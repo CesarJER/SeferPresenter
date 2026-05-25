@@ -4,6 +4,10 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "predev": "node generate-verses.js",
+    "prebuild": "node generate-verses.js",
+    "prebuild:web": "node generate-verses.js",
+    "prebuild:app": "node generate-verses.js",
     "dev": "cross-env VITE_APP_MODE=web vite",
     "build": "tsc -b && vite build",
     "build:web": "cross-env VITE_APP_MODE=web tsc -b && vite build",
