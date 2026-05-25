@@ -4,6 +4,7 @@ import type { SeferReaderState } from '../hooks/useSeferReader';
 import { transliterateText } from '../utils/transliterate';
 import { Languages, Save, Download, Upload, ArrowUp, ArrowDown, Trash2, Plus, FileText, Table, Pencil, Play, ChevronDown, ChevronUp, X, Lock, Unlock, Layers, Maximize2, Minimize2, Video, Image as ImageIcon } from 'lucide-react';
 import AutoResizeText from './AutoResizeText';
+import SeferControlPanel from './SeferControlPanel';
 
 interface MenuPopupProps {
   presentations: Presentation[];
@@ -411,7 +412,12 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
   onSelectSlide,
   onImport,
   videoState = null,
-  onVideoStateChange = () => {}
+  onVideoStateChange = () => {},
+  appMode = 'slides',
+  scriptureState = null,
+  onToggleAppMode = () => {},
+  onProjectScripture = () => {},
+  onAddScriptureSlide = () => {}
 }) => {
   const activeSlide = currentPresentation && currentSlideIndex >= 0 && currentSlideIndex < currentPresentation.slides.length
     ? currentPresentation.slides[currentSlideIndex]
@@ -1175,18 +1181,53 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
           <img src="/logo.svg" alt="Logo" className="h-7 w-7" />
           <span>Gestor de Presentaciones</span>
         </h2>
-        <button
-          type="button"
-          onClick={toggleFullscreen}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded border border-gray-700 bg-gray-800 hover:bg-gray-700 hover:text-white transition-all cursor-pointer text-gray-300"
-          title="Pantalla Completa"
-        >
-          {isFullscreen ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
-          <span>{isFullscreen ? 'Salir' : 'Pantalla Completa'}</span>
-        </button>
+        <div className="flex items-center gap-2">
+          {/* Toggle app mode button */}
+          <button
+            type="button"
+            onClick={() => onToggleAppMode(appMode === 'scripture' ? 'slides' : 'scripture')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded border transition-all cursor-pointer ${
+              appMode === 'scripture'
+                ? 'bg-yellow-600 border-yellow-500 text-white font-bold'
+                : 'bg-gray-800 border-gray-700 hover:bg-gray-700 text-gray-300 hover:text-white'
+            }`}
+            title={appMode === 'scripture' ? "Cambiar a Modo Diapositivas" : "Cambiar a Modo Lectura de Escrituras"}
+          >
+            <span className="text-sm">📜</span>
+            <span>{appMode === 'scripture' ? 'Modo Escrituras' : 'Modo Diapositivas'}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={toggleFullscreen}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded border border-gray-700 bg-gray-800 hover:bg-gray-700 hover:text-white transition-all cursor-pointer text-gray-300"
+            title="Pantalla Completa"
+          >
+            {isFullscreen ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
+            <span>{isFullscreen ? 'Salir' : 'Pantalla Completa'}</span>
+          </button>
+        </div>
       </div>
 
-      {/* Visor Superior - Horizontal en desktop, vertical en movil */}
+      {appMode === 'scripture' ? (
+        <div className="flex-1 overflow-hidden">
+          <SeferControlPanel
+            onProject={(state, cmd) => {
+              if (onProjectScripture) {
+                onProjectScripture(state, cmd);
+              }
+            }}
+            onAddSlide={(state) => {
+              if (onAddScriptureSlide) {
+                onAddScriptureSlide(state);
+              }
+            }}
+            restoredState={scriptureState}
+          />
+        </div>
+      ) : (
+        <>
+          {/* Visor Superior - Horizontal en desktop, vertical en movil */}
       <div className="border-b border-gray-700 bg-gray-900/50 p-3 md:p-4">
         {(() => {
           const isLiveVideo = activeSlide && activeSlide.type === 'video';
@@ -2458,6 +2499,8 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
           </>
         )}
       </div>
+    </>
+  )}
     </div>
   );
 };
