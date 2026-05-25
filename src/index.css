@@ -1,0 +1,48 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-gray-900 text-white overflow-hidden;
+  }
+}
+
+.hebrew-text {
+  direction: inherit;
+  font-family: 'Taamey D Web', 'Frank Ruehl CLM', 'David CLM', 'Times New Roman', serif;
+}
+
+.verse-popup {
+  backdrop-filter: blur(8px);
+  background: rgba(17, 24, 39, 0.85);
+}
+
+.scroll-bg {
+  background-color: #d4c4a8;
+  background-image: linear-gradient(90deg,
+      rgba(139, 119, 90, 0.2) 1px,
+      transparent 1px);
+  background-size: 20px 100%;
+}
+
+/* Ocultar scrollbar normalmente, mostrarlo al hacer hover */
+.scrollable-container {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.scrollable-container::-webkit-scrollbar {
+  width: 0px;
+  height: 0px;
+}
+
+.scrollable-container:hover::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.scrollable-container:hover::-webkit-scrollbar-thumb {
+  background-color: rgba(100, 100, 100, 0.5);
+  border-radius: 10px;
+}
