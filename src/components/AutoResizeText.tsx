@@ -7,6 +7,7 @@ interface AutoResizeTextProps {
   maxFontSize?: number;
   minFontSize?: number;
   fontScale?: number;
+  baseFontSize?: number;
   html?: boolean;
 }
 
@@ -16,6 +17,7 @@ const AutoResizeText: React.FC<AutoResizeTextProps> = ({
   maxFontSize = 100, // Let CSS clamp handle the initial large sizes if possible, or use a high max
   minFontSize = 12,
   fontScale = 1,
+  baseFontSize,
   html = false,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -34,22 +36,27 @@ const AutoResizeText: React.FC<AutoResizeTextProps> = ({
     const resizeText = () => {
       if (!containerRef.current || !textRef.current) return;
 
-      // Reset to the container's default CSS font size before measuring
-      textRef.current.style.fontSize = '';
+      // Reset to the intended base size before measuring
+      if (baseFontSize !== undefined) {
+        textRef.current.style.fontSize = `${baseFontSize}px`;
+      } else {
+        textRef.current.style.fontSize = '';
+      }
       
       const computedStyle = window.getComputedStyle(textRef.current);
       const computedSize = parseFloat(computedStyle.fontSize);
+      const initialSize = baseFontSize ?? computedSize;
       
       const containerHeight = containerRef.current.clientHeight;
       const containerWidth = containerRef.current.clientWidth;
 
       if (textRef.current.scrollHeight <= containerHeight && textRef.current.scrollWidth <= containerWidth) {
-        setFontSize(undefined); // Reset to CSS default
+        setFontSize(baseFontSize !== undefined ? initialSize : undefined);
         return;
       }
 
       // If it overflows, start shrinking from the computed size
-      let currentSize = computedSize;
+      let currentSize = initialSize;
 
       while (
         currentSize > minFontSize &&
@@ -78,7 +85,7 @@ const AutoResizeText: React.FC<AutoResizeTextProps> = ({
       observer.disconnect();
       window.removeEventListener('resize', resizeText);
     };
-  }, [cleanText, maxFontSize, minFontSize, fontScale]);
+  }, [cleanText, maxFontSize, minFontSize, fontScale, baseFontSize]);
 
   return (
     <div ref={containerRef} className="w-full h-full flex items-center justify-center overflow-hidden">

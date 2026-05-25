@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 
 export const useResizablePanel = () => {
   const [isVerticalLayout, setIsVerticalLayout] = useState(false);
-  const [sidePanelSize, setSidePanelSize] = useState(38);
+  const [sidePanelSize, setSidePanelSize] = useState(45); // Default 45% for sidebar, leaving 55% for Hebrew
   const resizeStartRef = useRef<{ x: number; y: number; size: number } | null>(null);
   const resizePointerIdRef = useRef<number | null>(null);
 
@@ -22,15 +22,17 @@ export const useResizablePanel = () => {
     if (resizePointerIdRef.current !== null && e.pointerId !== resizePointerIdRef.current) return;
     e.preventDefault();
     if (isVerticalLayout) {
-      const deltaY = resizeStartRef.current.y - e.clientY;
+      // Sidebar on top: dragging down increases height
+      const deltaY = e.clientY - resizeStartRef.current.y;
       const deltaVh = (deltaY / window.innerHeight) * 100;
       const next = resizeStartRef.current.size + deltaVh;
-      setSidePanelSize(Math.max(25, Math.min(70, next)));
+      setSidePanelSize(Math.max(20, Math.min(70, next)));
     } else {
-      const deltaX = resizeStartRef.current.x - e.clientX;
+      // Sidebar on left: dragging right increases width
+      const deltaX = e.clientX - resizeStartRef.current.x;
       const deltaVw = (deltaX / window.innerWidth) * 100;
       const next = resizeStartRef.current.size + deltaVw;
-      setSidePanelSize(Math.max(20, Math.min(55, next)));
+      setSidePanelSize(Math.max(20, Math.min(65, next)));
     }
   };
 

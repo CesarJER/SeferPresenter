@@ -127,7 +127,6 @@ export function useSeferReader(): UseSeferReaderResult {
   // Load metadata on mount
   // ------------------------------------------------------------------
   useEffect(() => {
-    if (typeof __APP_MODE__ !== 'undefined' && __APP_MODE__ === 'singlefile') return;
     const base = import.meta.env.BASE_URL ?? '/';
     fetch(`${base}metadata.json`)
       .then((r) => r.json())
@@ -147,7 +146,6 @@ export function useSeferReader(): UseSeferReaderResult {
   // ------------------------------------------------------------------
   useEffect(() => {
     if (!selectedBook || !metadataRef.current[selectedBook]) return;
-    if (typeof __APP_MODE__ !== 'undefined' && __APP_MODE__ === 'singlefile') return;
 
     const cached = loadedBooksRef.current.get(selectedBook);
     if (cached) {
@@ -248,7 +246,14 @@ export function useSeferReader(): UseSeferReaderResult {
   }, []);
 
   const restoreState = useCallback((state: SeferReaderState) => {
-    setSelectedBookState(state.bookEs);
+    let resolvedBook = state.bookEs;
+    if (resolvedBook && metadataRef.current && !metadataRef.current[resolvedBook]) {
+      const found = Object.keys(metadataRef.current).find(
+        (k) => metadataRef.current[k].bookAbbrevEs === resolvedBook
+      );
+      if (found) resolvedBook = found;
+    }
+    setSelectedBookState(resolvedBook);
     setSelectedChapterState(state.chapter);
     setSelectedVerseState(state.verse);
     setIsActive(true);

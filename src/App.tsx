@@ -74,6 +74,8 @@ export interface ScriptureNavState {
   totalVerses: number;
   command?: 'navigate' | 'next' | 'previous';
   commandId?: number;
+  hebrewFontSize?: number;
+  combinedTextBaseSize?: number;
 }
 
 // App mode: 'slides' is normal presentation, 'scripture' is live biblical reader
@@ -97,11 +99,36 @@ const normalizePublicPath = (value: string) => {
   }
 };
 
-const normalizePresentation = (presentation: Presentation): Presentation => ({
-  ...presentation,
-  background: normalizePublicPath(presentation.background),
-  fontScale: presentation.fontScale ?? 1
-});
+const normalizePresentation = (presentation: Presentation): Presentation => {
+  let mode = presentation.mode || 'standard';
+  let slides = presentation.slides || [];
+
+  if (mode === 'trilingual' && slides.length > 0) {
+    const allSlidesAreFallback = slides.every(slide => {
+      const l1 = slide.lines[1] ?? '';
+      const l2 = slide.lines[2] ?? '';
+      const isL1Fallback = l1 === '-' || l1 === '>-' || l1 === '';
+      const isL2Fallback = l2 === '-' || l2 === '>-' || l2 === '';
+      return isL1Fallback && isL2Fallback;
+    });
+
+    if (allSlidesAreFallback) {
+      mode = 'standard';
+      slides = slides.map(slide => ({
+        ...slide,
+        lines: [slide.lines[0] || '']
+      }));
+    }
+  }
+
+  return {
+    ...presentation,
+    mode,
+    slides,
+    background: normalizePublicPath(presentation.background),
+    fontScale: presentation.fontScale ?? 1
+  };
+};
 
 const loadStoredPresenterState = (): { presentation: Presentation | null; slideIndex: number } | null => {
   try {
@@ -291,6 +318,7 @@ function App() {
           totalVerses: 0,
           command: 'navigate',
           commandId: ++scriptureCommandIdRef.current,
+          combinedTextBaseSize: 50,
         }
       : null;
     const nextAppMode: AppMode = scriptureSlideState ? 'scripture' : 'slides';
@@ -642,8 +670,9 @@ function App() {
   // Handle keyboard navigation from both the control panel and the presenter window.
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Don't navigate if user is typing in the editor
-      if ((e.target as HTMLElement).tagName === 'INPUT' || (e.target as HTMLElement).tagName === 'TEXTAREA') return;
+      // Don't navigate if user is typing in the editor or focusing a select element
+      const targetTag = (e.target as HTMLElement).tagName.toUpperCase();
+      if (targetTag === 'INPUT' || targetTag === 'TEXTAREA' || targetTag === 'SELECT') return;
 
       if (appModeRef.current === 'scripture') {
         if (e.key === 'Escape') {
@@ -663,6 +692,9 @@ function App() {
         }
 
         if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+          // If in control mode, SeferControlPanel handles navigation locally to update dropdowns directly
+          if (isControlMode) return;
+
           const currentScripture = scriptureStateRef.current;
           if (!currentScripture) return;
 
@@ -702,7 +734,7 @@ function App() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [currentPresentation, currentSlideIndex, handleSelectPresentationAndSlide, syncState]);
+  }, [currentPresentation, currentSlideIndex, handleSelectPresentationAndSlide, syncState, isControlMode]);
 
   const getActiveBackground = useCallback(() => {
     if (!currentPresentation) return '';
@@ -839,6 +871,7 @@ function App() {
       totalVerses: state.totalVerses,
       command,
       commandId: ++scriptureCommandIdRef.current,
+      combinedTextBaseSize: scriptureStateRef.current?.combinedTextBaseSize ?? 50,
     };
     setScriptureState(navState);
     syncState(
@@ -853,6 +886,39 @@ function App() {
     );
     if (appMode !== 'scripture') setAppMode('scripture');
   }, [syncState, appMode]);
+
+  const handleUpdateScriptureFontSizes = useCallback((sizes: {
+    hebrewFontSize: number;
+    combinedTextBaseSize: number;
+  }) => {
+    const nextState: ScriptureNavState = {
+      ...(scriptureStateRef.current ?? {
+        bookEs: '',
+        bookHeb: '',
+        bookAbbrevEs: '',
+        chapter: '1',
+        verse: '1',
+        verseNikud: '',
+        transliteration: '',
+        translation: '',
+        verseIdx: 0,
+        totalVerses: 0,
+      }),
+      ...sizes,
+    };
+
+    setScriptureState(nextState);
+    syncState(
+      currentPresentationRef.current,
+      currentSlideIndexRef.current,
+      backgroundLockRef.current,
+      lockedBackgroundValueRef.current,
+      userSelectedBackgroundRef.current,
+      videoStateRef.current,
+      appModeRef.current,
+      nextState
+    );
+  }, [syncState]);
 
   const handleSeferOnlineRef = useCallback((payload: SeferOnlineRefPayload) => {
     const previous = scriptureStateRef.current;
@@ -877,6 +943,7 @@ function App() {
       totalVerses: numberOrFallback(payload.totalVerses, previous?.totalVerses ?? 0),
       command: undefined,
       commandId: previous?.commandId,
+      combinedTextBaseSize: previous?.combinedTextBaseSize ?? 50,
     };
 
     if (JSON.stringify(previous) === JSON.stringify(navState)) return;
@@ -948,11 +1015,37 @@ function App() {
           onVideoStateChange={(state) => syncState(currentPresentation, currentSlideIndex, backgroundLock, lockedBackgroundValue, userSelectedBackground, state)}
           appMode={appMode}
           scriptureState={scriptureState}
+          onUpdateScriptureFontSizes={handleUpdateScriptureFontSizes}
           onToggleAppMode={(mode: AppMode) => {
+            if (mode === 'slides') {
+              const fallbackPresentation =
+                currentPresentationRef.current ??
+                storedPresenterState?.presentation ??
+                presentations[0] ??
+                null;
+              const fallbackSlideIndex =
+                fallbackPresentation
+                  ? (currentSlideIndexRef.current >= 0 && currentPresentationRef.current
+                      ? currentSlideIndexRef.current
+                      : 0)
+                  : -1;
+
+              if (!currentPresentationRef.current && fallbackPresentation) {
+                setCurrentPresentation(normalizePresentation(fallbackPresentation));
+                setCurrentSlideIndex(fallbackSlideIndex);
+              } else if (currentPresentationRef.current && currentSlideIndexRef.current < 0) {
+                setCurrentSlideIndex(0);
+              }
+            }
+
             setAppMode(mode);
             syncState(
-              currentPresentationRef.current,
-              currentSlideIndexRef.current,
+              mode === 'slides'
+                ? (currentPresentationRef.current ?? storedPresenterState?.presentation ?? presentations[0] ?? null)
+                : currentPresentationRef.current,
+              mode === 'slides'
+                ? ((currentSlideIndexRef.current >= 0 && currentPresentationRef.current) ? currentSlideIndexRef.current : 0)
+                : currentSlideIndexRef.current,
               backgroundLockRef.current,
               lockedBackgroundValueRef.current,
               userSelectedBackgroundRef.current,

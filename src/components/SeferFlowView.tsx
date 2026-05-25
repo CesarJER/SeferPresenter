@@ -7,12 +7,14 @@ interface SeferFlowViewProps {
   onVerseClick: (e: React.MouseEvent, idx: number) => void;
   onVerseTouchEnd: (e: React.TouchEvent, idx: number) => void;
   bookDir?: string;
+  hebrewFontSize?: number;
 }
 
-export const SeferFlowView = ({ groupedVerses, selectedVerseIdx, onVerseClick, onVerseTouchEnd, bookDir = 'rtl' }: SeferFlowViewProps) => (
+export const SeferFlowView = ({ groupedVerses, selectedVerseIdx, onVerseClick, onVerseTouchEnd, bookDir = 'rtl', hebrewFontSize }: SeferFlowViewProps) => (
   <motion.div
     dir={bookDir}
     className="sefer-mode max-w-screen-xl mx-auto text-[3.5rem] leading-[1.8] text-justify break-keep"
+    style={{ fontSize: hebrewFontSize ? `${hebrewFontSize}px` : '42px' }}
     initial={{ opacity: 0 }}
     animate={{ opacity: 1 }}
     transition={{ duration: 1 }}

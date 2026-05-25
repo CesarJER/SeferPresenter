@@ -201,7 +201,8 @@ const PresenterScreen: React.FC<PresenterScreenProps> = ({
   }, [videoSrc, slide?.id, slide?.videoStart, slide?.videoEnd, videoElement]);
 
   const isVideoBg = /\.(mp4|webm)$/i.test(background);
-  const isTrilingual = slide?.lines.length === 3;
+  const isFallback1x = slide?.lines.length === 3 && slide.lines[1] === '-' && slide.lines[2] === '-';
+  const isTrilingual = slide?.lines.length === 3 && !isFallback1x;
   const slideLabel = slide?.label && slide.label !== 'Título' ? slide.label : '';
   const titleText = presentationTitle || slide?.label || '';
   const scaleStyle = { '--font-scale': fontScale } as React.CSSProperties;

@@ -201,20 +201,6 @@ export const SeferReaderScreen: React.FC<SeferReaderScreenProps> = ({
     return groups;
   }, [data]);
 
-  // Combined text for sidebar
-  const combinedText = useMemo(() => {
-    if (selectedVerseIdx === null || !data[selectedVerseIdx]) return '';
-    const verse = data[selectedVerseIdx];
-    let text = '';
-    if (verse.transliteration) {
-      text += `<strong>Transliteración:</strong><br/>${verse.transliteration}<br/><br/>`;
-    }
-    if (verse.translation) {
-      text += `<strong>Traducción:</strong><br/>${verse.translation}`;
-    }
-    return text;
-  }, [data, selectedVerseIdx]);
-
   const handleVerseClick = useCallback(
     (_e: React.MouseEvent, idx: number) => {
       setSelectedVerseIdx(idx);
@@ -261,6 +247,31 @@ export const SeferReaderScreen: React.FC<SeferReaderScreenProps> = ({
     [data, onVerseSelected]
   );
 
+  const currentSelectedVerse = useMemo(() => {
+    if (selectedVerseIdx === null || !data[selectedVerseIdx]) return null;
+    return data[selectedVerseIdx];
+  }, [data, selectedVerseIdx]);
+
+  const combinedText = useMemo(() => {
+    if (!currentSelectedVerse) return '';
+
+    let text = '';
+    if (currentSelectedVerse.transliteration) {
+      text += `<strong>Transliteración:</strong><br/>${currentSelectedVerse.transliteration}<br/><br/>`;
+    }
+    if (currentSelectedVerse.translation) {
+      text += `<strong>Traducción:</strong><br/>${currentSelectedVerse.translation}`;
+    }
+    return text;
+  }, [currentSelectedVerse]);
+
+  const combinedTextBaseSize = useMemo(() => {
+    const rawSize = scriptureState.combinedTextBaseSize;
+    const parsed = Number(rawSize);
+    if (!Number.isFinite(parsed)) return 50;
+    return Math.max(12, Math.min(70, parsed));
+  }, [scriptureState.combinedTextBaseSize]);
+
   if (isLoading || Object.keys(metadata).length === 0 || data.length === 0) {
     return (
       <div className="h-screen flex items-center justify-center text-2xl font-hebrew bg-[#fef3c7] text-amber-900">
@@ -273,6 +284,17 @@ export const SeferReaderScreen: React.FC<SeferReaderScreenProps> = ({
 
   return (
     <main className="h-screen flex flex-col md:flex-row bg-[#fef3c7] font-hebrew overflow-hidden">
+      <VerseSidebar
+        combinedText={combinedText}
+        combinedTextBaseSize={combinedTextBaseSize}
+        selectedVerseIdx={selectedVerseIdx}
+        lastSelectedIdx={lastSelectedIdx}
+        scrollToTarget={scrollToTarget}
+        isVerticalLayout={isVerticalLayout}
+        sidePanelSize={sidePanelSize}
+        handleResizeStart={handleResizeStart}
+      />
+
       <div className="flex-1 flex flex-col overflow-hidden">
         <div className="flex-1 overflow-y-auto flex flex-col justify-start p-8 pt-16 pb-24 scrollable-container touch-pan-y">
           <SeferFlowView
@@ -281,19 +303,10 @@ export const SeferReaderScreen: React.FC<SeferReaderScreenProps> = ({
             onVerseClick={handleVerseClick}
             onVerseTouchEnd={handleVerseTouchEnd}
             bookDir={bookDir}
+            hebrewFontSize={scriptureState.hebrewFontSize}
           />
         </div>
       </div>
-
-      <VerseSidebar
-        combinedText={combinedText}
-        selectedVerseIdx={selectedVerseIdx}
-        lastSelectedIdx={lastSelectedIdx}
-        scrollToTarget={scrollToTarget}
-        isVerticalLayout={isVerticalLayout}
-        sidePanelSize={sidePanelSize}
-        handleResizeStart={handleResizeStart}
-      />
     </main>
   );
 };

@@ -3,6 +3,7 @@ import AutoResizeText from './AutoResizeText';
 
 interface VerseSidebarProps {
   combinedText: string;
+  combinedTextBaseSize?: number;
   selectedVerseIdx: number | null;
   lastSelectedIdx: React.MutableRefObject<number | null>;
   scrollToTarget: (idx: number) => void;
@@ -13,6 +14,7 @@ interface VerseSidebarProps {
 
 export const VerseSidebar = ({
   combinedText,
+  combinedTextBaseSize = 50,
   selectedVerseIdx,
   lastSelectedIdx,
   scrollToTarget,
@@ -24,14 +26,14 @@ export const VerseSidebar = ({
 
   return (
     <motion.div
-      className="relative overflow-hidden min-w-full md:min-w-[200px] min-h-[25vh] md:min-h-full bg-white/90 md:p-8 shadow-xl text-base z-50 flex flex-col justify-center border-t md:border-l border-amber-300"
+      className="relative overflow-hidden min-w-full md:min-w-[200px] min-h-[25vh] md:min-h-full bg-white/95 shadow-xl text-base z-50 flex flex-col justify-center border-b md:border-r md:border-b-0 border-amber-300"
       style={{
         width: isVerticalLayout ? '100%' : `${sidePanelSize}vw`,
         height: isVerticalLayout ? `${sidePanelSize}vh` : '100%',
-        maxWidth: isVerticalLayout ? undefined : '55vw',
+        maxWidth: isVerticalLayout ? undefined : '65vw',
         maxHeight: isVerticalLayout ? '70vh' : undefined,
       }}
-      initial={{ opacity: 0, x: 20 }}
+      initial={{ opacity: 0, x: -20 }}
       animate={{ opacity: 1, x: 0 }}
       transition={{ delay: 0.5 }}
       onAnimationComplete={() => {
@@ -44,13 +46,13 @@ export const VerseSidebar = ({
       <div
         role="separator"
         aria-orientation="vertical"
-        className="hidden md:block touch-none absolute left-0 top-0 h-full w-4 cursor-col-resize bg-transparent hover:bg-amber-300/40 active:bg-amber-400/50 z-[60]"
+        className="hidden md:block touch-none absolute right-0 top-0 h-full w-4 cursor-col-resize bg-transparent hover:bg-amber-300/40 active:bg-amber-400/50 z-[60]"
         onPointerDown={handleResizeStart}
       />
       <div
         role="separator"
         aria-orientation="horizontal"
-        className="md:hidden touch-none absolute top-0 left-0 w-full h-6 cursor-row-resize bg-transparent active:bg-amber-400/50 z-[60]"
+        className="md:hidden touch-none absolute bottom-0 left-0 w-full h-6 cursor-row-resize bg-transparent active:bg-amber-400/50 z-[60]"
         onPointerDown={handleResizeStart}
       />
 
@@ -58,7 +60,8 @@ export const VerseSidebar = ({
         <div className="flex-1 flex items-center justify-center overflow-hidden m-3">
           <AutoResizeText
             text={combinedText}
-            maxFontSize={36}
+            baseFontSize={combinedTextBaseSize}
+            maxFontSize={70}
             minFontSize={12}
             className="text-gray-900"
             html={true}
