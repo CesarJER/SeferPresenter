@@ -762,7 +762,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
     setTransText('');
     setTraText('');
     setSlides([
-      { id: 'slide-title', label: 'Título', lines: [''] }
+      { id: 'slide-title', label: 'Título', lines: ['', '-', '-'] }
     ]);
     setIsTableMode(true);
   };
@@ -822,7 +822,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
     setTransText('');
     setTraText('');
     setSlides([
-      { id: 'slide-title', label: 'Título', lines: [''] }
+      { id: 'slide-title', label: 'Título', lines: ['', '-', '-'] }
     ]);
     setIsTableMode(true);
   };
@@ -993,10 +993,10 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
 
     if (isTableMode) {
       const newSlides = slides.map(slide => {
+        const fallbackVal = '-';
         if (newMode === 'trilingual') {
-          const fallbackVal = isTitleSlide(slide) ? '>-' : '-';
-          const l1 = slide.lines[1] !== undefined ? slide.lines[1] : fallbackVal;
-          const l2 = slide.lines[2] !== undefined ? slide.lines[2] : fallbackVal;
+          const l1 = slide.lines[1] !== undefined && slide.lines[1] !== '' ? slide.lines[1] : fallbackVal;
+          const l2 = slide.lines[2] !== undefined && slide.lines[2] !== '' ? slide.lines[2] : fallbackVal;
           return {
             ...slide,
             lines: [slide.lines[0] || '', l1, l2]
@@ -1004,7 +1004,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
         } else {
           return {
             ...slide,
-            lines: [slide.lines[0] || '']
+            lines: [slide.lines[0] || '', fallbackVal, fallbackVal]
           };
         }
       });
@@ -1013,7 +1013,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
       const parsed = await buildSlidesForSave();
       if (newMode === 'trilingual') {
         const mapped = parsed.slides.map(slide => {
-          const fallbackVal = isTitleSlide(slide) ? '>-' : '-';
+          const fallbackVal = '-';
           if (slide.type === 'tanaj' || slide.type === 'sefer' || slide.scriptureBook) {
             return slide;
           }
@@ -1027,10 +1027,13 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
         setTransText(getTrilingualTextFromSlides(mapped, 1));
         setTraText(getTrilingualTextFromSlides(mapped, 2));
       } else {
-        const mapped = parsed.slides.map(slide => ({
-          ...slide,
-          lines: [scriptureSlideToTag(slide) || slide.lines[0] || '']
-        }));
+        const mapped = parsed.slides.map(slide => {
+          const fallbackVal = '-';
+          return {
+            ...slide,
+            lines: [scriptureSlideToTag(slide) || slide.lines[0] || '', fallbackVal, fallbackVal]
+          };
+        });
         setSlides(mapped);
         setStandardText(getStandardTextFromSlides(mapped));
       }
@@ -1041,8 +1044,8 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
     const newId = `slide-${Date.now()}`;
     const newLabel = (slides.length).toString();
     const newSlide: Slide = { id: newId, label: newLabel, lines: [] };
-    const fallbackVal = isTitleSlide(newSlide) ? '>-' : '-';
-    newSlide.lines = mode === 'standard' ? [''] : ['', fallbackVal, fallbackVal];
+    const fallbackVal = '-';
+    newSlide.lines = ['', fallbackVal, fallbackVal];
     setSlides([...slides, newSlide]);
   };
 
@@ -1050,8 +1053,8 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
     const newId = `slide-${Date.now()}`;
     const newLabel = (slides.length).toString();
     const newSlide: Slide = { id: newId, label: newLabel, lines: [] };
-    const fallbackVal = isTitleSlide(newSlide) ? '>-' : '-';
-    newSlide.lines = mode === 'standard' ? ['[IMAGE]'] : ['[IMAGE]', fallbackVal, fallbackVal];
+    const fallbackVal = '-';
+    newSlide.lines = ['[IMAGE]', fallbackVal, fallbackVal];
     setSlides([...slides, newSlide]);
   };
 
@@ -1069,10 +1072,8 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
       videoLoop: true,
       videoPresenterNav: true
     };
-    const fallbackVal = isTitleSlide(newSlide) ? '>-' : '-';
-    newSlide.lines = mode === 'standard'
-      ? ['[VIDEO - "" - 0.8 - 1.0 - 1 - 1]']
-      : ['[VIDEO - "" - 0.8 - 1.0 - 1 - 1]', fallbackVal, fallbackVal];
+    const fallbackVal = '-';
+    newSlide.lines = ['[VIDEO - "" - 0.8 - 1.0 - 1 - 1]', fallbackVal, fallbackVal];
 
     setSlides([...slides, newSlide]);
   };
@@ -1080,6 +1081,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
   const handleChangeSlideType = (idx: number, newType: 'text' | 'video' | 'image' | 'tanaj' | 'sefer') => {
     const updated = [...slides];
     const slide = { ...updated[idx] };
+    const fallbackVal = '-';
 
     if (newType === 'text') {
       delete slide.type;
@@ -1098,7 +1100,12 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
         if (l.trim() === '[IMAGE]' || l.trim().startsWith('[VIDEO')) return '';
         return l;
       };
-      slide.lines = slide.lines.map(cleanLine);
+      const cleanLines = slide.lines.map(cleanLine);
+      slide.lines = [
+        cleanLines[0] || '',
+        cleanLines[1] !== undefined ? cleanLines[1] : fallbackVal,
+        cleanLines[2] !== undefined ? cleanLines[2] : fallbackVal
+      ];
     } else if (newType === 'image') {
       delete slide.type;
       delete slide.videoSrc;
@@ -1112,10 +1119,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
       delete slide.scriptureVerseStart;
       delete slide.scriptureVerseEnd;
 
-      slide.lines = slide.lines.map(() => '[IMAGE]');
-      if (slide.lines.length === 0) {
-        slide.lines = ['[IMAGE]'];
-      }
+      slide.lines = ['[IMAGE]', fallbackVal, fallbackVal];
     } else if (newType === 'video') {
       slide.type = 'video';
       slide.videoSrc = slide.videoSrc || '';
@@ -1145,7 +1149,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
       while (parts.length > 6 && parts[parts.length - 1] === '') {
         parts.pop();
       }
-      slide.lines = [`[${parts.join(' - ')}]`].concat(slide.lines.slice(1).map(() => ''));
+      slide.lines = [`[${parts.join(' - ')}]`, fallbackVal, fallbackVal];
     } else if (newType === 'tanaj' || newType === 'sefer') {
       slide.type = newType;
       if (slide.scriptureBook && slide.scriptureChapter && slide.scriptureVerseStart) {
@@ -1163,6 +1167,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
   ) => {
     const updated = [...slides];
     const slide = { ...updated[idx] };
+    const fallbackVal = '-';
 
     if (slide.type === 'video') {
       if ('videoSrc' in params) slide.videoSrc = params.videoSrc;
@@ -1190,7 +1195,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
       while (parts.length > 6 && parts[parts.length - 1] === '') {
         parts.pop();
       }
-      slide.lines = [`[${parts.join(' - ')}]`].concat(slide.lines.slice(1).map(() => ''));
+      slide.lines = [`[${parts.join(' - ')}]`, fallbackVal, fallbackVal];
     }
 
     updated[idx] = slide;
@@ -1369,7 +1374,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
     const titleSlide: Slide = {
       id: 'slide-title',
       label: 'Título',
-      lines: [hasTitleMarker ? titleLines.join('\n') : (titleLines.join('\n') || title.trim())]
+      lines: [hasTitleMarker ? titleLines.join('\n') : (titleLines.join('\n') || title.trim()), '-', '-']
     };
 
     let autoId = 1;
@@ -1391,7 +1396,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
           return {
             id: `slide-${idx}`,
             label,
-            lines: [content.trim()],
+            lines: [content.trim(), '-', '-'],
             type: 'video' as const,
             videoSrc: videoData.videoSrc,
             videoVolume: videoData.volume,
@@ -1402,7 +1407,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
           };
         }
 
-        return { id: `slide-${idx}`, label, lines: [content.trim()] };
+        return { id: `slide-${idx}`, label, lines: [content.trim(), '-', '-'] };
       })
       .filter(slide => slide.lines[0].length > 0);
 
@@ -1439,7 +1444,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
     const titleSlide: Slide = {
       id: 'slide-title',
       label: 'Título',
-      lines: [hebData.title, transData.title, traData.title].map(v => v || '')
+      lines: [hebData.title || '', transData.title || '-', traData.title || '-']
     };
 
     let autoId = 1;
@@ -1462,7 +1467,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
           return {
             id: `slide-${idx}`,
             label,
-            lines: [contentHeb.trim(), row.transliteration.trim(), row.translation.trim()],
+            lines: [contentHeb.trim(), row.transliteration.trim() || '-', row.translation.trim() || '-'],
             type: 'video' as const,
             videoSrc: videoData.videoSrc,
             videoVolume: videoData.volume,
@@ -1476,7 +1481,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
         return {
           id: `slide-${idx}`,
           label,
-          lines: [contentHeb.trim(), row.transliteration.trim(), row.translation.trim()]
+          lines: [contentHeb.trim(), row.transliteration.trim() || '-', row.translation.trim() || '-']
         };
       })
       .filter(slide => slide.lines.some(line => line.trim().length > 0));
@@ -1496,7 +1501,18 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
       const nextMode = slides.some((slide) => slide.type === 'tanaj' || slide.type === 'sefer' || slide.scriptureBook)
         ? 'trilingual'
         : mode;
-      return { slides, mode: nextMode };
+      const normalizedSlides = slides.map(slide => {
+        const fallbackVal = '-';
+        return {
+          ...slide,
+          lines: [
+            slide.lines[0] || '',
+            slide.lines[1] !== undefined && slide.lines[1] !== '' ? slide.lines[1] : fallbackVal,
+            slide.lines[2] !== undefined && slide.lines[2] !== '' ? slide.lines[2] : fallbackVal
+          ]
+        };
+      });
+      return { slides: normalizedSlides, mode: nextMode };
     }
 
     if (mode === 'standard') {
@@ -1519,7 +1535,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
       const titleSlide: Slide = {
         id: 'slide-title',
         label: 'Título',
-        lines: [hasTitleMarker ? titleLines.join('\n') : (titleLines.join('\n') || title.trim())]
+        lines: [hasTitleMarker ? titleLines.join('\n') : (titleLines.join('\n') || title.trim()), '-', '-']
       };
 
       let autoId = 1;
@@ -1548,7 +1564,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
           parsed.push({
             id: `slide-${idx}`,
             label,
-            lines: [content.trim()],
+            lines: [content.trim(), '-', '-'],
             type: 'video' as const,
             videoSrc: videoData.videoSrc,
             videoVolume: videoData.volume,
@@ -1560,7 +1576,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
           continue;
         }
 
-        parsed.push({ id: `slide-${idx}`, label, lines: [content.trim()] });
+        parsed.push({ id: `slide-${idx}`, label, lines: [content.trim(), '-', '-'] });
       }
 
       return { slides: [titleSlide, ...parsed.filter(slide => slide.lines[0].length > 0)], mode: hasScriptureSlides ? 'trilingual' : 'standard' };
@@ -1595,7 +1611,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
     const titleSlide: Slide = {
       id: 'slide-title',
       label: 'Título',
-      lines: [hebData.title, transData.title, traData.title].map(v => v || '')
+      lines: [hebData.title || '', transData.title || '-', traData.title || '-']
     };
 
     let autoId = 1;
@@ -1624,7 +1640,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
         parsed.push({
           id: `slide-${idx}`,
           label,
-          lines: [contentHeb.trim(), row.transliteration.trim(), row.translation.trim()],
+          lines: [contentHeb.trim(), row.transliteration.trim() || '-', row.translation.trim() || '-'],
           type: 'video' as const,
           videoSrc: videoData.videoSrc,
           videoVolume: videoData.volume,
@@ -1639,7 +1655,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
       parsed.push({
         id: `slide-${idx}`,
         label,
-        lines: [contentHeb.trim(), row.transliteration.trim(), row.translation.trim()]
+        lines: [contentHeb.trim(), row.transliteration.trim() || '-', row.translation.trim() || '-']
       });
     }
 

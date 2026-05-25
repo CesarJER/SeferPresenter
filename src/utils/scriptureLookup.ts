@@ -185,7 +185,7 @@ export const expandScriptureRangeToSlides = async (spec: ScriptureTagSpec): Prom
   const titleSlide: ScriptureSlideDraft = {
     id: `slide-scripture-title-${Date.now()}`,
     label: titleLabel,
-    lines: [titleLabel],
+    lines: [titleLabel, '-', '-'],
     type: spec.kind,
     scriptureBook: verses[0].bookAbbrevEs || spec.bookToken,
     scriptureChapter: spec.chapter,

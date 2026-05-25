@@ -147,12 +147,27 @@ const normalizePresentation = (presentation: Presentation): Presentation => {
 
     if (allSlidesAreFallback) {
       mode = 'standard';
-      slides = slides.map(slide => ({
-        ...slide,
-        lines: [slide.lines[0] || '']
-      }));
     }
   }
+
+  slides = slides.map((slide) => {
+    const fallbackVal = '-';
+    let l1 = slide.lines[1];
+    let l2 = slide.lines[2];
+
+    if (mode === 'standard') {
+      l1 = fallbackVal;
+      l2 = fallbackVal;
+    } else {
+      l1 = l1 !== undefined && l1 !== '' ? l1 : fallbackVal;
+      l2 = l2 !== undefined && l2 !== '' ? l2 : fallbackVal;
+    }
+
+    return {
+      ...slide,
+      lines: [slide.lines[0] || '', l1, l2]
+    };
+  });
 
   return {
     ...presentation,
