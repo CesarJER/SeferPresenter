@@ -10,6 +10,7 @@ interface VerseSidebarProps {
   isVerticalLayout: boolean;
   sidePanelSize: number;
   handleResizeStart: (e: React.PointerEvent<HTMLDivElement>) => void;
+  navLabel?: string;
 }
 
 export const VerseSidebar = ({
@@ -21,6 +22,7 @@ export const VerseSidebar = ({
   isVerticalLayout,
   sidePanelSize,
   handleResizeStart,
+  navLabel,
 }: VerseSidebarProps) => {
   if (!combinedText) return null;
 
@@ -56,8 +58,14 @@ export const VerseSidebar = ({
         onPointerDown={handleResizeStart}
       />
 
+      {navLabel && (
+        <div className="absolute left-0 right-0 top-0 z-[55] border-b border-amber-900/20 bg-[#f7e7b6]/95 px-4 py-2 text-5xl text-center font-bold text-amber-950 shadow-sm">
+          {navLabel}
+        </div>
+      )}
+
       <div className="flex flex-col text-center h-full">
-        <div className="flex-1 flex items-center justify-center overflow-hidden m-3">
+        <div className={`flex-1 flex items-center justify-center overflow-hidden m-3 ${navLabel ? 'mt-14' : ''}`}>
           <AutoResizeText
             text={combinedText}
             baseFontSize={combinedTextBaseSize}

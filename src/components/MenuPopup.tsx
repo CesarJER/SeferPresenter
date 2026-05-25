@@ -1716,12 +1716,12 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
           {/* Toggle app mode button */}
           <button
             type="button"
-            onClick={() => onToggleAppMode(appMode === 'scripture' ? 'slides' : 'scripture')}
-            className={`flex items-center justify-center p-2 text-xs font-semibold rounded border transition-all cursor-pointer ${appMode === 'scripture'
+            onClick={() => onToggleAppMode(appMode === 'seferManual' ? 'slides' : 'seferManual')}
+            className={`flex items-center justify-center p-2 text-xs font-semibold rounded border transition-all cursor-pointer ${appMode === 'seferManual'
               ? 'bg-yellow-600 border-yellow-500 text-white font-bold'
               : 'bg-gray-800 border-gray-700 hover:bg-gray-700 text-gray-300 hover:text-white'
               }`}
-            title={appMode === 'scripture' ? "Cambiar a Modo Diapositivas" : "Cambiar a Modo Lectura de Escrituras"}
+            title={appMode === 'seferManual' ? "Volver a la diapositiva" : "Activar Sefer manual"}
           >
             <span className="text-sm leading-none">📜</span>
           </button>
@@ -1738,7 +1738,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
       </div>
 
       <div className="flex-1 min-h-0 overflow-auto flex flex-col">
-        {appMode === 'scripture' && !isActiveScriptureSlide && (
+        {appMode === 'seferManual' && (
           <div className="shrink-0 border-b border-gray-700 bg-gray-950/70">
             <div>
               <SeferControlPanel
@@ -1907,7 +1907,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                       </button>
                     </div>
 
-                    {isActiveScriptureSlide && scriptureState && (
+                    {appMode !== 'seferManual' && isActiveScriptureSlide && scriptureState && (
                       <div className="rounded-md border border-gray-800 bg-gray-950/50">
                         <SeferControlPanelMini
                           onProject={(state, cmd) => {

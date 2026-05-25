@@ -5,17 +5,20 @@ import { parseVerses } from '../utils/scriptureParser';
 import { SeferFlowView } from './SeferFlowView';
 import { VerseSidebar } from './VerseSidebar';
 import { useResizablePanel } from '../hooks/useResizablePanel';
+import { numberToHebrewNumeral } from '../hooks/hebrewNumerals';
 
 interface SeferReaderScreenProps {
   scriptureState: ScriptureNavState;
   onVerseSelected: (payload: any) => void;
   onBoundaryReached?: (direction: 'next' | 'previous') => void;
+  onLogoClick?: () => void;
 }
 
 export const SeferReaderScreen: React.FC<SeferReaderScreenProps> = ({
   scriptureState,
   onVerseSelected,
   onBoundaryReached,
+  onLogoClick,
 }) => {
   const [metadata, setMetadata] = useState<AppMetadata>({});
   const [data, setData] = useState<VerseData[]>([]);
@@ -274,6 +277,28 @@ export const SeferReaderScreen: React.FC<SeferReaderScreenProps> = ({
     return Math.max(12, Math.min(70, parsed));
   }, [scriptureState.combinedTextBaseSize]);
 
+  const formatReferenceNav = useCallback((bookName: string, useHebrewNumbers = false) => {
+    const chapter = Number(scriptureState.chapter);
+    const verse = Number(scriptureState.verse);
+    const start = Number(scriptureState.verseStart || scriptureState.verse);
+    const end = Number(scriptureState.verseEnd || scriptureState.verseStart || scriptureState.verse);
+    const n = (value: number) => useHebrewNumbers ? numberToHebrewNumeral(value) : String(value);
+    const hasMultiVerseRange = scriptureState.verseEnd && scriptureState.verseStart !== scriptureState.verseEnd;
+
+    if (hasMultiVerseRange) {
+      return `${bookName} ${n(chapter)}:${n(start)}-${n(end)} (${n(verse)})`;
+    }
+
+    return `${bookName} ${n(chapter)}:${n(verse)}`;
+  }, [scriptureState.chapter, scriptureState.verse, scriptureState.verseEnd, scriptureState.verseStart]);
+
+  const spanishNavLabel = currentSelectedVerse
+    ? formatReferenceNav(currentSelectedVerse.bookEs || scriptureState.bookEs || scriptureState.bookAbbrevEs)
+    : '';
+  const hebrewNavLabel = currentSelectedVerse
+    ? formatReferenceNav(currentSelectedVerse.bookHeb || scriptureState.bookHeb, true)
+    : '';
+
   if (isLoading || Object.keys(metadata).length === 0 || data.length === 0) {
     return (
       <div className="h-screen flex items-center justify-center text-2xl font-hebrew bg-[#fef3c7] text-amber-900">
@@ -295,10 +320,27 @@ export const SeferReaderScreen: React.FC<SeferReaderScreenProps> = ({
         isVerticalLayout={isVerticalLayout}
         sidePanelSize={sidePanelSize}
         handleResizeStart={handleResizeStart}
+        navLabel={spanishNavLabel}
       />
 
-      <div className="flex-1 flex flex-col overflow-hidden">
-      <div className="flex-1 overflow-y-auto flex flex-col justify-start p-8 pt-16 pb-24 scrollable-container touch-pan-y">
+      <div className="relative flex-1 flex flex-col overflow-hidden">
+        <div className="absolute left-0 right-0 top-0 z-40 border-b border-amber-900/20 bg-[#f7e7b6]/95 px-4 py-2 text-5xl font-bold text-amber-950 shadow-sm">
+          <div className="flex items-center justify-between gap-3" dir="rtl">
+            {onLogoClick && (
+              <button
+                type="button"
+                onClick={onLogoClick}
+                className="flex h-8 w-8 items-center justify-center rounded border border-amber-900/20 bg-[#fef3c7] hover:bg-amber-100"
+                title="Abrir menú"
+              >
+                <img src="/logo.svg" alt="Abrir menú" className="h-6 w-6" />
+              </button>
+            )}
+            <span>{hebrewNavLabel}</span>
+            <span></span>
+          </div>
+        </div>
+        <div className="flex-1 overflow-y-auto flex flex-col justify-start p-8 pt-20 pb-24 scrollable-container touch-pan-y">
           <SeferFlowView
             groupedVerses={groupedVerses}
             selectedVerseIdx={selectedVerseIdx}

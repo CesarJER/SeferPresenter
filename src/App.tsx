@@ -86,8 +86,8 @@ export interface ScriptureNavState {
   combinedTextBaseSize?: number;
 }
 
-// App mode: 'slides' is normal presentation, 'scripture' is live biblical reader
-export type AppMode = 'slides' | 'scripture';
+// App mode: 'slides' is normal presentation, 'scripture' is slide scripture, 'seferManual' is the manual Sefer overlay
+export type AppMode = 'slides' | 'scripture' | 'seferManual';
 
 const parseSlideHash = (hash: string) => {
   const clean = hash.replace('#', '');
@@ -242,6 +242,7 @@ function App() {
   const appModeRef = useRef<AppMode>(appMode);
   const scriptureStateRef = useRef<ScriptureNavState | null>(scriptureState);
   const scriptureCommandIdRef = useRef(0);
+  const slideScriptureStateBeforeManualRef = useRef<ScriptureNavState | null>(null);
 
   useEffect(() => {
     videoStateRef.current = videoState;
@@ -409,8 +410,11 @@ function App() {
       const slug = slugify(currentPresentation.title);
       const activeSlide = currentSlideIndex >= 0 ? currentPresentation.slides[currentSlideIndex] : null;
       const isScriptureSlide = activeSlide?.type === 'sefer' || activeSlide?.type === 'tanaj';
+      const hashVerse = appMode === 'seferManual'
+        ? slideScriptureStateBeforeManualRef.current?.verse
+        : scriptureState?.verse;
       const hash = currentSlideIndex >= 0
-        ? formatSlideHash(currentSlideIndex, isScriptureSlide ? scriptureState?.verse : undefined)
+        ? formatSlideHash(currentSlideIndex, isScriptureSlide ? hashVerse : undefined)
         : '';
       const search = window.location.search;
       const normalizedPath = window.location.pathname.replace(/\/$/, '');
@@ -419,7 +423,7 @@ function App() {
         window.history.replaceState(null, '', targetPath);
       }
     }
-  }, [currentPresentation, currentSlideIndex, scriptureState]);
+  }, [appMode, currentPresentation, currentSlideIndex, scriptureState]);
 
   // Dynamic document title update based on current presentation
   useEffect(() => {
@@ -1014,6 +1018,7 @@ function App() {
       hebrewFontSize: scriptureStateRef.current?.hebrewFontSize ?? 42,
       combinedTextBaseSize: scriptureStateRef.current?.combinedTextBaseSize ?? 50,
     };
+    const nextMode: AppMode = appModeRef.current === 'seferManual' ? 'seferManual' : 'scripture';
     setScriptureState(navState);
     syncState(
       currentPresentationRef.current,
@@ -1022,11 +1027,11 @@ function App() {
       lockedBackgroundValueRef.current,
       userSelectedBackgroundRef.current,
       videoStateRef.current,
-      'scripture',
+      nextMode,
       navState
     );
-    if (appMode !== 'scripture') setAppMode('scripture');
-  }, [syncState, appMode]);
+    if (appModeRef.current !== nextMode) setAppMode(nextMode);
+  }, [syncState]);
 
   const handleUpdateScriptureFontSizes = useCallback((sizes: {
     hebrewFontSize: number;
@@ -1095,6 +1100,7 @@ function App() {
 
     if (JSON.stringify(previous) === JSON.stringify(navState)) return;
 
+    const nextMode: AppMode = appModeRef.current === 'seferManual' ? 'seferManual' : 'scripture';
     setScriptureState(navState);
     syncState(
       currentPresentationRef.current,
@@ -1103,7 +1109,7 @@ function App() {
       lockedBackgroundValueRef.current,
       userSelectedBackgroundRef.current,
       videoStateRef.current,
-      'scripture',
+      nextMode,
       navState
     );
   }, [syncState]);
@@ -1136,8 +1142,7 @@ function App() {
     ];
     const updatedPresentation: Presentation = { ...presentation, mode: 'trilingual', slides: updatedSlides };
     handleSave(updatedPresentation);
-    handleSelectPresentationAndSlide(updatedPresentation, insertAt, 'forward');
-  }, [handleSave, handleSelectPresentationAndSlide]);
+  }, [handleSave]);
 
   const handleScriptureBoundary = useCallback((direction: 'next' | 'previous') => {
     const presentation = currentPresentationRef.current;
@@ -1188,6 +1193,46 @@ function App() {
           scriptureState={scriptureState}
           onUpdateScriptureFontSizes={handleUpdateScriptureFontSizes}
           onToggleAppMode={(mode: AppMode) => {
+            if (mode === 'seferManual') {
+              if (appModeRef.current !== 'seferManual') {
+                slideScriptureStateBeforeManualRef.current = appModeRef.current === 'scripture'
+                  ? scriptureStateRef.current
+                  : null;
+              }
+
+              const activeSlide = currentPresentationRef.current && currentSlideIndexRef.current >= 0
+                ? currentPresentationRef.current.slides[currentSlideIndexRef.current]
+                : null;
+              const slideState = buildScriptureSlideState(activeSlide, 'forward');
+              const sourceState = scriptureStateRef.current ?? slideState;
+              const manualState: ScriptureNavState | null = sourceState
+                ? {
+                    ...sourceState,
+                    verseStart: sourceState.verse,
+                    verseEnd: undefined,
+                    scriptureKind: 'sefer',
+                    command: 'navigate',
+                    commandId: ++scriptureCommandIdRef.current,
+                  }
+                : null;
+
+              if (manualState) {
+                setScriptureState(manualState);
+              }
+              setAppMode('seferManual');
+              syncState(
+                currentPresentationRef.current,
+                currentSlideIndexRef.current,
+                backgroundLockRef.current,
+                lockedBackgroundValueRef.current,
+                userSelectedBackgroundRef.current,
+                videoStateRef.current,
+                'seferManual',
+                manualState ?? scriptureStateRef.current
+              );
+              return;
+            }
+
             if (mode === 'slides') {
               const fallbackPresentation =
                 currentPresentationRef.current ??
@@ -1206,6 +1251,31 @@ function App() {
                 setCurrentSlideIndex(fallbackSlideIndex);
               } else if (currentPresentationRef.current && currentSlideIndexRef.current < 0) {
                 setCurrentSlideIndex(0);
+              }
+
+              if (appModeRef.current === 'seferManual') {
+                const activeSlide = currentPresentationRef.current && currentSlideIndexRef.current >= 0
+                  ? currentPresentationRef.current.slides[currentSlideIndexRef.current]
+                  : null;
+                const restoredState = slideScriptureStateBeforeManualRef.current ?? buildScriptureSlideState(activeSlide, 'forward');
+                const returnsToScripture = !!restoredState && !!activeSlide && (activeSlide.type === 'sefer' || activeSlide.type === 'tanaj');
+                const nextMode: AppMode = returnsToScripture ? 'scripture' : 'slides';
+
+                if (restoredState) {
+                  setScriptureState(restoredState);
+                }
+                setAppMode(nextMode);
+                syncState(
+                  currentPresentationRef.current ?? storedPresenterState?.presentation ?? presentations[0] ?? null,
+                  (currentSlideIndexRef.current >= 0 && currentPresentationRef.current) ? currentSlideIndexRef.current : 0,
+                  backgroundLockRef.current,
+                  lockedBackgroundValueRef.current,
+                  userSelectedBackgroundRef.current,
+                  videoStateRef.current,
+                  nextMode,
+                  restoredState ?? scriptureStateRef.current
+                );
+                return;
               }
             }
 
@@ -1234,13 +1304,16 @@ function App() {
   }
 
   // Presenter (big screen) mode
-  if (appMode === 'scripture' && scriptureState?.scriptureKind !== 'tanaj' && scriptureState) {
+  if ((appMode === 'seferManual' || (appMode === 'scripture' && scriptureState?.scriptureKind !== 'tanaj')) && scriptureState) {
     return (
       <div className="w-full h-screen overflow-hidden">
         <SeferReaderScreen
           scriptureState={scriptureState}
           onVerseSelected={handleSeferOnlineRef}
           onBoundaryReached={handleScriptureBoundary}
+          onLogoClick={() => {
+            window.open(`${window.location.origin}?mode=control`, 'ControlPanel', 'width=1100,height=800');
+          }}
         />
       </div>
     );
