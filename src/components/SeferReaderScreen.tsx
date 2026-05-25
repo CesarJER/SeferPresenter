@@ -5,7 +5,7 @@ import { parseVerses } from '../utils/scriptureParser';
 import { SeferFlowView } from './SeferFlowView';
 import { VerseSidebar } from './VerseSidebar';
 import { useResizablePanel } from '../hooks/useResizablePanel';
-import { numberToHebrewNumeral } from '../hooks/hebrewNumerals';
+import { numberToHebrewNumeral, numberToGreekNumeral } from '../hooks/scriptureNumerals';
 
 interface SeferReaderScreenProps {
   scriptureState: ScriptureNavState;
@@ -277,12 +277,22 @@ export const SeferReaderScreen: React.FC<SeferReaderScreenProps> = ({
     return Math.max(12, Math.min(70, parsed));
   }, [scriptureState.combinedTextBaseSize]);
 
+  const isGreek = useMemo(() => {
+    const nativeBookName = currentSelectedVerse?.bookHeb || scriptureState?.bookHeb || '';
+    return /[\u0370-\u03FF\u1F00-\u1FFF]/.test(nativeBookName);
+  }, [currentSelectedVerse?.bookHeb, scriptureState?.bookHeb]);
+
   const formatReferenceNav = useCallback((bookName: string, useHebrewNumbers = false) => {
     const chapter = Number(scriptureState.chapter);
     const verse = Number(scriptureState.verse);
     const start = Number(scriptureState.verseStart || scriptureState.verse);
     const end = Number(scriptureState.verseEnd || scriptureState.verseStart || scriptureState.verse);
-    const n = (value: number) => useHebrewNumbers ? numberToHebrewNumeral(value) : String(value);
+    const n = (value: number) => {
+      if (useHebrewNumbers) {
+        return isGreek ? numberToGreekNumeral(value) : numberToHebrewNumeral(value);
+      }
+      return String(value);
+    };
     const hasMultiVerseRange = scriptureState.verseEnd && scriptureState.verseStart !== scriptureState.verseEnd;
 
     if (hasMultiVerseRange) {
@@ -290,7 +300,7 @@ export const SeferReaderScreen: React.FC<SeferReaderScreenProps> = ({
     }
 
     return `${bookName} ${n(chapter)}:${n(verse)}`;
-  }, [scriptureState.chapter, scriptureState.verse, scriptureState.verseEnd, scriptureState.verseStart]);
+  }, [scriptureState.chapter, scriptureState.verse, scriptureState.verseEnd, scriptureState.verseStart, isGreek]);
 
   const spanishNavLabel = currentSelectedVerse
     ? formatReferenceNav(currentSelectedVerse.bookEs || scriptureState.bookEs || scriptureState.bookAbbrevEs)
@@ -325,7 +335,9 @@ export const SeferReaderScreen: React.FC<SeferReaderScreenProps> = ({
 
       <div className="relative flex-1 flex flex-col overflow-hidden">
         <div className="absolute left-0 right-0 top-0 z-40 border-b border-amber-900/20 bg-[#f7e7b6]/95 px-4 py-2 text-5xl font-bold text-amber-950 shadow-sm">
-          <div className="flex items-center justify-between gap-3" dir="rtl">
+          <div className="flex items-center justify-between gap-3">
+            <span></span>
+            <span className="text-center" dir={bookDir} >{hebrewNavLabel}</span>
             {onLogoClick && (
               <button
                 type="button"
@@ -336,8 +348,6 @@ export const SeferReaderScreen: React.FC<SeferReaderScreenProps> = ({
                 <img src="/logo.svg" alt="Abrir menú" className="h-6 w-6" />
               </button>
             )}
-            <span>{hebrewNavLabel}</span>
-            <span></span>
           </div>
         </div>
         <div className="flex-1 overflow-y-auto flex flex-col justify-start p-8 pt-20 pb-24 scrollable-container touch-pan-y">

@@ -39,3 +39,46 @@ export const numberToHebrewNumeral = (num: number): string => {
   }
   return result;
 };
+
+export const numberToGreekNumeral = (num: number): string => {
+  if (num <= 0) return '';
+
+  const units: Record<number, string> = {
+    1: 'α', 2: 'β', 3: 'γ', 4: 'δ', 5: 'ε', 6: 'ϛ', 7: 'ζ', 8: 'η', 9: 'θ'
+  };
+  const tens: Record<number, string> = {
+    10: 'ι', 20: 'κ', 30: 'λ', 40: 'μ', 50: 'ν', 60: 'ξ', 70: 'ο', 80: 'π', 90: 'ϟ'
+  };
+  const hundreds: Record<number, string> = {
+    100: 'ρ', 200: 'σ', 300: 'τ', 400: 'υ', 500: 'φ', 600: 'χ', 700: 'ψ', 800: 'ω', 900: 'ϡ'
+  };
+
+  let result = '';
+
+  if (num >= 1000) {
+    const thousands = Math.floor(num / 1000);
+    result += '͵' + numberToGreekNumeral(thousands).replace('′', '');
+    num %= 1000;
+  }
+
+  const h = Math.floor(num / 100) * 100;
+  if (h) {
+    result += hundreds[h];
+    num %= 100;
+  }
+
+  const t = Math.floor(num / 10) * 10;
+  if (t) {
+    result += tens[t];
+    num %= 10;
+  }
+
+  if (num) {
+    result += units[num];
+  }
+
+  if (result) {
+    result += '′';
+  }
+  return result;
+};

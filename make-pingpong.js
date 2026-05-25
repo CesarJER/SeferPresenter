@@ -6,6 +6,7 @@ import { fileURLToPath } from "url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const backgroundsDir = path.join(__dirname, "public", "backgrounds");
+const excludeDir = path.join(backgroundsDir, "Fondos");
 
 function scanDirectory(dir) {
   const files = fs.readdirSync(dir);
@@ -14,6 +15,9 @@ function scanDirectory(dir) {
     const stat = fs.statSync(fullPath);
     
     if (stat.isDirectory()) {
+      if (path.normalize(fullPath).toLowerCase() === path.normalize(excludeDir).toLowerCase()) {
+        continue;
+      }
       scanDirectory(fullPath);
     } else if (stat.isFile() && file.toLowerCase().endsWith(".mp4")) {
       if (file.toLowerCase().endsWith("-pingpong.mp4")) {
