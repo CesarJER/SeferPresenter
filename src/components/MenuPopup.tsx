@@ -2,9 +2,11 @@ import React, { useEffect, useState, useRef } from 'react';
 import type { Presentation, Slide, VideoState, AppMode, ScriptureNavState } from '../App';
 import type { SeferReaderState } from '../hooks/useSeferReader';
 import { transliterateText } from '../utils/transliterate';
-import { Languages, Save, Download, Upload, ArrowUp, ArrowDown, Trash2, Plus, FileText, Table, Pencil, Play, ChevronDown, ChevronUp, X, Lock, Unlock, Layers, Maximize2, Minimize2, Video, Image as ImageIcon } from 'lucide-react';
+import { getScriptureChapterVerses, materializeScriptureSlides, parseScriptureTag, scriptureSlideToTag } from '../utils/scriptureLookup';
+import { Languages, Save, Download, Upload, ArrowUp, ArrowDown, Trash2, Plus, FileText, Table, Pencil, Play, ChevronDown, ChevronUp, X, Lock, Unlock, Layers, Maximize2, Minimize2, Video, Image as ImageIcon, BookOpen, ScrollText } from 'lucide-react';
 import AutoResizeText from './AutoResizeText';
 import SeferControlPanel from './SeferControlPanel';
+import SeferControlPanelMini from './SeferControlPanelMini';
 
 interface MenuPopupProps {
   presentations: Presentation[];
@@ -15,7 +17,7 @@ interface MenuPopupProps {
   backgroundLock: boolean;
   onToggleBackgroundLock: (locked: boolean) => void;
   onSelectBackgroundOverride: (bg: string) => void;
-  onSave: (p: Presentation) => void;
+  onSave: (p: Presentation) => void | Promise<void>;
   onSelectPresentation: (p: Presentation, slideIdx?: number) => void;
   onSelectSlide: (idx: number) => void;
   onImport: (imported: Presentation[]) => void;
@@ -25,13 +27,215 @@ interface MenuPopupProps {
   scriptureState?: ScriptureNavState | null;
   onToggleAppMode?: (mode: AppMode) => void;
   onProjectScripture?: (state: SeferReaderState, command?: 'navigate' | 'next' | 'previous') => void;
-  onAddScriptureSlide?: (state: SeferReaderState) => void;
+  onAddScriptureSlide?: (state: SeferReaderState, kind?: 'sefer' | 'tanaj') => void;
+  onBoundaryReached?: (direction: 'next' | 'previous') => void;
   onUpdateScriptureFontSizes?: (sizes: { hebrewFontSize: number; combinedTextBaseSize: number }) => void;
 }
 
 const isTitleSlide = (slide: Slide) =>
-  slide.id === 'slide-title' || slide.label === 'Título' || slide.label === 'TÃ­tulo';
+  slide.id === 'slide-title' || slide.label === 'Título';
 
+const mapScriptureDraftToSlide = (
+  draft: Awaited<ReturnType<typeof materializeScriptureSlides>>[number],
+): Slide => ({
+  id: draft.id,
+  label: draft.label,
+  lines: draft.lines,
+  type: draft.type,
+  scriptureBook: draft.scriptureBook,
+  scriptureChapter: draft.scriptureChapter,
+  scriptureVerseStart: draft.scriptureVerseStart,
+  scriptureVerseEnd: draft.scriptureVerseEnd,
+});
+
+const parseScriptureDirectiveFromText = async (text: string): Promise<Slide[] | null> => {
+  const tag = parseScriptureTag(text);
+  if (!tag) return null;
+  const materialized = await materializeScriptureSlides(tag);
+  return materialized.map(mapScriptureDraftToSlide);
+};
+
+interface ScriptureRangeEditorProps {
+  slide: Slide;
+  backgrounds: string[];
+  onVerseBackgroundChange: (verse: string, value: string) => void;
+  onCommit: (payload: {
+    scriptureBook: string;
+    scriptureChapter: string;
+    scriptureVerseStart: string;
+    scriptureVerseEnd?: string;
+    label: string;
+  }) => void;
+}
+
+const ScriptureRangeEditor: React.FC<ScriptureRangeEditorProps> = ({ slide, backgrounds, onVerseBackgroundChange, onCommit }) => {
+  const [bookToken, setBookToken] = useState(slide.scriptureBook || slide.label.split(' ')[0] || '');
+  const [chapter, setChapter] = useState(slide.scriptureChapter || '1');
+  const [verseStart, setVerseStart] = useState(slide.scriptureVerseStart || '1');
+  const [verseEnd, setVerseEnd] = useState(slide.scriptureVerseEnd && slide.scriptureVerseEnd !== slide.scriptureVerseStart ? slide.scriptureVerseEnd : '');
+  const [selectedVerses, setSelectedVerses] = useState<Awaited<ReturnType<typeof getScriptureChapterVerses>>>([]);
+  const [loadingVerses, setLoadingVerses] = useState(false);
+  const [showTanajTable, setShowTanajTable] = useState(true);
+
+  const isTanaj = slide.type === 'tanaj';
+  const isSefer = slide.type === 'sefer';
+
+  useEffect(() => {
+    setBookToken(slide.scriptureBook || slide.label.split(' ')[0] || '');
+    setChapter(slide.scriptureChapter || '1');
+    setVerseStart(slide.scriptureVerseStart || '1');
+    setVerseEnd(slide.scriptureVerseEnd && slide.scriptureVerseEnd !== slide.scriptureVerseStart ? slide.scriptureVerseEnd : '');
+  }, [slide.id, slide.label, slide.scriptureBook, slide.scriptureChapter, slide.scriptureVerseStart, slide.scriptureVerseEnd]);
+
+  useEffect(() => {
+    let alive = true;
+    const safeBook = bookToken.trim();
+    const safeChapter = chapter.trim() || '1';
+    const startNum = Number(verseStart || '1');
+    const endNum = Number(verseEnd || verseStart || '1');
+
+    if (!safeBook) {
+      setSelectedVerses([]);
+      setLoadingVerses(false);
+      return () => { alive = false; };
+    }
+
+    setLoadingVerses(true);
+    getScriptureChapterVerses(safeBook, safeChapter)
+      .then((rows) => {
+        if (!alive) return;
+        const from = Number.isFinite(startNum) ? startNum : 1;
+        const to = Number.isFinite(endNum) ? endNum : from;
+        const min = Math.min(from, to);
+        const max = Math.max(from, to);
+        setSelectedVerses(rows.filter((row) => {
+          const verseNum = Number(row.verse);
+          return verseNum >= min && verseNum <= max;
+        }));
+      })
+      .catch(() => {
+        if (!alive) return;
+        setSelectedVerses([]);
+      })
+      .finally(() => {
+        if (alive) setLoadingVerses(false);
+      });
+
+    return () => {
+      alive = false;
+    };
+  }, [bookToken, chapter, verseStart, verseEnd]);
+
+  const commitRange = () => {
+    const bookValue = bookToken.trim() || slide.scriptureBook || slide.label.split(' ')[0] || '';
+    const startValue = verseStart.trim() || '1';
+    const rawEnd = verseEnd.trim();
+    let normalizedEnd = rawEnd || startValue;
+    const startNum = Number(startValue);
+    const endNum = Number(rawEnd);
+    if (normalizedEnd && Number.isFinite(startNum) && Number.isFinite(endNum) && endNum < startNum) {
+      normalizedEnd = startValue;
+    }
+
+    onCommit({
+      scriptureBook: bookValue,
+      scriptureChapter: chapter.trim() || '1',
+      scriptureVerseStart: startValue,
+      scriptureVerseEnd: normalizedEnd,
+      label: `${bookValue} ${chapter.trim() || '1'}:${normalizedEnd !== startValue ? `${startValue}-${normalizedEnd}` : startValue}`,
+    });
+  };
+
+  return (
+    <div className="space-y-2 rounded-lg border border-gray-800 bg-gray-950/60 p-3">
+      <div className="grid grid-cols-1 gap-2 md:grid-cols-[minmax(0,1.2fr)_80px_80px_80px_auto]">
+        <input
+          value={bookToken}
+          onChange={(e) => setBookToken(e.target.value)}
+          className="w-full rounded border border-gray-700 bg-gray-900 px-2 py-1 text-[11px] text-white focus:outline-none focus:ring-1 focus:ring-yellow-500"
+          placeholder="Gn"
+        />
+        <input
+          value={chapter}
+          onChange={(e) => setChapter(e.target.value)}
+          className="w-full rounded border border-gray-700 bg-gray-900 px-2 py-1 text-[11px] text-white focus:outline-none focus:ring-1 focus:ring-yellow-500"
+          placeholder="Cap"
+        />
+        <input
+          value={verseStart}
+          onChange={(e) => setVerseStart(e.target.value)}
+          className="w-full rounded border border-gray-700 bg-gray-900 px-2 py-1 text-[11px] text-white focus:outline-none focus:ring-1 focus:ring-yellow-500"
+          placeholder="Ver"
+        />
+        <input
+          value={verseEnd}
+          onChange={(e) => setVerseEnd(e.target.value)}
+          className="w-full rounded border border-gray-700 bg-gray-900 px-2 py-1 text-[11px] text-white focus:outline-none focus:ring-1 focus:ring-yellow-500"
+          placeholder="End"
+        />
+        <button
+          type="button"
+          onClick={commitRange}
+          className="rounded-md bg-yellow-600 px-3 py-1.5 text-[11px] font-bold text-white hover:bg-yellow-500"
+        >
+          Ok
+        </button>
+      </div>
+
+      {(isTanaj || isSefer) && (
+        <div className="rounded-md border border-gray-800 bg-gray-900/50">
+          <button
+            type="button"
+            onClick={() => setShowTanajTable(!showTanajTable)}
+            className="flex w-full items-center justify-between px-2 py-1.5 text-[10px] font-black uppercase tracking-wide text-gray-400 hover:text-white"
+          >
+            <span>Versos {isTanaj ? 'Tanaj' : 'Sefer'} seleccionados</span>
+            {showTanajTable ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+          </button>
+
+          {showTanajTable && (
+            <div className="overflow-x-auto border-t border-gray-800">
+              <table className="w-full min-w-[680px] text-left text-[11px]">
+                <thead className="bg-gray-950/60 text-[9px] uppercase tracking-wide text-gray-500">
+                  <tr>
+                    <th className="px-2 py-1.5 w-[34%]">Hebreo</th>
+                    <th className="px-2 py-1.5 w-[24%]">Transliteración</th>
+                    <th className="px-2 py-1.5 w-[24%]">Traducción</th>
+                    {isTanaj && <th className="px-2 py-1.5 w-[18%]">Fondo slide</th>}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-800">
+                  {loadingVerses ? (
+                    <tr><td colSpan={isTanaj ? 4 : 3} className="px-2 py-2 text-gray-500">Cargando versos...</td></tr>
+                  ) : selectedVerses.length > 0 ? selectedVerses.map((verse) => (
+                    <tr key={`${verse.chapter}-${verse.verse}`}>
+                      <td className="px-2 py-1.5 text-right text-[#f3c96a]" dir="rtl" dangerouslySetInnerHTML={{ __html: verse.verseNikud }} />
+                      <td className="px-2 py-1.5 text-sky-200">{verse.transliteration}</td>
+                      <td className="px-2 py-1.5 text-gray-300">{verse.translation}</td>
+                      {isTanaj && <td className="px-2 py-1.5">
+                        <select
+                          value={slide.scriptureVerseBackgrounds?.[verse.verse] || 'Principal'}
+                          onChange={(e) => onVerseBackgroundChange(verse.verse, e.target.value)}
+                          className="w-full rounded border border-gray-700 bg-gray-900 px-1.5 py-1 text-[10px] text-gray-200"
+                        >
+                          {['Principal', 'Anterior', 'Ignorar', 'No cambiar', ...backgrounds].map((bgOption) => (
+                            <option key={bgOption} value={bgOption}>{bgOption.split('/').pop() || bgOption}</option>
+                          ))}
+                        </select>
+                      </td>}
+                    </tr>
+                  )) : (
+                    <tr><td colSpan={isTanaj ? 4 : 3} className="px-2 py-2 text-gray-500">Sin versos para este rango.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
 const parseVideoSlideString = (text: string): {
   videoSrc: string;
   volume: number;
@@ -418,11 +622,13 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
   onToggleAppMode = () => { },
   onProjectScripture = () => { },
   onAddScriptureSlide = () => { },
+  onBoundaryReached = () => { },
   onUpdateScriptureFontSizes = () => { }
 }) => {
   const activeSlide = currentPresentation && currentSlideIndex >= 0 && currentSlideIndex < currentPresentation.slides.length
     ? currentPresentation.slides[currentSlideIndex]
     : null;
+  const isActiveScriptureSlide = !!activeSlide && (activeSlide.type === 'sefer' || activeSlide.type === 'tanaj' || !!activeSlide.scriptureBook);
 
   const [id, setId] = useState('');
   const [title, setTitle] = useState('');
@@ -729,7 +935,11 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
 
     const parts = [
       titleBlock,
-      ...contentSlides.map(slide => (slide.label ? `#${slide.label}\n` : '') + (slide.lines[0] || ''))
+      ...contentSlides.map(slide => {
+        const tag = scriptureSlideToTag(slide);
+        const content = tag || (slide.lines[0] || '');
+        return (slide.label ? `#${slide.label}\n` : '') + content;
+      })
     ].filter(Boolean);
 
     return parts.join('\n\n');
@@ -743,13 +953,17 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
 
     const parts = [
       titleBlock,
-      ...contentSlides.map(slide => (index === 0 && slide.label ? `#${slide.label}\n` : '') + (slide.lines[index] || ''))
+      ...contentSlides.map(slide => {
+        const tag = scriptureSlideToTag(slide);
+        const content = tag && index === 0 ? tag : (slide.lines[index] || '');
+        return (index === 0 && slide.label ? `#${slide.label}\n` : '') + content;
+      })
     ].filter(Boolean);
 
     return parts.join('\n\n');
   };
 
-  const toggleEditMode = () => {
+  const toggleEditMode = async () => {
     if (isTableMode) {
       // De Tabla a Texto Rápido:
       if (mode === 'standard') {
@@ -762,8 +976,8 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
       setIsTableMode(false);
     } else {
       // De Texto Rápido a Tabla:
-      const parsed = mode === 'standard' ? parseStandardSlides() : parseTrilingualSlides();
-      const merged = parsed.map((pSlide, idx) => {
+      const parsed = await buildSlidesForSave();
+      const merged = parsed.slides.map((pSlide, idx) => {
         const existing = slides[idx] || slides.find(s => s.id === pSlide.id);
         return {
           ...pSlide,
@@ -771,11 +985,12 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
         };
       });
       setSlides(merged);
+      setMode(parsed.mode);
       setIsTableMode(true);
     }
   };
 
-  const handleModeChange = (newMode: 'standard' | 'trilingual') => {
+  const handleModeChange = async (newMode: 'standard' | 'trilingual') => {
     if (newMode === mode) return;
 
     setMode(newMode);
@@ -799,24 +1014,28 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
       });
       setSlides(newSlides);
     } else {
+      const parsed = await buildSlidesForSave();
       if (newMode === 'trilingual') {
-        const parsed = parseStandardSlides();
-        const mapped = parsed.map(slide => {
+        const mapped = parsed.slides.map(slide => {
           const fallbackVal = isTitleSlide(slide) ? '>-' : '-';
+          if (slide.type === 'tanaj' || slide.type === 'sefer' || slide.scriptureBook) {
+            return slide;
+          }
           return {
             ...slide,
-            lines: [slide.lines[0] || '', fallbackVal, fallbackVal]
+            lines: [slide.lines[0] || '', slide.lines[1] || fallbackVal, slide.lines[2] || fallbackVal]
           };
         });
+        setSlides(mapped);
         setHebText(getTrilingualTextFromSlides(mapped, 0));
         setTransText(getTrilingualTextFromSlides(mapped, 1));
         setTraText(getTrilingualTextFromSlides(mapped, 2));
       } else {
-        const parsed = parseTrilingualSlides();
-        const mapped = parsed.map(slide => ({
+        const mapped = parsed.slides.map(slide => ({
           ...slide,
-          lines: [slide.lines[0] || '']
+          lines: [scriptureSlideToTag(slide) || slide.lines[0] || '']
         }));
+        setSlides(mapped);
         setStandardText(getStandardTextFromSlides(mapped));
       }
     }
@@ -861,7 +1080,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
     setSlides([...slides, newSlide]);
   };
 
-  const handleChangeSlideType = (idx: number, newType: 'text' | 'video' | 'image') => {
+  const handleChangeSlideType = (idx: number, newType: 'text' | 'video' | 'image' | 'tanaj' | 'sefer') => {
     const updated = [...slides];
     const slide = { ...updated[idx] };
 
@@ -872,6 +1091,10 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
       delete slide.videoSpeed;
       delete slide.videoStart;
       delete slide.videoEnd;
+      delete slide.scriptureBook;
+      delete slide.scriptureChapter;
+      delete slide.scriptureVerseStart;
+      delete slide.scriptureVerseEnd;
 
       const cleanLine = (l: string) => {
         if (l.trim() === '[IMAGE]' || l.trim().startsWith('[VIDEO')) return '';
@@ -885,6 +1108,10 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
       delete slide.videoSpeed;
       delete slide.videoStart;
       delete slide.videoEnd;
+      delete slide.scriptureBook;
+      delete slide.scriptureChapter;
+      delete slide.scriptureVerseStart;
+      delete slide.scriptureVerseEnd;
 
       slide.lines = slide.lines.map(() => '[IMAGE]');
       if (slide.lines.length === 0) {
@@ -896,6 +1123,10 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
       slide.videoVolume = slide.videoVolume ?? 0.8;
       slide.videoSpeed = slide.videoSpeed ?? 1.0;
       slide.videoLoop = slide.videoLoop ?? true;
+      delete slide.scriptureBook;
+      delete slide.scriptureChapter;
+      delete slide.scriptureVerseStart;
+      delete slide.scriptureVerseEnd;
 
       const startStr = slide.videoStart !== undefined ? slide.videoStart : '';
       const endStr = slide.videoEnd !== undefined ? slide.videoEnd : '';
@@ -913,6 +1144,11 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
         parts.pop();
       }
       slide.lines = [`[${parts.join(' - ')}]`].concat(slide.lines.slice(1).map(() => ''));
+    } else if (newType === 'tanaj' || newType === 'sefer') {
+      slide.type = newType;
+      if (slide.scriptureBook && slide.scriptureChapter && slide.scriptureVerseStart) {
+        slide.scriptureVerseEnd = newType === 'sefer' ? (slide.scriptureVerseEnd || slide.scriptureVerseStart) : (slide.scriptureVerseStart);
+      }
     }
 
     updated[idx] = slide;
@@ -983,6 +1219,43 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
   const handleUpdateLabel = (idx: number, newLabel: string) => {
     const updated = [...slides];
     updated[idx] = { ...updated[idx], label: newLabel };
+    setSlides(updated);
+  };
+
+  const handleUpdateScriptureSlide = (
+    idx: number,
+    payload: {
+      scriptureBook: string;
+      scriptureChapter: string;
+      scriptureVerseStart: string;
+      scriptureVerseEnd?: string;
+      label: string;
+    }
+  ) => {
+    const updated = [...slides];
+    const slide = { ...updated[idx] };
+    const nextKind = slide.type === 'tanaj' ? 'tanaj' : 'sefer';
+    slide.type = nextKind;
+    slide.scriptureBook = payload.scriptureBook;
+    slide.scriptureChapter = payload.scriptureChapter;
+    slide.scriptureVerseStart = payload.scriptureVerseStart;
+    slide.scriptureVerseEnd = payload.scriptureVerseEnd || payload.scriptureVerseStart;
+    slide.label = payload.label;
+    updated[idx] = slide;
+    setSlides(updated);
+  };
+
+  const handleUpdateScriptureVerseBackground = (idx: number, verse: string, bgValue: string) => {
+    const updated = [...slides];
+    const slide = { ...updated[idx] };
+    const nextBackgrounds = { ...(slide.scriptureVerseBackgrounds ?? {}) };
+    if (!bgValue || bgValue === 'Principal') {
+      delete nextBackgrounds[verse];
+    } else {
+      nextBackgrounds[verse] = bgValue;
+    }
+    slide.scriptureVerseBackgrounds = nextBackgrounds;
+    updated[idx] = slide;
     setSlides(updated);
   };
 
@@ -1203,7 +1476,162 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
     return mode === 'standard' ? parseStandardSlides() : parseTrilingualSlides();
   };
 
-  const handleSave = () => {
+  const buildSlidesForSave = async (): Promise<{ slides: Slide[]; mode: 'standard' | 'trilingual' }> => {
+    if (isTableMode) {
+      const nextMode = slides.some((slide) => slide.type === 'tanaj' || slide.type === 'sefer' || slide.scriptureBook)
+        ? 'trilingual'
+        : mode;
+      return { slides, mode: nextMode };
+    }
+
+    if (mode === 'standard') {
+      const parts = standardText.split(/\n\n+/);
+      const titleLines: string[] = [];
+      const contentParts: string[] = [];
+      let hasTitleMarker = false;
+      let hasScriptureSlides = false;
+
+      parts.forEach((part) => {
+        const lines = part.split('\n');
+        const hasMarker = lines.some((line) => line.startsWith('>'));
+        if (hasMarker) hasTitleMarker = true;
+        const titleMarkers = lines.filter((line) => line.startsWith('>')).map((line) => line.substring(1).trim());
+        const con = lines.filter((line) => !line.startsWith('>')).join('\n');
+        if (titleMarkers.length > 0) titleLines.push(...titleMarkers);
+        if (con.trim()) contentParts.push(con);
+      });
+
+      const titleSlide: Slide = {
+        id: 'slide-title',
+        label: 'Título',
+        lines: [hasTitleMarker ? titleLines.join('\n') : (titleLines.join('\n') || title.trim())]
+      };
+
+      let autoId = 1;
+      const parsed: Slide[] = [];
+      for (const [idx, part] of contentParts.entries()) {
+        const lines = part.split('\n');
+        let label: string;
+        let content = part;
+        if (lines[0].startsWith('#')) {
+          label = lines[0].substring(1).trim();
+          content = lines.slice(1).join('\n');
+        } else {
+          label = autoId.toString();
+          autoId++;
+        }
+
+        const scriptureSlides = await parseScriptureDirectiveFromText(content.trim());
+        if (scriptureSlides) {
+          hasScriptureSlides = true;
+          parsed.push(...scriptureSlides);
+          continue;
+        }
+
+        const videoData = parseVideoSlideString(content);
+        if (videoData) {
+          parsed.push({
+            id: `slide-${idx}`,
+            label,
+            lines: [content.trim()],
+            type: 'video' as const,
+            videoSrc: videoData.videoSrc,
+            videoVolume: videoData.volume,
+            videoSpeed: videoData.speed,
+            videoLoop: videoData.loop,
+            videoStart: videoData.startTime,
+            videoEnd: videoData.endTime
+          });
+          continue;
+        }
+
+        parsed.push({ id: `slide-${idx}`, label, lines: [content.trim()] });
+      }
+
+      return { slides: [titleSlide, ...parsed.filter(slide => slide.lines[0].length > 0)], mode: hasScriptureSlides ? 'trilingual' : 'standard' };
+    }
+
+    const getTitleAndContent = (text: string) => {
+      const titleLines: string[] = [];
+      const content: string[] = [];
+
+      text.split(/\n\n+/).forEach(part => {
+        const lines = part.split('\n');
+        const titleMarkers = lines.filter(line => line.startsWith('>')).map(line => line.substring(1).trim());
+        const body = lines.filter(line => !line.startsWith('>')).join('\n');
+        if (titleMarkers.length > 0) titleLines.push(...titleMarkers);
+        if (body.trim()) content.push(body);
+      });
+
+      return { title: titleLines.join('\n'), content };
+    };
+
+    const hebData = getTitleAndContent(hebText);
+    const transData = getTitleAndContent(transText);
+    const traData = getTitleAndContent(traText);
+    const maxLen = Math.max(hebData.content.length, transData.content.length, traData.content.length);
+
+    const rows = Array.from({ length: maxLen }, (_, i) => ({
+      hebrew: hebData.content[i] || '',
+      transliteration: transData.content[i] || '',
+      translation: traData.content[i] || ''
+    }));
+
+    const titleSlide: Slide = {
+      id: 'slide-title',
+      label: 'Título',
+      lines: [hebData.title, transData.title, traData.title].map(v => v || '')
+    };
+
+    let autoId = 1;
+    const parsed: Slide[] = [];
+    for (const [idx, row] of rows.entries()) {
+      const lines = row.hebrew.split('\n');
+      let label: string;
+      let contentHeb = row.hebrew;
+
+      if (lines[0].startsWith('#')) {
+        label = lines[0].substring(1).trim();
+        contentHeb = lines.slice(1).join('\n');
+      } else {
+        label = autoId.toString();
+        autoId++;
+      }
+
+      const scriptureSlides = await parseScriptureDirectiveFromText(contentHeb.trim());
+      if (scriptureSlides) {
+        parsed.push(...scriptureSlides);
+        continue;
+      }
+
+      const videoData = parseVideoSlideString(contentHeb) || parseVideoSlideString(row.transliteration) || parseVideoSlideString(row.translation);
+      if (videoData) {
+        parsed.push({
+          id: `slide-${idx}`,
+          label,
+          lines: [contentHeb.trim(), row.transliteration.trim(), row.translation.trim()],
+          type: 'video' as const,
+          videoSrc: videoData.videoSrc,
+          videoVolume: videoData.volume,
+          videoSpeed: videoData.speed,
+          videoLoop: videoData.loop,
+          videoStart: videoData.startTime,
+          videoEnd: videoData.endTime
+        });
+        continue;
+      }
+
+      parsed.push({
+        id: `slide-${idx}`,
+        label,
+        lines: [contentHeb.trim(), row.transliteration.trim(), row.translation.trim()]
+      });
+    }
+
+    return { slides: [titleSlide, ...parsed.filter(slide => slide.lines.some(line => line.trim().length > 0))], mode: 'trilingual' };
+  };
+
+  const handleSave = async () => {
     if (!title.trim()) {
       alert('Por favor, introduce un título.');
       return;
@@ -1214,18 +1642,67 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
       ? (currentPresentation?.background || backgrounds[0])
       : bg;
 
-    onSave({
+    const parsed = await buildSlidesForSave();
+
+    await onSave({
       id: id || currentPresentation?.id || Date.now().toString(),
       title,
       background: finalBg,
-      mode,
+      mode: parsed.mode,
       fontScale,
-      slides: parseSlides()
+      slides: parsed.slides
     });
   };
 
   const textareaClass =
     'w-full min-h-[20rem] md:min-h-[24rem] max-h-[78vh] resize-y overflow-auto bg-gray-900 border border-gray-700 rounded-md p-3 text-[0.92rem] leading-relaxed text-white shadow-inner focus:outline-none focus:ring-1 focus:ring-yellow-500';
+
+  const isScriptureRangeRoot = (slide: Slide) => (
+    !!slide.scriptureBook &&
+    !!slide.scriptureChapter &&
+    !!slide.scriptureVerseStart &&
+    !!slide.scriptureVerseEnd &&
+    slide.scriptureVerseStart !== slide.scriptureVerseEnd
+  );
+
+  const getScriptureRangeRootIndex = (idx: number) => {
+    const slide = slides[idx];
+    if (!slide || !slide.scriptureBook || !slide.scriptureChapter || !slide.scriptureVerseStart) return -1;
+    if (isScriptureRangeRoot(slide)) return idx;
+
+    for (let i = idx - 1; i >= 0; i--) {
+      const candidate = slides[i];
+      if (!candidate.scriptureBook || !candidate.scriptureChapter || candidate.scriptureBook !== slide.scriptureBook || candidate.scriptureChapter !== slide.scriptureChapter) {
+        break;
+      }
+      if (isScriptureRangeRoot(candidate)) return i;
+    }
+
+    return -1;
+  };
+
+  const getScriptureRangeEndIndex = (startIdx: number) => {
+    const root = slides[startIdx];
+    if (!root || !isScriptureRangeRoot(root)) return startIdx;
+
+    let endIdx = startIdx;
+    for (let i = startIdx + 1; i < slides.length; i++) {
+      const candidate = slides[i];
+      if (
+        candidate.scriptureBook === root.scriptureBook &&
+        candidate.scriptureChapter === root.scriptureChapter &&
+        candidate.scriptureVerseStart &&
+        candidate.scriptureVerseEnd &&
+        candidate.scriptureVerseStart === candidate.scriptureVerseEnd
+      ) {
+        endIdx = i;
+        continue;
+      }
+      break;
+    }
+
+    return endIdx;
+  };
 
   return (
     <div className="flex h-full w-full flex-col bg-gray-800 text-white">
@@ -1241,8 +1718,8 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
             type="button"
             onClick={() => onToggleAppMode(appMode === 'scripture' ? 'slides' : 'scripture')}
             className={`flex items-center justify-center p-2 text-xs font-semibold rounded border transition-all cursor-pointer ${appMode === 'scripture'
-                ? 'bg-yellow-600 border-yellow-500 text-white font-bold'
-                : 'bg-gray-800 border-gray-700 hover:bg-gray-700 text-gray-300 hover:text-white'
+              ? 'bg-yellow-600 border-yellow-500 text-white font-bold'
+              : 'bg-gray-800 border-gray-700 hover:bg-gray-700 text-gray-300 hover:text-white'
               }`}
             title={appMode === 'scripture' ? "Cambiar a Modo Diapositivas" : "Cambiar a Modo Lectura de Escrituras"}
           >
@@ -1260,220 +1737,26 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
         </div>
       </div>
 
-      {appMode === 'scripture' ? (
-        <div className="flex-1 overflow-hidden">
-          <SeferControlPanel
-            onProject={(state, cmd) => {
-              if (onProjectScripture) {
-                onProjectScripture(state, cmd);
-              }
-            }}
-            onAddSlide={(state) => {
-              if (onAddScriptureSlide) {
-                onAddScriptureSlide(state);
-              }
-            }}
-            restoredState={scriptureState}
-            onUpdateFontSizes={onUpdateScriptureFontSizes}
-          />
-        </div>
-      ) : (
-        <>
+      <div className="flex-1 min-h-0 overflow-auto flex flex-col">
+        {appMode === 'scripture' && !isActiveScriptureSlide && (
+          <div className="shrink-0 border-b border-gray-700 bg-gray-950/70">
+            <div>
+              <SeferControlPanel
+                onProject={(state, cmd) => {
+                  if (onProjectScripture) {
+                    onProjectScripture(state, cmd);
+                  }
+                }}
+                onAddSlide={onAddScriptureSlide}
+                restoredState={scriptureState ? { ...scriptureState, verseEnd: undefined } : null}
+                onUpdateFontSizes={onUpdateScriptureFontSizes}
+              />
+            </div>
+          </div>
+        )}
+        <div className="flex-1">
           {/* Visor Superior - Horizontal en desktop, vertical en movil */}
           <div className="border-b border-gray-700 bg-gray-900/50 p-3 md:p-4">
-            {(() => {
-              const isLiveVideo = activeSlide && activeSlide.type === 'video';
-              const formatTime = (secs: number) => {
-                if (isNaN(secs) || secs === Infinity) return '0:00';
-                const m = Math.floor(secs / 60);
-                const s = Math.floor(secs % 60);
-                return `${m}:${s < 10 ? '0' : ''}${s}`;
-              };
-
-              if (!isLiveVideo) return null;
-
-              return (
-                <div className="w-full bg-yellow-955/10 border border-yellow-800/25 rounded-lg p-3.5 mb-3 flex flex-col gap-3 shadow-md">
-                  {/* Title / Indicator Row */}
-                  <div className="flex items-center justify-between border-b border-yellow-900/20 pb-2">
-                    <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-                      <span className="text-[10px] font-black text-yellow-500 uppercase tracking-wider">Consola de Control de Video en Tiempo Real</span>
-                    </div>
-                    <span className="text-[10px] font-black text-gray-400 truncate max-w-[200px]">
-                      {activeSlide?.videoSrc?.split('/').pop() || 'Video'}
-                    </span>
-                  </div>
-
-                  <div className="flex flex-col md:flex-row items-center gap-4">
-                    {/* Controls Group */}
-                    <div className="flex flex-wrap items-center gap-3">
-                      {/* Play/Pause Button */}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (onVideoStateChange) {
-                            onVideoStateChange({
-                              isPlaying: !videoState?.isPlaying,
-                              currentTime: videoState?.currentTime ?? 0,
-                              duration: videoState?.duration ?? activeSlide?.videoEnd ?? 0,
-                              volume: videoState?.volume ?? 0.8,
-                              speed: videoState?.speed ?? 1.0,
-                              loop: videoState?.loop ?? true,
-                              videoSrc: activeSlide?.videoSrc || null,
-                              lastUpdatedBy: 'controller',
-                              timestamp: Date.now()
-                            });
-                          }
-                        }}
-                        className="w-9 h-9 rounded-full bg-yellow-600 hover:bg-yellow-500 text-white flex items-center justify-center transition-all cursor-pointer shadow-md"
-                        title={videoState?.isPlaying ? 'Pausar Video' : 'Reproducir Video'}
-                      >
-                        {videoState?.isPlaying ? (
-                          /* Pause Icon */
-                          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" /></svg>
-                        ) : (
-                          /* Play Icon */
-                          <svg className="w-4 h-4 ml-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
-                        )}
-                      </button>
-
-                      {/* Volume Icon + Slider */}
-                      <div className="flex items-center gap-2 bg-gray-955/60 rounded px-2.5 py-1.5 border border-gray-800">
-                        <span className="text-[10px] font-black text-gray-500">VOL</span>
-                        <input
-                          type="range"
-                          min="0"
-                          max="1"
-                          step="0.05"
-                          value={videoState?.volume ?? 0.8}
-                          onChange={(e) => {
-                            if (onVideoStateChange) {
-                              onVideoStateChange({
-                                isPlaying: videoState?.isPlaying ?? false,
-                                currentTime: videoState?.currentTime ?? 0,
-                                duration: videoState?.duration ?? activeSlide?.videoEnd ?? 0,
-                                volume: parseFloat(e.target.value),
-                                speed: videoState?.speed ?? 1.0,
-                                loop: videoState?.loop ?? true,
-                                videoSrc: activeSlide?.videoSrc || null,
-                                lastUpdatedBy: 'controller',
-                                timestamp: Date.now()
-                              });
-                            }
-                          }}
-                          className="w-16 accent-yellow-500 h-1 bg-gray-850 rounded appearance-none cursor-pointer"
-                        />
-                        <span className="text-[9px] font-bold text-yellow-500 min-w-[24px]">
-                          {Math.round((videoState?.volume ?? 0.8) * 100)}%
-                        </span>
-                      </div>
-
-                      {/* Playback Speed selector */}
-                      <div className="flex items-center gap-1 rounded bg-gray-955/60 p-0.5 border border-gray-800">
-                        {[0.5, 1.0, 1.5, 2.0].map(speedVal => {
-                          const isActive = (videoState?.speed ?? 1.0) === speedVal;
-                          return (
-                            <button
-                              key={speedVal}
-                              type="button"
-                              onClick={() => {
-                                if (onVideoStateChange) {
-                                  onVideoStateChange({
-                                    isPlaying: videoState?.isPlaying ?? false,
-                                    currentTime: videoState?.currentTime ?? 0,
-                                    duration: videoState?.duration ?? activeSlide?.videoEnd ?? 0,
-                                    volume: videoState?.volume ?? 0.8,
-                                    speed: speedVal,
-                                    loop: videoState?.loop ?? true,
-                                    videoSrc: activeSlide?.videoSrc || null,
-                                    lastUpdatedBy: 'controller',
-                                    timestamp: Date.now()
-                                  });
-                                }
-                              }}
-                              className={`text-[9px] font-black px-1.5 py-1 rounded transition-all cursor-pointer ${isActive ? 'bg-yellow-600 text-white shadow-sm' : 'text-gray-400 hover:text-gray-200'}`}
-                            >
-                              {speedVal}x
-                            </button>
-                          );
-                        })}
-                      </div>
-
-                      {/* Loop Toggle */}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (onVideoStateChange) {
-                            onVideoStateChange({
-                              isPlaying: videoState?.isPlaying ?? false,
-                              currentTime: videoState?.currentTime ?? 0,
-                              duration: videoState?.duration ?? activeSlide?.videoEnd ?? 0,
-                              volume: videoState?.volume ?? 0.8,
-                              speed: videoState?.speed ?? 1.0,
-                              loop: !(videoState?.loop ?? true),
-                              videoSrc: activeSlide?.videoSrc || null,
-                              lastUpdatedBy: 'controller',
-                              timestamp: Date.now()
-                            });
-                          }
-                        }}
-                        className={`text-[10px] font-black px-2.5 py-1.5 rounded border transition-colors cursor-pointer flex items-center gap-1.5 ${(videoState?.loop ?? true)
-                            ? 'bg-yellow-600/25 border-yellow-800 text-yellow-500'
-                            : 'bg-gray-955/60 border-gray-800 text-gray-500 hover:text-gray-300'
-                          }`}
-                        title="Repetir en bucle"
-                      >
-                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
-                        </svg>
-                        <span>BUCLE</span>
-                      </button>
-                    </div>
-
-                    {/* Timeline / Progress Scrubber Group */}
-                    <div className="flex-1 w-full flex items-center gap-3">
-                      <span className="text-[10px] font-bold text-gray-400 select-none">
-                        {formatTime(localTime)}
-                      </span>
-                      <input
-                        type="range"
-                        min="0"
-                        max={videoState?.duration || activeSlide?.videoEnd || 100}
-                        step="0.1"
-                        value={localTime}
-                        onMouseDown={() => setIsScrubbing(true)}
-                        onTouchStart={() => setIsScrubbing(true)}
-                        onMouseUp={() => setIsScrubbing(false)}
-                        onTouchEnd={() => setIsScrubbing(false)}
-                        onChange={(e) => {
-                          const val = parseFloat(e.target.value);
-                          setLocalTime(val);
-                          if (onVideoStateChange) {
-                            onVideoStateChange({
-                              isPlaying: videoState?.isPlaying ?? false,
-                              currentTime: val,
-                              duration: videoState?.duration ?? activeSlide?.videoEnd ?? 0,
-                              volume: videoState?.volume ?? 0.8,
-                              speed: videoState?.speed ?? 1.0,
-                              loop: videoState?.loop ?? true,
-                              videoSrc: activeSlide?.videoSrc || null,
-                              lastUpdatedBy: 'controller',
-                              timestamp: Date.now()
-                            });
-                          }
-                        }}
-                        className="flex-1 accent-yellow-500 h-1.5 bg-gray-850 rounded appearance-none cursor-pointer"
-                      />
-                      <span className="text-[10px] font-bold text-gray-400 select-none">
-                        {formatTime(videoState?.duration ?? activeSlide?.videoEnd ?? 0)}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              );
-            })()}
-
             <div className="flex flex-col gap-4 lg:flex-row lg:items-stretch">
 
               {/* Lado Izquierdo: Controles del Visor */}
@@ -1538,8 +1821,8 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                       type="button"
                       onClick={() => onToggleBackgroundLock(!backgroundLock)}
                       className={`px-3 rounded-md border flex items-center justify-center transition-all cursor-pointer ${backgroundLock
-                          ? 'bg-red-600 border-red-500 text-white hover:bg-red-500 shadow-md shadow-red-500/20 animate-pulse'
-                          : 'bg-gray-700 border-gray-600 text-gray-300 hover:bg-gray-600 hover:text-white'
+                        ? 'bg-red-600 border-red-500 text-white hover:bg-red-500 shadow-md shadow-red-500/20 animate-pulse'
+                        : 'bg-gray-700 border-gray-600 text-gray-300 hover:bg-gray-600 hover:text-white'
                         }`}
                       title={
                         backgroundLock
@@ -1596,8 +1879,8 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                                 e.currentTarget.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
                               }}
                               className={`min-w-[2.2rem] rounded border text-xs font-semibold transition-all px-2.5 py-1 select-none ${isSelected
-                                  ? 'border-yellow-500 bg-yellow-600 text-white font-bold shadow-[0_0_8px_rgba(234,179,8,0.3)]'
-                                  : 'border-gray-600 bg-gray-700 hover:bg-gray-600 text-gray-300'
+                                ? 'border-yellow-500 bg-yellow-600 text-white font-bold shadow-[0_0_8px_rgba(234,179,8,0.3)]'
+                                : 'border-gray-600 bg-gray-700 hover:bg-gray-600 text-gray-300'
                                 }`}
                             >
                               {slide.label}
@@ -1623,10 +1906,167 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                         &gt;
                       </button>
                     </div>
+
+                    {isActiveScriptureSlide && scriptureState && (
+                      <div className="rounded-md border border-gray-800 bg-gray-950/50">
+                        <SeferControlPanelMini
+                          onProject={(state, cmd) => {
+                            if (onProjectScripture) {
+                              onProjectScripture(state, cmd);
+                            }
+                          }}
+                          onBoundaryReached={onBoundaryReached}
+                          restoredState={scriptureState}
+                          onUpdateFontSizes={onUpdateScriptureFontSizes}
+                        />
+                      </div>
+                    )}
+
+                    {activeSlide?.type === 'video' && (
+                      <div className="rounded-md border border-yellow-800/25 bg-yellow-950/10 p-2.5 space-y-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                            <span className="text-[10px] font-black text-yellow-500 uppercase tracking-wider">Video</span>
+                          </div>
+                          <span className="text-[10px] font-black text-gray-400 truncate">
+                            {activeSlide.videoSrc?.split('/').pop() || 'Video'}
+                          </span>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              onVideoStateChange({
+                                isPlaying: !videoState?.isPlaying,
+                                currentTime: videoState?.currentTime ?? 0,
+                                duration: videoState?.duration ?? activeSlide.videoEnd ?? 0,
+                                volume: videoState?.volume ?? 0.8,
+                                speed: videoState?.speed ?? 1.0,
+                                loop: videoState?.loop ?? true,
+                                videoSrc: activeSlide.videoSrc || null,
+                                lastUpdatedBy: 'controller',
+                                timestamp: Date.now()
+                              });
+                            }}
+                            className="w-8 h-8 rounded-full bg-yellow-600 hover:bg-yellow-500 text-white flex items-center justify-center transition-all cursor-pointer shadow-md"
+                            title={videoState?.isPlaying ? 'Pausar video' : 'Reproducir video'}
+                          >
+                            {videoState?.isPlaying ? (
+                              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" /></svg>
+                            ) : (
+                              <svg className="w-4 h-4 ml-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
+                            )}
+                          </button>
+
+                          <div className="flex items-center gap-2 rounded border border-gray-800 bg-gray-950/60 px-2 py-1">
+                            <span className="text-[9px] font-black text-gray-500">VOL</span>
+                            <input
+                              type="range"
+                              min="0"
+                              max="1"
+                              step="0.05"
+                              value={videoState?.volume ?? 0.8}
+                              onChange={(e) => {
+                                onVideoStateChange({
+                                  isPlaying: videoState?.isPlaying ?? false,
+                                  currentTime: videoState?.currentTime ?? 0,
+                                  duration: videoState?.duration ?? activeSlide.videoEnd ?? 0,
+                                  volume: parseFloat(e.target.value),
+                                  speed: videoState?.speed ?? 1.0,
+                                  loop: videoState?.loop ?? true,
+                                  videoSrc: activeSlide.videoSrc || null,
+                                  lastUpdatedBy: 'controller',
+                                  timestamp: Date.now()
+                                });
+                              }}
+                              className="w-16 accent-yellow-500"
+                            />
+                          </div>
+
+                          <div className="flex items-center gap-1 rounded border border-gray-800 bg-gray-950/60 p-0.5">
+                            {[0.5, 1, 1.5, 2].map((speedVal) => (
+                              <button
+                                key={speedVal}
+                                type="button"
+                                onClick={() => {
+                                  onVideoStateChange({
+                                    isPlaying: videoState?.isPlaying ?? false,
+                                    currentTime: videoState?.currentTime ?? 0,
+                                    duration: videoState?.duration ?? activeSlide.videoEnd ?? 0,
+                                    volume: videoState?.volume ?? 0.8,
+                                    speed: speedVal,
+                                    loop: videoState?.loop ?? true,
+                                    videoSrc: activeSlide.videoSrc || null,
+                                    lastUpdatedBy: 'controller',
+                                    timestamp: Date.now()
+                                  });
+                                }}
+                                className={`rounded px-1.5 py-1 text-[9px] font-black ${((videoState?.speed ?? 1) === speedVal) ? 'bg-yellow-600 text-white' : 'text-gray-400 hover:text-gray-200'}`}
+                              >
+                                {speedVal}x
+                              </button>
+                            ))}
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              onVideoStateChange({
+                                isPlaying: videoState?.isPlaying ?? false,
+                                currentTime: videoState?.currentTime ?? 0,
+                                duration: videoState?.duration ?? activeSlide.videoEnd ?? 0,
+                                volume: videoState?.volume ?? 0.8,
+                                speed: videoState?.speed ?? 1.0,
+                                loop: !(videoState?.loop ?? true),
+                                videoSrc: activeSlide.videoSrc || null,
+                                lastUpdatedBy: 'controller',
+                                timestamp: Date.now()
+                              });
+                            }}
+                            className={`rounded border px-2 py-1 text-[10px] font-black ${(videoState?.loop ?? true)
+                              ? 'bg-yellow-600/25 border-yellow-800 text-yellow-500'
+                              : 'bg-gray-950/60 border-gray-800 text-gray-500 hover:text-gray-300'
+                              }`}
+                          >
+                            BUCLE
+                          </button>
+
+                          <input
+                            type="range"
+                            min="0"
+                            max={videoState?.duration || activeSlide.videoEnd || 100}
+                            step="0.1"
+                            value={localTime}
+                            onMouseDown={() => setIsScrubbing(true)}
+                            onTouchStart={() => setIsScrubbing(true)}
+                            onMouseUp={() => setIsScrubbing(false)}
+                            onTouchEnd={() => setIsScrubbing(false)}
+                            onChange={(e) => {
+                              const val = parseFloat(e.target.value);
+                              setLocalTime(val);
+                              onVideoStateChange({
+                                isPlaying: videoState?.isPlaying ?? false,
+                                currentTime: val,
+                                duration: videoState?.duration ?? activeSlide.videoEnd ?? 0,
+                                volume: videoState?.volume ?? 0.8,
+                                speed: videoState?.speed ?? 1.0,
+                                loop: videoState?.loop ?? true,
+                                videoSrc: activeSlide.videoSrc || null,
+                                lastUpdatedBy: 'controller',
+                                timestamp: Date.now()
+                              });
+                            }}
+                            className="min-w-[160px] flex-1 accent-yellow-500"
+                          />
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div className="text-center py-2 text-xs text-gray-500 italic">
-                    Ninguna canción activa para proyectar
+                    Ninguna presentación activa para proyectar
                   </div>
                 )}
               </div>
@@ -1730,10 +2170,10 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                                       type="button"
                                       onClick={() => onSelectPresentation(p)}
                                       className={`p-1.5 rounded-md flex items-center justify-center transition-all cursor-pointer ${isCurrent
-                                          ? 'bg-yellow-500 text-white shadow-md shadow-yellow-500/20'
-                                          : 'bg-gray-700/80 text-gray-300 hover:bg-yellow-600 hover:text-white'
+                                        ? 'bg-yellow-500 text-white shadow-md shadow-yellow-500/20'
+                                        : 'bg-gray-700/80 text-gray-300 hover:bg-yellow-600 hover:text-white'
                                         }`}
-                                      title={isCurrent ? "En reproducción" : "Reproducir canción"}
+                                      title={isCurrent ? "En directo" : "Presentar"}
                                     >
                                       <Play size={13} fill={isCurrent ? "currentColor" : "none"} />
                                     </button>
@@ -1761,8 +2201,8 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                                 </td>
                                 <td className="p-3 align-middle text-center">
                                   <span className={`px-2 py-0.5 rounded text-[10px] uppercase font-extrabold ${p.mode === 'trilingual'
-                                      ? 'bg-purple-950/60 text-purple-400 border border-purple-800/50'
-                                      : 'bg-blue-950/60 text-blue-400 border border-blue-800/50'
+                                    ? 'bg-purple-950/60 text-purple-400 border border-purple-800/50'
+                                    : 'bg-blue-950/60 text-blue-400 border border-blue-800/50'
                                     }`}>
                                     {p.mode === 'trilingual' ? '3x' : '1x'}
                                   </span>
@@ -1817,7 +2257,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                                   <td colSpan={5} className="px-6 py-2.5">
                                     <div className="space-y-1">
                                       <div className="text-[10px] font-bold uppercase tracking-wider text-gray-500">
-                                        Diapositivas de la canción (Haz clic en una para reproducir directo):
+                                        Diapositivas (Haz clic en una para mostrarla):
                                       </div>
                                       <div className="flex flex-wrap gap-1.5 max-h-[10rem] overflow-y-auto py-1">
                                         {p.slides.map((slide, slideIdx) => (
@@ -1874,7 +2314,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                       type="text"
                       value={title}
                       onChange={e => setTitle(e.target.value)}
-                      placeholder="Escribe el título de la canción..."
+                      placeholder="Escribe el título..."
                       className="bg-transparent border-b border-transparent hover:border-gray-700 focus:border-yellow-500 outline-none text-base font-bold text-white px-2 py-1 flex-1 min-w-0 transition-colors"
                     />
                   </div>
@@ -1910,7 +2350,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                           }
                         }}
                         className="p-1.5 rounded bg-yellow-600 hover:bg-yellow-500 text-white transition-all cursor-pointer flex items-center justify-center"
-                        title="Aplicar este fondo a todas las diapositivas de la canción"
+                        title="Aplicar este fondo a todas las diapositivas"
                       >
                         <Layers size={13} />
                       </button>
@@ -1922,8 +2362,8 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                         type="button"
                         onClick={() => handleModeChange('standard')}
                         className={`px-3 py-1.5 rounded-md text-xs font-black transition-all cursor-pointer ${mode === 'standard'
-                            ? 'bg-yellow-600 text-white shadow-md'
-                            : 'text-gray-400 hover:text-white'
+                          ? 'bg-yellow-600 text-white shadow-md'
+                          : 'text-gray-400 hover:text-white'
                           }`}
                         title="Modo Estándar (1 línea por diapositiva)"
                       >
@@ -1933,8 +2373,8 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                         type="button"
                         onClick={() => handleModeChange('trilingual')}
                         className={`px-3 py-1.5 rounded-md text-xs font-black transition-all cursor-pointer ${mode === 'trilingual'
-                            ? 'bg-yellow-600 text-white shadow-md'
-                            : 'text-gray-400 hover:text-white'
+                          ? 'bg-yellow-600 text-white shadow-md'
+                          : 'text-gray-400 hover:text-white'
                           }`}
                         title="Modo Trilingüe (3 líneas por diapositiva)"
                       >
@@ -1965,8 +2405,8 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                         type="button"
                         onClick={() => { if (!isTableMode) toggleEditMode(); }}
                         className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-bold transition-all cursor-pointer ${isTableMode
-                            ? 'bg-yellow-600 text-white shadow-md'
-                            : 'text-gray-400 hover:text-white'
+                          ? 'bg-yellow-600 text-white shadow-md'
+                          : 'text-gray-400 hover:text-white'
                           }`}
                       >
                         <Table size={12} />
@@ -1976,8 +2416,8 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                         type="button"
                         onClick={() => { if (isTableMode) toggleEditMode(); }}
                         className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-bold transition-all cursor-pointer ${!isTableMode
-                            ? 'bg-yellow-600 text-white shadow-md'
-                            : 'text-gray-400 hover:text-white'
+                          ? 'bg-yellow-600 text-white shadow-md'
+                          : 'text-gray-400 hover:text-white'
                           }`}
                       >
                         <FileText size={12} />
@@ -2028,10 +2468,19 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                         </thead>
                         <tbody className="divide-y divide-gray-800 text-sm">
                           {slides.map((slide, idx) => {
+                            const rangeRootIdx = getScriptureRangeRootIndex(idx);
+                            const isScriptureGroupChild = rangeRootIdx >= 0 && rangeRootIdx !== idx;
+                            const groupRoot = rangeRootIdx >= 0 ? slides[rangeRootIdx] : null;
+                            const groupExpanded = groupRoot ? expandedRows[groupRoot.id] !== false : true;
+                            if (isScriptureGroupChild && !groupExpanded) {
+                              return null;
+                            }
+
                             const isTitle = isTitleSlide(slide);
                             const customBg = slide.background;
                             const isVideo = customBg && (customBg.endsWith('.mp4') || customBg.endsWith('.webm') || customBg.endsWith('.ogg'));
                             const isImage = slide.lines[0]?.trim() === '[IMAGE]';
+                            const hasRangeChildren = isScriptureRangeRoot(slide) && getScriptureRangeEndIndex(idx) > idx;
 
                             const videoOptions = backgrounds
                               .filter(bg => bg.match(/\.(mp4|webm)$/i))
@@ -2045,7 +2494,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                               : (currentSlideIndex === idx && videoState?.duration ? videoState.duration : undefined);
 
                             return (
-                              <tr key={slide.id} className="transition-colors hover:bg-gray-800/10">
+                              <tr key={slide.id} className={`transition-colors hover:bg-gray-800/10 ${isScriptureGroupChild ? 'bg-gray-950/15' : ''}`}>
                                 {/* 1. Label column */}
                                 <td className="px-3 py-3 text-center align-top">
                                   {isTitle ? (
@@ -2053,13 +2502,26 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                                       {slide.label}
                                     </span>
                                   ) : (
-                                    <AutoResizeInput
-                                      type="text"
-                                      className="w-[60px] text-center bg-gray-900 border border-gray-700 rounded px-1.5 py-1 text-xs text-white focus:outline-none focus:ring-1 focus:ring-yellow-500 font-bold"
-                                      value={slide.label}
-                                      onChange={e => handleUpdateLabel(idx, e.target.value)}
-                                      placeholder="Nº"
-                                    />
+                                    <div className="flex items-center justify-center gap-1">
+                                      {isScriptureGroupChild && <span className="text-[10px] font-black text-gray-500">&gt;</span>}
+                                      <AutoResizeInput
+                                        type="text"
+                                        className={`w-[60px] text-center bg-gray-900 border border-gray-700 rounded px-1.5 py-1 text-xs text-white focus:outline-none focus:ring-1 focus:ring-yellow-500 font-bold ${isScriptureGroupChild ? 'opacity-75' : ''}`}
+                                        value={slide.label}
+                                        onChange={e => handleUpdateLabel(idx, e.target.value)}
+                                        placeholder="Nº"
+                                      />
+                                      {hasRangeChildren && (
+                                        <button
+                                          type="button"
+                                          onClick={() => setExpandedRows({ ...expandedRows, [slide.id]: !groupExpanded })}
+                                          className="p-1 rounded bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white border border-gray-700"
+                                          title={groupExpanded ? 'Colapsar bloque' : 'Expandir bloque'}
+                                        >
+                                          {groupExpanded ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
+                                        </button>
+                                      )}
+                                    </div>
                                   )}
 
                                   {/* Broadcast slide immediately directly from the editor row */}
@@ -2086,8 +2548,15 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                                 </td>
 
                                 {/* 2. Text/Video/Image fields column */}
-                                <td className="px-3 py-3 align-top">
-                                  {slide.type === 'video' ? (
+                                <td className={`px-3 py-3 align-top ${isScriptureGroupChild ? 'bg-gray-950/20' : ''}`}>
+                                  {slide.type === 'sefer' || slide.type === 'tanaj' || !!slide.scriptureBook ? (
+                                    <ScriptureRangeEditor
+                                      slide={slide}
+                                      backgrounds={backgrounds}
+                                      onVerseBackgroundChange={(verse, value) => handleUpdateScriptureVerseBackground(idx, verse, value)}
+                                      onCommit={(payload) => handleUpdateScriptureSlide(idx, payload)}
+                                    />
+                                  ) : slide.type === 'video' ? (
                                     /* Video Config Panel */
                                     <div className="bg-gray-950/40 border border-gray-800/80 rounded-lg p-3 space-y-3 shadow-md w-full">
                                       <div className="flex items-center gap-2 border-b border-gray-850 pb-1.5 mb-1.5">
@@ -2230,7 +2699,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                                             className="w-full bg-gray-900 border border-gray-700 rounded px-2 py-1.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-yellow-500 min-h-[3.5rem] leading-relaxed resize-y"
                                             value={slide.lines[0] || ''}
                                             onChange={e => handleUpdateLine(idx, 0, e.target.value)}
-                                            placeholder={isTitle ? 'Escribe el título de la canción...' : 'Escribe la letra de la diapositiva...'}
+                                            placeholder={isTitle ? 'Escribe el título...' : 'Escribe la letra de la diapositiva...'}
                                           />
                                         </div>
                                       ) : (
@@ -2315,10 +2784,10 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                                                       text={line}
                                                       fontScale={fontScale * 0.25}
                                                       className={`font-semibold text-center select-none ${lIdx === 0
-                                                          ? 'hebrew-text text-[#f3c96a] text-[4px]'
-                                                          : lIdx === 1
-                                                            ? 'text-sky-200 text-[3px]'
-                                                            : 'text-white text-[3px]'
+                                                        ? 'hebrew-text text-[#f3c96a] text-[4px]'
+                                                        : lIdx === 1
+                                                          ? 'text-sky-200 text-[3px]'
+                                                          : 'text-white text-[3px]'
                                                         }`}
                                                     />
                                                   </div>
@@ -2408,40 +2877,71 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
 
                                     {/* Fila 2: Selector de tipo de diapositiva (solo iconos compactos en gris/activo) */}
                                     {!isTitle && (
-                                      <div className="flex items-center justify-center gap-3.5 mt-1 bg-gray-950/40 border border-gray-800/60 rounded py-0.5 px-2.5 w-fit">
-                                        <button
-                                          type="button"
-                                          onClick={() => handleChangeSlideType(idx, 'text')}
-                                          className={`transition-colors cursor-pointer p-0.5 ${!isImage && slide.type !== 'video'
+                                      <div className="flex flex-col items-center gap-1 mt-1 bg-gray-950/40 border border-gray-800/60 rounded py-1 px-2.5 w-fit">
+
+                                        {/* Primera línea */}
+                                        <div className="flex items-center justify-center gap-3.5">
+                                          <button
+                                            type="button"
+                                            onClick={() => handleChangeSlideType(idx, 'text')}
+                                            className={`transition-colors cursor-pointer p-0.5 ${!isImage && slide.type !== 'video' && slide.type !== 'tanaj' && slide.type !== 'sefer'
                                               ? 'text-yellow-500 font-bold'
                                               : 'text-gray-500 hover:text-gray-350'
-                                            }`}
-                                          title="Tipo: Texto normal"
-                                        >
-                                          <FileText size={12} />
-                                        </button>
-                                        <button
-                                          type="button"
-                                          onClick={() => handleChangeSlideType(idx, 'video')}
-                                          className={`transition-colors cursor-pointer p-0.5 ${slide.type === 'video'
+                                              }`}
+                                            title="Tipo: Texto normal"
+                                          >
+                                            <FileText size={12} />
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleChangeSlideType(idx, 'video')}
+                                            className={`transition-colors cursor-pointer p-0.5 ${slide.type === 'video'
                                               ? 'text-yellow-500 font-bold'
                                               : 'text-gray-500 hover:text-gray-350'
-                                            }`}
-                                          title="Tipo: Video"
-                                        >
-                                          <Video size={12} />
-                                        </button>
-                                        <button
-                                          type="button"
-                                          onClick={() => handleChangeSlideType(idx, 'image')}
-                                          className={`transition-colors cursor-pointer p-0.5 ${isImage
+                                              }`}
+                                            title="Tipo: Video"
+                                          >
+                                            <Video size={12} />
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleChangeSlideType(idx, 'image')}
+                                            className={`transition-colors cursor-pointer p-0.5 ${isImage
                                               ? 'text-yellow-500 font-bold'
                                               : 'text-gray-500 hover:text-gray-350'
-                                            }`}
-                                          title="Tipo: Imagen Pura"
-                                        >
-                                          <ImageIcon size={12} />
-                                        </button>
+                                              }`}
+                                            title="Tipo: Imagen Pura"
+                                          >
+                                            <ImageIcon size={12} />
+                                          </button>
+                                        </div>
+
+                                        {/* Segunda línea */}
+                                        <div className="flex items-center justify-center gap-3.5">
+
+                                          <button
+                                            type="button"
+                                            onClick={() => handleChangeSlideType(idx, 'tanaj')}
+                                            className={`transition-colors cursor-pointer p-0.5 ${slide.type === 'tanaj'
+                                              ? 'text-yellow-500 font-bold'
+                                              : 'text-gray-500 hover:text-gray-350'
+                                              }`}
+                                            title="Tipo: Tanaj materializado"
+                                          >
+                                            <BookOpen size={12} />
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleChangeSlideType(idx, 'sefer')}
+                                            className={`transition-colors cursor-pointer p-0.5 ${slide.type === 'sefer'
+                                              ? 'text-yellow-500 font-bold'
+                                              : 'text-gray-500 hover:text-gray-350'
+                                              }`}
+                                            title="Tipo: Sefer nativo"
+                                          >
+                                            <ScrollText size={12} />
+                                          </button>
+                                        </div>
                                       </div>
                                     )}
                                   </div>
@@ -2551,8 +3051,8 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
               </>
             )}
           </div>
-        </>
-      )}
+        </div>
+      </div>
     </div>
   );
 };

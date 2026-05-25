@@ -18,6 +18,27 @@ interface BookMetadata {
 
 type AppMetadata = Record<string, BookMetadata>;
 
+export type ScriptureSlideKind = 'tanaj' | 'sefer';
+
+export interface ScriptureTagSpec {
+  kind: ScriptureSlideKind;
+  bookToken: string;
+  chapter: string;
+  verseStart: string;
+  verseEnd?: string;
+}
+
+export interface ScriptureSlideDraft {
+  id: string;
+  label: string;
+  lines: string[];
+  type: ScriptureSlideKind;
+  scriptureBook: string;
+  scriptureChapter: string;
+  scriptureVerseStart: string;
+  scriptureVerseEnd?: string;
+}
+
 const loadedBooks = new Map<string, ScriptureVerse[]>();
 let metadataPromise: Promise<AppMetadata> | null = null;
 
@@ -80,8 +101,108 @@ export const findScriptureRange = async (
   });
 };
 
+export const getScriptureChapterVerses = async (bookToken: string, chapter: string) => {
+  const book = await loadBook(bookToken);
+  return book.filter((row) => row.chapter === String(chapter));
+};
+
 export const scriptureVerseToLines = (verse: ScriptureVerse) => [
   verse.verseNikud,
   verse.transliteration,
   verse.translation,
 ];
+
+export const parseScriptureTag = (text: string): ScriptureTagSpec | null => {
+  const clean = text.trim();
+  const match = clean.match(/^\[(Tanaj|Sefer)\s+(.+?)\s+(\d+):(\d+)(?:-(\d+))?\]$/i);
+  if (!match) return null;
+
+  const kind = match[1].toLowerCase() === 'sefer' ? 'sefer' : 'tanaj';
+  const bookToken = match[2].trim();
+  const chapter = match[3];
+  const verseStart = match[4];
+  const verseEnd = match[5];
+
+  return {
+    kind,
+    bookToken,
+    chapter,
+    verseStart,
+    verseEnd: verseEnd && verseEnd !== verseStart ? verseEnd : undefined,
+  };
+};
+
+export const scriptureTagToText = (spec: ScriptureTagSpec) => {
+  const range = spec.verseEnd ? `${spec.verseStart}-${spec.verseEnd}` : spec.verseStart;
+  return `[${spec.kind === 'sefer' ? 'Sefer' : 'Tanaj'} ${spec.bookToken} ${spec.chapter}:${range}]`;
+};
+
+export const scriptureSlideToTag = (slide: {
+  type?: string;
+  scriptureBook?: string;
+  scriptureChapter?: string;
+  scriptureVerseStart?: string;
+  scriptureVerseEnd?: string;
+}) => {
+  if (!slide.scriptureBook || !slide.scriptureChapter || !slide.scriptureVerseStart) return null;
+
+  const kind = slide.type === 'sefer' || slide.type === 'scripture' ? 'sefer' : 'tanaj';
+  return scriptureTagToText({
+    kind,
+    bookToken: slide.scriptureBook,
+    chapter: slide.scriptureChapter,
+    verseStart: slide.scriptureVerseStart,
+    verseEnd: slide.scriptureVerseEnd && slide.scriptureVerseEnd !== slide.scriptureVerseStart
+      ? slide.scriptureVerseEnd
+      : undefined,
+  });
+};
+
+export const materializeScriptureSlides = async (spec: ScriptureTagSpec): Promise<ScriptureSlideDraft[]> => {
+  const verses = await findScriptureRange(spec.bookToken, spec.chapter, spec.verseStart, spec.verseEnd);
+  if (verses.length === 0) return [];
+
+  const baseLabel = `${spec.bookToken} ${spec.chapter}:${spec.verseStart}${spec.verseEnd ? `-${spec.verseEnd}` : ''}`;
+
+  const first = verses[0];
+  return [{
+    id: `slide-scripture-${Date.now()}-${spec.kind}`,
+    label: baseLabel,
+    lines: scriptureVerseToLines(first),
+    type: spec.kind,
+    scriptureBook: first.bookAbbrevEs || spec.bookToken,
+    scriptureChapter: first.chapter,
+    scriptureVerseStart: spec.verseStart,
+    scriptureVerseEnd: spec.verseEnd ?? spec.verseStart,
+  }];
+};
+
+export const expandScriptureRangeToSlides = async (spec: ScriptureTagSpec): Promise<ScriptureSlideDraft[]> => {
+  const verses = await findScriptureRange(spec.bookToken, spec.chapter, spec.verseStart, spec.verseEnd);
+  if (verses.length === 0) return [];
+
+  const titleLabel = `${spec.bookToken} ${spec.chapter}:${spec.verseEnd ? `${spec.verseStart}-${spec.verseEnd}` : spec.verseStart}`;
+  const titleSlide: ScriptureSlideDraft = {
+    id: `slide-scripture-title-${Date.now()}`,
+    label: titleLabel,
+    lines: [titleLabel],
+    type: spec.kind,
+    scriptureBook: verses[0].bookAbbrevEs || spec.bookToken,
+    scriptureChapter: spec.chapter,
+    scriptureVerseStart: spec.verseStart,
+    scriptureVerseEnd: spec.verseEnd ?? spec.verseStart,
+  };
+
+  const verseSlides = verses.map((verse, idx) => ({
+    id: `slide-scripture-${Date.now()}-${idx}`,
+    label: verse.verse,
+    lines: scriptureVerseToLines(verse),
+    type: spec.kind,
+    scriptureBook: verse.bookAbbrevEs || spec.bookToken,
+    scriptureChapter: verse.chapter,
+    scriptureVerseStart: verse.verse,
+    scriptureVerseEnd: verse.verse,
+  }));
+
+  return [titleSlide, ...verseSlides];
+};

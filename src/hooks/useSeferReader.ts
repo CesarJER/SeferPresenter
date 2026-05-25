@@ -78,12 +78,15 @@ export interface SeferReaderState {
   bookHeb: string;
   bookAbbrevEs: string;
   chapter: string;
+  verseStart?: string;
   verse: string;
+  verseEnd?: string;
   verseNikud: string;
   transliteration: string;
   translation: string;
   verseIdx: number;       // index in loaded book data
   totalVerses: number;    // total verses in loaded book
+  scriptureKind?: 'tanaj' | 'sefer';
 }
 
 interface UseSeferReaderResult {
@@ -101,10 +104,13 @@ interface UseSeferReaderResult {
   setSelectedChapter: (chapter: string) => void;
   setSelectedVerse: (verse: string) => void;
   activate: () => SeferReaderState | null;  // press ▶️ — sets active, returns current verse
+  goToVerse: (verse: string) => SeferReaderState | null;
   goNext: () => SeferReaderState | null;    // advance verse (active only auto-projects via caller)
   goPrev: () => SeferReaderState | null;    // go back verse
   deactivate: () => void;  // ESC or mode switch
   restoreState: (state: SeferReaderState) => void;
+  rangeVerses: string[];
+  rangeLabel: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -122,6 +128,22 @@ export function useSeferReader(): UseSeferReaderResult {
 
   const loadedBooksRef = useRef<Map<string, VerseData[]>>(new Map());
   const metadataRef = useRef<AppMetadata>({});
+  const rangeStartVerseRef = useRef<string | null>(null);
+  const rangeEndVerseRef = useRef<string | null>(null);
+  const scriptureKindRef = useRef<'tanaj' | 'sefer'>('sefer');
+
+  const chapterVerses = bookData.filter((v) => v.chapter === selectedChapter);
+  const hasActiveRange = !!rangeStartVerseRef.current && !!rangeEndVerseRef.current;
+  const rangeChapterVerses = (() => {
+    if (!chapterVerses.length || !hasActiveRange) return chapterVerses;
+
+    const startIdx = chapterVerses.findIndex((v) => v.verse === rangeStartVerseRef.current);
+    const endIdx = chapterVerses.findIndex((v) => v.verse === rangeEndVerseRef.current);
+    if (startIdx < 0 || endIdx < 0) return chapterVerses;
+    const from = Math.min(startIdx, endIdx);
+    const to = Math.max(startIdx, endIdx);
+    return chapterVerses.slice(from, to + 1);
+  })();
 
   // ------------------------------------------------------------------
   // Load metadata on mount
@@ -185,32 +207,61 @@ export function useSeferReader(): UseSeferReaderResult {
   // ------------------------------------------------------------------
   // Build SeferReaderState from a VerseData
   // ------------------------------------------------------------------
-  const buildState = useCallback((v: VerseData, idx: number, total: number): SeferReaderState => ({
+  const buildState = useCallback((v: VerseData, idx: number, total: number, verseStart?: string, verseEnd?: string): SeferReaderState => ({
     bookEs: v.bookEs,
     bookHeb: v.bookHeb,
     bookAbbrevEs: v.bookAbbrevEs,
     chapter: v.chapter,
+    verseStart: verseStart ?? v.verse,
     verse: v.verse,
+    verseEnd,
     verseNikud: v.verseNikudSanitized ?? v.verseNikud,
     transliteration: v.transliteration,
     translation: v.translation,
     verseIdx: idx,
     totalVerses: total,
+    scriptureKind: scriptureKindRef.current,
   }), []);
 
   // ------------------------------------------------------------------
   // Get current verse by selected book/chapter/verse
   // ------------------------------------------------------------------
   const getCurrentVerseState = useCallback((): SeferReaderState | null => {
-    if (!bookData.length) return null;
-    const idx = bookData.findIndex(
+    if (!chapterVerses.length) return null;
+    const idx = chapterVerses.findIndex(
       (v) => v.chapter === selectedChapter && v.verse === selectedVerse
     );
     if (idx < 0) return null;
-    return buildState(bookData[idx], idx, bookData.length);
-  }, [bookData, selectedChapter, selectedVerse, buildState]);
+    const bookIdx = bookData.findIndex((v) => v.chapter === selectedChapter && v.verse === selectedVerse);
+    const verseStart = hasActiveRange ? (rangeStartVerseRef.current ?? chapterVerses[idx].verse) : undefined;
+    const verseEnd = hasActiveRange ? (rangeEndVerseRef.current ?? verseStart ?? chapterVerses[idx].verse) : undefined;
+    return buildState(
+      chapterVerses[idx],
+      hasActiveRange ? idx : Math.max(0, bookIdx >= 0 ? bookIdx : idx),
+      hasActiveRange ? rangeChapterVerses.length : bookData.length,
+      verseStart,
+      verseEnd
+    );
+  }, [bookData, buildState, chapterVerses, hasActiveRange, rangeChapterVerses.length, selectedChapter, selectedVerse]);
 
   const currentVerse = getCurrentVerseState();
+
+  const rangeVerses = (() => {
+    if (!chapterVerses.length) return [];
+    return hasActiveRange ? rangeChapterVerses.map((v) => v.verse) : chapterVerses.map((v) => v.verse);
+  })();
+
+  const rangeLabel = (() => {
+    if (!chapterVerses.length) return '';
+    const current = currentVerse;
+    if (!current) return '';
+    if (!hasActiveRange) return `${current.bookAbbrevEs} ${current.chapter}:${current.verse}`;
+    const start = chapterVerses.find((v) => v.verse === rangeStartVerseRef.current);
+    const end = chapterVerses.find((v) => v.verse === rangeEndVerseRef.current);
+    if (!start || !end) return `${current.bookAbbrevEs} ${current.chapter}:${current.verse}`;
+    const rangePart = start.verse === end.verse ? start.verse : `${start.verse}-${end.verse}`;
+    return `${current.bookAbbrevEs} ${current.chapter}:${rangePart}`;
+  })();
 
   // ------------------------------------------------------------------
   // Setters with cascade reset
@@ -219,17 +270,26 @@ export function useSeferReader(): UseSeferReaderResult {
     setSelectedBookState(book);
     setSelectedChapterState('1');
     setSelectedVerseState('1');
+    rangeStartVerseRef.current = null;
+    rangeEndVerseRef.current = null;
+    scriptureKindRef.current = 'sefer';
     setIsActive(false); // manual change → requires ▶️
   }, []);
 
   const setSelectedChapter = useCallback((chapter: string) => {
     setSelectedChapterState(chapter);
     setSelectedVerseState('1');
+    rangeStartVerseRef.current = null;
+    rangeEndVerseRef.current = null;
+    scriptureKindRef.current = 'sefer';
     setIsActive(false); // manual change → requires ▶️
   }, []);
 
   const setSelectedVerse = useCallback((verse: string) => {
     setSelectedVerseState(verse);
+    rangeStartVerseRef.current = null;
+    rangeEndVerseRef.current = null;
+    scriptureKindRef.current = 'sefer';
     setIsActive(false); // manual change → requires ▶️
   }, []);
 
@@ -240,6 +300,25 @@ export function useSeferReader(): UseSeferReaderResult {
     setIsActive(true);
     return getCurrentVerseState();
   }, [getCurrentVerseState]);
+
+  const goToVerse = useCallback((verse: string): SeferReaderState | null => {
+    if (!chapterVerses.length) return null;
+    const idx = chapterVerses.findIndex((v) => v.verse === verse);
+    if (idx < 0) return null;
+    const bookIdx = bookData.findIndex((v) => v.chapter === selectedChapter && v.verse === verse);
+
+    setSelectedVerseState(verse);
+    setIsActive(true);
+    const verseStart = hasActiveRange ? (rangeStartVerseRef.current ?? verse) : undefined;
+    const verseEnd = hasActiveRange ? (rangeEndVerseRef.current ?? verseStart ?? verse) : undefined;
+    return buildState(
+      chapterVerses[idx],
+      hasActiveRange ? idx : Math.max(0, bookIdx >= 0 ? bookIdx : idx),
+      hasActiveRange ? rangeChapterVerses.length : bookData.length,
+      verseStart,
+      verseEnd
+    );
+  }, [bookData, buildState, chapterVerses, hasActiveRange, rangeChapterVerses.length]);
 
   const deactivate = useCallback(() => {
     setIsActive(false);
@@ -256,35 +335,57 @@ export function useSeferReader(): UseSeferReaderResult {
     setSelectedBookState(resolvedBook);
     setSelectedChapterState(state.chapter);
     setSelectedVerseState(state.verse);
+    rangeStartVerseRef.current = state.verseEnd ? (state.verseStart ?? state.verse) : null;
+    rangeEndVerseRef.current = state.verseEnd ? (state.verseEnd ?? state.verseStart ?? state.verse) : null;
+    scriptureKindRef.current = state.scriptureKind ?? 'sefer';
     setIsActive(true);
   }, []);
 
   const goNext = useCallback((): SeferReaderState | null => {
-    if (!bookData.length) return null;
-    const idx = bookData.findIndex(
-      (v) => v.chapter === selectedChapter && v.verse === selectedVerse
-    );
-    const nextIdx = Math.min(idx + 1, bookData.length - 1);
+    const versesSource = hasActiveRange ? rangeChapterVerses : bookData;
+    if (!versesSource.length) return null;
+    const idx = hasActiveRange
+      ? rangeChapterVerses.findIndex((v) => v.verse === selectedVerse && v.chapter === selectedChapter)
+      : bookData.findIndex((v) => v.chapter === selectedChapter && v.verse === selectedVerse);
+    if (idx < 0) return null;
+    const nextIdx = Math.min(idx + 1, versesSource.length - 1);
     if (nextIdx === idx) return null; // at the end
-    const next = bookData[nextIdx];
+    const next = versesSource[nextIdx];
     setSelectedChapterState(next.chapter);
     setSelectedVerseState(next.verse);
-    // Do NOT call setIsActive(false) — goNext keeps active state
-    return buildState(next, nextIdx, bookData.length);
-  }, [bookData, selectedChapter, selectedVerse, buildState]);
+    const verseStart = hasActiveRange ? (rangeStartVerseRef.current ?? next.verse) : undefined;
+    const verseEnd = hasActiveRange ? (rangeEndVerseRef.current ?? verseStart ?? next.verse) : undefined;
+    return buildState(
+      next,
+      nextIdx,
+      versesSource.length,
+      verseStart,
+      verseEnd
+    );
+  }, [bookData, buildState, chapterVerses, hasActiveRange, rangeChapterVerses, selectedChapter, selectedVerse]);
 
   const goPrev = useCallback((): SeferReaderState | null => {
-    if (!bookData.length) return null;
-    const idx = bookData.findIndex(
-      (v) => v.chapter === selectedChapter && v.verse === selectedVerse
-    );
+    const versesSource = hasActiveRange ? rangeChapterVerses : bookData;
+    if (!versesSource.length) return null;
+    const idx = hasActiveRange
+      ? rangeChapterVerses.findIndex((v) => v.verse === selectedVerse && v.chapter === selectedChapter)
+      : bookData.findIndex((v) => v.chapter === selectedChapter && v.verse === selectedVerse);
+    if (idx < 0) return null;
     const prevIdx = Math.max(idx - 1, 0);
     if (prevIdx === idx) return null; // at the beginning
-    const prev = bookData[prevIdx];
+    const prev = versesSource[prevIdx];
     setSelectedChapterState(prev.chapter);
     setSelectedVerseState(prev.verse);
-    return buildState(prev, prevIdx, bookData.length);
-  }, [bookData, selectedChapter, selectedVerse, buildState]);
+    const verseStart = hasActiveRange ? (rangeStartVerseRef.current ?? prev.verse) : undefined;
+    const verseEnd = hasActiveRange ? (rangeEndVerseRef.current ?? verseStart ?? prev.verse) : undefined;
+    return buildState(
+      prev,
+      prevIdx,
+      versesSource.length,
+      verseStart,
+      verseEnd
+    );
+  }, [bookData, buildState, chapterVerses, hasActiveRange, rangeChapterVerses, selectedChapter, selectedVerse]);
 
   return {
     metadata,
@@ -301,9 +402,12 @@ export function useSeferReader(): UseSeferReaderResult {
     setSelectedChapter,
     setSelectedVerse,
     activate,
+    goToVerse,
     goNext,
     goPrev,
     deactivate,
     restoreState,
+    rangeVerses,
+    rangeLabel,
   };
 }

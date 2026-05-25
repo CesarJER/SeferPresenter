@@ -8,7 +8,7 @@ interface SeferControlPanelProps {
   /** Called whenever a verse should be projected (activate ▶️ or arrow nav while active) */
   onProject: (state: SeferReaderState, command?: 'navigate' | 'next' | 'previous') => void;
   /** Called when ➕ is pressed — project + add as slide */
-  onAddSlide: (state: SeferReaderState) => void;
+  onAddSlide: (state: SeferReaderState, kind?: 'sefer' | 'tanaj') => void;
   /** Restore a previously projected state (when returning to scripture mode) */
   restoredState?: ScriptureNavState | null;
   /** Callback to update font sizes */
@@ -24,6 +24,7 @@ const SeferControlPanel: React.FC<SeferControlPanelProps> = ({
   const lastSyncedStateRef = useRef<string | null>(null);
   const didInitFontSyncRef = useRef(false);
   const [showFontSettings, setShowFontSettings] = useState(false);
+  const [endVerse, setEndVerse] = useState('');
 
   const [hebrewFontSize, setHebrewFontSize] = useState<number>(() => {
     const val = localStorage.getItem('sefer-presenter-font-hebrew');
@@ -65,6 +66,14 @@ const SeferControlPanel: React.FC<SeferControlPanelProps> = ({
   }, [hebrewFontSize, combinedTextBaseSize, onUpdateFontSizes]);
 
   useEffect(() => {
+    const restoredHebrewSize = restoredState?.hebrewFontSize;
+    if (typeof restoredHebrewSize === 'number' && Number.isFinite(restoredHebrewSize)) {
+      const clamped = Math.max(20, Math.min(72, restoredHebrewSize));
+      if (clamped !== hebrewFontSize) {
+        setHebrewFontSize(clamped);
+      }
+    }
+
     const restoredBaseSize = restoredState?.combinedTextBaseSize;
     if (typeof restoredBaseSize === 'number' && Number.isFinite(restoredBaseSize)) {
       const clamped = Math.max(12, Math.min(70, restoredBaseSize));
@@ -72,7 +81,7 @@ const SeferControlPanel: React.FC<SeferControlPanelProps> = ({
         setCombinedTextBaseSize(clamped);
       }
     }
-  }, [restoredState, combinedTextBaseSize]);
+  }, [restoredState, combinedTextBaseSize, hebrewFontSize]);
 
   // Continuous sync from presenter/keyboard updates
   useEffect(() => {
@@ -95,6 +104,12 @@ const SeferControlPanel: React.FC<SeferControlPanelProps> = ({
     }
   }, [activate, onProject]);
 
+  useEffect(() => {
+    if (endVerse && Number(endVerse) < Number(selectedVerse)) {
+      setEndVerse('');
+    }
+  }, [endVerse, selectedVerse]);
+
   const handleNext = useCallback(() => {
     const state = goNext();
     if (state) {
@@ -111,12 +126,21 @@ const SeferControlPanel: React.FC<SeferControlPanelProps> = ({
     }
   }, [goPrev, isActive, onProject]);
 
-  const handleAddSlide = useCallback(() => {
+  const handleAddSlide = useCallback((kind: 'sefer' | 'tanaj') => {
     if (currentVerse) {
-      onProject(currentVerse, 'navigate');
-      onAddSlide(currentVerse);
+      const normalizedEnd = endVerse || currentVerse.verse;
+      const slideState: SeferReaderState = {
+        ...currentVerse,
+        verseStart: currentVerse.verse,
+        verseEnd: normalizedEnd,
+        totalVerses: normalizedEnd
+          ? Math.max(1, Math.abs(Number(normalizedEnd) - Number(currentVerse.verse)) + 1)
+          : 1,
+      };
+      onProject(slideState, 'navigate');
+      onAddSlide(slideState, kind);
     }
-  }, [currentVerse, onProject, onAddSlide]);
+  }, [currentVerse, endVerse, onProject, onAddSlide]);
 
   // Keyboard navigation within the control panel window
   useEffect(() => {
@@ -231,15 +255,42 @@ const SeferControlPanel: React.FC<SeferControlPanelProps> = ({
             </button>
 
             {/* Add slide ➕ */}
-            <button
-              id="sefer-add-slide-btn"
-              onClick={handleAddSlide}
-              disabled={!currentVerse}
-              title="Presentar y añadir como slide a la presentación actual"
-              className="flex items-center justify-center gap-1 px-3 py-2 rounded-md bg-green-700 hover:bg-green-600 text-white text-xs font-bold transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-            >
-              <Plus size={14} />
-            </button>
+            <div className="flex items-center gap-1">
+              <button
+                id="sefer-add-slide-btn"
+                onClick={() => handleAddSlide('sefer')}
+                disabled={!currentVerse}
+                title="Presentar y añadir como slide Sefer a la presentación actual"
+                className="flex items-center justify-center gap-1 px-3 py-2 rounded-md bg-green-700 hover:bg-green-600 text-white text-xs font-bold transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                <Plus size={14} />
+                <span>Sefer</span>
+              </button>
+              <select
+                value={endVerse}
+                onChange={(e) => setEndVerse(e.target.value)}
+                disabled={!currentVerse}
+                title="Versículo final opcional"
+                className="h-8 rounded-md border border-gray-700 bg-gray-800 px-1.5 text-[10px] font-bold text-gray-200 focus:outline-none focus:ring-1 focus:ring-yellow-500 disabled:opacity-40"
+              >
+                <option value=""></option>
+                {verses
+                  .filter((verse) => Number(verse) >= Number(selectedVerse))
+                  .map((verse) => (
+                    <option key={verse} value={verse}>{verse}</option>
+                  ))}
+              </select>
+              <button
+                id="tanaj-add-slide-btn"
+                onClick={() => handleAddSlide('tanaj')}
+                disabled={!currentVerse}
+                title="Presentar y añadir como slide Tanaj a la presentación actual"
+                className="flex items-center justify-center gap-1 px-3 py-2 rounded-md bg-blue-700 hover:bg-blue-600 text-white text-xs font-bold transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                <Plus size={14} />
+                <span>Libro</span>
+              </button>
+            </div>
 
             {/* Next */}
             <button

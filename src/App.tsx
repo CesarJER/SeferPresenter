@@ -4,11 +4,14 @@ import MenuPopup from './components/MenuPopup'
 import SeferReaderScreen from './components/SeferReaderScreen'
 import defaultPresentations from '../presentations.json'
 import type { SeferReaderState } from './hooks/useSeferReader'
+import { getScriptureChapterVerses } from './utils/scriptureLookup'
 
 export type SeferOnlineRefPayload = {
   book?: string;
   chapter?: number | string;
+  verseStart?: number | string;
   verse?: number | string;
+  verseEnd?: number | string;
   bookEs?: string;
   bookHeb?: string;
   bookAbbrevEs?: string;
@@ -17,6 +20,7 @@ export type SeferOnlineRefPayload = {
   translation?: string;
   verseIdx?: number;
   totalVerses?: number;
+  scriptureKind?: 'tanaj' | 'sefer';
 };
 
 export interface Presentation {
@@ -33,7 +37,7 @@ export interface Slide {
   label: string;
   lines: string[]; // 1 line for standard, 3 for trilingual (Hebrew, Translit, Translation)
   background?: string; // Ruta al fondo personalizado para esta diapositiva
-  type?: 'text' | 'video' | 'scripture'; // 'text' por defecto
+  type?: 'text' | 'video' | 'tanaj' | 'sefer'; // 'text' por defecto
   videoSrc?: string;
   videoVolume?: number;
   videoSpeed?: number;
@@ -44,6 +48,7 @@ export interface Slide {
   scriptureChapter?: string;
   scriptureVerseStart?: string;
   scriptureVerseEnd?: string;
+  scriptureVerseBackgrounds?: Record<string, string>;
 }
 
 export interface VideoState {
@@ -66,12 +71,15 @@ export interface ScriptureNavState {
   bookHeb: string;
   bookAbbrevEs: string;
   chapter: string;
+  verseStart: string;
   verse: string;
+  verseEnd?: string;
   verseNikud: string;
   transliteration: string;
   translation: string;
   verseIdx: number;
   totalVerses: number;
+  scriptureKind?: 'tanaj' | 'sefer';
   command?: 'navigate' | 'next' | 'previous';
   commandId?: number;
   hebrewFontSize?: number;
@@ -80,6 +88,19 @@ export interface ScriptureNavState {
 
 // App mode: 'slides' is normal presentation, 'scripture' is live biblical reader
 export type AppMode = 'slides' | 'scripture';
+
+const parseSlideHash = (hash: string) => {
+  const clean = hash.replace('#', '');
+  const [slidePart, versePart] = clean.split('.');
+  const slideIndex = parseInt(slidePart, 10);
+  return {
+    slideIndex,
+    verse: versePart || undefined,
+  };
+};
+
+const formatSlideHash = (slideIndex: number, verse?: string) =>
+  verse ? `#${slideIndex}.${verse}` : `#${slideIndex}`;
 
 const normalizePublicPath = (value: string) => {
   if (!value) return '';
@@ -102,6 +123,13 @@ const normalizePublicPath = (value: string) => {
 const normalizePresentation = (presentation: Presentation): Presentation => {
   let mode = presentation.mode || 'standard';
   let slides = presentation.slides || [];
+
+  slides = slides.map((slide) => {
+    if ((slide as any).type === 'scripture') {
+      return { ...slide, type: 'sefer' as const };
+    }
+    return slide;
+  });
 
   if (mode === 'trilingual' && slides.length > 0) {
     const allSlidesAreFallback = slides.every(slide => {
@@ -190,7 +218,7 @@ function App() {
   const [currentPresentation, setCurrentPresentation] = useState<Presentation | null>(storedPresenterState?.presentation ?? null);
   const [currentSlideIndex, setCurrentSlideIndex] = useState<number>(storedPresenterState?.slideIndex ?? -1);
   const [backgrounds, setBackgrounds] = useState<string[]>([]);
-  
+
   const [backgroundLock, setBackgroundLock] = useState<boolean>(() => {
     return localStorage.getItem('sefer-presenter-bg-lock') === 'true';
   });
@@ -257,12 +285,12 @@ function App() {
     const activeVideoState = vState !== undefined ? vState : videoStateRef.current;
     const activeAppMode = aMode !== undefined ? aMode : appModeRef.current;
     const activeScriptureState = scrState !== undefined ? scrState : scriptureStateRef.current;
-    
+
     console.log("[App] syncState - isControlMode:", isControlMode, "currentTime:", activeVideoState?.currentTime, "lastUpdatedBy:", activeVideoState?.lastUpdatedBy);
 
     // Synchronize local React state
     setVideoState(activeVideoState);
-    
+
     persistState(presentation, slideIndex, bgLock, lockedBg);
     channel.postMessage({
       type: 'SYNC_STATE',
@@ -294,40 +322,24 @@ function App() {
     }
   }, [channel, persistState]);
 
-  const handleSelectPresentationAndSlide = useCallback((p: Presentation | null, idx: number) => {
+  const handleSelectPresentationAndSlide = useCallback((p: Presentation | null, idx: number, direction: 'forward' | 'backward' = 'forward', targetVerse?: string) => {
     const normalizedPresentation = p ? normalizePresentation(p) : null;
     setCurrentPresentation(normalizedPresentation);
     setCurrentSlideIndex(idx);
     setVideoState(null); // Reset video state on slide transition
-    
+
     // Check if the clicked slide background is Ignorar / No cambiar
     const slide = normalizedPresentation && idx >= 0 ? normalizedPresentation.slides[idx] : null;
     const bgVal = slide?.background ?? '';
     const isIgnored = bgVal === 'Ignorar' || bgVal === 'No cambiar';
-    const scriptureSlideState: ScriptureNavState | null = slide?.type === 'scripture'
-      ? {
-          bookEs: slide.scriptureBook || 'Gn',
-          bookHeb: '',
-          bookAbbrevEs: slide.scriptureBook || 'Gn',
-          chapter: slide.scriptureChapter || '1',
-          verse: slide.scriptureVerseStart || '1',
-          verseNikud: '',
-          transliteration: '',
-          translation: '',
-          verseIdx: 0,
-          totalVerses: 0,
-          command: 'navigate',
-          commandId: ++scriptureCommandIdRef.current,
-          combinedTextBaseSize: 50,
-        }
-      : null;
+    const scriptureSlideState: ScriptureNavState | null = buildScriptureSlideState(slide, direction, targetVerse);
     const nextAppMode: AppMode = scriptureSlideState ? 'scripture' : 'slides';
 
     setAppMode(nextAppMode);
     if (scriptureSlideState) {
       setScriptureState(scriptureSlideState);
     }
-    
+
     if (isIgnored) {
       // Ignorar: preserve userSelectedBackground override
       syncState(
@@ -376,16 +388,17 @@ function App() {
     const matched = presentations.find(p => slugify(p.title) === slugify(urlTitle));
 
     if (matched) {
-      const hash = window.location.hash.replace('#', '');
-      const slideIndex = parseInt(hash, 10);
+      const { slideIndex, verse } = parseSlideHash(window.location.hash);
       const targetIndex = !isNaN(slideIndex) && slideIndex >= 0 && slideIndex < matched.slides.length ? slideIndex : 0;
+      const currentVerse = scriptureStateRef.current?.verse;
 
       if (
         !currentPresentationRef.current ||
         currentPresentationRef.current.id !== matched.id ||
-        currentSlideIndexRef.current !== targetIndex
+        currentSlideIndexRef.current !== targetIndex ||
+        (!!verse && currentVerse !== verse)
       ) {
-        handleSelectPresentationAndSlide(matched, targetIndex);
+        handleSelectPresentationAndSlide(matched, targetIndex, 'forward', verse);
       }
     }
   }, [presentations, handleSelectPresentationAndSlide]);
@@ -394,7 +407,11 @@ function App() {
   useEffect(() => {
     if (currentPresentation) {
       const slug = slugify(currentPresentation.title);
-      const hash = currentSlideIndex >= 0 ? `#${currentSlideIndex}` : '';
+      const activeSlide = currentSlideIndex >= 0 ? currentPresentation.slides[currentSlideIndex] : null;
+      const isScriptureSlide = activeSlide?.type === 'sefer' || activeSlide?.type === 'tanaj';
+      const hash = currentSlideIndex >= 0
+        ? formatSlideHash(currentSlideIndex, isScriptureSlide ? scriptureState?.verse : undefined)
+        : '';
       const search = window.location.search;
       const normalizedPath = window.location.pathname.replace(/\/$/, '');
       const targetPath = `/${slug}${search}${hash}`;
@@ -402,7 +419,7 @@ function App() {
         window.history.replaceState(null, '', targetPath);
       }
     }
-  }, [currentPresentation, currentSlideIndex]);
+  }, [currentPresentation, currentSlideIndex, scriptureState]);
 
   // Dynamic document title update based on current presentation
   useEffect(() => {
@@ -474,7 +491,7 @@ function App() {
         console.log("[Presenter App] BroadcastChannel message received:", data.type, "videoState currentTime:", data.videoState?.currentTime);
         if (data.type === 'SYNC_STATE') {
           const normalizedPresentation = data.presentation ? normalizePresentation(data.presentation) : null;
-          
+
           if (JSON.stringify(currentPresentationRef.current) !== JSON.stringify(normalizedPresentation)) {
             setCurrentPresentation(normalizedPresentation);
           }
@@ -509,7 +526,7 @@ function App() {
         }
       };
       channel.addEventListener('message', handleMessage);
-      
+
       // Ask for current state when opened
       channel.postMessage({ type: 'REQUEST_STATE' });
 
@@ -531,7 +548,7 @@ function App() {
           );
         } else if (event.data.type === 'SYNC_STATE') {
           const normalizedPresentation = event.data.presentation ? normalizePresentation(event.data.presentation) : null;
-          
+
           if (JSON.stringify(currentPresentationRef.current) !== JSON.stringify(normalizedPresentation)) {
             setCurrentPresentation(normalizedPresentation);
           }
@@ -575,26 +592,26 @@ function App() {
     if (__APP_MODE__ === 'singlefile') return;
 
     const eventSource = new EventSource('/api/state-events');
-    
+
     eventSource.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
         if (!data) return;
-        
+
         const normalizedPresentation = data.presentation ? normalizePresentation(data.presentation) : null;
         const currentRef = currentPresentationRef.current;
         const currentIdxRef = currentSlideIndexRef.current;
-        
-        const isDifferent = !currentRef || 
-                            currentRef.id !== (normalizedPresentation?.id ?? '') || 
-                            currentIdxRef !== data.slideIndex ||
-                            backgroundLockRef.current !== data.backgroundLock ||
-                            lockedBackgroundValueRef.current !== data.lockedBackgroundValue ||
-                            userSelectedBackgroundRef.current !== data.userSelectedBackground ||
-                            JSON.stringify(videoStateRef.current) !== JSON.stringify(data.videoState) ||
-                            appModeRef.current !== data.appMode ||
-                            JSON.stringify(scriptureStateRef.current) !== JSON.stringify(data.scriptureState);
-                             
+
+        const isDifferent = !currentRef ||
+          currentRef.id !== (normalizedPresentation?.id ?? '') ||
+          currentIdxRef !== data.slideIndex ||
+          backgroundLockRef.current !== data.backgroundLock ||
+          lockedBackgroundValueRef.current !== data.lockedBackgroundValue ||
+          userSelectedBackgroundRef.current !== data.userSelectedBackground ||
+          JSON.stringify(videoStateRef.current) !== JSON.stringify(data.videoState) ||
+          appModeRef.current !== data.appMode ||
+          JSON.stringify(scriptureStateRef.current) !== JSON.stringify(data.scriptureState);
+
         if (isDifferent) {
           setCurrentPresentation(normalizedPresentation);
           setCurrentSlideIndex(data.slideIndex);
@@ -667,6 +684,48 @@ function App() {
     handleSelectPresentationAndSlide(normalizedPresentation, nextIndex);
   }
 
+  const buildScriptureSlideState = useCallback((slide: Slide | null, direction: 'forward' | 'backward' = 'forward', targetVerse?: string): ScriptureNavState | null => {
+    if (!slide || (slide.type !== 'sefer' && slide.type !== 'tanaj' && !slide.scriptureBook)) return null;
+
+    const verseStart = slide.scriptureVerseStart || '1';
+    const verseEnd = slide.scriptureVerseEnd || verseStart;
+    const startNum = Number(verseStart);
+    const endNum = Number(verseEnd || verseStart);
+    const totalVerses = Number.isFinite(startNum) && Number.isFinite(endNum)
+      ? Math.max(1, Math.abs(endNum - startNum) + 1)
+      : 1;
+    const enteringAtEnd = direction === 'backward';
+    const targetNum = Number(targetVerse);
+    const hasTargetVerse = !!targetVerse && Number.isFinite(targetNum) && Number.isFinite(startNum) && Number.isFinite(endNum);
+    const targetInsideRange = hasTargetVerse
+      && targetNum >= Math.min(startNum, endNum)
+      && targetNum <= Math.max(startNum, endNum);
+    const activeVerse = targetInsideRange ? String(targetVerse) : enteringAtEnd ? verseEnd : verseStart;
+    const activeVerseIdx = targetInsideRange
+      ? Math.abs(targetNum - startNum)
+      : enteringAtEnd ? totalVerses - 1 : 0;
+
+    return {
+      bookEs: slide.scriptureBook || 'Gn',
+      bookHeb: '',
+      bookAbbrevEs: slide.scriptureBook || 'Gn',
+      chapter: slide.scriptureChapter || '1',
+      verseStart,
+      verse: activeVerse,
+      verseEnd,
+      verseNikud: slide.lines[0] || '',
+      transliteration: slide.lines[1] || '',
+      translation: slide.lines[2] || '',
+      verseIdx: activeVerseIdx,
+      totalVerses,
+      scriptureKind: slide.type === 'tanaj' ? 'tanaj' : 'sefer',
+      command: 'navigate',
+      commandId: ++scriptureCommandIdRef.current,
+      hebrewFontSize: scriptureStateRef.current?.hebrewFontSize ?? 42,
+      combinedTextBaseSize: scriptureStateRef.current?.combinedTextBaseSize ?? 50,
+    };
+  }, []);
+
   // Handle keyboard navigation from both the control panel and the presenter window.
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -724,11 +783,11 @@ function App() {
       if (e.key === 'ArrowRight') {
         e.preventDefault();
         const nextIdx = Math.min(currentSlideIndex + 1, currentPresentation.slides.length - 1);
-        handleSelectPresentationAndSlide(currentPresentation, nextIdx);
+        handleSelectPresentationAndSlide(currentPresentation, nextIdx, 'forward');
       } else if (e.key === 'ArrowLeft') {
         e.preventDefault();
         const prevIdx = Math.max(currentSlideIndex - 1, 0);
-        handleSelectPresentationAndSlide(currentPresentation, prevIdx);
+        handleSelectPresentationAndSlide(currentPresentation, prevIdx, 'backward');
       }
     };
 
@@ -771,8 +830,9 @@ function App() {
       return bg;
     }
 
+    const verseBgVal = activeSlide.scriptureVerseBackgrounds?.[String(scriptureStateRef.current?.verse ?? '')];
     // 3. Flujo secuencial de diapositivas
-    const bgVal = activeSlide.background;
+    const bgVal = verseBgVal || activeSlide.background;
 
     // A. Ignorar explicitly (comportamiento de candado)
     if (bgVal === 'Ignorar' || bgVal === 'No cambiar') {
@@ -812,7 +872,7 @@ function App() {
     // D. Ruta de fondo personalizada
     updateLastPhysical(bgVal);
     return bgVal;
-  }, [currentPresentation, currentSlideIndex, backgroundLock, lockedBackgroundValue, userSelectedBackground]);
+  }, [currentPresentation, currentSlideIndex, backgroundLock, lockedBackgroundValue, userSelectedBackground, scriptureState]);
 
   const activeBackground = getActiveBackground();
 
@@ -852,25 +912,106 @@ function App() {
   }, [syncState]);
 
   const activeSlide = currentPresentation && currentSlideIndex >= 0 ? currentPresentation.slides[currentSlideIndex] : null;
+  const activePresenterSlide = scriptureState?.scriptureKind === 'tanaj'
+    ? {
+        id: activeSlide?.id || `tanaj-${scriptureState.bookAbbrevEs}-${scriptureState.chapter}-${scriptureState.verse}`,
+        label: `${scriptureState.bookAbbrevEs} ${scriptureState.chapter}:${scriptureState.verse}`,
+        lines: [
+          scriptureState.verseNikud,
+          scriptureState.transliteration,
+          scriptureState.translation,
+        ],
+        type: 'tanaj' as const,
+        background: activeBackground,
+      }
+    : activeSlide;
+
+  useEffect(() => {
+    if (!scriptureState || !activeSlide || (activeSlide.type !== 'sefer' && activeSlide.type !== 'tanaj')) return;
+
+    let cancelled = false;
+    getScriptureChapterVerses(scriptureState.bookAbbrevEs || scriptureState.bookEs, scriptureState.chapter)
+      .then((verses) => {
+        if (cancelled) return;
+        const verse = verses.find((row) => row.verse === scriptureState.verse);
+        if (!verse) return;
+
+        const hydratedState: ScriptureNavState = {
+          ...scriptureState,
+          bookEs: verse.bookEs,
+          bookHeb: verse.bookHeb,
+          bookAbbrevEs: verse.bookAbbrevEs,
+          chapter: verse.chapter,
+          verse: verse.verse,
+          verseNikud: verse.verseNikud,
+          transliteration: verse.transliteration,
+          translation: verse.translation,
+          scriptureKind: activeSlide.type === 'tanaj' ? 'tanaj' : 'sefer',
+        };
+
+        if (
+          hydratedState.verseNikud === scriptureState.verseNikud &&
+          hydratedState.transliteration === scriptureState.transliteration &&
+          hydratedState.translation === scriptureState.translation &&
+          hydratedState.scriptureKind === scriptureState.scriptureKind
+        ) {
+          return;
+        }
+
+        setScriptureState(hydratedState);
+        syncState(
+          currentPresentationRef.current,
+          currentSlideIndexRef.current,
+          backgroundLockRef.current,
+          lockedBackgroundValueRef.current,
+          userSelectedBackgroundRef.current,
+          videoStateRef.current,
+          'scripture',
+          hydratedState
+        );
+      })
+      .catch((err) => console.error('Error hydrating scripture verse', err));
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    activeSlide,
+    scriptureState?.bookAbbrevEs,
+    scriptureState?.bookEs,
+    scriptureState?.chapter,
+    scriptureState?.scriptureKind,
+    scriptureState?.translation,
+    scriptureState?.transliteration,
+    scriptureState?.verse,
+    scriptureState?.verseNikud,
+    syncState,
+  ]);
 
   // Helper: project a scripture verse (called from MenuPopup/SeferControlPanel)
   const handleProjectScripture = useCallback((
     state: SeferReaderState,
     command: ScriptureNavState['command'] = 'navigate'
   ) => {
+    const verseStart = state.verseStart ?? state.verse;
+    const verseEnd = state.verseEnd || undefined;
     const navState: ScriptureNavState = {
       bookEs: state.bookEs,
       bookHeb: state.bookHeb,
       bookAbbrevEs: state.bookAbbrevEs,
       chapter: state.chapter,
+      verseStart,
       verse: state.verse,
+      verseEnd,
       verseNikud: state.verseNikud,
       transliteration: state.transliteration,
       translation: state.translation,
       verseIdx: state.verseIdx,
       totalVerses: state.totalVerses,
+      scriptureKind: state.scriptureKind ?? 'sefer',
       command,
       commandId: ++scriptureCommandIdRef.current,
+      hebrewFontSize: scriptureStateRef.current?.hebrewFontSize ?? 42,
       combinedTextBaseSize: scriptureStateRef.current?.combinedTextBaseSize ?? 50,
     };
     setScriptureState(navState);
@@ -897,7 +1038,9 @@ function App() {
         bookHeb: '',
         bookAbbrevEs: '',
         chapter: '1',
+        verseStart: '1',
         verse: '1',
+        verseEnd: undefined,
         verseNikud: '',
         transliteration: '',
         translation: '',
@@ -935,14 +1078,18 @@ function App() {
       bookHeb: String(payload.bookHeb ?? previous?.bookHeb ?? ''),
       bookAbbrevEs,
       chapter: String(payload.chapter ?? previous?.chapter ?? '1'),
+      verseStart: String(payload.verseStart ?? previous?.verseStart ?? payload.verse ?? previous?.verse ?? '1'),
       verse: String(payload.verse ?? previous?.verse ?? '1'),
+      verseEnd: payload.verseEnd !== undefined ? String(payload.verseEnd) || undefined : undefined,
       verseNikud: String(payload.verseNikud ?? previous?.verseNikud ?? ''),
       transliteration: String(payload.transliteration ?? previous?.transliteration ?? ''),
       translation: String(payload.translation ?? previous?.translation ?? ''),
       verseIdx: numberOrFallback(payload.verseIdx, previous?.verseIdx ?? 0),
       totalVerses: numberOrFallback(payload.totalVerses, previous?.totalVerses ?? 0),
+      scriptureKind: payload.scriptureKind ?? previous?.scriptureKind ?? 'sefer',
       command: undefined,
       commandId: previous?.commandId,
+      hebrewFontSize: previous?.hebrewFontSize ?? 42,
       combinedTextBaseSize: previous?.combinedTextBaseSize ?? 50,
     };
 
@@ -961,34 +1108,58 @@ function App() {
     );
   }, [syncState]);
 
-  // Helper: add current scripture verse as a trilingual slide to the active presentation
-  const handleAddScriptureSlide = useCallback((state: SeferReaderState) => {
-    if (!currentPresentation) return;
+  const handleAddScriptureSlide = useCallback((state: SeferReaderState, kind: 'sefer' | 'tanaj' = 'sefer') => {
+    const presentation = currentPresentationRef.current;
+    if (!presentation) return;
+    const verseStart = state.verseStart || state.verse;
+    const verseEnd = state.verseEnd || verseStart;
+    const rangeLabel = verseEnd !== verseStart ? `${verseStart}-${verseEnd}` : verseStart;
     const newSlide: Slide = {
-      id: `slide-scripture-${Date.now()}`,
-      label: `${state.bookAbbrevEs} ${state.chapter}:${state.verse}`,
+      id: `slide-${kind}-${Date.now()}`,
+      label: `${state.bookAbbrevEs} ${state.chapter}:${rangeLabel}`,
       lines: [
         state.verseNikud,
         state.transliteration,
         state.translation,
       ],
-      type: 'text',
+      type: kind,
+      scriptureBook: state.bookAbbrevEs || state.bookEs,
+      scriptureChapter: state.chapter,
+      scriptureVerseStart: verseStart,
+      scriptureVerseEnd: verseEnd,
     };
-    // Insert after currentSlideIndex (or at end)
-    const insertAt = currentSlideIndex >= 0 ? currentSlideIndex + 1 : currentPresentation.slides.length;
+    const insertAt = currentSlideIndexRef.current >= 0 ? currentSlideIndexRef.current + 1 : presentation.slides.length;
     const updatedSlides = [
-      ...currentPresentation.slides.slice(0, insertAt),
+      ...presentation.slides.slice(0, insertAt),
       newSlide,
-      ...currentPresentation.slides.slice(insertAt),
+      ...presentation.slides.slice(insertAt),
     ];
-    const updatedPresentation: Presentation = { ...currentPresentation, mode: 'trilingual', slides: updatedSlides };
+    const updatedPresentation: Presentation = { ...presentation, mode: 'trilingual', slides: updatedSlides };
     handleSave(updatedPresentation);
-  }, [currentPresentation, currentSlideIndex, handleSave]);
+    handleSelectPresentationAndSlide(updatedPresentation, insertAt, 'forward');
+  }, [handleSave, handleSelectPresentationAndSlide]);
+
+  const handleScriptureBoundary = useCallback((direction: 'next' | 'previous') => {
+    const presentation = currentPresentationRef.current;
+    if (!presentation || presentation.slides.length === 0) return;
+
+    const nextIndex = direction === 'next'
+      ? currentSlideIndexRef.current + 1
+      : currentSlideIndexRef.current - 1;
+
+    if (nextIndex < 0 || nextIndex >= presentation.slides.length) return;
+
+    handleSelectPresentationAndSlide(
+      presentation,
+      nextIndex,
+      direction === 'next' ? 'forward' : 'backward'
+    );
+  }, [handleSelectPresentationAndSlide]);
 
   if (isControlMode) {
     return (
       <div className="w-full h-screen bg-gray-900 overflow-hidden">
-        <MenuPopup 
+        <MenuPopup
           presentations={presentations}
           backgrounds={backgrounds}
           currentPresentation={currentPresentation}
@@ -1026,8 +1197,8 @@ function App() {
               const fallbackSlideIndex =
                 fallbackPresentation
                   ? (currentSlideIndexRef.current >= 0 && currentPresentationRef.current
-                      ? currentSlideIndexRef.current
-                      : 0)
+                    ? currentSlideIndexRef.current
+                    : 0)
                   : -1;
 
               if (!currentPresentationRef.current && fallbackPresentation) {
@@ -1056,18 +1227,20 @@ function App() {
           }}
           onProjectScripture={handleProjectScripture}
           onAddScriptureSlide={handleAddScriptureSlide}
+          onBoundaryReached={handleScriptureBoundary}
         />
       </div>
     );
   }
 
   // Presenter (big screen) mode
-  if (appMode === 'scripture' && scriptureState) {
+  if (appMode === 'scripture' && scriptureState?.scriptureKind !== 'tanaj' && scriptureState) {
     return (
       <div className="w-full h-screen overflow-hidden">
         <SeferReaderScreen
           scriptureState={scriptureState}
           onVerseSelected={handleSeferOnlineRef}
+          onBoundaryReached={handleScriptureBoundary}
         />
       </div>
     );
@@ -1075,9 +1248,9 @@ function App() {
 
   return (
     <div className="w-full h-screen overflow-hidden bg-black relative">
-      <PresenterScreen 
-        background={activeBackground} 
-        slide={activeSlide} 
+      <PresenterScreen
+        background={activeBackground}
+        slide={activePresenterSlide}
         presentationTitle={currentPresentation?.title || ''}
         fontScale={currentPresentation?.fontScale ?? 1}
         onLogoClick={() => {
@@ -1091,3 +1264,4 @@ function App() {
 }
 
 export default App
+

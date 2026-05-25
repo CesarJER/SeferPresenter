@@ -9,11 +9,13 @@ import { useResizablePanel } from '../hooks/useResizablePanel';
 interface SeferReaderScreenProps {
   scriptureState: ScriptureNavState;
   onVerseSelected: (payload: any) => void;
+  onBoundaryReached?: (direction: 'next' | 'previous') => void;
 }
 
 export const SeferReaderScreen: React.FC<SeferReaderScreenProps> = ({
   scriptureState,
   onVerseSelected,
+  onBoundaryReached,
 }) => {
   const [metadata, setMetadata] = useState<AppMetadata>({});
   const [data, setData] = useState<VerseData[]>([]);
@@ -72,6 +74,8 @@ export const SeferReaderScreen: React.FC<SeferReaderScreenProps> = ({
       .finally(() => setIsLoading(false));
   }, [metadata, scriptureState.bookEs, scriptureState.bookAbbrevEs, resolveBookName]);
 
+  const hasVerseRange = !!scriptureState.verseEnd;
+
   // Sync selected index when data or scriptureState chapter/verse changes
   useEffect(() => {
     if (data.length === 0) return;
@@ -85,6 +89,42 @@ export const SeferReaderScreen: React.FC<SeferReaderScreenProps> = ({
     }
   }, [data, scriptureState.chapter, scriptureState.verse]);
 
+  const rangeBounds = useMemo(() => {
+    if (!hasVerseRange || data.length === 0) {
+      return null;
+    }
+
+    const startIdx = data.findIndex((v) => v.chapter === scriptureState.chapter && v.verse === scriptureState.verseStart);
+    const endIdx = data.findIndex((v) => v.chapter === scriptureState.chapter && v.verse === scriptureState.verseEnd);
+    if (startIdx < 0 || endIdx < 0) return null;
+
+    const resolvedStartIdx = Math.min(startIdx, endIdx);
+    const resolvedEndIdx = Math.max(startIdx, endIdx);
+
+    return {
+      startIdx: resolvedStartIdx,
+      endIdx: resolvedEndIdx,
+      length: Math.max(1, resolvedEndIdx - resolvedStartIdx + 1),
+    };
+  }, [data, hasVerseRange, scriptureState.chapter, scriptureState.verseEnd, scriptureState.verseStart]);
+
+  const buildVersePayload = useCallback((verse: VerseData, idx: number) => ({
+    book: verse.bookAbbrevEs,
+    chapter: Number(verse.chapter),
+    verseStart: scriptureState.verseStart,
+    verse: Number(verse.verse),
+    verseEnd: hasVerseRange ? scriptureState.verseEnd : undefined,
+    bookEs: verse.bookEs,
+    bookHeb: verse.bookHeb,
+    bookAbbrevEs: verse.bookAbbrevEs,
+    verseNikud: verse.verseNikudSanitized ?? verse.verseNikud,
+    transliteration: verse.transliteration,
+    translation: verse.translation,
+    verseIdx: hasVerseRange && rangeBounds ? Math.max(0, idx - rangeBounds.startIdx) : idx,
+    totalVerses: hasVerseRange && rangeBounds ? rangeBounds.length : data.length,
+    scriptureKind: scriptureState.scriptureKind ?? 'sefer',
+  }), [data.length, hasVerseRange, rangeBounds, scriptureState.scriptureKind, scriptureState.verseEnd, scriptureState.verseStart]);
+
   // Handle command (next/previous) changes
   useEffect(() => {
     if (data.length === 0 || scriptureState.commandId === undefined) return;
@@ -95,51 +135,37 @@ export const SeferReaderScreen: React.FC<SeferReaderScreenProps> = ({
     if (scriptureState.command === 'next') {
       setSelectedVerseIdx((prev) => {
         if (prev === null) return 0;
-        const nextIdx = Math.min(prev + 1, data.length - 1);
+        const nextLimit = hasVerseRange && rangeBounds ? rangeBounds.endIdx : data.length - 1;
+        const nextIdx = Math.min(prev + 1, nextLimit);
+        if (nextIdx === prev) {
+          if (hasVerseRange) onBoundaryReached?.('next');
+          return prev;
+        }
         // Propagate selection back to App so other screens keep up
         const verse = data[nextIdx];
         if (verse) {
-          onVerseSelected({
-            book: verse.bookAbbrevEs,
-            chapter: Number(verse.chapter),
-            verse: Number(verse.verse),
-            bookEs: verse.bookEs,
-            bookHeb: verse.bookHeb,
-            bookAbbrevEs: verse.bookAbbrevEs,
-            verseNikud: verse.verseNikudSanitized ?? verse.verseNikud,
-            transliteration: verse.transliteration,
-            translation: verse.translation,
-            verseIdx: nextIdx,
-            totalVerses: data.length,
-          });
+          onVerseSelected(buildVersePayload(verse, nextIdx));
         }
         return nextIdx;
       });
     } else if (scriptureState.command === 'previous') {
       setSelectedVerseIdx((prev) => {
         if (prev === null) return 0;
-        const prevIdx = Math.max(prev - 1, 0);
+        const prevLimit = hasVerseRange && rangeBounds ? rangeBounds.startIdx : 0;
+        const prevIdx = Math.max(prev - 1, prevLimit);
+        if (prevIdx === prev) {
+          if (hasVerseRange) onBoundaryReached?.('previous');
+          return prev;
+        }
         // Propagate selection back to App so other screens keep up
         const verse = data[prevIdx];
         if (verse) {
-          onVerseSelected({
-            book: verse.bookAbbrevEs,
-            chapter: Number(verse.chapter),
-            verse: Number(verse.verse),
-            bookEs: verse.bookEs,
-            bookHeb: verse.bookHeb,
-            bookAbbrevEs: verse.bookAbbrevEs,
-            verseNikud: verse.verseNikudSanitized ?? verse.verseNikud,
-            transliteration: verse.transliteration,
-            translation: verse.translation,
-            verseIdx: prevIdx,
-            totalVerses: data.length,
-          });
+          onVerseSelected(buildVersePayload(verse, prevIdx));
         }
         return prevIdx;
       });
     }
-  }, [data, scriptureState.command, scriptureState.commandId, onVerseSelected]);
+  }, [buildVersePayload, data, hasVerseRange, onBoundaryReached, onVerseSelected, rangeBounds, scriptureState.command, scriptureState.commandId]);
 
   // Scrolling logic
   const scrollToTarget = useCallback((idx: number) => {
@@ -206,22 +232,10 @@ export const SeferReaderScreen: React.FC<SeferReaderScreenProps> = ({
       setSelectedVerseIdx(idx);
       const verse = data[idx];
       if (verse) {
-        onVerseSelected({
-          book: verse.bookAbbrevEs,
-          chapter: Number(verse.chapter),
-          verse: Number(verse.verse),
-          bookEs: verse.bookEs,
-          bookHeb: verse.bookHeb,
-          bookAbbrevEs: verse.bookAbbrevEs,
-          verseNikud: verse.verseNikudSanitized ?? verse.verseNikud,
-          transliteration: verse.transliteration,
-          translation: verse.translation,
-          verseIdx: idx,
-          totalVerses: data.length,
-        });
+        onVerseSelected(buildVersePayload(verse, idx));
       }
     },
-    [data, onVerseSelected]
+    [buildVersePayload, data, onVerseSelected]
   );
 
   const handleVerseTouchEnd = useCallback(
@@ -229,22 +243,10 @@ export const SeferReaderScreen: React.FC<SeferReaderScreenProps> = ({
       setSelectedVerseIdx(idx);
       const verse = data[idx];
       if (verse) {
-        onVerseSelected({
-          book: verse.bookAbbrevEs,
-          chapter: Number(verse.chapter),
-          verse: Number(verse.verse),
-          bookEs: verse.bookEs,
-          bookHeb: verse.bookHeb,
-          bookAbbrevEs: verse.bookAbbrevEs,
-          verseNikud: verse.verseNikudSanitized ?? verse.verseNikud,
-          transliteration: verse.transliteration,
-          translation: verse.translation,
-          verseIdx: idx,
-          totalVerses: data.length,
-        });
+        onVerseSelected(buildVersePayload(verse, idx));
       }
     },
-    [data, onVerseSelected]
+    [buildVersePayload, data, onVerseSelected]
   );
 
   const currentSelectedVerse = useMemo(() => {
@@ -296,10 +298,12 @@ export const SeferReaderScreen: React.FC<SeferReaderScreenProps> = ({
       />
 
       <div className="flex-1 flex flex-col overflow-hidden">
-        <div className="flex-1 overflow-y-auto flex flex-col justify-start p-8 pt-16 pb-24 scrollable-container touch-pan-y">
+      <div className="flex-1 overflow-y-auto flex flex-col justify-start p-8 pt-16 pb-24 scrollable-container touch-pan-y">
           <SeferFlowView
             groupedVerses={groupedVerses}
             selectedVerseIdx={selectedVerseIdx}
+            rangeStartVerse={hasVerseRange ? scriptureState.verseStart : undefined}
+            rangeEndVerse={hasVerseRange ? scriptureState.verseEnd : undefined}
             onVerseClick={handleVerseClick}
             onVerseTouchEnd={handleVerseTouchEnd}
             bookDir={bookDir}

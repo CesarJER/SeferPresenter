@@ -4,13 +4,24 @@ import type { VerseData } from '../hooks/useSeferReader';
 interface SeferFlowViewProps {
   groupedVerses: { type: 'normal' | 'shira'; verses: { verse: VerseData; idxVerse: number }[] }[];
   selectedVerseIdx: number | null;
+  rangeStartVerse?: string;
+  rangeEndVerse?: string;
   onVerseClick: (e: React.MouseEvent, idx: number) => void;
   onVerseTouchEnd: (e: React.TouchEvent, idx: number) => void;
   bookDir?: string;
   hebrewFontSize?: number;
 }
 
-export const SeferFlowView = ({ groupedVerses, selectedVerseIdx, onVerseClick, onVerseTouchEnd, bookDir = 'rtl', hebrewFontSize }: SeferFlowViewProps) => (
+export const SeferFlowView = ({
+  groupedVerses,
+  selectedVerseIdx,
+  rangeStartVerse,
+  rangeEndVerse,
+  onVerseClick,
+  onVerseTouchEnd,
+  bookDir = 'rtl',
+  hebrewFontSize,
+}: SeferFlowViewProps) => (
   <motion.div
     dir={bookDir}
     className="sefer-mode max-w-screen-xl mx-auto text-[3.5rem] leading-[1.8] text-justify break-keep"
@@ -23,6 +34,11 @@ export const SeferFlowView = ({ groupedVerses, selectedVerseIdx, onVerseClick, o
       {groupedVerses.map((group, groupIdx) => {
         const renderVerse = (verse: VerseData, idxVerse: number) => {
           const isSelected = idxVerse === selectedVerseIdx;
+          const verseNumber = Number(verse.verse);
+          const startNumber = Number(rangeStartVerse ?? verse.verse);
+          const endNumber = Number(rangeEndVerse ?? rangeStartVerse ?? verse.verse);
+          const hasRange = Number.isFinite(startNumber) && Number.isFinite(endNumber);
+          const isWithinRange = !hasRange || (verseNumber >= Math.min(startNumber, endNumber) && verseNumber <= Math.max(startNumber, endNumber));
           const textToShow = isSelected
             ? (verse.verseNikudSanitized ?? verse.verseNikud)
             : (verse.verseNikudCleanSanitized ?? verse.verseNikudSanitized ?? verse.verseNikudClean ?? verse.verseNikud);
@@ -30,7 +46,7 @@ export const SeferFlowView = ({ groupedVerses, selectedVerseIdx, onVerseClick, o
           const hasBricks = textToShow.includes('brick-');
           const classNameVerse = isSelected
             ? `text-red-900 font-semibold verse-selected ${hasBricks ? 'verse-shira' : 'bg-yellow-100 px-2 rounded'}`
-            : `text-gray-800 ${hasBricks ? 'verse-shira' : ''}`;
+            : `${isWithinRange ? 'text-gray-800' : 'text-gray-500/70'} ${hasBricks ? 'verse-shira' : ''}`;
 
           const htmlString = `${textToShow} `.replace(/<br\s*\/?>\s+/gi, '<br/>');
 
