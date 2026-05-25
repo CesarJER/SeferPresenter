@@ -42,6 +42,7 @@ export interface Slide {
   videoVolume?: number;
   videoSpeed?: number;
   videoLoop?: boolean;
+  videoPresenterNav?: boolean;
   videoStart?: number;
   videoEnd?: number;
   scriptureBook?: string;
@@ -88,7 +89,6 @@ export interface ScriptureNavState {
 
 // App mode: 'slides' is normal presentation, 'scripture' is slide scripture, 'seferManual' is the manual Sefer overlay
 export type AppMode = 'slides' | 'scripture' | 'seferManual';
-
 const parseSlideHash = (hash: string) => {
   const clean = hash.replace('#', '');
   const [slidePart, versePart] = clean.split('.');
@@ -101,6 +101,11 @@ const parseSlideHash = (hash: string) => {
 
 const formatSlideHash = (slideIndex: number, verse?: string) =>
   verse ? `#${slideIndex}.${verse}` : `#${slideIndex}`;
+
+const makeClientId = () => {
+  const randomPart = Math.random().toString(36).slice(2);
+  return `sefer-${Date.now().toString(36)}-${randomPart}`;
+};
 
 const normalizePublicPath = (value: string) => {
   if (!value) return '';
@@ -243,6 +248,7 @@ function App() {
   const scriptureStateRef = useRef<ScriptureNavState | null>(scriptureState);
   const scriptureCommandIdRef = useRef(0);
   const slideScriptureStateBeforeManualRef = useRef<ScriptureNavState | null>(null);
+  const clientIdRef = useRef(makeClientId());
 
   useEffect(() => {
     videoStateRef.current = videoState;
@@ -295,6 +301,8 @@ function App() {
     persistState(presentation, slideIndex, bgLock, lockedBg);
     channel.postMessage({
       type: 'SYNC_STATE',
+      clientId: clientIdRef.current,
+      origin: isControlMode ? 'control' : 'presenter',
       presentation,
       slideIndex,
       backgroundLock: bgLock,
@@ -310,6 +318,8 @@ function App() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          clientId: clientIdRef.current,
+          origin: isControlMode ? 'control' : 'presenter',
           presentation,
           slideIndex,
           backgroundLock: bgLock,
@@ -321,7 +331,7 @@ function App() {
         })
       }).catch(err => console.error("Error syncing state to network", err));
     }
-  }, [channel, persistState]);
+  }, [channel, isControlMode, persistState]);
 
   const handleSelectPresentationAndSlide = useCallback((p: Presentation | null, idx: number, direction: 'forward' | 'backward' = 'forward', targetVerse?: string) => {
     const normalizedPresentation = p ? normalizePresentation(p) : null;
@@ -492,6 +502,7 @@ function App() {
       // Presenter Screen Mode: Listen for changes from the control panel
       const handleMessage = (event: MessageEvent) => {
         const data = event.data;
+        if (data?.clientId === clientIdRef.current) return;
         console.log("[Presenter App] BroadcastChannel message received:", data.type, "videoState currentTime:", data.videoState?.currentTime);
         if (data.type === 'SYNC_STATE') {
           const normalizedPresentation = data.presentation ? normalizePresentation(data.presentation) : null;
@@ -539,6 +550,7 @@ function App() {
       // Control Panel Mode: Listen for requests from new presenter screens
       const handleMessage = (event: MessageEvent) => {
         console.log("[Control App] BroadcastChannel message received:", event.data.type, "videoState currentTime:", event.data.videoState?.currentTime);
+        if (event.data?.clientId === clientIdRef.current) return;
         if (event.data.type === 'REQUEST_STATE') {
           syncState(
             currentPresentationRef.current,
@@ -601,6 +613,7 @@ function App() {
       try {
         const data = JSON.parse(event.data);
         if (!data) return;
+        if (data.clientId === clientIdRef.current) return;
 
         const normalizedPresentation = data.presentation ? normalizePresentation(data.presentation) : null;
         const currentRef = currentPresentationRef.current;
@@ -758,10 +771,10 @@ function App() {
           // If in control mode, SeferControlPanel handles navigation locally to update dropdowns directly
           if (isControlMode) return;
 
+          e.preventDefault();
           const currentScripture = scriptureStateRef.current;
           if (!currentScripture) return;
 
-          e.preventDefault();
           const navState: ScriptureNavState = {
             ...currentScripture,
             command: e.key === 'ArrowRight' ? 'next' : 'previous',
@@ -918,20 +931,21 @@ function App() {
   const activeSlide = currentPresentation && currentSlideIndex >= 0 ? currentPresentation.slides[currentSlideIndex] : null;
   const activePresenterSlide = scriptureState?.scriptureKind === 'tanaj'
     ? {
-        id: activeSlide?.id || `tanaj-${scriptureState.bookAbbrevEs}-${scriptureState.chapter}-${scriptureState.verse}`,
-        label: `${scriptureState.bookAbbrevEs} ${scriptureState.chapter}:${scriptureState.verse}`,
-        lines: [
-          scriptureState.verseNikud,
-          scriptureState.transliteration,
-          scriptureState.translation,
-        ],
-        type: 'tanaj' as const,
-        background: activeBackground,
-      }
+      id: activeSlide?.id || `tanaj-${scriptureState.bookAbbrevEs}-${scriptureState.chapter}-${scriptureState.verse}`,
+      label: `${scriptureState.bookAbbrevEs} ${scriptureState.chapter}:${scriptureState.verse}`,
+      lines: [
+        scriptureState.verseNikud,
+        scriptureState.transliteration,
+        scriptureState.translation,
+      ],
+      type: 'tanaj' as const,
+      background: activeBackground,
+    }
     : activeSlide;
 
   useEffect(() => {
     if (!scriptureState || !activeSlide || (activeSlide.type !== 'sefer' && activeSlide.type !== 'tanaj')) return;
+    if (appModeRef.current === 'seferManual') return;
 
     let cancelled = false;
     getScriptureChapterVerses(scriptureState.bookAbbrevEs || scriptureState.bookEs, scriptureState.chapter)
@@ -997,6 +1011,7 @@ function App() {
     state: SeferReaderState,
     command: ScriptureNavState['command'] = 'navigate'
   ) => {
+    const projectedCommand: ScriptureNavState['command'] = isControlMode ? 'navigate' : command;
     const verseStart = state.verseStart ?? state.verse;
     const verseEnd = state.verseEnd || undefined;
     const navState: ScriptureNavState = {
@@ -1013,7 +1028,7 @@ function App() {
       verseIdx: state.verseIdx,
       totalVerses: state.totalVerses,
       scriptureKind: state.scriptureKind ?? 'sefer',
-      command,
+      command: projectedCommand,
       commandId: ++scriptureCommandIdRef.current,
       hebrewFontSize: scriptureStateRef.current?.hebrewFontSize ?? 42,
       combinedTextBaseSize: scriptureStateRef.current?.combinedTextBaseSize ?? 50,
@@ -1031,14 +1046,22 @@ function App() {
       navState
     );
     if (appModeRef.current !== nextMode) setAppMode(nextMode);
-  }, [syncState]);
+  }, [isControlMode, syncState]);
 
   const handleUpdateScriptureFontSizes = useCallback((sizes: {
     hebrewFontSize: number;
     combinedTextBaseSize: number;
   }) => {
+    const previous = scriptureStateRef.current;
+    if (
+      previous?.hebrewFontSize === sizes.hebrewFontSize &&
+      previous?.combinedTextBaseSize === sizes.combinedTextBaseSize
+    ) {
+      return;
+    }
+
     const nextState: ScriptureNavState = {
-      ...(scriptureStateRef.current ?? {
+      ...(previous ?? {
         bookEs: '',
         bookHeb: '',
         bookAbbrevEs: '',
@@ -1207,13 +1230,13 @@ function App() {
               const sourceState = scriptureStateRef.current ?? slideState;
               const manualState: ScriptureNavState | null = sourceState
                 ? {
-                    ...sourceState,
-                    verseStart: sourceState.verse,
-                    verseEnd: undefined,
-                    scriptureKind: 'sefer',
-                    command: 'navigate',
-                    commandId: ++scriptureCommandIdRef.current,
-                  }
+                  ...sourceState,
+                  verseStart: sourceState.verse,
+                  verseEnd: undefined,
+                  scriptureKind: 'sefer',
+                  command: 'navigate',
+                  commandId: ++scriptureCommandIdRef.current,
+                }
                 : null;
 
               if (manualState) {

@@ -22,7 +22,6 @@ const SeferControlPanel: React.FC<SeferControlPanelProps> = ({
   onUpdateFontSizes,
 }) => {
   const lastSyncedStateRef = useRef<string | null>(null);
-  const didInitFontSyncRef = useRef(false);
   const [showFontSettings, setShowFontSettings] = useState(false);
 
   const [hebrewFontSize, setHebrewFontSize] = useState<number>(() => {
@@ -31,7 +30,7 @@ const SeferControlPanel: React.FC<SeferControlPanelProps> = ({
   });
   const [combinedTextBaseSize, setCombinedTextBaseSize] = useState<number>(() => {
     const val = localStorage.getItem('sefer-presenter-font-combined');
-    return val ? Number(val) : 50;
+    return val ? Number(val) : 40;
   });
 
   const {
@@ -45,16 +44,6 @@ const SeferControlPanel: React.FC<SeferControlPanelProps> = ({
     restoreState,
     rangeVerses,
   } = useSeferReader();
-
-  useEffect(() => {
-    if (!didInitFontSyncRef.current) {
-      didInitFontSyncRef.current = true;
-      return;
-    }
-    if (onUpdateFontSizes) {
-      onUpdateFontSizes({ hebrewFontSize, combinedTextBaseSize });
-    }
-  }, [hebrewFontSize, combinedTextBaseSize, onUpdateFontSizes]);
 
   useEffect(() => {
     const restoredHebrewSize = restoredState?.hebrewFontSize;

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { ChevronLeft, ChevronRight, Play, Plus, Sliders } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Play, Sliders } from 'lucide-react';
 import type { ScriptureNavState } from '../App';
 import type { SeferReaderState } from '../hooks/useSeferReader';
 import { useSeferReader } from '../hooks/useSeferReader';
@@ -22,7 +22,6 @@ const SeferControlPanel: React.FC<SeferControlPanelProps> = ({
   onUpdateFontSizes,
 }) => {
   const lastSyncedStateRef = useRef<string | null>(null);
-  const didInitFontSyncRef = useRef(false);
   const [showFontSettings, setShowFontSettings] = useState(false);
   const [endVerse, setEndVerse] = useState('');
 
@@ -32,7 +31,7 @@ const SeferControlPanel: React.FC<SeferControlPanelProps> = ({
   });
   const [combinedTextBaseSize, setCombinedTextBaseSize] = useState<number>(() => {
     const val = localStorage.getItem('sefer-presenter-font-combined');
-    return val ? Number(val) : 50;
+    return val ? Number(val) : 40;
   });
 
   const {
@@ -54,16 +53,6 @@ const SeferControlPanel: React.FC<SeferControlPanelProps> = ({
     goPrev,
     restoreState,
   } = useSeferReader();
-
-  useEffect(() => {
-    if (!didInitFontSyncRef.current) {
-      didInitFontSyncRef.current = true;
-      return;
-    }
-    if (onUpdateFontSizes) {
-      onUpdateFontSizes({ hebrewFontSize, combinedTextBaseSize });
-    }
-  }, [hebrewFontSize, combinedTextBaseSize, onUpdateFontSizes]);
 
   useEffect(() => {
     const restoredHebrewSize = restoredState?.hebrewFontSize;
@@ -263,8 +252,7 @@ const SeferControlPanel: React.FC<SeferControlPanelProps> = ({
                 title="Presentar y añadir como slide Sefer a la presentación actual"
                 className="flex items-center justify-center gap-1 px-3 py-2 rounded-md bg-green-700 hover:bg-green-600 text-white text-xs font-bold transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
               >
-                <Plus size={14} />
-                <span>Sefer</span>
+                <span>+📜</span>
               </button>
               <select
                 value={endVerse}
@@ -287,8 +275,7 @@ const SeferControlPanel: React.FC<SeferControlPanelProps> = ({
                 title="Presentar y añadir como slide Tanaj a la presentación actual"
                 className="flex items-center justify-center gap-1 px-3 py-2 rounded-md bg-blue-700 hover:bg-blue-600 text-white text-xs font-bold transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
               >
-                <Plus size={14} />
-                <span>Libro</span>
+                <span>+📖</span>
               </button>
             </div>
 

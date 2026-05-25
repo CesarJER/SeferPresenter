@@ -241,6 +241,7 @@ const parseVideoSlideString = (text: string): {
   volume: number;
   speed: number;
   loop: boolean;
+  presenterNav: boolean;
   startTime?: number;
   endTime?: number
 } | null => {
@@ -251,11 +252,11 @@ const parseVideoSlideString = (text: string): {
   if (!inner.startsWith('-')) return null;
 
   const parts = inner.substring(1).split(' - ').map(p => p.trim());
-  if (parts.length < 3) return null;
+  if (parts.length < 4) return null;
 
   // Find the boundary between path and parameters.
   // Case A: The path is quoted. The end of the path is the segment that ends with '"'.
-  // Case B: The path is not quoted. Scan from right to left for parameters (max 5 parameters: volume, speed, loop, start, end).
+  // Case B: The path is not quoted. Scan from right to left for parameters.
   let pathEndIdx = -1;
   for (let i = parts.length - 1; i >= 0; i--) {
     if (parts[i].endsWith('"')) {
@@ -271,17 +272,7 @@ const parseVideoSlideString = (text: string): {
     rawSrc = parts.slice(0, pathEndIdx + 1).join(' - ');
     paramStrings = parts.slice(pathEndIdx + 1);
   } else {
-    let paramCount = 0;
-    for (let i = parts.length - 1; i >= 1; i--) {
-      const part = parts[i];
-      const isNum = !isNaN(parseFloat(part)) || part === '';
-      if (isNum && paramCount < 5) {
-        paramCount++;
-      } else {
-        break;
-      }
-    }
-    const splitIndex = parts.length - paramCount;
+    const splitIndex = parts.length - 6;
     rawSrc = parts.slice(0, splitIndex).join(' - ');
     paramStrings = parts.slice(splitIndex);
   }
@@ -298,23 +289,27 @@ const parseVideoSlideString = (text: string): {
   if (isNaN(volume) || isNaN(speed)) return null;
 
   let loop = true;
+  let presenterNav = true;
   let startTime: number | undefined;
   let endTime: number | undefined;
 
-  if (paramStrings.length >= 3) {
-    const loopStr = paramStrings[2];
-    if (loopStr !== '') {
-      loop = parseFloat(loopStr) !== 0;
-    }
+  const rawLoop = paramStrings[2];
+  if (rawLoop !== '') {
+    loop = parseFloat(rawLoop) !== 0;
   }
-  if (paramStrings.length >= 4) {
-    const startStr = paramStrings[3];
+
+  const rawPresenterNav = paramStrings[3];
+  if (rawPresenterNav !== '') {
+    presenterNav = parseFloat(rawPresenterNav) !== 0;
+  }
+  if (paramStrings.length >= 5) {
+    const startStr = paramStrings[4];
     if (startStr !== '') {
       startTime = parseFloat(startStr);
     }
   }
-  if (paramStrings.length >= 5) {
-    const endStr = paramStrings[4];
+  if (paramStrings.length >= 6) {
+    const endStr = paramStrings[5];
     if (endStr !== '') {
       endTime = parseFloat(endStr);
     }
@@ -325,6 +320,7 @@ const parseVideoSlideString = (text: string): {
     volume,
     speed,
     loop,
+    presenterNav,
     startTime: startTime !== undefined && !isNaN(startTime) ? startTime : undefined,
     endTime: endTime !== undefined && !isNaN(endTime) ? endTime : undefined
   };
@@ -1070,12 +1066,13 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
       videoSrc: '',
       videoVolume: 0.8,
       videoSpeed: 1.0,
-      videoLoop: true
+      videoLoop: true,
+      videoPresenterNav: true
     };
     const fallbackVal = isTitleSlide(newSlide) ? '>-' : '-';
     newSlide.lines = mode === 'standard'
-      ? ['[VIDEO - "" - 0.8 - 1.0 - 1]']
-      : ['[VIDEO - "" - 0.8 - 1.0 - 1]', fallbackVal, fallbackVal];
+      ? ['[VIDEO - "" - 0.8 - 1.0 - 1 - 1]']
+      : ['[VIDEO - "" - 0.8 - 1.0 - 1 - 1]', fallbackVal, fallbackVal];
 
     setSlides([...slides, newSlide]);
   };
@@ -1091,6 +1088,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
       delete slide.videoSpeed;
       delete slide.videoStart;
       delete slide.videoEnd;
+      delete slide.videoPresenterNav;
       delete slide.scriptureBook;
       delete slide.scriptureChapter;
       delete slide.scriptureVerseStart;
@@ -1108,6 +1106,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
       delete slide.videoSpeed;
       delete slide.videoStart;
       delete slide.videoEnd;
+      delete slide.videoPresenterNav;
       delete slide.scriptureBook;
       delete slide.scriptureChapter;
       delete slide.scriptureVerseStart;
@@ -1123,6 +1122,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
       slide.videoVolume = slide.videoVolume ?? 0.8;
       slide.videoSpeed = slide.videoSpeed ?? 1.0;
       slide.videoLoop = slide.videoLoop ?? true;
+      slide.videoPresenterNav = slide.videoPresenterNav ?? true;
       delete slide.scriptureBook;
       delete slide.scriptureChapter;
       delete slide.scriptureVerseStart;
@@ -1131,16 +1131,18 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
       const startStr = slide.videoStart !== undefined ? slide.videoStart : '';
       const endStr = slide.videoEnd !== undefined ? slide.videoEnd : '';
       const loopStr = slide.videoLoop !== false ? '1' : '0';
+      const presenterNavStr = slide.videoPresenterNav !== false ? '1' : '0';
       const parts = [
         'VIDEO',
         `"${slide.videoSrc}"`,
         slide.videoVolume.toString(),
         slide.videoSpeed.toString(),
         loopStr,
+        presenterNavStr,
         startStr.toString(),
         endStr.toString()
       ];
-      while (parts.length > 5 && parts[parts.length - 1] === '') {
+      while (parts.length > 6 && parts[parts.length - 1] === '') {
         parts.pop();
       }
       slide.lines = [`[${parts.join(' - ')}]`].concat(slide.lines.slice(1).map(() => ''));
@@ -1157,7 +1159,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
 
   const handleUpdateVideoParams = (
     idx: number,
-    params: { videoSrc?: string; volume?: number; speed?: number; loop?: boolean; startTime?: number; endTime?: number }
+    params: { videoSrc?: string; volume?: number; speed?: number; loop?: boolean; presenterNav?: boolean; startTime?: number; endTime?: number }
   ) => {
     const updated = [...slides];
     const slide = { ...updated[idx] };
@@ -1167,22 +1169,25 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
       if ('volume' in params) slide.videoVolume = params.volume;
       if ('speed' in params) slide.videoSpeed = params.speed;
       if ('loop' in params) slide.videoLoop = params.loop;
+      if ('presenterNav' in params) slide.videoPresenterNav = params.presenterNav;
       if ('startTime' in params) slide.videoStart = params.startTime;
       if ('endTime' in params) slide.videoEnd = params.endTime;
 
       const startVal = slide.videoStart !== undefined && !isNaN(slide.videoStart) ? slide.videoStart : '';
       const endVal = slide.videoEnd !== undefined && !isNaN(slide.videoEnd) ? slide.videoEnd : '';
       const loopStr = slide.videoLoop !== false ? '1' : '0';
+      const presenterNavStr = slide.videoPresenterNav !== false ? '1' : '0';
       const parts = [
         'VIDEO',
         `"${slide.videoSrc || ''}"`,
         (slide.videoVolume ?? 0.8).toString(),
         (slide.videoSpeed ?? 1.0).toString(),
         loopStr,
+        presenterNavStr,
         startVal.toString(),
         endVal.toString()
       ];
-      while (parts.length > 5 && parts[parts.length - 1] === '') {
+      while (parts.length > 6 && parts[parts.length - 1] === '') {
         parts.pop();
       }
       slide.lines = [`[${parts.join(' - ')}]`].concat(slide.lines.slice(1).map(() => ''));
@@ -1874,10 +1879,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                             <button
                               id={`live-slide-btn-${idx}`}
                               key={slide.id}
-                              onClick={(e) => {
-                                onSelectSlide(idx);
-                                e.currentTarget.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-                              }}
+                              onClick={() => onSelectSlide(idx)}
                               className={`min-w-[2.2rem] rounded border text-xs font-semibold transition-all px-2.5 py-1 select-none ${isSelected
                                 ? 'border-yellow-500 bg-yellow-600 text-white font-bold shadow-[0_0_8px_rgba(234,179,8,0.3)]'
                                 : 'border-gray-600 bg-gray-700 hover:bg-gray-600 text-gray-300'
@@ -2630,6 +2632,20 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                                               className="accent-yellow-500 h-4 w-4 rounded border-gray-700 bg-gray-900 cursor-pointer"
                                             />
                                             <span>Repetir en Bucle</span>
+                                          </label>
+                                        </div>
+
+                                        {/* Presenter nav checkbox */}
+                                        <div className="space-y-1">
+                                          <label className="text-[9px] font-black text-gray-500 uppercase tracking-wide block mb-1.5">Nav presentador</label>
+                                          <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer text-gray-300 hover:text-white select-none pt-1">
+                                            <input
+                                              type="checkbox"
+                                              checked={slide.videoPresenterNav !== false}
+                                              onChange={e => handleUpdateVideoParams(idx, { presenterNav: e.target.checked })}
+                                              className="accent-yellow-500 h-4 w-4 rounded border-gray-700 bg-gray-900 cursor-pointer"
+                                            />
+                                            <span>Nav</span>
                                           </label>
                                         </div>
 

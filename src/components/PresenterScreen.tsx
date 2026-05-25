@@ -210,6 +210,7 @@ const PresenterScreen: React.FC<PresenterScreenProps> = ({
   // Hiding overlays based on special image slide content ([IMAGE]) or dedicated video slides
   const isImageSlide = slide?.lines[0]?.trim() === '[IMAGE]';
   const isVideoSlide = slide?.type === 'video';
+  const presenterNavVisible = !isVideoSlide || slide?.videoPresenterNav !== false;
   const hideLyricsOverlay = isImageSlide || isVideoSlide;
 
   return (
@@ -252,8 +253,12 @@ const PresenterScreen: React.FC<PresenterScreenProps> = ({
         </motion.div>
       </AnimatePresence>
 
-      <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/50 to-black/22 pointer-events-none" />
-      <div className="absolute inset-0 bg-gradient-to-t from-black/78 via-black/12 to-black/28 pointer-events-none" />
+      {!isVideoSlide && (
+        <>
+          <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/50 to-black/22 pointer-events-none" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/78 via-black/12 to-black/28 pointer-events-none" />
+        </>
+      )}
 
       {!slide ? (
         <div className="relative z-20 flex h-full items-center justify-center">
@@ -317,7 +322,9 @@ const PresenterScreen: React.FC<PresenterScreenProps> = ({
               )}
             </main>
 
-            <footer className="grid h-[7vh] min-h-14 max-h-20 w-full grid-cols-[1.25fr_0.5fr_auto] gap-2 text-center font-bold">
+            <footer
+              className={`group/nav grid h-[7vh] min-h-14 max-h-20 w-full grid-cols-[1.25fr_0.5fr_auto] gap-2 text-center font-bold transition-opacity duration-200 ${presenterNavVisible ? 'opacity-100' : 'opacity-0 hover:opacity-100'}`}
+            >
               <div className="flex min-w-0 items-center justify-center rounded-lg bg-black/52 px-3 text-sky-50 shadow-[0_20px_70px_rgba(0,0,0,0.36)] backdrop-blur-md text-[clamp(0.72rem,1vw,1.18rem)] sm:px-4">
                 {titleText}
               </div>

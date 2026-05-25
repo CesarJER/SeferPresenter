@@ -273,7 +273,7 @@ export const SeferReaderScreen: React.FC<SeferReaderScreenProps> = ({
   const combinedTextBaseSize = useMemo(() => {
     const rawSize = scriptureState.combinedTextBaseSize;
     const parsed = Number(rawSize);
-    if (!Number.isFinite(parsed)) return 50;
+    if (!Number.isFinite(parsed)) return 40;
     return Math.max(12, Math.min(70, parsed));
   }, [scriptureState.combinedTextBaseSize]);
 

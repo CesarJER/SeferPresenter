@@ -15,7 +15,7 @@ interface VerseSidebarProps {
 
 export const VerseSidebar = ({
   combinedText,
-  combinedTextBaseSize = 50,
+  combinedTextBaseSize = 40,
   selectedVerseIdx,
   lastSelectedIdx,
   scrollToTarget,
