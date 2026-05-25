@@ -1,10 +1,23 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import PresenterScreen from './components/PresenterScreen'
 import MenuPopup from './components/MenuPopup'
-import SeferOnlineIframeScreen from './components/SeferOnlineIframeScreen'
+import SeferReaderScreen from './components/SeferReaderScreen'
 import defaultPresentations from '../presentations.json'
 import type { SeferReaderState } from './hooks/useSeferReader'
-import type { SeferOnlineRefPayload } from './components/SeferOnlineIframeScreen'
+
+export type SeferOnlineRefPayload = {
+  book?: string;
+  chapter?: number | string;
+  verse?: number | string;
+  bookEs?: string;
+  bookHeb?: string;
+  bookAbbrevEs?: string;
+  verseNikud?: string;
+  transliteration?: string;
+  translation?: string;
+  verseIdx?: number;
+  totalVerses?: number;
+};
 
 export interface Presentation {
   id: string;
@@ -959,9 +972,8 @@ function App() {
   if (appMode === 'scripture' && scriptureState) {
     return (
       <div className="w-full h-screen overflow-hidden">
-        <SeferOnlineIframeScreen
+        <SeferReaderScreen
           scriptureState={scriptureState}
-          onVerseChanged={handleSeferOnlineRef}
           onVerseSelected={handleSeferOnlineRef}
         />
       </div>

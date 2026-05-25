@@ -1,4 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import DOMPurify from 'dompurify';
 
 interface AutoResizeTextProps {
   text: string;
@@ -6,6 +7,7 @@ interface AutoResizeTextProps {
   maxFontSize?: number;
   minFontSize?: number;
   fontScale?: number;
+  html?: boolean;
 }
 
 const AutoResizeText: React.FC<AutoResizeTextProps> = ({
@@ -14,10 +16,19 @@ const AutoResizeText: React.FC<AutoResizeTextProps> = ({
   maxFontSize = 100, // Let CSS clamp handle the initial large sizes if possible, or use a high max
   minFontSize = 12,
   fontScale = 1,
+  html = false,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const textRef = useRef<HTMLDivElement>(null);
   const [fontSize, setFontSize] = useState<number | undefined>(undefined);
+
+  const cleanText = useMemo(() => {
+    if (!html) return text;
+    return DOMPurify.sanitize(text, {
+      ALLOWED_TAGS: ['br', 'span', 'sup', 'i', 'b', 'strong', 'em', 'u', 'small', 'mark', 'ruby', 'rt', 'rp', 'big', 'div'],
+      ALLOWED_ATTR: ['class', 'dir', 'lang', 'title', 'data-comment'],
+    });
+  }, [text, html]);
 
   useEffect(() => {
     const resizeText = () => {
@@ -67,17 +78,26 @@ const AutoResizeText: React.FC<AutoResizeTextProps> = ({
       observer.disconnect();
       window.removeEventListener('resize', resizeText);
     };
-  }, [text, maxFontSize, minFontSize, fontScale]);
+  }, [cleanText, maxFontSize, minFontSize, fontScale]);
 
   return (
     <div ref={containerRef} className="w-full h-full flex items-center justify-center overflow-hidden">
-      <div
-        ref={textRef}
-        className={`${className} text-center leading-tight whitespace-pre-wrap`}
-        style={fontSize ? { fontSize: `${fontSize}px` } : undefined}
-      >
-        {text}
-      </div>
+      {html ? (
+        <div
+          ref={textRef}
+          className={`${className} text-center leading-tight whitespace-pre-wrap`}
+          style={fontSize ? { fontSize: `${fontSize}px` } : undefined}
+          dangerouslySetInnerHTML={{ __html: cleanText }}
+        />
+      ) : (
+        <div
+          ref={textRef}
+          className={`${className} text-center leading-tight whitespace-pre-wrap`}
+          style={fontSize ? { fontSize: `${fontSize}px` } : undefined}
+        >
+          {text}
+        </div>
+      )}
     </div>
   );
 };

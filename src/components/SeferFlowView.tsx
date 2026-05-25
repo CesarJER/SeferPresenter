@@ -1,0 +1,63 @@
+import { motion } from 'framer-motion';
+import type { VerseData } from '../hooks/useSeferReader';
+
+interface SeferFlowViewProps {
+  groupedVerses: { type: 'normal' | 'shira'; verses: { verse: VerseData; idxVerse: number }[] }[];
+  selectedVerseIdx: number | null;
+  onVerseClick: (e: React.MouseEvent, idx: number) => void;
+  onVerseTouchEnd: (e: React.TouchEvent, idx: number) => void;
+  bookDir?: string;
+}
+
+export const SeferFlowView = ({ groupedVerses, selectedVerseIdx, onVerseClick, onVerseTouchEnd, bookDir = 'rtl' }: SeferFlowViewProps) => (
+  <motion.div
+    dir={bookDir}
+    className="sefer-mode max-w-screen-xl mx-auto text-[3.5rem] leading-[1.8] text-justify break-keep"
+    initial={{ opacity: 0 }}
+    animate={{ opacity: 1 }}
+    transition={{ duration: 1 }}
+  >
+    <div className="whitespace-pre-wrap relative max-w-full">
+      {groupedVerses.map((group, groupIdx) => {
+        const renderVerse = (verse: VerseData, idxVerse: number) => {
+          const isSelected = idxVerse === selectedVerseIdx;
+          const textToShow = isSelected
+            ? (verse.verseNikudSanitized ?? verse.verseNikud)
+            : (verse.verseNikudCleanSanitized ?? verse.verseNikudSanitized ?? verse.verseNikudClean ?? verse.verseNikud);
+
+          const hasBricks = textToShow.includes('brick-');
+          const classNameVerse = isSelected
+            ? `text-red-900 font-semibold verse-selected ${hasBricks ? 'verse-shira' : 'bg-yellow-100 px-2 rounded'}`
+            : `text-gray-800 ${hasBricks ? 'verse-shira' : ''}`;
+
+          const htmlString = `${textToShow} `.replace(/<br\s*\/?>\s+/gi, '<br/>');
+
+          return (
+            <span
+              key={idxVerse}
+              id={`verse-${idxVerse}`}
+              className={`inline transition-all duration-500 ${classNameVerse}`}
+              onClick={(e) => onVerseClick(e, idxVerse)}
+              onTouchEnd={(e) => onVerseTouchEnd(e, idxVerse)}
+            >
+              <span dangerouslySetInnerHTML={{ __html: htmlString }} />
+            </span>
+          );
+        };
+
+        if (group.type === 'shira') {
+          return (
+            <div key={`group-${groupIdx}`} className="shira-flow">
+              {group.verses.map(({ verse, idxVerse }) => renderVerse(verse, idxVerse))}
+            </div>
+          );
+        }
+        return (
+          <span key={`group-${groupIdx}`}>
+            {group.verses.map(({ verse, idxVerse }) => renderVerse(verse, idxVerse))}
+          </span>
+        );
+      })}
+    </div>
+  </motion.div>
+);
