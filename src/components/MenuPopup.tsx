@@ -1041,7 +1041,8 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
   };
 
   const handleAddSlide = () => {
-    const newId = `slide-${Date.now()}`;
+    const randomSuffix = Math.random().toString(36).substring(2, 9);
+    const newId = `slide-${slides.length}-${Date.now()}-${randomSuffix}`;
     const newLabel = (slides.length).toString();
     const newSlide: Slide = { id: newId, label: newLabel, lines: [] };
     const fallbackVal = '-';
@@ -1050,7 +1051,8 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
   };
 
   const handleAddImageSlide = () => {
-    const newId = `slide-${Date.now()}`;
+    const randomSuffix = Math.random().toString(36).substring(2, 9);
+    const newId = `slide-img-${slides.length}-${Date.now()}-${randomSuffix}`;
     const newLabel = (slides.length).toString();
     const newSlide: Slide = { id: newId, label: newLabel, lines: [] };
     const fallbackVal = '-';
@@ -1059,7 +1061,8 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
   };
 
   const handleAddVideoSlide = () => {
-    const newId = `slide-${Date.now()}`;
+    const randomSuffix = Math.random().toString(36).substring(2, 9);
+    const newId = `slide-video-${slides.length}-${Date.now()}-${randomSuffix}`;
     const newLabel = (slides.length).toString();
     const newSlide: Slide = {
       id: newId,
@@ -1152,9 +1155,6 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
       slide.lines = [`[${parts.join(' - ')}]`, fallbackVal, fallbackVal];
     } else if (newType === 'tanaj' || newType === 'sefer') {
       slide.type = newType;
-      if (slide.scriptureBook && slide.scriptureChapter && slide.scriptureVerseStart) {
-        slide.scriptureVerseEnd = newType === 'sefer' ? (slide.scriptureVerseEnd || slide.scriptureVerseStart) : (slide.scriptureVerseStart);
-      }
     }
 
     updated[idx] = slide;
@@ -1392,9 +1392,10 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
         }
 
         const videoData = parseVideoSlideString(content);
+        const randomSuffix = Math.random().toString(36).substring(2, 9);
         if (videoData) {
           return {
-            id: `slide-${idx}`,
+            id: `slide-${idx}-${Date.now()}-${randomSuffix}`,
             label,
             lines: [content.trim(), '-', '-'],
             type: 'video' as const,
@@ -1407,7 +1408,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
           };
         }
 
-        return { id: `slide-${idx}`, label, lines: [content.trim(), '-', '-'] };
+        return { id: `slide-${idx}-${Date.now()}-${randomSuffix}`, label, lines: [content.trim(), '-', '-'] };
       })
       .filter(slide => slide.lines[0].length > 0);
 
@@ -1463,9 +1464,10 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
         }
 
         const videoData = parseVideoSlideString(contentHeb) || parseVideoSlideString(row.transliteration) || parseVideoSlideString(row.translation);
+        const randomSuffix = Math.random().toString(36).substring(2, 9);
         if (videoData) {
           return {
-            id: `slide-${idx}`,
+            id: `slide-${idx}-${Date.now()}-${randomSuffix}`,
             label,
             lines: [contentHeb.trim(), row.transliteration.trim() || '-', row.translation.trim() || '-'],
             type: 'video' as const,
@@ -1479,7 +1481,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
         }
 
         return {
-          id: `slide-${idx}`,
+          id: `slide-${idx}-${Date.now()}-${randomSuffix}`,
           label,
           lines: [contentHeb.trim(), row.transliteration.trim() || '-', row.translation.trim() || '-']
         };
@@ -1560,9 +1562,10 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
         }
 
         const videoData = parseVideoSlideString(content);
+        const randomSuffix = Math.random().toString(36).substring(2, 9);
         if (videoData) {
           parsed.push({
-            id: `slide-${idx}`,
+            id: `slide-${idx}-${Date.now()}-${randomSuffix}`,
             label,
             lines: [content.trim(), '-', '-'],
             type: 'video' as const,
@@ -1576,7 +1579,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
           continue;
         }
 
-        parsed.push({ id: `slide-${idx}`, label, lines: [content.trim(), '-', '-'] });
+        parsed.push({ id: `slide-${idx}-${Date.now()}-${randomSuffix}`, label, lines: [content.trim(), '-', '-'] });
       }
 
       return { slides: [titleSlide, ...parsed.filter(slide => slide.lines[0].length > 0)], mode: hasScriptureSlides ? 'trilingual' : 'standard' };

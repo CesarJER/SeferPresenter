@@ -163,10 +163,12 @@ export const materializeScriptureSlides = async (spec: ScriptureTagSpec): Promis
   if (verses.length === 0) return [];
 
   const baseLabel = `${spec.bookToken} ${spec.chapter}:${spec.verseStart}${spec.verseEnd ? `-${spec.verseEnd}` : ''}`;
+  const randomSuffix = Math.random().toString(36).substring(2, 9);
+  const cleanRange = `${spec.bookToken}-${spec.chapter}-${spec.verseStart}${spec.verseEnd ? `-${spec.verseEnd}` : ''}`;
 
   const first = verses[0];
   return [{
-    id: `slide-scripture-${Date.now()}-${spec.kind}`,
+    id: `slide-scripture-${cleanRange}-${Date.now()}-${randomSuffix}-${spec.kind}`,
     label: baseLabel,
     lines: scriptureVerseToLines(first),
     type: spec.kind,
@@ -182,8 +184,11 @@ export const expandScriptureRangeToSlides = async (spec: ScriptureTagSpec): Prom
   if (verses.length === 0) return [];
 
   const titleLabel = `${spec.bookToken} ${spec.chapter}:${spec.verseEnd ? `${spec.verseStart}-${spec.verseEnd}` : spec.verseStart}`;
+  const randomSuffix = Math.random().toString(36).substring(2, 9);
+  const cleanRange = `${spec.bookToken}-${spec.chapter}-${spec.verseStart}${spec.verseEnd ? `-${spec.verseEnd}` : ''}`;
+
   const titleSlide: ScriptureSlideDraft = {
-    id: `slide-scripture-title-${Date.now()}`,
+    id: `slide-scripture-title-${cleanRange}-${Date.now()}-${randomSuffix}`,
     label: titleLabel,
     lines: [titleLabel, '-', '-'],
     type: spec.kind,
@@ -193,16 +198,19 @@ export const expandScriptureRangeToSlides = async (spec: ScriptureTagSpec): Prom
     scriptureVerseEnd: spec.verseEnd ?? spec.verseStart,
   };
 
-  const verseSlides = verses.map((verse, idx) => ({
-    id: `slide-scripture-${Date.now()}-${idx}`,
-    label: verse.verse,
-    lines: scriptureVerseToLines(verse),
-    type: spec.kind,
-    scriptureBook: verse.bookAbbrevEs || spec.bookToken,
-    scriptureChapter: verse.chapter,
-    scriptureVerseStart: verse.verse,
-    scriptureVerseEnd: verse.verse,
-  }));
+  const verseSlides = verses.map((verse, idx) => {
+    const verseRandomSuffix = Math.random().toString(36).substring(2, 9);
+    return {
+      id: `slide-scripture-${spec.bookToken}-${spec.chapter}-${verse.verse}-${idx}-${Date.now()}-${verseRandomSuffix}-${spec.kind}`,
+      label: verse.verse,
+      lines: scriptureVerseToLines(verse),
+      type: spec.kind,
+      scriptureBook: verse.bookAbbrevEs || spec.bookToken,
+      scriptureChapter: verse.chapter,
+      scriptureVerseStart: verse.verse,
+      scriptureVerseEnd: verse.verse,
+    };
+  });
 
   return [titleSlide, ...verseSlides];
 };

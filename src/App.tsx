@@ -765,20 +765,53 @@ function App() {
       const targetTag = (e.target as HTMLElement).tagName.toUpperCase();
       if (targetTag === 'INPUT' || targetTag === 'TEXTAREA' || targetTag === 'SELECT') return;
 
-      if (appModeRef.current === 'scripture') {
+      if (appModeRef.current === 'scripture' || appModeRef.current === 'seferManual') {
         if (e.key === 'Escape') {
           e.preventDefault();
-          setAppMode('slides');
-          syncState(
-            currentPresentationRef.current,
-            currentSlideIndexRef.current,
-            backgroundLockRef.current,
-            lockedBackgroundValueRef.current,
-            userSelectedBackgroundRef.current,
-            videoStateRef.current,
-            'slides',
-            scriptureStateRef.current
-          );
+          if (appModeRef.current === 'seferManual') {
+            // Exit manual sefer mode, returning to scripture mode or slides mode
+            const activeSlide = currentPresentationRef.current && currentSlideIndexRef.current >= 0
+              ? currentPresentationRef.current.slides[currentSlideIndexRef.current]
+              : null;
+            const restoredState = slideScriptureStateBeforeManualRef.current ?? buildScriptureSlideState(activeSlide, 'forward');
+            const returnsToScripture = !!restoredState && !!activeSlide && (activeSlide.type === 'sefer' || activeSlide.type === 'tanaj');
+            const nextMode: AppMode = returnsToScripture ? 'scripture' : 'slides';
+
+            if (restoredState) {
+              setScriptureState(restoredState);
+            }
+            setAppMode(nextMode);
+            syncState(
+              currentPresentationRef.current,
+              currentSlideIndexRef.current,
+              backgroundLockRef.current,
+              lockedBackgroundValueRef.current,
+              userSelectedBackgroundRef.current,
+              videoStateRef.current,
+              nextMode,
+              restoredState ?? scriptureStateRef.current
+            );
+          } else {
+            const activeSlide = currentPresentationRef.current && currentSlideIndexRef.current >= 0
+              ? currentPresentationRef.current.slides[currentSlideIndexRef.current]
+              : null;
+            const isScriptureSlide = activeSlide && (activeSlide.type === 'sefer' || activeSlide.type === 'tanaj');
+            if (isScriptureSlide) {
+              return;
+            }
+
+            setAppMode('slides');
+            syncState(
+              currentPresentationRef.current,
+              currentSlideIndexRef.current,
+              backgroundLockRef.current,
+              lockedBackgroundValueRef.current,
+              userSelectedBackgroundRef.current,
+              videoStateRef.current,
+              'slides',
+              scriptureStateRef.current
+            );
+          }
           return;
         }
 
@@ -803,7 +836,7 @@ function App() {
             lockedBackgroundValueRef.current,
             userSelectedBackgroundRef.current,
             videoStateRef.current,
-            'scripture',
+            appModeRef.current,
             navState
           );
           return;
@@ -992,16 +1025,18 @@ function App() {
         }
 
         setScriptureState(hydratedState);
-        syncState(
-          currentPresentationRef.current,
-          currentSlideIndexRef.current,
-          backgroundLockRef.current,
-          lockedBackgroundValueRef.current,
-          userSelectedBackgroundRef.current,
-          videoStateRef.current,
-          'scripture',
-          hydratedState
-        );
+        if (isControlMode) {
+          syncState(
+            currentPresentationRef.current,
+            currentSlideIndexRef.current,
+            backgroundLockRef.current,
+            lockedBackgroundValueRef.current,
+            userSelectedBackgroundRef.current,
+            videoStateRef.current,
+            'scripture',
+            hydratedState
+          );
+        }
       })
       .catch((err) => console.error('Error hydrating scripture verse', err));
 
@@ -1018,6 +1053,7 @@ function App() {
     scriptureState?.transliteration,
     scriptureState?.verse,
     scriptureState?.verseNikud,
+    isControlMode,
     syncState,
   ]);
 
@@ -1158,8 +1194,9 @@ function App() {
     const verseStart = state.verseStart || state.verse;
     const verseEnd = state.verseEnd || verseStart;
     const rangeLabel = verseEnd !== verseStart ? `${verseStart}-${verseEnd}` : verseStart;
+    const randomSuffix = Math.random().toString(36).substring(2, 9);
     const newSlide: Slide = {
-      id: `slide-${kind}-${Date.now()}`,
+      id: `slide-${kind}-${state.bookAbbrevEs || state.bookEs}-${state.chapter}-${rangeLabel}-${Date.now()}-${randomSuffix}`,
       label: `${state.bookAbbrevEs} ${state.chapter}:${rangeLabel}`,
       lines: [
         state.verseNikud,
