@@ -1197,6 +1197,16 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
     setSlides(updated);
   };
 
+  const handleUpdateImagePresenterNav = (idx: number, visible: boolean) => {
+    const updated = [...slides];
+    const slide = { ...updated[idx] };
+    if (slide.lines[0]?.trim() === '[IMAGE]') {
+      slide.videoPresenterNav = visible;
+      updated[idx] = slide;
+      setSlides(updated);
+    }
+  };
+
   const handleDeleteSlide = (idx: number) => {
     if (idx === 0) return; // Portada es indestructible
     const updated = slides.filter((_, i) => i !== idx);
@@ -2622,31 +2632,33 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                                         </div>
 
                                         {/* Loop checkbox */}
-                                        <div className="space-y-1">
-                                          <label className="text-[9px] font-black text-gray-500 uppercase tracking-wide block mb-1.5">Reproducción</label>
-                                          <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer text-gray-300 hover:text-white select-none pt-1">
-                                            <input
-                                              type="checkbox"
-                                              checked={slide.videoLoop !== false}
-                                              onChange={e => handleUpdateVideoParams(idx, { loop: e.target.checked })}
-                                              className="accent-yellow-500 h-4 w-4 rounded border-gray-700 bg-gray-900 cursor-pointer"
-                                            />
-                                            <span>Repetir en Bucle</span>
+                                        <div>
+                                          <label className="text-[9px] font-black text-gray-500 uppercase tracking-wide block mb-1.5">
+                                            Reproducción
                                           </label>
-                                        </div>
 
-                                        {/* Presenter nav checkbox */}
-                                        <div className="space-y-1">
-                                          <label className="text-[9px] font-black text-gray-500 uppercase tracking-wide block mb-1.5">Nav presentador</label>
-                                          <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer text-gray-300 hover:text-white select-none pt-1">
-                                            <input
-                                              type="checkbox"
-                                              checked={slide.videoPresenterNav !== false}
-                                              onChange={e => handleUpdateVideoParams(idx, { presenterNav: e.target.checked })}
-                                              className="accent-yellow-500 h-4 w-4 rounded border-gray-700 bg-gray-900 cursor-pointer"
-                                            />
-                                            <span>Nav</span>
-                                          </label>
+                                          <div className="flex items-center gap-4">
+                                            <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer text-gray-300 hover:text-white select-none">
+                                              <input
+                                                type="checkbox"
+                                                checked={slide.videoLoop !== false}
+                                                onChange={e => handleUpdateVideoParams(idx, { loop: e.target.checked })}
+                                                className="accent-yellow-500 h-4 w-4 rounded border-gray-700 bg-gray-900 cursor-pointer"
+                                              />
+                                              <span>Bucle</span>
+                                            </label>
+
+                                            {/* Presenter nav checkbox */}
+                                            <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer text-gray-300 hover:text-white select-none">
+                                              <input
+                                                type="checkbox"
+                                                checked={slide.videoPresenterNav !== false}
+                                                onChange={e => handleUpdateVideoParams(idx, { presenterNav: e.target.checked })}
+                                                className="accent-yellow-500 h-4 w-4 rounded border-gray-700 bg-gray-900 cursor-pointer"
+                                              />
+                                              <span>Nav</span>
+                                            </label>
+                                          </div>
                                         </div>
 
                                         {/* Start / End Times */}
@@ -2696,15 +2708,26 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                                   ) : isImage ? (
                                     /* Pure Image Slide Banner */
                                     <div className="flex items-center gap-3 bg-blue-950/10 border border-blue-900/20 rounded-lg p-3.5 shadow-sm w-full">
-                                      <div className="p-2 rounded bg-blue-950/50 border border-blue-800/30 text-blue-400">
-                                        <ImageIcon size={15} />
+                                      <div className="flex items-center gap-3">
+                                        <div className="p-2 rounded bg-blue-950/50 border border-blue-800/30 text-blue-400">
+                                          <ImageIcon size={15} />
+                                        </div>
+                                        <div className="space-y-0.5">
+                                          <span className="text-[10px] font-black text-blue-300 uppercase tracking-wide block">Diapositiva de Imagen Pura</span>
+                                          <p className="text-[11px] text-gray-400 leading-relaxed max-w-lg">
+                                            Esta diapositiva oculta por completo el cuadro de texto translúcido en la pantalla de proyección, permitiendo apreciar la imagen o el video de fondo a pantalla completa.
+                                          </p>
+                                        </div>
                                       </div>
-                                      <div className="space-y-0.5">
-                                        <span className="text-[10px] font-black text-blue-300 uppercase tracking-wide block">Diapositiva de Imagen Pura</span>
-                                        <p className="text-[11px] text-gray-400 leading-relaxed max-w-lg">
-                                          Esta diapositiva oculta por completo el cuadro de texto translúcido en la pantalla de proyección, permitiendo apreciar la imagen o el video de fondo a pantalla completa.
-                                        </p>
-                                      </div>
+                                      <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer text-gray-300 hover:text-white select-none pt-1">
+                                        <input
+                                          type="checkbox"
+                                          checked={slide.videoPresenterNav !== false}
+                                          onChange={e => handleUpdateImagePresenterNav(idx, e.target.checked)}
+                                          className="accent-yellow-500 h-4 w-4 rounded border-gray-700 bg-gray-900 cursor-pointer"
+                                        />
+                                        <span>Nav</span>
+                                      </label>
                                     </div>
                                   ) : (
                                     /* Standard Text Slide */

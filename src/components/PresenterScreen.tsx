@@ -210,8 +210,9 @@ const PresenterScreen: React.FC<PresenterScreenProps> = ({
   // Hiding overlays based on special image slide content ([IMAGE]) or dedicated video slides
   const isImageSlide = slide?.lines[0]?.trim() === '[IMAGE]';
   const isVideoSlide = slide?.type === 'video';
-  const presenterNavVisible = !isVideoSlide || slide?.videoPresenterNav !== false;
-  const hideLyricsOverlay = isImageSlide || isVideoSlide;
+  const isPhotoSlide = isImageSlide;
+  const presenterNavVisible = !(isVideoSlide || isPhotoSlide) || slide?.videoPresenterNav !== false;
+  const hideLyricsOverlay = isPhotoSlide || isVideoSlide;
 
   return (
     <div className="relative h-full w-full overflow-hidden bg-slate-950 text-white">
@@ -253,7 +254,7 @@ const PresenterScreen: React.FC<PresenterScreenProps> = ({
         </motion.div>
       </AnimatePresence>
 
-      {!isVideoSlide && (
+      {!isVideoSlide && !isPhotoSlide && (
         <>
           <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/50 to-black/22 pointer-events-none" />
           <div className="absolute inset-0 bg-gradient-to-t from-black/78 via-black/12 to-black/28 pointer-events-none" />
