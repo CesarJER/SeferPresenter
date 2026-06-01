@@ -269,40 +269,7 @@ const SeferControlPanel: React.FC<SeferControlPanelProps> = ({
         )}
       </div>
 
-      {/* ── Current verse display ──────────────────────────────── */}
-      <div id="section-current-verse-display" className="flex-1 overflow-y-auto p-2.5 space-y-2">
-        {currentVerse ? (
-          <div className="rounded-lg bg-gray-800/80 p-2.5">
-            {/* Hebrew */}
-            <div
-              dir="rtl"
-              className="text-sm leading-relaxed text-[#f3c96a] font-bold text-right"
-              style={{ fontFamily: "'Frank Ruhl Libre', 'SBL Hebrew', serif" }}
-              dangerouslySetInnerHTML={{ __html: currentVerse.verseNikud }}
-            />
 
-            {/* Transliteration & Translation in compact format */}
-            <div className="flex flex-col gap-1.5 mt-2 pt-2 border-t border-gray-700/60 text-xs">
-              {currentVerse.transliteration && (
-                <p className="text-sky-355 leading-relaxed">
-                  <span className="text-sky-400 font-bold mr-1"></span>
-                  {currentVerse.transliteration}
-                </p>
-              )}
-              {currentVerse.translation && (
-                <p className="text-gray-300 leading-relaxed">
-                  <span className="text-green-455 font-bold mr-1"></span>
-                  {currentVerse.translation}
-                </p>
-              )}
-            </div>
-          </div>
-        ) : (
-          <div className="flex items-center justify-center h-full text-gray-600 text-xs">
-            Selecciona un versículo
-          </div>
-        )}
-      </div>
 
     </div>
   );

@@ -338,14 +338,14 @@ const SeferControlPanel: React.FC<SeferControlPanelProps> = ({
       </div>
 
       {/* ── Current verse display ──────────────────────────────── */}
-      <div className="flex-1 overflow-y-auto p-2.5 space-y-2">
+      <div id="section-current-verse-display" className="flex-1 overflow-y-auto p-2.5 space-y-2">
         {currentVerse ? (
           <div className="rounded-lg bg-gray-800/80 p-2.5">
             {/* Hebrew */}
             <div
-              dir="rtl"
-              className="text-sm leading-relaxed text-[#f3c96a] font-bold text-right"
-              style={{ fontFamily: "'Frank Ruhl Libre', 'SBL Hebrew', serif" }}
+              dir={/[\u0590-\u05FF]/.test(currentVerse.verseNikud || '') ? "rtl" : "ltr"}
+              className={`text-sm leading-relaxed text-[#f3c96a] font-bold ${/[\u0590-\u05FF]/.test(currentVerse.verseNikud || '') ? "text-right" : "text-left"}`}
+              style={{ fontFamily: /[\u0590-\u05FF]/.test(currentVerse.verseNikud || '') ? "'Frank Ruhl Libre', 'SBL Hebrew', serif" : 'inherit' }}
               dangerouslySetInnerHTML={{ __html: currentVerse.verseNikud }}
             />
 

@@ -7,6 +7,7 @@ import { Languages, Save, Download, Upload, ArrowUp, ArrowDown, Trash2, Plus, Fi
 import AutoResizeText from './AutoResizeText';
 import SeferControlPanel from './SeferControlPanel';
 import SeferControlPanelMini from './SeferControlPanelMini';
+import SlideVisualizer from './SlideVisualizer';
 
 interface MenuPopupProps {
   presentations: Presentation[];
@@ -2144,6 +2145,12 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
 
             </div>
           </div>
+
+          <SlideVisualizer
+            slide={activeSlide}
+            appMode={appMode}
+            scriptureState={scriptureState}
+          />
 
           {/* ── Main Area ───────────────────────────────── */}
           <div id="section-main-area" className="flex-1 overflow-y-auto p-3 md:p-4">
