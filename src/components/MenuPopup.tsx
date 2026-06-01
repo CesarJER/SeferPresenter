@@ -639,6 +639,9 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
   const activeSlide = currentPresentation && currentSlideIndex >= 0 && currentSlideIndex < currentPresentation.slides.length
     ? currentPresentation.slides[currentSlideIndex]
     : null;
+  const matchedSyncMap = audioState.audioSrc
+    ? audioSyncMaps.find((m) => m.audioSrc === audioState.audioSrc)
+    : undefined;
   const isActiveScriptureSlide = !!activeSlide && (activeSlide.type === 'sefer' || activeSlide.type === 'tanaj' || !!activeSlide.scriptureBook);
 
   // Keep compiler happy
@@ -1966,15 +1969,48 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                   className="w-full bg-gray-900 border border-gray-700 rounded px-2.5 py-1.5 focus:border-yellow-500 outline-none text-white cursor-pointer"
                 >
                   <option value="">-- Sin Música / Silencio --</option>
-                  {availableAudioFiles.map((file) => (
-                    <option key={file} value={file}>
-                      {decodeURIComponent(file.split('/').pop() || '')}
-                    </option>
-                  ))}
+                  {availableAudioFiles.map((file) => {
+                    const hasSync = audioSyncMaps.some(m => m.audioSrc === file);
+                    return (
+                      <option key={file} value={file}>
+                        {decodeURIComponent(file.split('/').pop() || '')}{hasSync ? ' 🎼' : ''}
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
 
               <div className="flex items-center gap-2">
+                {/* Linked Presentation Button (Only if sync map exists) */}
+                {matchedSyncMap && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const linkedPres = presentations.find(p => p.id === matchedSyncMap.presentationId);
+                      if (linkedPres) {
+                        onSelectPresentation(linkedPres);
+                      }
+                      onAudioStateChange({
+                        ...audioState,
+                        activeSyncMapId: matchedSyncMap.id,
+                        syncMode: matchedSyncMap.defaultSyncMode || 'unilateral',
+                        volume: matchedSyncMap.defaultVolume !== undefined ? matchedSyncMap.defaultVolume : audioState.volume,
+                        lastUpdatedBy: 'controller',
+                        changeType: 'syncMode',
+                        timestamp: Date.now(),
+                      });
+                    }}
+                    className={`flex items-center justify-center p-2.5 rounded bg-sky-700 hover:bg-sky-650 border border-sky-600 text-white transition-all cursor-pointer shadow-sm ${
+                      audioState.syncMode === 'none' || currentPresentation?.id !== matchedSyncMap.presentationId
+                        ? 'animate-pulse hover:animate-none'
+                        : ''
+                    }`}
+                    title={`Abrir presentación vinculada "${presentations.find(p => p.id === matchedSyncMap.presentationId)?.title || ''}" y activar sincronización`}
+                  >
+                    <span>🎼</span>
+                  </button>
+                )}
+
                 {/* Play/Pause Button */}
                 <button
                   type="button"
@@ -2058,32 +2094,103 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
 
             {/* Right: Sync Mode & Editor Window Trigger */}
             <div className="flex items-end gap-3 w-full md:w-auto">
-              <div className="flex flex-col gap-1 w-full sm:w-44">
-                <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">Sincronización</label>
-                <select
-                  value={audioState.syncMode}
-                  onChange={(e) => {
-                    onAudioStateChange({
-                      ...audioState,
-                      syncMode: e.target.value as any,
-                      lastUpdatedBy: 'controller',
-                      changeType: 'syncMode',
-                      timestamp: Date.now(),
-                    });
-                  }}
-                  disabled={!audioState.audioSrc}
-                  className="w-full bg-gray-900 border border-gray-700 rounded px-2.5 py-1.5 focus:border-yellow-500 outline-none text-white cursor-pointer"
-                >
-                  <option value="none">Ninguna (Música Fondo)</option>
-                  <option value="unilateral">Unilateral (Música cambia diapositiva)</option>
-                  <option value="bilateral">Bilateral (Sincro Bidireccional)</option>
-                </select>
+              <div className="flex flex-col gap-1 w-full sm:w-52">
+                <div className="flex items-center justify-between">
+                  <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">Sincronización</label>
+                  <div className="relative group/tooltip">
+                    <button
+                      type="button"
+                      className="text-gray-400 hover:text-white cursor-pointer select-none text-[10px] bg-gray-800 hover:bg-gray-700 h-4 w-4 rounded-full flex items-center justify-center font-bold"
+                    >
+                      ?
+                    </button>
+                    <div className="absolute right-0 bottom-full mb-2 w-64 bg-gray-900 border border-gray-700 text-gray-200 text-xs p-3 rounded-lg shadow-xl opacity-0 invisible group-hover/tooltip:opacity-100 group-hover/tooltip:visible transition-all duration-200 z-50 pointer-events-none">
+                      <p className="font-bold text-yellow-500 mb-1">Sincronización de Audio:</p>
+                      <p className="mb-2 text-gray-300">Una melodía solo puede estar sincronizada a una única presentación, pero una presentación puede tener asociadas varias melodías.</p>
+                      <hr className="border-gray-800 my-1.5" />
+                      <div className="flex flex-col gap-1 text-[11px] text-gray-300">
+                        <div><strong className="text-white">Fondo (🎼):</strong> Música de fondo normal sin sincronizar.</div>
+                        <div><strong className="text-sky-400">Unilateral (🎼 ⬆️):</strong> La música avanza automáticamente las diapositivas.</div>
+                        <div><strong className="text-emerald-400">Bilateral (🎼 ↕️):</strong> Sincronización bidireccional de diapositivas y audio.</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="flex items-center bg-gray-900 border border-gray-700 rounded p-0.5 gap-0.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onAudioStateChange({
+                        ...audioState,
+                        syncMode: 'none',
+                        lastUpdatedBy: 'controller',
+                        changeType: 'syncMode',
+                        timestamp: Date.now(),
+                      });
+                    }}
+                    disabled={!audioState.audioSrc}
+                    className={`flex-1 py-1 px-1.5 rounded text-[10px] font-semibold transition-all flex items-center justify-center gap-1 cursor-pointer disabled:opacity-40 disabled:hover:bg-transparent ${
+                      audioState.syncMode === 'none'
+                        ? 'bg-gray-700 text-white font-bold'
+                        : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800'
+                    }`}
+                    title="Música de Fondo (Sin sincronización)"
+                  >
+                    <Music size={11} />
+                    <span>Fondo</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onAudioStateChange({
+                        ...audioState,
+                        syncMode: 'unilateral',
+                        lastUpdatedBy: 'controller',
+                        changeType: 'syncMode',
+                        timestamp: Date.now(),
+                      });
+                    }}
+                    disabled={!audioState.audioSrc}
+                    className={`flex-1 py-1 px-1.5 rounded text-[10px] font-semibold transition-all flex items-center justify-center gap-1 cursor-pointer disabled:opacity-40 disabled:hover:bg-transparent ${
+                      audioState.syncMode === 'unilateral'
+                        ? 'bg-sky-600 text-white font-bold'
+                        : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800'
+                    }`}
+                    title="Sincronización Unilateral (Música cambia diapositivas)"
+                  >
+                    <Music size={11} />
+                    <ArrowUp size={10} className="stroke-[3]" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onAudioStateChange({
+                        ...audioState,
+                        syncMode: 'bilateral',
+                        lastUpdatedBy: 'controller',
+                        changeType: 'syncMode',
+                        timestamp: Date.now(),
+                      });
+                    }}
+                    disabled={!audioState.audioSrc}
+                    className={`flex-1 py-1 px-1.5 rounded text-[10px] font-semibold transition-all flex items-center justify-center gap-1 cursor-pointer disabled:opacity-40 disabled:hover:bg-transparent ${
+                      audioState.syncMode === 'bilateral'
+                        ? 'bg-emerald-600 text-white font-bold'
+                        : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800'
+                    }`}
+                    title="Sincronización Bilateral (Sincro Bidireccional)"
+                  >
+                    <Music size={11} />
+                    <ArrowUpDown size={10} className="stroke-[3]" />
+                  </button>
+                </div>
               </div>
 
               <button
                 type="button"
                 onClick={handleOpenAudioEditor}
-                className="flex items-center gap-1 py-1.5 px-3 rounded bg-gray-900 border border-gray-700 hover:bg-gray-800 text-yellow-500 font-bold transition-all cursor-pointer shadow-sm shrink-0 whitespace-nowrap"
+                className="flex items-center gap-1 py-1.5 px-3 rounded bg-gray-900 border border-gray-700 hover:bg-gray-800 text-yellow-500 font-bold transition-all cursor-pointer shadow-sm shrink-0 whitespace-nowrap h-[28px]"
                 title="Abrir Editor de Sincronización en ventana externa (🎼)"
               >
                 <Settings size={13} />
