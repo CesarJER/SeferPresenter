@@ -621,6 +621,9 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
   onBoundaryReached = () => { },
   onUpdateScriptureFontSizes = () => { }
 }) => {
+  // ────────────────────────────────────────────────────────────────
+  // States
+  // ────────────────────────────────────────────────────────────────
   const activeSlide = currentPresentation && currentSlideIndex >= 0 && currentSlideIndex < currentPresentation.slides.length
     ? currentPresentation.slides[currentSlideIndex]
     : null;
@@ -632,6 +635,9 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
 
   const [isFullscreen, setIsFullscreen] = useState(false);
 
+  // ────────────────────────────────────────────────────────────────
+  // Effects
+  // ────────────────────────────────────────────────────────────────
   useEffect(() => {
     const onFullscreenChange = () => {
       setIsFullscreen(!!document.fullscreenElement);
@@ -779,6 +785,9 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
     };
   }, [isScrubbing]);
 
+  // ────────────────────────────────────────────────────────────────
+  // Handlers
+  // ────────────────────────────────────────────────────────────────
   const handleNew = () => {
     setId(Date.now().toString());
     setTitle('');
@@ -1767,9 +1776,9 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
   };
 
   return (
-    <div className="flex h-full w-full flex-col bg-gray-800 text-white">
-      {/* Header */}
-      <div className="flex items-center justify-between border-b border-gray-700 bg-gray-900 px-4 py-3 md:px-5 md:py-4">
+    <div id="section-menu-popup-container" className="flex h-full w-full flex-col bg-gray-800 text-white">
+      {/* ── Menu Header ───────────────────────────────── */}
+      <div id="section-menu-header" className="flex items-center justify-between border-b border-gray-700 bg-gray-900 px-4 py-3 md:px-5 md:py-4">
         <h2 className="flex items-center gap-2 text-lg font-bold md:text-xl">
           <img src="/logo.svg" alt="Logo" className="h-7 w-7" />
           <span>Gestor de Presentaciones</span>
@@ -1799,7 +1808,8 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
         </div>
       </div>
 
-      <div className="flex-1 min-h-0 overflow-auto flex flex-col">
+      {/* ── App Mode Wrapper ───────────────────────────────── */}
+      <div id="section-app-mode-wrapper" className="flex-1 min-h-0 overflow-auto flex flex-col">
         {appMode === 'seferManual' && (
           <div className="shrink-0 border-b border-gray-700 bg-gray-950/70">
             <div>
@@ -1817,12 +1827,12 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
           </div>
         )}
         <div className="flex-1">
-          {/* Visor Superior - Horizontal en desktop, vertical en movil */}
-          <div className="border-b border-gray-700 bg-gray-900/50 p-3 md:p-4">
+          {/* ── Visor Superior Panel ───────────────────────────────── */}
+          <div id="section-viewer-top-panel" className="border-b border-gray-700 bg-gray-900/50 p-3 md:p-4">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-stretch">
 
-              {/* Lado Izquierdo: Controles del Visor */}
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-end lg:w-[420px] lg:flex-none">
+              {/* ── Viewer Controls Left ───────────────────────────────── */}
+              <div id="section-viewer-controls-left" className="flex flex-col gap-3 sm:flex-row sm:items-end lg:w-[420px] lg:flex-none">
                 {/* Seleccionar Presentación */}
                 <div className="flex-1 space-y-1.5 min-w-0">
                   <label className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">Seleccionar Presentación</label>
@@ -1898,8 +1908,8 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                 </div>
               </div>
 
-              {/* Lado Derecho: Navegación de Diapositivas */}
-              <div className="flex-1 min-w-0 flex flex-col justify-center rounded-md bg-gray-900/60 border border-gray-700/60 p-2.5 sm:p-3 shadow-inner">
+              {/* ── Live Navigation ───────────────────────────────── */}
+              <div id="section-live-navigation" className="flex-1 min-w-0 flex flex-col justify-center rounded-md bg-gray-900/60 border border-gray-700/60 p-2.5 sm:p-3 shadow-inner">
                 {currentPresentation && currentPresentation.slides.length > 0 ? (
                   <div className="space-y-1.5 w-full">
                     <div className="flex items-center justify-between">
@@ -1966,8 +1976,9 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                       </button>
                     </div>
 
+                    {/* ── Sefer Control Panel Mini ───────────────────────────────── */}
                     {appMode !== 'seferManual' && isActiveScriptureSlide && scriptureState && (
-                      <div className="rounded-md border border-gray-800 bg-gray-950/50">
+                      <div id="section-sefer-control-mini" className="rounded-md border border-gray-800 bg-gray-950/50">
                         <SeferControlPanelMini
                           onProject={(state, cmd) => {
                             if (onProjectScripture) {
@@ -1981,8 +1992,9 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                       </div>
                     )}
 
+                    {/* ── Video Player Controller ───────────────────────────────── */}
                     {activeSlide?.type === 'video' && (
-                      <div className="rounded-md border border-yellow-800/25 bg-yellow-950/10 p-2.5 space-y-2">
+                      <div id="section-video-control" className="rounded-md border border-yellow-800/25 bg-yellow-950/10 p-2.5 space-y-2">
                         <div className="flex items-center justify-between gap-2">
                           <div className="flex items-center gap-2 min-w-0">
                             <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
@@ -2133,11 +2145,11 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
             </div>
           </div>
 
-          {/* Área Principal */}
-          <div className="flex-1 overflow-y-auto p-3 md:p-4">
+          {/* ── Main Area ───────────────────────────────── */}
+          <div id="section-main-area" className="flex-1 overflow-y-auto p-3 md:p-4">
                {editorMode === 'list' ? (
-              /* ================= GESTOR DE ORDEN Y LISTA ================= */
-              <div className="flex-1 flex flex-col gap-3">
+              /* ── Presentation Manager (List Mode) ───────────────────────────────── */
+              <div id="section-presentation-manager" className="flex-1 flex flex-col gap-3">
                 {/* Header del Gestor */}
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between rounded-md bg-gray-900 border border-gray-700 p-3">
                   <div className="flex-1 min-w-0">
@@ -2542,8 +2554,8 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                 </div>
               </div>
             ) : (
-              /* ================= EDITOR DE CONTENIDO ================= */
-              <>
+              /* ── Presentation Editor (Edit Mode) ───────────────────────────────── */
+              <div id="section-presentation-editor">
                 {/* Header del Editor */}
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between rounded-md bg-gray-900 border border-gray-700 p-3 mb-3">
                   <div className="flex items-center gap-2.5 flex-1 min-w-0">
@@ -3323,7 +3335,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                     </div>
                   )
                 )}
-              </>
+              </div>
             )}
           </div>
         </div>

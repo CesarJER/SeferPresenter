@@ -21,6 +21,9 @@ const SeferControlPanel: React.FC<SeferControlPanelProps> = ({
   restoredState,
   onUpdateFontSizes,
 }) => {
+  // ────────────────────────────────────────────────────────────────
+  // States
+  // ────────────────────────────────────────────────────────────────
   const lastSyncedStateRef = useRef<string | null>(null);
   const [showFontSettings, setShowFontSettings] = useState(false);
 
@@ -45,6 +48,9 @@ const SeferControlPanel: React.FC<SeferControlPanelProps> = ({
     rangeVerses,
   } = useSeferReader();
 
+  // ────────────────────────────────────────────────────────────────
+  // Effects
+  // ────────────────────────────────────────────────────────────────
   useEffect(() => {
     const restoredHebrewSize = restoredState?.hebrewFontSize;
     if (typeof restoredHebrewSize === 'number' && Number.isFinite(restoredHebrewSize)) {
@@ -73,9 +79,9 @@ const SeferControlPanel: React.FC<SeferControlPanelProps> = ({
     }
   }, [restoreState, restoredState]);
 
-  // ----------------------------------------------------------------
+  // ────────────────────────────────────────────────────────────────
   // Handlers
-  // ----------------------------------------------------------------
+  // ────────────────────────────────────────────────────────────────
   const hasActiveRange = !!currentVerse?.verseEnd;
   const currentVerseIndex = currentVerse ? rangeVerses.indexOf(currentVerse.verse) : -1;
   const canAdjustFont = restoredState?.scriptureKind !== 'tanaj';
@@ -145,21 +151,21 @@ const SeferControlPanel: React.FC<SeferControlPanelProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleNext, handlePrev]);
 
-  // ----------------------------------------------------------------
+  // ────────────────────────────────────────────────────────────────
   // Loading / unavailable states
-  // ----------------------------------------------------------------
+  // ────────────────────────────────────────────────────────────────
   if (Object.keys(metadata).length === 0) {
     return (
-      <div className="flex items-center justify-center h-full text-gray-500 text-sm">
+      <div id="section-loading-bible-data" className="flex items-center justify-center h-full text-gray-500 text-sm">
         Cargando datos bí­blicos...
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col h-full overflow-hidden bg-gray-900 text-white">
+    <div id="section-sefer-panel-mini-container" className="flex flex-col h-full overflow-hidden bg-gray-900 text-white">
       {/* ── Navigation selectors ───────────────────────────────── */}
-      <div className="flex-none p-3 border-b border-gray-800 space-y-2">
+      <div id="section-nav-selectors" className="flex-none p-3 border-b border-gray-800 space-y-2">
         <div className="flex items-center justify-center gap-2">
           <div className="flex -1 items-center gap-2">
             {canAdjustFont && (
@@ -223,9 +229,9 @@ const SeferControlPanel: React.FC<SeferControlPanelProps> = ({
           </div>
         </div>
 
-        {/* Font Adjustment Drawer */}
+        {/* ── Font Adjustment Drawer ───────────────────────────────── */}
         {canAdjustFont && showFontSettings && (
-          <div className="p-2.5 bg-gray-800 border border-gray-700 rounded-md space-y-2 text-[10px]">
+          <div id="section-font-adjustments" className="p-2.5 bg-gray-800 border border-gray-700 rounded-md space-y-2 text-[10px]">
             <div className="flex items-center justify-between gap-2">
               <span className="text-gray-300 font-semibold">Hebreo: {hebrewFontSize}px</span>
               <input
@@ -264,7 +270,7 @@ const SeferControlPanel: React.FC<SeferControlPanelProps> = ({
       </div>
 
       {/* ── Current verse display ──────────────────────────────── */}
-      <div className="flex-1 overflow-y-auto p-2.5 space-y-2">
+      <div id="section-current-verse-display" className="flex-1 overflow-y-auto p-2.5 space-y-2">
         {currentVerse ? (
           <div className="rounded-lg bg-gray-800/80 p-2.5">
             {/* Hebrew */}

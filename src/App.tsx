@@ -230,6 +230,9 @@ const fallbackBackgrounds = [
 ];
 
 function App() {
+  // ────────────────────────────────────────────────────────────────
+  // States
+  // ────────────────────────────────────────────────────────────────
   // Detect if we are in control panel mode based on URL query
   const isControlMode = new URLSearchParams(window.location.search).get('mode') === 'control';
   const storedPresenterState = loadStoredPresenterState();
@@ -265,6 +268,9 @@ function App() {
   const slideScriptureStateBeforeManualRef = useRef<ScriptureNavState | null>(null);
   const clientIdRef = useRef(makeClientId());
 
+  // ────────────────────────────────────────────────────────────────
+  // Effects
+  // ────────────────────────────────────────────────────────────────
   useEffect(() => {
     videoStateRef.current = videoState;
   }, [videoState]);
@@ -274,6 +280,9 @@ function App() {
     scriptureStateRef.current = scriptureState;
   }, [appMode, scriptureState]);
 
+  // ────────────────────────────────────────────────────────────────
+  // Handlers / Callbacks
+  // ────────────────────────────────────────────────────────────────
   const channel = useMemo(() => new BroadcastChannel('sefer-presenter'), []);
 
   const persistState = useCallback((
@@ -1238,7 +1247,8 @@ function App() {
 
   if (isControlMode) {
     return (
-      <div className="w-full h-screen bg-gray-900 overflow-hidden">
+      <div id="section-app-control-mode" className="w-full h-screen bg-gray-900 overflow-hidden">
+        {/* ── Control Panel View ───────────────────────────────── */}
         <MenuPopup
           presentations={presentations}
           backgrounds={backgrounds}
@@ -1381,7 +1391,8 @@ function App() {
   // Presenter (big screen) mode
   if ((appMode === 'seferManual' || (appMode === 'scripture' && scriptureState?.scriptureKind !== 'tanaj')) && scriptureState) {
     return (
-      <div className="w-full h-screen overflow-hidden">
+      <div id="section-app-scripture-reader-view" className="w-full h-screen overflow-hidden">
+        {/* ── Scripture Reader Screen ───────────────────────────────── */}
         <SeferReaderScreen
           scriptureState={scriptureState}
           onVerseSelected={handleSeferOnlineRef}
@@ -1395,7 +1406,8 @@ function App() {
   }
 
   return (
-    <div className="w-full h-screen overflow-hidden bg-black relative">
+    <div id="section-app-presenter-slide-view" className="w-full h-screen overflow-hidden bg-black relative">
+      {/* ── Slides Presenter Screen ───────────────────────────────── */}
       <PresenterScreen
         background={activeBackground}
         slide={activePresenterSlide}
