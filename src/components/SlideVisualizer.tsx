@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ChevronDown, ChevronUp, Eye } from 'lucide-react';
-import type { Slide, ScriptureNavState, AppMode } from '../App';
+import type { Slide, ScriptureNavState, AppMode } from '../types/presentation';
 
 interface SlideVisualizerProps {
   slide: Slide | null;
@@ -137,3 +137,4 @@ const SlideVisualizer: React.FC<SlideVisualizerProps> = ({
 };
 
 export default SlideVisualizer;
+

@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import type { Slide, VideoState } from '../App';
+import type { Slide, VideoState } from '../types/presentation';
 import { AnimatePresence, motion } from 'framer-motion';
 import AutoResizeText from './AutoResizeText';
 
@@ -357,3 +357,4 @@ const PresenterScreen: React.FC<PresenterScreenProps> = ({
 };
 
 export default PresenterScreen;
+

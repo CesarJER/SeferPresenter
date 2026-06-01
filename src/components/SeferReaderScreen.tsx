@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
-import type { ScriptureNavState } from '../App';
+import type { ScriptureNavState } from '../types/presentation';
 import type { VerseData, AppMetadata } from '../hooks/useSeferReader';
 import { parseVerses } from '../utils/scriptureParser';
 import { SeferFlowView } from './SeferFlowView';
@@ -368,3 +368,4 @@ export const SeferReaderScreen: React.FC<SeferReaderScreenProps> = ({
 };
 
 export default SeferReaderScreen;
+

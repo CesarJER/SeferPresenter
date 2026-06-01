@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import type { Presentation, Slide, VideoState, AppMode, ScriptureNavState } from '../App';
+import type { Presentation, Slide, VideoState, AppMode, ScriptureNavState } from '../types/presentation';
 import type { SeferReaderState } from '../hooks/useSeferReader';
 import { transliterateText } from '../utils/transliterate';
 import { getScriptureChapterVerses, materializeScriptureSlides, parseScriptureTag, scriptureSlideToTag } from '../utils/scriptureLookup';
@@ -3791,3 +3791,4 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
 };
 
 export default MenuPopup;
+

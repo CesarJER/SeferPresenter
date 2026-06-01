@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Play, Pause, Save, Download, Upload, X, Clock, Trash2, Volume2, Music, AlertTriangle, ArrowUp, ArrowUpDown } from 'lucide-react';
-import type { Presentation } from '../App';
+import type { Presentation } from '../types/presentation';
 import type { AudioSyncMap, AudioSyncCue, AudioSyncMode } from '../types/audio';
 import { findScriptureRange } from '../utils/scriptureLookup';
 
@@ -920,3 +920,4 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
     </div>
   );
 };
+

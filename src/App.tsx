@@ -9,90 +9,7 @@ import type { AudioState, AudioSyncMap } from './types/audio'
 import { DEFAULT_AUDIO_STATE } from './types/audio'
 import { Music } from 'lucide-react';
 import { AudioSyncEditor } from './components/AudioSyncEditor';
-
-export type SeferOnlineRefPayload = {
-  book?: string;
-  chapter?: number | string;
-  verseStart?: number | string;
-  verse?: number | string;
-  verseEnd?: number | string;
-  bookEs?: string;
-  bookHeb?: string;
-  bookAbbrevEs?: string;
-  verseNikud?: string;
-  transliteration?: string;
-  translation?: string;
-  verseIdx?: number;
-  totalVerses?: number;
-  scriptureKind?: 'tanaj' | 'sefer';
-};
-
-export interface Presentation {
-  id: string;
-  title: string;
-  background: string;
-  mode: 'standard' | 'trilingual';
-  fontScale?: number;
-  slides: Slide[];
-}
-
-export interface Slide {
-  id: string;
-  label: string;
-  lines: string[]; // 1 line for standard, 3 for trilingual (Hebrew, Translit, Translation)
-  background?: string; // Ruta al fondo personalizado para esta diapositiva
-  type?: 'text' | 'video' | 'tanaj' | 'sefer'; // 'text' por defecto
-  videoSrc?: string;
-  videoVolume?: number;
-  videoSpeed?: number;
-  videoLoop?: boolean;
-  videoPresenterNav?: boolean;
-  videoStart?: number;
-  videoEnd?: number;
-  scriptureBook?: string;
-  scriptureChapter?: string;
-  scriptureVerseStart?: string;
-  scriptureVerseEnd?: string;
-  scriptureVerseBackgrounds?: Record<string, string>;
-}
-
-export interface VideoState {
-  isPlaying: boolean;
-  currentTime: number;
-  duration: number;
-  volume: number;
-  speed: number;
-  loop?: boolean;
-  videoSrc: string | null;
-  startTime?: number;
-  endTime?: number;
-  lastUpdatedBy: 'controller' | 'projection';
-  timestamp: number;
-}
-
-// New: scripture reader state synchronized between controller and presenter
-export interface ScriptureNavState {
-  bookEs: string;
-  bookHeb: string;
-  bookAbbrevEs: string;
-  chapter: string;
-  verseStart: string;
-  verse: string;
-  verseEnd?: string;
-  verseNikud: string;
-  transliteration: string;
-  translation: string;
-  verseIdx: number;
-  totalVerses: number;
-  scriptureKind?: 'tanaj' | 'sefer';
-  command?: 'navigate' | 'next' | 'previous';
-  commandId?: number;
-  hebrewFontSize?: number;
-  combinedTextBaseSize?: number;
-}
-
-// App mode: 'slides' is normal presentation, 'scripture' is slide scripture, 'seferManual' is the manual Sefer overlay
-export type AppMode = 'slides' | 'scripture' | 'seferManual';
+import type { AppMode, Presentation, ScriptureNavState, SeferOnlineRefPayload, Slide, VideoState } from './types/presentation';
 const parseSlideHash = (hash: string) => {
   const clean = hash.replace('#', '');
   const [slidePart, versePart] = clean.split('.');
@@ -1806,4 +1723,5 @@ function App() {
 }
 
 export default App;
+
 

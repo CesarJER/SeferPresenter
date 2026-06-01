@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { ChevronLeft, ChevronRight, Sliders } from 'lucide-react';
-import type { ScriptureNavState } from '../App';
+import type { ScriptureNavState } from '../types/presentation';
 import type { SeferReaderState } from '../hooks/useSeferReader';
 import { useSeferReader } from '../hooks/useSeferReader';
 
@@ -276,3 +276,4 @@ const SeferControlPanel: React.FC<SeferControlPanelProps> = ({
 };
 
 export default SeferControlPanel;
+
