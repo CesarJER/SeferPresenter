@@ -1561,6 +1561,7 @@ function App() {
           onClose={() => window.close()}
           presentations={presentations}
           activePresentationId={currentPresentation?.id || null}
+          activeAudioSrc={audioState.audioSrc}
           availableAudioFiles={availableAudioFiles}
           audioSyncMaps={audioSyncMaps}
           onAudioSyncMapsChange={(maps) => {

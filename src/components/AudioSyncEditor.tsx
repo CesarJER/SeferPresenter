@@ -9,6 +9,7 @@ interface AudioSyncEditorProps {
   onClose: () => void;
   presentations: Presentation[];
   activePresentationId: string | null;
+  activeAudioSrc?: string | null;
   availableAudioFiles: string[];
   audioSyncMaps: AudioSyncMap[];
   onAudioSyncMapsChange: (maps: AudioSyncMap[]) => void;
@@ -28,6 +29,7 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
   onClose,
   presentations,
   activePresentationId,
+  activeAudioSrc,
   availableAudioFiles,
   audioSyncMaps,
   onAudioSyncMapsChange,
@@ -57,12 +59,27 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Initialize selected presentation
+  // Initialize selected presentation and audio
   useEffect(() => {
     if (isOpen) {
-      setSelectedPresentationId(activePresentationId || (presentations[0]?.id ?? ''));
+      const initialAudio = activeAudioSrc || '';
+      setSelectedAudioFile(initialAudio);
+
+      let initialPresId = '';
+      if (initialAudio) {
+        const existingMap = audioSyncMaps.find((m) => m.audioSrc === initialAudio);
+        if (existingMap) {
+          initialPresId = existingMap.presentationId;
+        }
+      }
+
+      if (!initialPresId) {
+        initialPresId = activePresentationId || (presentations[0]?.id ?? '');
+      }
+
+      setSelectedPresentationId(initialPresId);
     }
-  }, [isOpen, activePresentationId, presentations]);
+  }, [isOpen, activePresentationId, activeAudioSrc, presentations, audioSyncMaps]);
 
   // Load available sync map if it exists for this presentation + audio
   useEffect(() => {
@@ -461,29 +478,21 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
           {!isConfigCollapsed && (
             <div className="flex flex-col gap-3.5">
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-1 gap-3">
-                {/* Presentation Selector */}
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">Presentación</label>
-                  <select
-                    value={selectedPresentationId}
-                    onChange={(e) => setSelectedPresentationId(e.target.value)}
-                    className="w-full text-xs bg-gray-900 border border-gray-800 rounded px-2.5 py-1.5 focus:border-yellow-500 outline-none text-white cursor-pointer shadow-sm"
-                  >
-                    <option value="">-- Seleccionar Presentación --</option>
-                    {presentations.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.title}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
                 {/* Audio File Selector */}
                 <div className="space-y-1">
                   <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">Pista de Audio</label>
                   <select
                     value={selectedAudioFile}
-                    onChange={(e) => setSelectedAudioFile(e.target.value)}
+                    onChange={(e) => {
+                      const audioFile = e.target.value;
+                      setSelectedAudioFile(audioFile);
+                      if (audioFile) {
+                        const existingMap = audioSyncMaps.find((m) => m.audioSrc === audioFile);
+                        if (existingMap) {
+                          setSelectedPresentationId(existingMap.presentationId);
+                        }
+                      }
+                    }}
                     className="w-full text-xs bg-gray-900 border border-gray-800 rounded px-2.5 py-1.5 focus:border-yellow-500 outline-none text-white cursor-pointer shadow-sm"
                   >
                     <option value="">-- Seleccionar Pista --</option>
@@ -499,6 +508,23 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
                       <span>Sin audios en public/audio/music</span>
                     </div>
                   )}
+                </div>
+
+                {/* Presentation Selector */}
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">Presentación</label>
+                  <select
+                    value={selectedPresentationId}
+                    onChange={(e) => setSelectedPresentationId(e.target.value)}
+                    className="w-full text-xs bg-gray-900 border border-gray-800 rounded px-2.5 py-1.5 focus:border-yellow-500 outline-none text-white cursor-pointer shadow-sm"
+                  >
+                    <option value="">-- Seleccionar Presentación --</option>
+                    {presentations.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.title}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
 

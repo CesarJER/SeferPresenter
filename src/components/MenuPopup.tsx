@@ -1467,7 +1467,17 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
   };
 
   const handleSortPresentationsAZ = () => {
-    const sorted = [...presentations].sort((a, b) => a.title.localeCompare(b.title));
+    const cleanForSort = (str: string) =>
+      (str || '')
+        .replace(/[¡!¿?]/g, '')
+        .trim()
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '');
+
+    const sorted = [...presentations].sort((a, b) =>
+      cleanForSort(a.title).localeCompare(cleanForSort(b.title))
+    );
     onImport(sorted);
   };
 
