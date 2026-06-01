@@ -90,13 +90,13 @@ function fileBackendPlugin(): Plugin {
         if (req.url === '/api/backgrounds' && req.method === 'GET') {
           const bgDir = path.resolve(__dirname, 'public/backgrounds');
           const videoDir = path.resolve(__dirname, 'public/videos');
-          
+
           if (!fs.existsSync(videoDir)) {
             fs.mkdirSync(videoDir, { recursive: true });
           }
 
           const results: string[] = [];
-          
+
           const walk = (dir: string) => {
             if (!fs.existsSync(dir)) return;
             const list = fs.readdirSync(dir);
@@ -117,16 +117,14 @@ function fileBackendPlugin(): Plugin {
 
           walk(bgDir);
           walk(videoDir);
-          
+
           res.setHeader('Content-Type', 'application/json');
           res.end(JSON.stringify(results.map(r => r.startsWith('/') ? r : '/' + r)));
           return;
         }
-        
+
         if (req.url === '/api/audio' && req.method === 'GET') {
           const audioDir = path.resolve(__dirname, 'public/audio');
-          const musicDirLower = path.resolve(__dirname, 'public/music');
-          const musicDirCapital = path.resolve(__dirname, 'public/Music');
 
           if (!fs.existsSync(audioDir)) {
             fs.mkdirSync(audioDir, { recursive: true });
@@ -152,8 +150,7 @@ function fileBackendPlugin(): Plugin {
           };
 
           walkAudio(audioDir);
-          walkAudio(musicDirLower);
-          walkAudio(musicDirCapital);
+          // Walk audio and music folders (only one music folder needed; Windows FS is case-insensitive)
 
           res.setHeader('Content-Type', 'application/json');
           res.end(JSON.stringify(audioResults));

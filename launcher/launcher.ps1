@@ -3,15 +3,15 @@ Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
 # 1. Obtener la IP de red local
 function Get-LocalIP {
     $ip = (Get-NetIPAddress -AddressFamily IPv4 | Where-Object { 
-        $_.IPAddress -notlike "127.*" -and 
-        $_.IPAddress -notlike "169.254.*" -and 
-        $_.InterfaceAlias -match "Wi-Fi|Ethernet|WiFi|Red"
-    } | Select-Object -First 1).IPAddress
+            $_.IPAddress -notlike "127.*" -and 
+            $_.IPAddress -notlike "169.254.*" -and 
+            $_.InterfaceAlias -match "Wi-Fi|Ethernet|WiFi|Red"
+        } | Select-Object -First 1).IPAddress
 
     if (-not $ip) {
         $ip = (Get-NetIPAddress -AddressFamily IPv4 | Where-Object { 
-            $_.IPAddress -notlike "127.*" -and $_.IPAddress -notlike "169.254.*" 
-        } | Select-Object -First 1).IPAddress
+                $_.IPAddress -notlike "127.*" -and $_.IPAddress -notlike "169.254.*" 
+            } | Select-Object -First 1).IPAddress
     }
     
     if (-not $ip) { $ip = "127.0.0.1" }
@@ -83,7 +83,14 @@ $localUrl = "http://localhost`:$port"
                         <TextBlock Text="ESTADO DEL SERVIDOR" Foreground="#6c7086" FontSize="10" FontWeight="Bold"/>
                         <StackPanel Orientation="Horizontal" Margin="0,5,0,0">
                             <Ellipse Name="StatusDot" Width="10" Height="10" Fill="#f38ba8" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                            <TextBlock Name="StatusText" Text="Servidor Apagado" Foreground="#f38ba8" FontSize="15" FontWeight="SemiBold"/>
+                            <TextBlock Name="StatusText" Text="Servidor Apagado" Foreground="#f38ba8" FontSize="15" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                            <Button Name="BtnCheckStatus" Content="Actualizar" Width="70" Height="24" Margin="10,0,0,0" Background="#313244" Foreground="#cdd6f4" BorderThickness="0" FontSize="11" Cursor="Hand" VerticalAlignment="Center" ToolTip="Comprobar si el puerto esta en uso">
+                                <Button.Resources>
+                                    <Style TargetType="Border">
+                                        <Setter Property="CornerRadius" Value="6"/>
+                                    </Style>
+                                </Button.Resources>
+                            </Button>
                         </StackPanel>
                     </StackPanel>
                     
@@ -173,10 +180,12 @@ $btnOpenNetwork = $window.FindName("BtnOpenNetwork")
 $statusDot = $window.FindName("StatusDot")
 $statusText = $window.FindName("StatusText")
 $consoleLog = $window.FindName("ConsoleLog")
+$btnCheckStatus = $window.FindName("BtnCheckStatus")
 
 # 4. Variables de Estado
 $script:viteProcess = $null
 $script:dispatcherTimer = $null
+$script:logPath = Join-Path $PSScriptRoot "vite_dev.log"
 
 # Log de consola inicial
 $consoleLog.AppendText("[Launcher] Listo. Haz clic en 'Iniciar Servidor' para comenzar.`r`n")
@@ -192,7 +201,8 @@ function Update-UI-Status {
         $btnStop.IsEnabled = $true
         $btnOpenLocal.IsEnabled = $true
         $btnOpenNetwork.IsEnabled = $true
-    } else {
+    }
+    else {
         $statusDot.Fill = [System.Windows.Media.Brushes]::LightPink
         $statusText.Text = "Servidor Apagado"
         $statusText.Foreground = [System.Windows.Media.Brushes]::LightPink
@@ -205,85 +215,89 @@ function Update-UI-Status {
 
 # 6. Eventos de la ventana
 $headerBar.add_MouseLeftButtonDown({
-    $window.DragMove()
-})
+        $window.DragMove()
+    })
 
 $btnClose.add_Click({
-    Stop-Server
-    $window.Close()
-})
+        Stop-Server
+        $window.Close()
+    })
 
 $btnMinimize.add_Click({
-    $window.WindowState = [System.Windows.WindowState]::Minimized
-})
+        $window.WindowState = [System.Windows.WindowState]::Minimized
+    })
 
 # Iniciar servidor
 $btnStart.add_Click({
-    $consoleLog.AppendText("[Launcher] Iniciando servidor de desarrollo con --host...`r`n")
+        $consoleLog.AppendText("[Launcher] Iniciando servidor de desarrollo con --host...`r`n")
     
-    # Detener si hay uno anterior
-    Stop-Server
+        # Detener si hay uno anterior
+        Stop-Server
 
-    $script:logPath = Join-Path $PSScriptRoot "vite_dev.log"
-    $script:lastLogPosition = 0
-    if (Test-Path $script:logPath) {
-        Remove-Item $script:logPath -Force -ErrorAction SilentlyContinue
-    }
+        $script:logPath = Join-Path $PSScriptRoot "vite_dev.log"
+        $script:lastLogPosition = 0
+        if (Test-Path $script:logPath) {
+            Remove-Item $script:logPath -Force -ErrorAction SilentlyContinue
+        }
 
-    $psi = New-Object System.Diagnostics.ProcessStartInfo
-    $psi.FileName = "cmd.exe"
-    $projDir = Split-Path -Path $PSScriptRoot -Parent
-    $psi.WorkingDirectory = $projDir
-    # Redirigimos la salida estandar y errores a un archivo de log para evitar bloquear la UI
-    $psi.Arguments = "/c npm run dev -- --host > `"$script:logPath`" 2>&1"
-    $psi.UseShellExecute = $false
-    $psi.CreateNoWindow = $true
+        $psi = New-Object System.Diagnostics.ProcessStartInfo
+        $psi.FileName = "cmd.exe"
+        $projDir = Split-Path -Path $PSScriptRoot -Parent
+        $psi.WorkingDirectory = $projDir
+        # Redirigimos la salida estandar y errores a un archivo de log para evitar bloquear la UI
+        $psi.Arguments = "/c npm run dev -- --host > `"$script:logPath`" 2>&1"
+        $psi.UseShellExecute = $false
+        $psi.CreateNoWindow = $true
+        $psi.EnvironmentVariables["FORCE_COLOR"] = "0"
+        $psi.EnvironmentVariables["NO_COLOR"] = "1"
 
-    $script:viteProcess = New-Object System.Diagnostics.Process
-    $script:viteProcess.StartInfo = $psi
+        $script:viteProcess = New-Object System.Diagnostics.Process
+        $script:viteProcess.StartInfo = $psi
     
-    if ($script:viteProcess.Start()) {
-        Update-UI-Status -running $true
+        if ($script:viteProcess.Start()) {
+            Update-UI-Status -running $true
         
-        $script:timerTicks = 0
-        $script:dispatcherTimer = New-Object System.Windows.Threading.DispatcherTimer
-        $script:dispatcherTimer.Interval = [TimeSpan]::FromMilliseconds(100)
+            $script:timerTicks = 0
+            $script:dispatcherTimer = New-Object System.Windows.Threading.DispatcherTimer
+            $script:dispatcherTimer.Interval = [TimeSpan]::FromMilliseconds(100)
         
-        $script:dispatcherTimer.add_Tick({
-            # Leer el archivo de log de forma no bloqueante
-            if (Test-Path $script:logPath) {
-                try {
-                    $stream = [System.IO.File]::Open($script:logPath, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
-                    $reader = New-Object System.IO.StreamReader($stream)
-                    if ($script:lastLogPosition -lt $stream.Length) {
-                        [void]$stream.Seek($script:lastLogPosition, [System.IO.SeekOrigin]::Begin)
-                        $newText = $reader.ReadToEnd()
-                        if ($newText) {
-                            $consoleLog.AppendText($newText)
-                            $consoleLog.ScrollToEnd()
+            $script:dispatcherTimer.add_Tick({
+                    # Leer el archivo de log de forma no bloqueante
+                    if (Test-Path $script:logPath) {
+                        try {
+                            $stream = [System.IO.File]::Open($script:logPath, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
+                            $reader = New-Object System.IO.StreamReader($stream)
+                            if ($script:lastLogPosition -lt $stream.Length) {
+                                [void]$stream.Seek($script:lastLogPosition, [System.IO.SeekOrigin]::Begin)
+                                $newText = $reader.ReadToEnd()
+                                if ($newText) {
+                                    $cleanText = $newText -replace "\x1B\[[0-9;]*[a-zA-Z]", ""
+                                    $consoleLog.AppendText($cleanText)
+                                    $consoleLog.ScrollToEnd()
+                                }
+                                $script:lastLogPosition = $stream.Position
+                            }
+                            $reader.Close()
+                            $stream.Close()
                         }
-                        $script:lastLogPosition = $stream.Position
+                        catch {
+                            # Ignorar errores temporales de bloqueo de archivo
+                        }
                     }
-                    $reader.Close()
-                    $stream.Close()
-                } catch {
-                    # Ignorar errores temporales de bloqueo de archivo
-                }
-            }
 
 
-            # Comprobar si el proceso ha terminado de forma externa
-            if ($script:viteProcess -and $script:viteProcess.HasExited) {
-                $consoleLog.AppendText("[Launcher] El servidor se ha detenido.`r`n")
-                $script:dispatcherTimer.Stop()
-                Update-UI-Status -running $false
-            }
-        })
-        $script:dispatcherTimer.Start()
-    } else {
-        $consoleLog.AppendText("[Error] No se pudo iniciar el proceso cmd.exe`r`n")
-    }
-})
+                    # Comprobar si el proceso ha terminado de forma externa
+                    if ($script:viteProcess -and $script:viteProcess.HasExited) {
+                        $consoleLog.AppendText("[Launcher] El servidor se ha detenido.`r`n")
+                        Stop-Server
+                    }
+                })
+            $script:dispatcherTimer.Start()
+        }
+        else {
+            $consoleLog.AppendText("[Error] No se pudo iniciar el proceso cmd.exe`r`n")
+        }
+    })
 
 # Detener servidor
 function Stop-Server {
@@ -291,27 +305,28 @@ function Stop-Server {
         $script:dispatcherTimer.Stop()
         $script:dispatcherTimer = $null
     }
-    if ($script:viteProcess) {
-        if (-not $script:viteProcess.HasExited) {
-            $consoleLog.AppendText("[Launcher] Deteniendo procesos asociados a Vite...`r`n")
-            # Detener el arbol de procesos de forma limpia usando taskkill
+    
+    $portActive = $null -ne (Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue)
+    if ($script:viteProcess -or $portActive) {
+        $consoleLog.AppendText("[Launcher] Deteniendo procesos asociados a Vite...`r`n")
+        if ($script:viteProcess -and -not $script:viteProcess.HasExited) {
             Stop-Process -Id $script:viteProcess.Id -Force -ErrorAction SilentlyContinue
-            Start-Process -FilePath "taskkill" -ArgumentList "/F /T /IM node.exe" -WindowStyle Hidden -ErrorAction SilentlyContinue
-            Start-Process -FilePath "taskkill" -ArgumentList "/F /T /IM vite.exe" -WindowStyle Hidden -ErrorAction SilentlyContinue
         }
+        Start-Process -FilePath "taskkill" -ArgumentList "/F /T /IM node.exe" -WindowStyle Hidden -ErrorAction SilentlyContinue
+        Start-Process -FilePath "taskkill" -ArgumentList "/F /T /IM vite.exe" -WindowStyle Hidden -ErrorAction SilentlyContinue
         $script:viteProcess = $null
     }
     
     # Limpiar archivo de log al detener
-    if (Test-Path $script:logPath) {
+    if ($script:logPath -and (Test-Path $script:logPath)) {
         Remove-Item $script:logPath -Force -ErrorAction SilentlyContinue
     }
     Update-UI-Status -running $false
 }
 
 $btnStop.add_Click({
-    Stop-Server
-})
+        Stop-Server
+    })
 
 # Abrir navegadores
 function Open-Browser {
@@ -336,19 +351,42 @@ function Open-Browser {
     if ($chromePath) {
         # Abrir directamente con Chrome
         Start-Process -FilePath $chromePath -ArgumentList $url
-    } else {
+    }
+    else {
         # Abrir con navegador por defecto
         Start-Process $url
     }
 }
 
 $btnOpenLocal.add_Click({
-    Open-Browser -url $localUrl
-})
+        Open-Browser -url $localUrl
+    })
 
 $btnOpenNetwork.add_Click({
-    Open-Browser -url $networkUrl
-})
+        Open-Browser -url $networkUrl
+    })
+# 7. Comprobacion manual del estado del puerto
+function Test-ServerStatus {
+    $portActive = $null -ne (Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue)
+    if ($portActive) {
+        Update-UI-Status -running $true
+        $statusText.Text = "Servidor Activo (En uso)"
+        $statusText.Foreground = [System.Windows.Media.Brushes]::LimeGreen
+        $statusDot.Fill = [System.Windows.Media.Brushes]::LimeGreen
+    }
+    else {
+        if (-not $script:viteProcess) {
+            Update-UI-Status -running $false
+        }
+    }
+}
+
+$btnCheckStatus.add_Click({
+        Test-ServerStatus
+    })
+
+# Comprobacion inicial al arrancar
+Test-ServerStatus
 
 # Iniciar bucle de eventos WPF
 [void]$window.ShowDialog()
