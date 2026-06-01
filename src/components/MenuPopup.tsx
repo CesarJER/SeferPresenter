@@ -3,11 +3,12 @@ import type { Presentation, Slide, VideoState, AppMode, ScriptureNavState } from
 import type { SeferReaderState } from '../hooks/useSeferReader';
 import { transliterateText } from '../utils/transliterate';
 import { getScriptureChapterVerses, materializeScriptureSlides, parseScriptureTag, scriptureSlideToTag } from '../utils/scriptureLookup';
-import { Languages, Save, Download, Upload, ArrowUp, ArrowDown, Trash2, Plus, FileText, Table, Pencil, Play, ChevronDown, ChevronUp, X, Lock, Unlock, Layers, Maximize2, Minimize2, Video, Image as ImageIcon, BookOpen, ScrollText } from 'lucide-react';
+import { Languages, Save, Download, Upload, ArrowUp, ArrowDown, Trash2, Plus, FileText, Table, Pencil, Play, Pause, ChevronDown, ChevronUp, X, Lock, Unlock, Layers, Maximize2, Minimize2, Video, Image as ImageIcon, BookOpen, ScrollText, Music, Volume2, ArrowUpDown, Settings } from 'lucide-react';
 import AutoResizeText from './AutoResizeText';
 import SeferControlPanel from './SeferControlPanel';
 import SeferControlPanelMini from './SeferControlPanelMini';
 import SlideVisualizer from './SlideVisualizer';
+import type { AudioState, AudioSyncMap } from '../types/audio';
 
 interface MenuPopupProps {
   presentations: Presentation[];
@@ -31,6 +32,11 @@ interface MenuPopupProps {
   onAddScriptureSlide?: (state: SeferReaderState, kind?: 'sefer' | 'tanaj') => void;
   onBoundaryReached?: (direction: 'next' | 'previous') => void;
   onUpdateScriptureFontSizes?: (sizes: { hebrewFontSize: number; combinedTextBaseSize: number }) => void;
+  audioState: AudioState;
+  audioSyncMaps: AudioSyncMap[];
+  availableAudioFiles: string[];
+  onAudioStateChange: (state: AudioState) => void;
+  onAudioSyncMapsChange: (maps: AudioSyncMap[]) => void;
 }
 
 const isTitleSlide = (slide: Slide) =>
@@ -620,7 +626,12 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
   onProjectScripture = () => { },
   onAddScriptureSlide = () => { },
   onBoundaryReached = () => { },
-  onUpdateScriptureFontSizes = () => { }
+  onUpdateScriptureFontSizes = () => { },
+  audioState,
+  audioSyncMaps,
+  availableAudioFiles,
+  onAudioStateChange,
+  onAudioSyncMapsChange,
 }) => {
   // ────────────────────────────────────────────────────────────────
   // States
@@ -630,11 +641,18 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
     : null;
   const isActiveScriptureSlide = !!activeSlide && (activeSlide.type === 'sefer' || activeSlide.type === 'tanaj' || !!activeSlide.scriptureBook);
 
+  // Keep compiler happy
+  if (false as boolean) {
+    console.log(onAudioSyncMapsChange);
+  }
+
   const [id, setId] = useState('');
   const [title, setTitle] = useState('');
   const [bg, setBg] = useState('');
 
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isMusicPanelOpen, setIsMusicPanelOpen] = useState(false);
+  const [prevVolume, setPrevVolume] = useState(0.7);
 
   // ────────────────────────────────────────────────────────────────
   // Effects
@@ -654,6 +672,91 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
       });
     } else {
       document.exitFullscreen();
+    }
+  };
+
+  const handleSelectAudioTrack = (trackPath: string) => {
+    if (!trackPath) {
+      onAudioStateChange({
+        ...audioState,
+        audioSrc: null,
+        activeSyncMapId: null,
+        isPlaying: false,
+        currentTime: 0,
+        syncMode: 'none',
+        lastUpdatedBy: 'controller',
+        changeType: 'track',
+        timestamp: Date.now(),
+      });
+      return;
+    }
+
+    const matchedMap = audioSyncMaps.find(
+      m => m.presentationId === (currentPresentation?.id || '') && m.audioSrc === trackPath
+    );
+
+    onAudioStateChange({
+      ...audioState,
+      audioSrc: trackPath,
+      activeSyncMapId: matchedMap ? matchedMap.id : null,
+      isPlaying: false,
+      currentTime: 0,
+      syncMode: matchedMap ? matchedMap.defaultSyncMode : 'none',
+      volume: matchedMap ? matchedMap.defaultVolume : audioState.volume,
+      lastUpdatedBy: 'controller',
+      changeType: 'track',
+      timestamp: Date.now(),
+    });
+  };
+
+  const togglePlayback = () => {
+    onAudioStateChange({
+      ...audioState,
+      isPlaying: !audioState.isPlaying,
+      lastUpdatedBy: 'controller',
+      changeType: 'playState',
+      timestamp: Date.now(),
+    });
+  };
+
+  const handleOpenAudioEditor = () => {
+    const width = 1100;
+    const height = 800;
+    const left = (window.screen.width - width) / 2;
+    const top = (window.screen.height - height) / 2;
+
+    window.open(
+      `${window.location.origin}${window.location.pathname}?mode=audio-editor`,
+      'AudioSyncEditor',
+      `width=${width},height=${height},top=${top},left=${left},resizable=yes,scrollbars=yes`
+    );
+  };
+
+  const formatTime = (timeSec: number) => {
+    if (isNaN(timeSec) || !isFinite(timeSec)) return '00:00';
+    const minutes = Math.floor(timeSec / 60);
+    const seconds = Math.floor(timeSec % 60);
+    return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+  };
+
+  const toggleMute = () => {
+    if (audioState.volume > 0) {
+      setPrevVolume(audioState.volume);
+      onAudioStateChange({
+        ...audioState,
+        volume: 0,
+        lastUpdatedBy: 'controller',
+        changeType: 'volume',
+        timestamp: Date.now(),
+      });
+    } else {
+      onAudioStateChange({
+        ...audioState,
+        volume: prevVolume || 0.7,
+        lastUpdatedBy: 'controller',
+        changeType: 'volume',
+        timestamp: Date.now(),
+      });
     }
   };
 
@@ -1785,13 +1888,53 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
           <span>Gestor de Presentaciones</span>
         </h2>
         <div className="flex items-center gap-2">
+          {/* Music Controller Button */}
+          <button
+            type="button"
+            onClick={() => setIsMusicPanelOpen(!isMusicPanelOpen)}
+            className={`flex items-center justify-center p-2 text-xs font-semibold rounded border transition-all cursor-pointer ${isMusicPanelOpen
+                ? 'bg-orange-600 border-orange-500 text-white font-bold'
+                : audioState.volume === 0
+                  ? 'bg-red-600 border-red-500 text-white font-bold animate-pulse'
+                  : !audioState.isPlaying || !audioState.audioSrc
+                    ? 'bg-gray-800 border-gray-700 hover:bg-gray-700 text-gray-300 hover:text-white'
+                    : audioState.syncMode === 'unilateral'
+                      ? 'bg-sky-600 border-sky-500 text-white font-bold'
+                      : audioState.syncMode === 'bilateral'
+                        ? 'bg-emerald-600 border-emerald-500 text-white font-bold'
+                        : 'bg-orange-600 border-orange-500 text-white font-bold'
+              }`}
+            title={isMusicPanelOpen ? "Cerrar panel de música" : "Abrir panel de música y sincronización"}
+          >
+            {audioState.volume === 0 ? (
+              <div className="relative">
+                <Music size={14} className="text-red-200" />
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <span className="text-red-300 font-extrabold text-sm select-none pointer-events-none" style={{ transform: 'rotate(45deg)' }}>/</span>
+                </div>
+              </div>
+            ) : audioState.syncMode === 'unilateral' && audioState.isPlaying ? (
+              <div className="flex items-center gap-0.5">
+                <Music size={13} />
+                <ArrowUp size={10} className="stroke-[3]" />
+              </div>
+            ) : audioState.syncMode === 'bilateral' && audioState.isPlaying ? (
+              <div className="flex items-center gap-0.5">
+                <Music size={13} />
+                <ArrowUpDown size={10} className="stroke-[3]" />
+              </div>
+            ) : (
+              <Music size={14} />
+            )}
+          </button>
+
           {/* Toggle app mode button */}
           <button
             type="button"
-            onClick={() => onToggleAppMode(appMode === 'seferManual' ? 'slides' : 'seferManual')}
+            onClick={() => onToggleAppMode && onToggleAppMode(appMode === 'seferManual' ? 'slides' : 'seferManual')}
             className={`flex items-center justify-center p-2 text-xs font-semibold rounded border transition-all cursor-pointer ${appMode === 'seferManual'
-              ? 'bg-yellow-600 border-yellow-500 text-white font-bold'
-              : 'bg-gray-800 border-gray-700 hover:bg-gray-700 text-gray-300 hover:text-white'
+                ? 'bg-yellow-600 border-yellow-500 text-white font-bold'
+                : 'bg-gray-800 border-gray-700 hover:bg-gray-700 text-gray-300 hover:text-white'
               }`}
             title={appMode === 'seferManual' ? "Volver a la diapositiva" : "Activar Sefer manual"}
           >
@@ -1811,6 +1954,145 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
 
       {/* ── App Mode Wrapper ───────────────────────────────── */}
       <div id="section-app-mode-wrapper" className="flex-1 min-h-0 overflow-auto flex flex-col">
+        {isMusicPanelOpen && (
+          <div className="shrink-0 border-b border-gray-700 bg-gray-950/80 p-3.5 flex flex-col md:flex-row md:items-end justify-between gap-3 text-xs">
+            {/* Left: Track Select & Playback control */}
+            <div className="flex flex-wrap items-end gap-3 flex-1 md:flex-none">
+              <div className="flex flex-col gap-1 w-full sm:w-56">
+                <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">Pista de Audio</label>
+                <select
+                  value={audioState.audioSrc || ''}
+                  onChange={(e) => handleSelectAudioTrack(e.target.value)}
+                  className="w-full bg-gray-900 border border-gray-700 rounded px-2.5 py-1.5 focus:border-yellow-500 outline-none text-white cursor-pointer"
+                >
+                  <option value="">-- Sin Música / Silencio --</option>
+                  {availableAudioFiles.map((file) => (
+                    <option key={file} value={file}>
+                      {decodeURIComponent(file.split('/').pop() || '')}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex items-center gap-2">
+                {/* Play/Pause Button */}
+                <button
+                  type="button"
+                  onClick={togglePlayback}
+                  disabled={!audioState.audioSrc}
+                  className="flex items-center justify-center p-2.5 rounded bg-yellow-600 hover:bg-yellow-500 text-white transition-all disabled:opacity-40 disabled:hover:bg-yellow-600 cursor-pointer shadow-sm"
+                  title={audioState.isPlaying ? "Pausar" : "Reproducir"}
+                >
+                  {audioState.isPlaying ? <Pause size={14} /> : <Play size={14} />}
+                </button>
+
+                {/* Mute/Volume Button */}
+                <button
+                  type="button"
+                  onClick={toggleMute}
+                  disabled={!audioState.audioSrc}
+                  className={`flex items-center justify-center p-2.5 rounded transition-all cursor-pointer ${audioState.volume === 0
+                      ? 'bg-red-650 text-white animate-pulse border border-red-500'
+                      : 'bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700'
+                    }`}
+                  title={audioState.volume === 0 ? "Activar Sonido" : "Silenciar"}
+                >
+                  {audioState.volume === 0 ? (
+                    <div className="relative">
+                      <Music size={14} className="text-red-200" />
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <span className="text-red-300 font-extrabold text-sm select-none pointer-events-none" style={{ transform: 'rotate(45deg)' }}>/</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <Volume2 size={14} />
+                  )}
+                </button>
+
+                {/* Volume Slider */}
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.05"
+                  value={audioState.volume}
+                  onChange={(e) => {
+                    onAudioStateChange({
+                      ...audioState,
+                      volume: parseFloat(e.target.value),
+                      lastUpdatedBy: 'controller',
+                      changeType: 'volume',
+                      timestamp: Date.now(),
+                    });
+                  }}
+                  disabled={!audioState.audioSrc}
+                  className="w-16 h-1 bg-gray-700 rounded appearance-none cursor-pointer accent-yellow-500 disabled:opacity-30"
+                />
+              </div>
+            </div>
+
+            {/* Center: Scrubber ProgressBar */}
+            <div className="flex-1 flex items-center gap-2.5 w-full min-w-0">
+              <span className="font-mono text-gray-400 text-[11px] shrink-0">{formatTime(audioState.currentTime)}</span>
+              <input
+                type="range"
+                min="0"
+                max={audioState.duration || 100}
+                step="0.1"
+                value={audioState.currentTime}
+                onChange={(e) => {
+                  const val = parseFloat(e.target.value);
+                  onAudioStateChange({
+                    ...audioState,
+                    currentTime: val,
+                    lastUpdatedBy: 'controller',
+                    changeType: 'seek',
+                    timestamp: Date.now(),
+                  });
+                }}
+                disabled={!audioState.audioSrc}
+                className="flex-1 h-1 bg-gray-700 rounded appearance-none cursor-pointer accent-yellow-500 disabled:opacity-30 min-w-0"
+              />
+              <span className="font-mono text-gray-400 text-[11px] shrink-0">{formatTime(audioState.duration)}</span>
+            </div>
+
+            {/* Right: Sync Mode & Editor Window Trigger */}
+            <div className="flex items-end gap-3 w-full md:w-auto">
+              <div className="flex flex-col gap-1 w-full sm:w-44">
+                <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">Sincronización</label>
+                <select
+                  value={audioState.syncMode}
+                  onChange={(e) => {
+                    onAudioStateChange({
+                      ...audioState,
+                      syncMode: e.target.value as any,
+                      lastUpdatedBy: 'controller',
+                      changeType: 'syncMode',
+                      timestamp: Date.now(),
+                    });
+                  }}
+                  disabled={!audioState.audioSrc}
+                  className="w-full bg-gray-900 border border-gray-700 rounded px-2.5 py-1.5 focus:border-yellow-500 outline-none text-white cursor-pointer"
+                >
+                  <option value="none">Ninguna (Música Fondo)</option>
+                  <option value="unilateral">Unilateral (Música cambia diapositiva)</option>
+                  <option value="bilateral">Bilateral (Sincro Bidireccional)</option>
+                </select>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleOpenAudioEditor}
+                className="flex items-center gap-1 py-1.5 px-3 rounded bg-gray-900 border border-gray-700 hover:bg-gray-800 text-yellow-500 font-bold transition-all cursor-pointer shadow-sm shrink-0 whitespace-nowrap"
+                title="Abrir Editor de Sincronización en ventana externa (🎼)"
+              >
+                <Settings size={13} />
+                <span>🎼</span>
+              </button>
+            </div>
+          </div>
+        )}
+
         {appMode === 'seferManual' && (
           <div className="shrink-0 border-b border-gray-700 bg-gray-950/70">
             <div>
@@ -2154,7 +2436,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
 
           {/* ── Main Area ───────────────────────────────── */}
           <div id="section-main-area" className="flex-1 overflow-y-auto p-3 md:p-4">
-               {editorMode === 'list' ? (
+            {editorMode === 'list' ? (
               /* ── Presentation Manager (List Mode) ───────────────────────────────── */
               <div id="section-presentation-manager" className="flex-1 flex flex-col gap-3">
                 {/* Header del Gestor */}
@@ -2242,8 +2524,8 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                       {titleMatches.map((p) => {
                         const originalIdx = presentations.findIndex(orig => orig.id === p.id);
                         const isCurrent = currentPresentation?.id === p.id;
-                        const isExpanded = expandedRows[p.id] !== undefined 
-                          ? expandedRows[p.id] 
+                        const isExpanded = expandedRows[p.id] !== undefined
+                          ? expandedRows[p.id]
                           : (searchQuery.trim() !== '' && contentMatches.some(match => match.id === p.id));
                         return (
                           <React.Fragment key={p.id}>
@@ -2359,11 +2641,10 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                                             onClick={() => {
                                               onSelectPresentation(p, slideIdx);
                                             }}
-                                            className={`transition-all text-xs border rounded cursor-pointer px-2 py-1 ${
-                                              slideMatchesQuery
+                                            className={`transition-all text-xs border rounded cursor-pointer px-2 py-1 ${slideMatchesQuery
                                                 ? 'border-yellow-500 bg-yellow-950/30 text-yellow-300 ring-1 ring-yellow-500/40'
                                                 : 'bg-gray-800 hover:bg-yellow-600 hover:text-white border-gray-700 text-gray-300'
-                                            }`}
+                                              }`}
                                           >
                                             <span className="font-bold text-[10px] mr-1 text-yellow-500">
                                               {slide.label}:
@@ -2400,8 +2681,8 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                       {contentMatches.map((p) => {
                         const originalIdx = presentations.findIndex(orig => orig.id === p.id);
                         const isCurrent = currentPresentation?.id === p.id;
-                        const isExpanded = expandedRows[p.id] !== undefined 
-                          ? expandedRows[p.id] 
+                        const isExpanded = expandedRows[p.id] !== undefined
+                          ? expandedRows[p.id]
                           : (searchQuery.trim() !== '' && contentMatches.some(match => match.id === p.id));
                         return (
                           <React.Fragment key={p.id}>
@@ -2520,11 +2801,10 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                                             onClick={() => {
                                               onSelectPresentation(p, slideIdx);
                                             }}
-                                            className={`transition-all text-xs border rounded cursor-pointer px-2 py-1 ${
-                                              slideMatchesQuery
+                                            className={`transition-all text-xs border rounded cursor-pointer px-2 py-1 ${slideMatchesQuery
                                                 ? 'border-yellow-500 bg-yellow-950/30 text-yellow-300 ring-1 ring-yellow-500/40'
                                                 : 'bg-gray-800 hover:bg-yellow-600 hover:text-white border-gray-700 text-gray-300'
-                                            }`}
+                                              }`}
                                           >
                                             <span className="font-bold text-[10px] mr-1 text-yellow-500">
                                               {slide.label}:
@@ -2557,7 +2837,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                         </tr>
                       )}
                     </tbody>
-                </table>
+                  </table>
                 </div>
               </div>
             ) : (

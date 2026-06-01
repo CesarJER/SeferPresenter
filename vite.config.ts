@@ -123,6 +123,76 @@ function fileBackendPlugin(): Plugin {
           return;
         }
         
+        if (req.url === '/api/audio' && req.method === 'GET') {
+          const audioDir = path.resolve(__dirname, 'public/audio');
+          const musicDirLower = path.resolve(__dirname, 'public/music');
+          const musicDirCapital = path.resolve(__dirname, 'public/Music');
+
+          if (!fs.existsSync(audioDir)) {
+            fs.mkdirSync(audioDir, { recursive: true });
+          }
+
+          const audioResults: string[] = [];
+
+          const walkAudio = (dir: string) => {
+            if (!fs.existsSync(dir)) return;
+            const list = fs.readdirSync(dir);
+            list.forEach((file) => {
+              const fullPath = path.join(dir, file);
+              const stat = fs.statSync(fullPath);
+              if (stat && stat.isDirectory()) {
+                walkAudio(fullPath);
+              } else {
+                if (fullPath.match(/\.(mp3|wav|ogg|m4a|aac|flac|webm)$/i)) {
+                  const relPath = path.relative(path.resolve(__dirname, 'public'), fullPath);
+                  audioResults.push('/' + relPath.replace(/\\/g, '/'));
+                }
+              }
+            });
+          };
+
+          walkAudio(audioDir);
+          walkAudio(musicDirLower);
+          walkAudio(musicDirCapital);
+
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify(audioResults));
+          return;
+        }
+
+        if (req.url === '/api/audio-sync' && req.method === 'GET') {
+          const syncPath = path.resolve(__dirname, 'audio_sync.json');
+          if (fs.existsSync(syncPath)) {
+            const content = fs.readFileSync(syncPath, 'utf-8').replace(/^\uFEFF/, '');
+            res.setHeader('Content-Type', 'application/json');
+            res.end(content);
+          } else {
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify([]));
+          }
+          return;
+        }
+
+        if (req.url === '/api/audio-sync' && req.method === 'POST') {
+          let body = '';
+          req.on('data', (chunk: Buffer) => {
+            body += chunk.toString();
+          });
+          req.on('end', () => {
+            try {
+              const syncPath = path.resolve(__dirname, 'audio_sync.json');
+              const parsed = JSON.parse(body);
+              fs.writeFileSync(syncPath, JSON.stringify(parsed, null, 2), 'utf-8');
+              res.writeHead(200, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ success: true }));
+            } catch (err) {
+              res.writeHead(400, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: 'Invalid JSON' }));
+            }
+          });
+          return;
+        }
+
         if (req.url === '/api/presentations' && req.method === 'GET') {
           const pPath = path.resolve(__dirname, 'presentations.json');
           if (fs.existsSync(pPath)) {

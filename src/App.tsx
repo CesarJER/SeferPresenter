@@ -5,6 +5,10 @@ import SeferReaderScreen from './components/SeferReaderScreen'
 import defaultPresentations from '../presentations.json'
 import type { SeferReaderState } from './hooks/useSeferReader'
 import { getScriptureChapterVerses } from './utils/scriptureLookup'
+import type { AudioState, AudioSyncMap } from './types/audio'
+import { DEFAULT_AUDIO_STATE } from './types/audio'
+import { Music } from 'lucide-react';
+import { AudioSyncEditor } from './components/AudioSyncEditor';
 
 export type SeferOnlineRefPayload = {
   book?: string;
@@ -234,7 +238,9 @@ function App() {
   // States
   // ────────────────────────────────────────────────────────────────
   // Detect if we are in control panel mode based on URL query
-  const isControlMode = new URLSearchParams(window.location.search).get('mode') === 'control';
+  const modeParam = new URLSearchParams(window.location.search).get('mode');
+  const isControlMode = modeParam === 'control';
+  const isAudioEditorMode = modeParam === 'audio-editor';
   const storedPresenterState = loadStoredPresenterState();
 
   const [presentations, setPresentations] = useState<Presentation[]>([]);
@@ -251,9 +257,15 @@ function App() {
   const [userSelectedBackground, setUserSelectedBackground] = useState<string | null>(null);
   const [videoState, setVideoState] = useState<VideoState | null>(null);
 
+  // Audio state
+  const [audioState, setAudioState] = useState<AudioState>(DEFAULT_AUDIO_STATE);
+  const [audioSyncMaps, setAudioSyncMaps] = useState<AudioSyncMap[]>([]);
+  const [availableAudioFiles, setAvailableAudioFiles] = useState<string[]>([]);
+
   // Scripture reader state
   const [appMode, setAppMode] = useState<AppMode>('slides');
   const [scriptureState, setScriptureState] = useState<ScriptureNavState | null>(null);
+  const [autoplayBlocked, setAutoplayBlocked] = useState<boolean>(false);
 
   const currentPresentationRef = useRef<Presentation | null>(currentPresentation);
   const currentSlideIndexRef = useRef(currentSlideIndex);
@@ -261,6 +273,9 @@ function App() {
   const lockedBackgroundValueRef = useRef(lockedBackgroundValue);
   const userSelectedBackgroundRef = useRef(userSelectedBackground);
   const videoStateRef = useRef<VideoState | null>(null);
+  const audioStateRef = useRef<AudioState>(audioState);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const lastSyncCueRef = useRef<number>(-1);
   const lastPhysicalBgRef = useRef<string>('');
   const appModeRef = useRef<AppMode>(appMode);
   const scriptureStateRef = useRef<ScriptureNavState | null>(scriptureState);
@@ -274,6 +289,10 @@ function App() {
   useEffect(() => {
     videoStateRef.current = videoState;
   }, [videoState]);
+
+  useEffect(() => {
+    audioStateRef.current = audioState;
+  }, [audioState]);
 
   useEffect(() => {
     appModeRef.current = appMode;
@@ -311,16 +330,19 @@ function App() {
     userSelectedBg: string | null,
     vState?: VideoState | null,
     aMode?: AppMode,
-    scrState?: ScriptureNavState | null
+    scrState?: ScriptureNavState | null,
+    audState?: AudioState
   ) => {
     const activeVideoState = vState !== undefined ? vState : videoStateRef.current;
     const activeAppMode = aMode !== undefined ? aMode : appModeRef.current;
     const activeScriptureState = scrState !== undefined ? scrState : scriptureStateRef.current;
+    const activeAudioState = audState !== undefined ? audState : audioStateRef.current;
 
     console.log("[App] syncState - isControlMode:", isControlMode, "currentTime:", activeVideoState?.currentTime, "lastUpdatedBy:", activeVideoState?.lastUpdatedBy);
 
     // Synchronize local React state
     setVideoState(activeVideoState);
+    if (audState !== undefined) setAudioState(audState);
 
     persistState(presentation, slideIndex, bgLock, lockedBg);
     channel.postMessage({
@@ -335,6 +357,7 @@ function App() {
       videoState: activeVideoState,
       appMode: activeAppMode,
       scriptureState: activeScriptureState,
+      audioState: activeAudioState,
     });
 
     if (__APP_MODE__ !== 'singlefile') {
@@ -352,6 +375,7 @@ function App() {
           videoState: activeVideoState,
           appMode: activeAppMode,
           scriptureState: activeScriptureState,
+          audioState: activeAudioState,
         })
       }).catch(err => console.error("Error syncing state to network", err));
     }
@@ -518,6 +542,16 @@ function App() {
         .then(res => res.json())
         .then(data => setPresentations(data.map(normalizePresentation)))
         .catch(err => console.error("Error loading presentations", err));
+
+      fetch('/api/audio')
+        .then(res => res.json())
+        .then(data => setAvailableAudioFiles(data))
+        .catch(err => console.error("Error loading audio files", err));
+
+      fetch('/api/audio-sync')
+        .then(res => res.json())
+        .then(data => setAudioSyncMaps(data))
+        .catch(err => console.error("Error loading audio sync maps", err));
     }
   }, []);
 
@@ -527,6 +561,10 @@ function App() {
       const handleMessage = (event: MessageEvent) => {
         const data = event.data;
         if (data?.clientId === clientIdRef.current) return;
+        if (data.type === 'AUDIO_SYNC_MAPS_UPDATE') {
+          setAudioSyncMaps(data.maps);
+          return;
+        }
         console.log("[Presenter App] BroadcastChannel message received:", data.type, "videoState currentTime:", data.videoState?.currentTime);
         if (data.type === 'SYNC_STATE') {
           const normalizedPresentation = data.presentation ? normalizePresentation(data.presentation) : null;
@@ -555,6 +593,9 @@ function App() {
           if (data.scriptureState !== undefined && JSON.stringify(scriptureStateRef.current) !== JSON.stringify(data.scriptureState)) {
             setScriptureState(data.scriptureState);
           }
+          if (data.audioState !== undefined && JSON.stringify(audioStateRef.current) !== JSON.stringify(data.audioState)) {
+            setAudioState(data.audioState);
+          }
 
           persistState(
             normalizedPresentation,
@@ -575,6 +616,10 @@ function App() {
       const handleMessage = (event: MessageEvent) => {
         console.log("[Control App] BroadcastChannel message received:", event.data.type, "videoState currentTime:", event.data.videoState?.currentTime);
         if (event.data?.clientId === clientIdRef.current) return;
+        if (event.data.type === 'AUDIO_SYNC_MAPS_UPDATE') {
+          setAudioSyncMaps(event.data.maps);
+          return;
+        }
         if (event.data.type === 'REQUEST_STATE') {
           syncState(
             currentPresentationRef.current,
@@ -584,7 +629,8 @@ function App() {
             userSelectedBackgroundRef.current,
             videoStateRef.current,
             appModeRef.current,
-            scriptureStateRef.current
+            scriptureStateRef.current,
+            audioStateRef.current
           );
         } else if (event.data.type === 'SYNC_STATE') {
           const normalizedPresentation = event.data.presentation ? normalizePresentation(event.data.presentation) : null;
@@ -612,6 +658,9 @@ function App() {
           }
           if (event.data.scriptureState !== undefined && JSON.stringify(scriptureStateRef.current) !== JSON.stringify(event.data.scriptureState)) {
             setScriptureState(event.data.scriptureState);
+          }
+          if (event.data.audioState !== undefined && JSON.stringify(audioStateRef.current) !== JSON.stringify(event.data.audioState)) {
+            setAudioState(event.data.audioState);
           }
 
           persistState(
@@ -651,7 +700,8 @@ function App() {
           userSelectedBackgroundRef.current !== data.userSelectedBackground ||
           JSON.stringify(videoStateRef.current) !== JSON.stringify(data.videoState) ||
           appModeRef.current !== data.appMode ||
-          JSON.stringify(scriptureStateRef.current) !== JSON.stringify(data.scriptureState);
+          JSON.stringify(scriptureStateRef.current) !== JSON.stringify(data.scriptureState) ||
+          JSON.stringify(audioStateRef.current) !== JSON.stringify(data.audioState);
 
         if (isDifferent) {
           setCurrentPresentation(normalizedPresentation);
@@ -673,6 +723,9 @@ function App() {
           }
           if (data.scriptureState !== undefined) {
             setScriptureState(data.scriptureState);
+          }
+          if (data.audioState !== undefined) {
+            setAudioState(data.audioState);
           }
           persistState(
             normalizedPresentation,
@@ -1066,6 +1119,236 @@ function App() {
     syncState,
   ]);
 
+  // ── Projection Audio Playback & Sync ──────────────────────────
+  // 1. Load/change source
+  useEffect(() => {
+    if (isControlMode) return;
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    if (audioState.audioSrc) {
+      const encodedSrc = encodeURI(audioState.audioSrc);
+      const targetUrl = window.location.origin + encodedSrc;
+      
+      const currentSrcDecoded = decodeURIComponent(audio.src);
+      const targetUrlDecoded = decodeURIComponent(targetUrl);
+      
+      if (currentSrcDecoded !== targetUrlDecoded && audio.getAttribute('data-src') !== audioState.audioSrc) {
+        audio.src = encodedSrc;
+        audio.setAttribute('data-src', audioState.audioSrc);
+        audio.load();
+        lastSyncCueRef.current = -1;
+      }
+    } else {
+      audio.pause();
+      audio.removeAttribute('src');
+      audio.setAttribute('data-src', '');
+    }
+  }, [audioState.audioSrc, isControlMode]);
+
+  // 2. Sync playback settings from controller (play/pause/volume/currentTime)
+  useEffect(() => {
+    if (isControlMode) return;
+    const audio = audioRef.current;
+    if (!audio || !audioState.audioSrc) return;
+    if (audioState.lastUpdatedBy !== 'controller') return;
+
+    if (audioState.changeType === 'volume') {
+      if (audio.volume !== audioState.volume) {
+        audio.volume = audioState.volume;
+      }
+    } else if (audioState.changeType === 'seek') {
+      if (Math.abs(audio.currentTime - audioState.currentTime) > 0.8) {
+        audio.currentTime = audioState.currentTime;
+      }
+    } else if (audioState.changeType === 'playState') {
+      if (audioState.isPlaying && audio.paused) {
+        audio.play()
+          .then(() => setAutoplayBlocked(false))
+          .catch(err => {
+            console.error('[App] Error playing audio:', err);
+            if (err.name === 'NotAllowedError') {
+              setAutoplayBlocked(true);
+            }
+          });
+      } else if (!audioState.isPlaying && !audio.paused) {
+        audio.pause();
+      }
+    } else if (audioState.changeType === 'track') {
+      if (audio.volume !== audioState.volume) {
+        audio.volume = audioState.volume;
+      }
+      if (Math.abs(audio.currentTime - audioState.currentTime) > 0.8) {
+        audio.currentTime = audioState.currentTime;
+      }
+      if (audioState.isPlaying && audio.paused) {
+        audio.play().then(() => setAutoplayBlocked(false)).catch(() => {});
+      } else if (!audioState.isPlaying && !audio.paused) {
+        audio.pause();
+      }
+    }
+  }, [audioState, isControlMode]);
+
+  // 3. Telemetry emission back to the controller
+  useEffect(() => {
+    if (isControlMode) return;
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    let intervalId: ReturnType<typeof setInterval> | null = null;
+    let lastTimeEmitted = -1;
+
+    const emitAudioTelemetry = (force = false) => {
+      const current = audioStateRef.current;
+      if (!current) return;
+      
+      // Throttle telemetry to reduce network traffic
+      const isSignificantJump = Math.abs(audio.currentTime - lastTimeEmitted) > 2.0;
+      const isPeriodicTick = !audio.paused && (Math.floor(audio.currentTime) % 5 === 0) && (Math.floor(audio.currentTime) !== Math.floor(lastTimeEmitted));
+      
+      if (!force && !isSignificantJump && !isPeriodicTick) {
+        return;
+      }
+      
+      lastTimeEmitted = audio.currentTime;
+
+      syncState(
+        currentPresentationRef.current,
+        currentSlideIndexRef.current,
+        backgroundLockRef.current,
+        lockedBackgroundValueRef.current,
+        userSelectedBackgroundRef.current,
+        videoStateRef.current,
+        appModeRef.current,
+        scriptureStateRef.current,
+        {
+          ...current,
+          isPlaying: !audio.paused,
+          currentTime: audio.currentTime,
+          duration: Number.isFinite(audio.duration) ? audio.duration : 0,
+          volume: audio.volume,
+          lastUpdatedBy: 'projection',
+          timestamp: Date.now(),
+        }
+      );
+    };
+
+    const handlePlay = () => {
+      if (intervalId) clearInterval(intervalId);
+      intervalId = setInterval(() => emitAudioTelemetry(false), 500);
+      emitAudioTelemetry(true);
+    };
+
+    const handlePause = () => {
+      if (intervalId) { clearInterval(intervalId); intervalId = null; }
+      emitAudioTelemetry(true);
+    };
+
+    const handleEnded = () => {
+      if (intervalId) { clearInterval(intervalId); intervalId = null; }
+      emitAudioTelemetry(true);
+    };
+
+    const handleLoadedMetadata = () => emitAudioTelemetry(true);
+
+    audio.addEventListener('play', handlePlay);
+    audio.addEventListener('pause', handlePause);
+    audio.addEventListener('ended', handleEnded);
+    audio.addEventListener('loadedmetadata', handleLoadedMetadata);
+
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+      audio.removeEventListener('play', handlePlay);
+      audio.removeEventListener('pause', handlePause);
+      audio.removeEventListener('ended', handleEnded);
+      audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
+    };
+  }, [isControlMode, syncState]);
+
+  // 4. Drive slide/verse navigation from audio cues (Unilateral / Bilateral)
+  useEffect(() => {
+    if (isControlMode) return;
+    const audio = audioRef.current;
+    if (!audio || !audioState.audioSrc || !audioState.isPlaying) return;
+    if (audioState.syncMode === 'none') return;
+
+    const syncMap = audioSyncMaps.find(m => m.id === audioState.activeSyncMapId);
+    if (!syncMap || syncMap.cues.length === 0) return;
+
+    const intervalId = setInterval(() => {
+      const currentTime = audio.currentTime;
+      let activeCueIdx = -1;
+      for (let i = syncMap.cues.length - 1; i >= 0; i--) {
+        if (currentTime >= syncMap.cues[i].timeSec) {
+          activeCueIdx = i;
+          break;
+        }
+      }
+
+      if (activeCueIdx >= 0 && activeCueIdx !== lastSyncCueRef.current) {
+        lastSyncCueRef.current = activeCueIdx;
+        const cue = syncMap.cues[activeCueIdx];
+        
+        // Trigger slide/verse change on projection
+        handleSelectPresentationAndSlide(
+          currentPresentationRef.current,
+          cue.slideIndex,
+          'forward',
+          cue.verse
+        );
+      }
+    }, 200);
+
+    return () => clearInterval(intervalId);
+  }, [audioState.audioSrc, audioState.isPlaying, audioState.syncMode, audioState.activeSyncMapId, audioSyncMaps, isControlMode, handleSelectPresentationAndSlide]);
+
+  // 5. Bilateral sync: Seek audio on manual slide/verse changes
+  useEffect(() => {
+    if (isControlMode) return;
+    const audio = audioRef.current;
+    if (!audio || !audioState.audioSrc) return;
+    if (audioState.syncMode !== 'bilateral') return;
+
+    const syncMap = audioSyncMaps.find(m => m.id === audioState.activeSyncMapId);
+    if (!syncMap || syncMap.cues.length === 0) return;
+
+    // Find cue matching current slide and verse
+    const currentVerse = scriptureState?.verse;
+    
+    // Find matching cue
+    const matchingCue = syncMap.cues.find(cue => {
+      if (cue.slideIndex !== currentSlideIndex) return false;
+      if (cue.verse || currentVerse) {
+        return cue.verse === currentVerse;
+      }
+      return true;
+    });
+
+    if (matchingCue) {
+      if (Math.abs(audio.currentTime - matchingCue.timeSec) > 1.0) {
+        audio.currentTime = matchingCue.timeSec;
+        
+        // Emit updated time to controller
+        syncState(
+          currentPresentationRef.current,
+          currentSlideIndexRef.current,
+          backgroundLockRef.current,
+          lockedBackgroundValueRef.current,
+          userSelectedBackgroundRef.current,
+          videoStateRef.current,
+          appModeRef.current,
+          scriptureStateRef.current,
+          {
+            ...audioStateRef.current,
+            currentTime: matchingCue.timeSec,
+            lastUpdatedBy: 'projection',
+            timestamp: Date.now(),
+          }
+        );
+      }
+    }
+  }, [currentSlideIndex, scriptureState?.verse, audioState.syncMode, audioState.activeSyncMapId, audioSyncMaps, isControlMode, syncState]);
+
   // Helper: project a scripture verse (called from MenuPopup/SeferControlPanel)
   const handleProjectScripture = useCallback((
     state: SeferReaderState,
@@ -1245,6 +1528,37 @@ function App() {
     );
   }, [handleSelectPresentationAndSlide]);
 
+  if (isAudioEditorMode) {
+    return (
+      <div className="w-screen h-screen bg-gray-900 overflow-hidden">
+        <AudioSyncEditor
+          isOpen={true}
+          onClose={() => window.close()}
+          presentations={presentations}
+          activePresentationId={currentPresentation?.id || null}
+          availableAudioFiles={availableAudioFiles}
+          audioSyncMaps={audioSyncMaps}
+          onAudioSyncMapsChange={(maps) => {
+            setAudioSyncMaps(maps);
+            if (__APP_MODE__ !== 'singlefile') {
+              fetch('/api/audio-sync', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(maps)
+              }).catch(err => console.error('Error saving audio sync maps', err));
+            } else {
+              localStorage.setItem('sefer-presenter-audio-sync', JSON.stringify(maps));
+            }
+            channel.postMessage({
+              type: 'AUDIO_SYNC_MAPS_UPDATE',
+              maps
+            });
+          }}
+        />
+      </div>
+    );
+  }
+
   if (isControlMode) {
     return (
       <div id="section-app-control-mode" className="w-full h-screen bg-gray-900 overflow-hidden">
@@ -1274,6 +1588,25 @@ function App() {
           }}
           videoState={videoState}
           onVideoStateChange={(state) => syncState(currentPresentation, currentSlideIndex, backgroundLock, lockedBackgroundValue, userSelectedBackground, state)}
+          audioState={audioState}
+          audioSyncMaps={audioSyncMaps}
+          availableAudioFiles={availableAudioFiles}
+          onAudioStateChange={(state) => {
+            setAudioState(state);
+            syncState(currentPresentation, currentSlideIndex, backgroundLock, lockedBackgroundValue, userSelectedBackground, undefined, undefined, undefined, state);
+          }}
+          onAudioSyncMapsChange={(maps) => {
+            setAudioSyncMaps(maps);
+            if (__APP_MODE__ !== 'singlefile') {
+              fetch('/api/audio-sync', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(maps)
+              }).catch(err => console.error('Error saving audio sync maps', err));
+            } else {
+              localStorage.setItem('sefer-presenter-audio-sync', JSON.stringify(maps));
+            }
+          }}
           appMode={appMode}
           scriptureState={scriptureState}
           onUpdateScriptureFontSizes={handleUpdateScriptureFontSizes}
@@ -1389,39 +1722,61 @@ function App() {
   }
 
   // Presenter (big screen) mode
-  if ((appMode === 'seferManual' || (appMode === 'scripture' && scriptureState?.scriptureKind !== 'tanaj')) && scriptureState) {
-    return (
-      <div id="section-app-scripture-reader-view" className="w-full h-screen overflow-hidden">
-        {/* ── Scripture Reader Screen ───────────────────────────────── */}
-        <SeferReaderScreen
-          scriptureState={scriptureState}
-          onVerseSelected={handleSeferOnlineRef}
-          onBoundaryReached={handleScriptureBoundary}
-          onLogoClick={() => {
-            window.open(`${window.location.origin}?mode=control`, 'ControlPanel', 'width=1100,height=800');
-          }}
-        />
-      </div>
-    );
-  }
-
   return (
-    <div id="section-app-presenter-slide-view" className="w-full h-screen overflow-hidden bg-black relative">
-      {/* ── Slides Presenter Screen ───────────────────────────────── */}
-      <PresenterScreen
-        background={activeBackground}
-        slide={activePresenterSlide}
-        presentationTitle={currentPresentation?.title || ''}
-        fontScale={currentPresentation?.fontScale ?? 1}
-        onLogoClick={() => {
-          window.open(`${window.location.origin}?mode=control`, 'ControlPanel', 'width=1100,height=800');
-        }}
-        videoState={videoState}
-        onVideoStateChange={(state) => syncState(currentPresentation, currentSlideIndex, backgroundLock, lockedBackgroundValue, userSelectedBackground, state)}
-      />
+    <div className="w-full h-screen overflow-hidden bg-black relative">
+      {(appMode === 'seferManual' || (appMode === 'scripture' && scriptureState?.scriptureKind !== 'tanaj')) && scriptureState ? (
+        <div id="section-app-scripture-reader-view" className="w-full h-full overflow-hidden">
+          {/* ── Scripture Reader Screen ───────────────────────────────── */}
+          <SeferReaderScreen
+            scriptureState={scriptureState}
+            onVerseSelected={handleSeferOnlineRef}
+            onBoundaryReached={handleScriptureBoundary}
+            onLogoClick={() => {
+              window.open(`${window.location.origin}?mode=control`, 'ControlPanel', 'width=1100,height=800');
+            }}
+          />
+        </div>
+      ) : (
+        <div id="section-app-presenter-slide-view" className="w-full h-full overflow-hidden relative">
+          {/* ── Slides Presenter Screen ───────────────────────────────── */}
+          <PresenterScreen
+            background={activeBackground}
+            slide={activePresenterSlide}
+            presentationTitle={currentPresentation?.title || ''}
+            fontScale={currentPresentation?.fontScale ?? 1}
+            onLogoClick={() => {
+              window.open(`${window.location.origin}?mode=control`, 'ControlPanel', 'width=1100,height=800');
+            }}
+            videoState={videoState}
+            onVideoStateChange={(state) => syncState(currentPresentation, currentSlideIndex, backgroundLock, lockedBackgroundValue, userSelectedBackground, state)}
+          />
+        </div>
+      )}
+
+      {/* Hidden audio element for karaoke and music sync */}
+      <audio ref={audioRef} preload="auto" style={{ display: 'none' }} />
+
+      {/* Autoplay block overlay banner */}
+      {autoplayBlocked && (
+        <div 
+          onClick={() => {
+            const audio = audioRef.current;
+            if (audio) {
+              audio.play()
+                .then(() => setAutoplayBlocked(false))
+                .catch(err => console.error("Autoplay retry failed:", err));
+            }
+          }}
+          className="absolute bottom-6 left-1/2 -translate-x-1/2 z-50 bg-yellow-600 hover:bg-yellow-500 text-white font-bold text-xs px-5 py-2.5 rounded-full shadow-xl cursor-pointer flex items-center gap-2 animate-bounce transition-all border border-yellow-400 shadow-yellow-950/30"
+          title="Haga clic aquí para habilitar la reproducción de audio en esta pestaña"
+        >
+          <Music size={13} className="animate-pulse text-white" />
+          <span>Haga clic para habilitar sonido</span>
+        </div>
+      )}
     </div>
-  )
+  );
 }
 
-export default App
+export default App;
 
