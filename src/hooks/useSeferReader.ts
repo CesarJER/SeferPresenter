@@ -86,7 +86,6 @@ export function useSeferReader(): UseSeferReaderResult {
   const [selectedChapter, setSelectedChapterState] = useState('1');
   const [selectedVerse, setSelectedVerseState] = useState('1');
 
-  const loadedBooksRef = useRef<Map<string, VerseData[]>>(new Map());
   const metadataRef = useRef<AppMetadata>({});
   const rangeStartVerseRef = useRef<string | null>(null);
   const rangeEndVerseRef = useRef<string | null>(null);
@@ -130,7 +129,6 @@ export function useSeferReader(): UseSeferReaderResult {
     setIsLoading(true);
     loadBookData(selectedBook, parseVerses)
       .then((parsed) => {
-        loadedBooksRef.current.set(selectedBook, parsed);
         setBookData(parsed);
       })
       .catch((e) => console.error('SeferReader: error loading book', e))

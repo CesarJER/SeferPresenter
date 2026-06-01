@@ -1,5 +1,5 @@
-import Papa from 'papaparse';
 import { getMetadata, loadBookData, resolveBookName } from './metadataCache';
+import { parseVerses } from './scriptureParser';
 
 export interface ScriptureVerse {
   bookEs: string;
@@ -39,11 +39,7 @@ const loadBook = async (bookToken: string) => {
   if (!bookName) throw new Error(`Libro no encontrado: ${bookToken}`);
 
   return loadBookData(bookName, (text) =>
-    Papa.parse<ScriptureVerse>(text, {
-      header: true,
-      delimiter: '\t',
-      skipEmptyLines: true,
-    }).data.filter((row) => row.bookEs && row.chapter && row.verse)
+    parseVerses(text).filter((row) => row.bookEs && row.chapter && row.verse)
   );
 };
 
