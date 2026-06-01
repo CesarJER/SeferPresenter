@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import Papa from 'papaparse';
+import { loadBookData, getMetadata } from '../utils/metadataCache';
+import { parseVerses } from '../utils/scriptureParser';
 
 // ---------------------------------------------------------------------------
 // Types (inline — avoids @sefer/core circular dep during bootstrap)
@@ -29,48 +30,6 @@ export interface BookMetadata {
 export type AppMetadata = Record<string, BookMetadata>;
 
 // ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-const removeNiqqudFromPlainText = (text: string) =>
-  text.replace(/\u05BE/g, ' ').replace(/[\u0591-\u05C7]/g, '').replace(/ \(.+\)/g, '');
-
-const removeNiqqudPreserveHtml = (html: string): string =>
-  html.split(/(<[^>]+>)/g)
-    .map((part) => (part.startsWith('<') ? part : removeNiqqudFromPlainText(part)))
-    .join('');
-
-const sanitizeHtmlLight = (html: string): string => {
-  // Simple pass-through — full sanitizer available in @sefer/core
-  return html;
-};
-
-function parseVerses(source: string): VerseData[] {
-  const result = Papa.parse<VerseData>(source, {
-    header: true,
-    delimiter: '\t',
-    skipEmptyLines: true,
-  });
-  return result.data
-    .filter((row) => row.bookEs !== '')
-    .map((row) => {
-      let verseNikud = (row.verseNikud ?? '')
-        .replace(/\{\u05E4\}/g, '<br/>')
-        .replace(/\{\u05E1\}/g, '&emsp;&emsp;&emsp;')
-        .replace(/\(\u05E4\)/g, '<br/>')
-        .replace(/\(\u05E1\)/g, '&emsp;&emsp;&emsp;');
-
-      const verseNikudClean = removeNiqqudPreserveHtml(verseNikud);
-      return {
-        ...row,
-        verseNikud,
-        verseNikudClean,
-        verseNikudSanitized: sanitizeHtmlLight(verseNikud),
-        verseNikudCleanSanitized: sanitizeHtmlLight(verseNikudClean),
-      };
-    });
-}
-
-// ---------------------------------------------------------------------------
 // State types
 // ---------------------------------------------------------------------------
 export interface SeferReaderState {
@@ -82,6 +41,7 @@ export interface SeferReaderState {
   verse: string;
   verseEnd?: string;
   verseNikud: string;
+  verseNikudSanitized?: string;
   transliteration: string;
   translation: string;
   verseIdx: number;       // index in loaded book data
@@ -149,9 +109,7 @@ export function useSeferReader(): UseSeferReaderResult {
   // Load metadata on mount
   // ------------------------------------------------------------------
   useEffect(() => {
-    const base = import.meta.env.BASE_URL ?? '/';
-    fetch(`${base}metadata.json`)
-      .then((r) => r.json())
+    getMetadata()
       .then((meta: AppMetadata) => {
         setMetadata(meta);
         metadataRef.current = meta;
@@ -169,19 +127,9 @@ export function useSeferReader(): UseSeferReaderResult {
   useEffect(() => {
     if (!selectedBook || !metadataRef.current[selectedBook]) return;
 
-    const cached = loadedBooksRef.current.get(selectedBook);
-    if (cached) {
-      setBookData(cached);
-      return;
-    }
-
     setIsLoading(true);
-    const base = import.meta.env.BASE_URL ?? '/';
-    const safeFile = metadataRef.current[selectedBook].safeFile;
-    fetch(`${base}books/${safeFile}.tsv`)
-      .then((r) => r.text())
-      .then((text) => {
-        const parsed = parseVerses(text);
+    loadBookData(selectedBook, parseVerses)
+      .then((parsed) => {
         loadedBooksRef.current.set(selectedBook, parsed);
         setBookData(parsed);
       })
@@ -216,6 +164,7 @@ export function useSeferReader(): UseSeferReaderResult {
     verse: v.verse,
     verseEnd,
     verseNikud: v.verseNikudSanitized ?? v.verseNikud,
+    verseNikudSanitized: v.verseNikudSanitized,
     transliteration: v.transliteration,
     translation: v.translation,
     verseIdx: idx,

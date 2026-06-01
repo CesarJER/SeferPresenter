@@ -346,7 +346,7 @@ const SeferControlPanel: React.FC<SeferControlPanelProps> = ({
               dir={/[\u0590-\u05FF]/.test(currentVerse.verseNikud || '') ? "rtl" : "ltr"}
               className={`text-sm leading-relaxed text-[#f3c96a] font-bold ${/[\u0590-\u05FF]/.test(currentVerse.verseNikud || '') ? "text-right" : "text-left"}`}
               style={{ fontFamily: /[\u0590-\u05FF]/.test(currentVerse.verseNikud || '') ? "'Frank Ruhl Libre', 'SBL Hebrew', serif" : 'inherit' }}
-              dangerouslySetInnerHTML={{ __html: currentVerse.verseNikud }}
+              dangerouslySetInnerHTML={{ __html: currentVerse.verseNikudSanitized ?? currentVerse.verseNikud }}
             />
 
             {/* Transliteration & Translation in compact format */}

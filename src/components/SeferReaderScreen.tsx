@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
-import type { ScriptureNavState } from '../types/presentation';
+import type { ScriptureNavState, SeferOnlineRefPayload } from '../types/presentation';
 import type { VerseData, AppMetadata } from '../hooks/useSeferReader';
 import { parseVerses } from '../utils/scriptureParser';
+import { getMetadata, loadBookData, resolveBookName } from '../utils/metadataCache';
 import { SeferFlowView } from './SeferFlowView';
 import { VerseSidebar } from './VerseSidebar';
 import { useResizablePanel } from '../hooks/useResizablePanel';
@@ -9,7 +10,7 @@ import { numberToHebrewNumeral, numberToGreekNumeral } from '../hooks/scriptureN
 
 interface SeferReaderScreenProps {
   scriptureState: ScriptureNavState;
-  onVerseSelected: (payload: any) => void;
+  onVerseSelected: (payload: SeferOnlineRefPayload) => void;
   onBoundaryReached?: (direction: 'next' | 'previous') => void;
   onLogoClick?: () => void;
 }
@@ -25,7 +26,6 @@ export const SeferReaderScreen: React.FC<SeferReaderScreenProps> = ({
   const [selectedVerseIdx, setSelectedVerseIdx] = useState<number | null>(0);
   const [isLoading, setIsLoading] = useState(false);
 
-  const loadedBooksRef = useRef<Map<string, VerseData[]>>(new Map());
   const lastSelectedIdx = useRef<number | null>(0);
   const prevSelectedIdxRef = useRef<number | null>(null);
   const lastProcessedCommandId = useRef<number | undefined>(undefined);
@@ -34,20 +34,11 @@ export const SeferReaderScreen: React.FC<SeferReaderScreenProps> = ({
 
   // Load metadata on mount
   useEffect(() => {
-    const base = import.meta.env.BASE_URL ?? '/';
-    fetch(`${base}metadata.json`)
-      .then((r) => r.json())
+    getMetadata()
       .then((meta: AppMetadata) => {
         setMetadata(meta);
       })
       .catch((e) => console.error('SeferReaderScreen: error loading metadata', e));
-  }, []);
-
-  // Helper to resolve book name from state
-  const resolveBookName = useCallback((token: string, meta: AppMetadata): string | null => {
-    if (!token) return null;
-    if (meta[token]) return token;
-    return Object.keys(meta).find((bookName) => meta[bookName].bookAbbrevEs === token) ?? null;
   }, []);
 
   // Fetch and load book data when scriptureState.bookEs or bookAbbrevEs changes
@@ -57,20 +48,9 @@ export const SeferReaderScreen: React.FC<SeferReaderScreenProps> = ({
     const targetBook = resolveBookName(scriptureState.bookEs || scriptureState.bookAbbrevEs, metadata);
     if (!targetBook) return;
 
-    const cached = loadedBooksRef.current.get(targetBook);
-    if (cached) {
-      setData(cached);
-      return;
-    }
-
     setIsLoading(true);
-    const base = import.meta.env.BASE_URL ?? '/';
-    const safeFile = metadata[targetBook].safeFile;
-    fetch(`${base}books/${safeFile}.tsv`)
-      .then((r) => r.text())
-      .then((text) => {
-        const parsed = parseVerses(text);
-        loadedBooksRef.current.set(targetBook, parsed);
+    loadBookData(targetBook, parseVerses)
+      .then((parsed) => {
         setData(parsed);
       })
       .catch((e) => console.error('SeferReaderScreen: error loading book', e))

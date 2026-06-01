@@ -1,4 +1,5 @@
 import Papa from 'papaparse';
+import { getMetadata, loadBookData, resolveBookName } from './metadataCache';
 
 export interface ScriptureVerse {
   bookEs: string;
@@ -10,13 +11,6 @@ export interface ScriptureVerse {
   transliteration: string;
   translation: string;
 }
-
-interface BookMetadata {
-  bookAbbrevEs: string;
-  safeFile: string;
-}
-
-type AppMetadata = Record<string, BookMetadata>;
 
 export type ScriptureSlideKind = 'tanaj' | 'sefer';
 
@@ -39,49 +33,18 @@ export interface ScriptureSlideDraft {
   scriptureVerseEnd?: string;
 }
 
-const loadedBooks = new Map<string, ScriptureVerse[]>();
-let metadataPromise: Promise<AppMetadata> | null = null;
-
-const getBaseUrl = () => import.meta.env.BASE_URL ?? '/';
-
-const getMetadata = async () => {
-  if (!metadataPromise) {
-    metadataPromise = fetch(`${getBaseUrl()}metadata.json`).then((response) => {
-      if (!response.ok) throw new Error(`No se pudo cargar metadata.json (${response.status})`);
-      return response.json() as Promise<AppMetadata>;
-    });
-  }
-  return metadataPromise;
-};
-
-const resolveBookName = (bookToken: string, metadata: AppMetadata) => {
-  if (metadata[bookToken]) return bookToken;
-  return Object.keys(metadata).find((bookName) => metadata[bookName].bookAbbrevEs === bookToken) ?? null;
-};
-
 const loadBook = async (bookToken: string) => {
   const metadata = await getMetadata();
   const bookName = resolveBookName(bookToken, metadata);
   if (!bookName) throw new Error(`Libro no encontrado: ${bookToken}`);
 
-  const cached = loadedBooks.get(bookName);
-  if (cached) return cached;
-
-  const safeFile = metadata[bookName]?.safeFile;
-  if (!safeFile) throw new Error(`No hay TSV para el libro: ${bookToken}`);
-
-  const response = await fetch(`${getBaseUrl()}books/${safeFile}.tsv`);
-  if (!response.ok) throw new Error(`No se pudo cargar ${safeFile}.tsv (${response.status})`);
-
-  const text = await response.text();
-  const parsed = Papa.parse<ScriptureVerse>(text, {
-    header: true,
-    delimiter: '\t',
-    skipEmptyLines: true,
-  }).data.filter((row) => row.bookEs && row.chapter && row.verse);
-
-  loadedBooks.set(bookName, parsed);
-  return parsed;
+  return loadBookData(bookName, (text) =>
+    Papa.parse<ScriptureVerse>(text, {
+      header: true,
+      delimiter: '\t',
+      skipEmptyLines: true,
+    }).data.filter((row) => row.bookEs && row.chapter && row.verse)
+  );
 };
 
 export const findScriptureRange = async (

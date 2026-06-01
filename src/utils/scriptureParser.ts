@@ -1,23 +1,6 @@
 import Papa from 'papaparse';
-import DOMPurify from 'dompurify';
 import type { VerseData } from '../hooks/useSeferReader';
-
-export const sanitizeHtml = (html: string): string => {
-  return DOMPurify.sanitize(html, {
-    ALLOWED_TAGS: ['br', 'span', 'sup', 'i', 'b', 'strong', 'em', 'u', 'small', 'mark', 'ruby', 'rt', 'rp', 'big', 'div'],
-    ALLOWED_ATTR: ['class', 'dir', 'lang', 'title', 'data-comment'],
-  });
-};
-
-const removeNiqqudFromPlainText = (text: string) =>
-  text.replace(/־/g, ' ').replace(/[\u0591-\u05C7]/g, '').replace(/ \(.+\)/g, '');
-
-const removeNiqqudPreserveHtml = (html: string): string => {
-  return html
-    .split(/(<[^>]+>)/g)
-    .map((part) => (part.startsWith('<') ? part : removeNiqqudFromPlainText(part)))
-    .join('');
-};
+import { removeNiqqudPreserveHtml, sanitizeHtml } from './hebrewText';
 
 export const parseVerses = (source: string): VerseData[] => {
   const result = Papa.parse<VerseData>(source, {
