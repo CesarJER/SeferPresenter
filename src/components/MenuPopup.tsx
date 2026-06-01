@@ -37,6 +37,7 @@ interface MenuPopupProps {
   availableAudioFiles: string[];
   onAudioStateChange: (state: AudioState) => void;
   onAudioSyncMapsChange: (maps: AudioSyncMap[]) => void;
+  onResetState?: () => void;
 }
 
 const isTitleSlide = (slide: Slide) =>
@@ -632,6 +633,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
   availableAudioFiles,
   onAudioStateChange,
   onAudioSyncMapsChange,
+  onResetState,
 }) => {
   // ────────────────────────────────────────────────────────────────
   // States
@@ -656,6 +658,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isMusicPanelOpen, setIsMusicPanelOpen] = useState(false);
   const [prevVolume, setPrevVolume] = useState(0.7);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
 
   // ────────────────────────────────────────────────────────────────
   // Effects
@@ -1887,7 +1890,13 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
       {/* ── Menu Header ───────────────────────────────── */}
       <div id="section-menu-header" className="flex items-center justify-between border-b border-gray-700 bg-gray-900 px-4 py-3 md:px-5 md:py-4">
         <h2 className="flex items-center gap-2 text-lg font-bold md:text-xl">
-          <img src="/logo.svg" alt="Logo" className="h-7 w-7" />
+          <img
+            src="/logo.svg"
+            alt="Logo"
+            className="h-7 w-7 cursor-pointer hover:opacity-85 active:scale-95 transition-all"
+            title="Restablecer estado del presentador"
+            onClick={() => setShowResetConfirm(true)}
+          />
           <span>Gestor de Presentaciones</span>
         </h2>
         <div className="flex items-center gap-2">
@@ -3734,6 +3743,39 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
           </div>
         </div>
       </div>
+      {showResetConfirm && (
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/75 backdrop-blur-sm p-4">
+          <div className="bg-gray-900 border border-gray-700 rounded-lg max-w-sm w-full p-5 shadow-2xl space-y-4">
+            <h3 className="text-base font-bold text-red-500 flex items-center gap-2">
+              ⚠️ ¿Restablecer aplicación?
+            </h3>
+            <p className="text-xs text-gray-300 leading-relaxed font-sans">
+              Esto borrará la memoria temporal de la presentación activa, desbloqueará los fondos y reiniciará el presentador a la pantalla inicial en todos los dispositivos conectados.
+            </p>
+            <div className="flex justify-end gap-2 text-xs">
+              <button
+                type="button"
+                onClick={() => setShowResetConfirm(false)}
+                className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded border border-gray-700 font-semibold cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowResetConfirm(false);
+                  if (onResetState) {
+                    onResetState();
+                  }
+                }}
+                className="px-4 py-2 bg-red-650 hover:bg-red-600 text-white rounded font-bold cursor-pointer"
+              >
+                Sí, restablecer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

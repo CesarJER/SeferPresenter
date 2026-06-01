@@ -427,6 +427,24 @@ function App() {
     }
   }, [syncState]);
 
+  const handleResetState = useCallback(() => {
+    localStorage.removeItem('sefer-presenter-state');
+    localStorage.removeItem('sefer-presenter-bg-lock');
+    localStorage.removeItem('sefer-presenter-locked-bg');
+    setBackgroundLock(false);
+    setLockedBackgroundValue(null);
+    setUserSelectedBackground(null);
+    setCurrentPresentation(null);
+    setCurrentSlideIndex(-1);
+    setVideoState(null);
+    setAppMode('slides');
+    setScriptureState(null);
+
+    syncState(null, -1, false, null, null, null, 'slides', null);
+
+    window.history.replaceState(null, '', `/${window.location.search}`);
+  }, [syncState]);
+
   useEffect(() => {
     currentPresentationRef.current = currentPresentation;
     currentSlideIndexRef.current = currentSlideIndex;
@@ -478,6 +496,13 @@ function App() {
       const normalizedPath = window.location.pathname.replace(/\/$/, '');
       const targetPath = `/${slug}${search}${hash}`;
       if (normalizedPath !== `/${slug}` || window.location.hash !== hash) {
+        window.history.replaceState(null, '', targetPath);
+      }
+    } else {
+      // Clear path and hash when no presentation is active (like on reset)
+      const search = window.location.search;
+      const targetPath = `/${search}`;
+      if (window.location.pathname !== '/' || window.location.hash !== '') {
         window.history.replaceState(null, '', targetPath);
       }
     }
@@ -1573,6 +1598,7 @@ function App() {
           onToggleBackgroundLock={handleToggleBackgroundLock}
           onSelectBackgroundOverride={handleSelectBackgroundOverride}
           onSave={handleSave}
+          onResetState={handleResetState}
           onSelectPresentation={(p, slideIndex) => {
             const targetIdx = slideIndex !== undefined ? slideIndex : (p.slides.length > 0 ? 0 : -1);
             handleSelectPresentationAndSlide(p, targetIdx);
