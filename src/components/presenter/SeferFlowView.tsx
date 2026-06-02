@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import type { VerseData } from '../hooks/useSeferReader';
+import type { VerseData } from '../../hooks/useSeferReader';
 
 interface SeferFlowViewProps {
   groupedVerses: { type: 'normal' | 'shira'; verses: { verse: VerseData; idxVerse: number }[] }[];

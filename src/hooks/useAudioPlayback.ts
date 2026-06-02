@@ -10,7 +10,7 @@ interface UseAudioPlaybackProps {
   currentSlideIndex: number;
   scriptureState: ScriptureNavState | null;
   // Refs
-  audioRef: React.RefObject<HTMLAudioElement>;
+  audioRef: React.RefObject<HTMLAudioElement | null>;
   currentPresentationRef: React.MutableRefObject<Presentation | null>;
   currentSlideIndexRef: React.MutableRefObject<number>;
   backgroundLockRef: React.MutableRefObject<boolean>;

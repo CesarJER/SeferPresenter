@@ -1,8 +1,8 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { ChevronLeft, ChevronRight, Play, Sliders } from 'lucide-react';
-import type { ScriptureNavState } from '../types/presentation';
-import type { SeferReaderState } from '../hooks/useSeferReader';
-import { useSeferReader } from '../hooks/useSeferReader';
+import type { ScriptureNavState } from '../../types/presentation';
+import type { SeferReaderState } from '../../hooks/useSeferReader';
+import { useSeferReader } from '../../hooks/useSeferReader';
 
 interface SeferControlPanelProps {
   /** Called whenever a verse should be projected (activate ▶️ or arrow nav while active) */

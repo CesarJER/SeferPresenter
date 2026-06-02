@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import PresenterScreen from './components/PresenterScreen';
-import MenuPopup from './components/MenuPopup';
-import SeferReaderScreen from './components/SeferReaderScreen';
+import PresenterScreen from './components/presenter/PresenterScreen';
+import MenuPopup from './components/control/MenuPopup';
+import SeferReaderScreen from './components/presenter/SeferReaderScreen';
 import defaultPresentations from '../presentations.json';
 import { Music } from 'lucide-react';
 import { AudioSyncEditor } from './components/AudioSyncEditor';

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ChevronDown, ChevronUp, Eye } from 'lucide-react';
-import type { Slide, ScriptureNavState, AppMode } from '../types/presentation';
+import type { Slide, ScriptureNavState, AppMode } from '../../types/presentation';
 
 interface SlideVisualizerProps {
   slide: Slide | null;

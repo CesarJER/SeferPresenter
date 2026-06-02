@@ -1,12 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
-import type { ScriptureNavState, SeferOnlineRefPayload } from '../types/presentation';
-import type { VerseData, AppMetadata } from '../hooks/useSeferReader';
-import { parseVerses } from '../utils/scriptureParser';
-import { getMetadata, loadBookData, resolveBookName } from '../utils/metadataCache';
+import type { ScriptureNavState, SeferOnlineRefPayload } from '../../types/presentation';
+import type { VerseData, AppMetadata } from '../../hooks/useSeferReader';
+import { parseVerses } from '../../utils/scriptureParser';
+import { getMetadata, loadBookData, resolveBookName } from '../../utils/metadataCache';
 import { SeferFlowView } from './SeferFlowView';
 import { VerseSidebar } from './VerseSidebar';
-import { useResizablePanel } from '../hooks/useResizablePanel';
-import { numberToHebrewNumeral, numberToGreekNumeral } from '../hooks/scriptureNumerals';
+import { useResizablePanel } from '../../hooks/useResizablePanel';
+import { numberToHebrewNumeral, numberToGreekNumeral } from '../../hooks/scriptureNumerals';
 
 interface SeferReaderScreenProps {
   scriptureState: ScriptureNavState;

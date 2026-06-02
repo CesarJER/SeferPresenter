@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import AutoResizeText from './AutoResizeText';
+import AutoResizeText from '../shared/AutoResizeText';
 
 interface VerseSidebarProps {
   combinedText: string;

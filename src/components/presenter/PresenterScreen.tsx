@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
-import type { Slide, VideoState } from '../types/presentation';
+import type { Slide, VideoState } from '../../types/presentation';
 import { AnimatePresence, motion } from 'framer-motion';
-import AutoResizeText from './AutoResizeText';
+import AutoResizeText from '../shared/AutoResizeText';
 
 interface PresenterScreenProps {
   background: string;
