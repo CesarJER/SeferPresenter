@@ -1,8 +1,8 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React from 'react';
 import { ChevronLeft, ChevronRight, Play, Sliders } from 'lucide-react';
 import type { ScriptureNavState } from '../../types/presentation';
 import type { SeferReaderState } from '../../hooks/useSeferReader';
-import { useSeferReader } from '../../hooks/useSeferReader';
+import { useSeferControlLogic } from '../../hooks/useSeferControlLogic';
 
 interface SeferControlPanelProps {
   /** Called whenever a verse should be projected (activate ▶️ or arrow nav while active) */
@@ -21,19 +21,6 @@ const SeferControlPanel: React.FC<SeferControlPanelProps> = ({
   restoredState,
   onUpdateFontSizes,
 }) => {
-  const lastSyncedStateRef = useRef<string | null>(null);
-  const [showFontSettings, setShowFontSettings] = useState(false);
-  const [endVerse, setEndVerse] = useState('');
-
-  const [hebrewFontSize, setHebrewFontSize] = useState<number>(() => {
-    const val = localStorage.getItem('sefer-presenter-font-hebrew');
-    return val ? Number(val) : 42;
-  });
-  const [combinedTextBaseSize, setCombinedTextBaseSize] = useState<number>(() => {
-    const val = localStorage.getItem('sefer-presenter-font-combined');
-    return val ? Number(val) : 40;
-  });
-
   const {
     metadata,
     currentVerse,
@@ -48,107 +35,25 @@ const SeferControlPanel: React.FC<SeferControlPanelProps> = ({
     setSelectedBook,
     setSelectedChapter,
     setSelectedVerse,
-    activate,
-    goNext,
-    goPrev,
-    restoreState,
-  } = useSeferReader();
-
-  useEffect(() => {
-    const restoredHebrewSize = restoredState?.hebrewFontSize;
-    if (typeof restoredHebrewSize === 'number' && Number.isFinite(restoredHebrewSize)) {
-      const clamped = Math.max(20, Math.min(72, restoredHebrewSize));
-      if (clamped !== hebrewFontSize) {
-        setHebrewFontSize(clamped);
-      }
-    }
-
-    const restoredBaseSize = restoredState?.combinedTextBaseSize;
-    if (typeof restoredBaseSize === 'number' && Number.isFinite(restoredBaseSize)) {
-      const clamped = Math.max(12, Math.min(70, restoredBaseSize));
-      if (clamped !== combinedTextBaseSize) {
-        setCombinedTextBaseSize(clamped);
-      }
-    }
-  }, [restoredState, combinedTextBaseSize, hebrewFontSize]);
-
-  // Continuous sync from presenter/keyboard updates
-  useEffect(() => {
-    if (!restoredState) return;
-    const stateKey = `${restoredState.bookEs}-${restoredState.chapter}-${restoredState.verse}`;
-    if (stateKey !== lastSyncedStateRef.current) {
-      lastSyncedStateRef.current = stateKey;
-      restoreState(restoredState);
-    }
-  }, [restoreState, restoredState]);
-
-  // ----------------------------------------------------------------
-  // Handlers
-  // ----------------------------------------------------------------
-  const handleActivate = useCallback(() => {
-    const state = activate();
-    if (state) {
-      lastSyncedStateRef.current = `${state.bookEs}-${state.chapter}-${state.verse}`;
-      onProject(state, 'navigate');
-    }
-  }, [activate, onProject]);
-
-  useEffect(() => {
-    if (endVerse && Number(endVerse) < Number(selectedVerse)) {
-      setEndVerse('');
-    }
-  }, [endVerse, selectedVerse]);
-
-  const handleNext = useCallback(() => {
-    const state = goNext();
-    if (state) {
-      lastSyncedStateRef.current = `${state.bookEs}-${state.chapter}-${state.verse}`;
-      if (isActive) onProject(state, 'next');
-    }
-  }, [goNext, isActive, onProject]);
-
-  const handlePrev = useCallback(() => {
-    const state = goPrev();
-    if (state) {
-      lastSyncedStateRef.current = `${state.bookEs}-${state.chapter}-${state.verse}`;
-      if (isActive) onProject(state, 'previous');
-    }
-  }, [goPrev, isActive, onProject]);
-
-  const handleAddSlide = useCallback((kind: 'sefer' | 'tanaj') => {
-    if (currentVerse) {
-      const normalizedEnd = endVerse || currentVerse.verse;
-      const slideState: SeferReaderState = {
-        ...currentVerse,
-        verseStart: currentVerse.verse,
-        verseEnd: normalizedEnd,
-        totalVerses: normalizedEnd
-          ? Math.max(1, Math.abs(Number(normalizedEnd) - Number(currentVerse.verse)) + 1)
-          : 1,
-      };
-      onProject(slideState, 'navigate');
-      onAddSlide(slideState, kind);
-    }
-  }, [currentVerse, endVerse, onProject, onAddSlide]);
-
-  // Keyboard navigation within the control panel window
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      const targetTag = (e.target as HTMLElement).tagName.toUpperCase();
-      if (targetTag === 'INPUT' || targetTag === 'TEXTAREA' || targetTag === 'SELECT') return;
-
-      if (e.key === 'ArrowRight') {
-        e.preventDefault();
-        handleNext();
-      } else if (e.key === 'ArrowLeft') {
-        e.preventDefault();
-        handlePrev();
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleNext, handlePrev]);
+    showFontSettings,
+    setShowFontSettings,
+    hebrewFontSize,
+    combinedTextBaseSize,
+    updateHebrewFontSize,
+    updateCombinedTextBaseSize,
+    endVerse,
+    setEndVerse,
+    handleActivate,
+    handleNext,
+    handlePrev,
+    handleAddSlide,
+  } = useSeferControlLogic({
+    variant: 'full',
+    onProject,
+    onAddSlide,
+    restoredState,
+    onUpdateFontSizes,
+  });
 
   // ----------------------------------------------------------------
   // Loading / unavailable states
@@ -308,10 +213,7 @@ const SeferControlPanel: React.FC<SeferControlPanelProps> = ({
                 max="72"
                 value={hebrewFontSize}
                 onChange={(e) => {
-                  const val = Number(e.target.value);
-                  setHebrewFontSize(val);
-                  localStorage.setItem('sefer-presenter-font-hebrew', String(val));
-                  if (onUpdateFontSizes) onUpdateFontSizes({ hebrewFontSize: val, combinedTextBaseSize });
+                  updateHebrewFontSize(Number(e.target.value));
                 }}
                 className="w-24 accent-yellow-500 cursor-pointer"
               />
@@ -324,11 +226,7 @@ const SeferControlPanel: React.FC<SeferControlPanelProps> = ({
                 max="70"
                 value={combinedTextBaseSize}
                 onChange={(e) => {
-                  const val = Number(e.target.value);
-                  const clamped = Math.max(12, Math.min(70, val));
-                  setCombinedTextBaseSize(clamped);
-                  localStorage.setItem('sefer-presenter-font-combined', String(clamped));
-                  if (onUpdateFontSizes) onUpdateFontSizes({ hebrewFontSize, combinedTextBaseSize: clamped });
+                  updateCombinedTextBaseSize(Number(e.target.value));
                 }}
                 className="w-24 accent-yellow-500 cursor-pointer"
               />
