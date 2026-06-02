@@ -113,7 +113,7 @@ function App() {
     }
   }, []);
 
-  const { channel, syncState } = useSyncState({
+  const { channel, syncState, emitAudioTelemetry } = useSyncState({
     isControlMode, clientIdRef,
     currentPresentationRef, currentSlideIndexRef, backgroundLockRef,
     lockedBackgroundValueRef, userSelectedBackgroundRef, videoStateRef,
@@ -255,8 +255,7 @@ function App() {
 
   useAudioPlayback({
     isControlMode, audioState, audioStateRef, audioSyncMaps, currentSlideIndex, scriptureState,
-    audioRef, currentPresentationRef, currentSlideIndexRef, backgroundLockRef, lockedBackgroundValueRef,
-    userSelectedBackgroundRef, videoStateRef, appModeRef, scriptureStateRef, setAutoplayBlocked, syncState,
+    audioRef, currentPresentationRef, setAutoplayBlocked, emitAudioTelemetry,
     handleSelectPresentationAndSlide
   });
 

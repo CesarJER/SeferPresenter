@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import type { AudioState, AudioSyncMap } from '../types/audio';
-import type { AppMode, Presentation, ScriptureNavState, VideoState } from '../types/presentation';
+import type { Presentation, ScriptureNavState } from '../types/presentation';
 
 interface UseAudioPlaybackProps {
   isControlMode: boolean;
@@ -12,26 +12,9 @@ interface UseAudioPlaybackProps {
   // Refs
   audioRef: React.RefObject<HTMLAudioElement | null>;
   currentPresentationRef: React.MutableRefObject<Presentation | null>;
-  currentSlideIndexRef: React.MutableRefObject<number>;
-  backgroundLockRef: React.MutableRefObject<boolean>;
-  lockedBackgroundValueRef: React.MutableRefObject<string | null>;
-  userSelectedBackgroundRef: React.MutableRefObject<string | null>;
-  videoStateRef: React.MutableRefObject<VideoState | null>;
-  appModeRef: React.MutableRefObject<AppMode>;
-  scriptureStateRef: React.MutableRefObject<ScriptureNavState | null>;
   // Callbacks
   setAutoplayBlocked: (blocked: boolean) => void;
-  syncState: (opts: {
-    presentation: Presentation | null;
-    slideIndex: number;
-    bgLock: boolean;
-    lockedBg: string | null;
-    userSelectedBg: string | null;
-    videoState?: VideoState | null;
-    appMode?: AppMode;
-    scriptureState?: ScriptureNavState | null;
-    audioState?: AudioState;
-  }) => void;
+  emitAudioTelemetry: (audioState: AudioState) => void;
   handleSelectPresentationAndSlide: (p: Presentation | null, idx: number, direction?: 'forward' | 'backward', targetVerse?: string) => void;
 }
 
@@ -45,15 +28,8 @@ export function useAudioPlayback(props: UseAudioPlaybackProps) {
     scriptureState,
     audioRef,
     currentPresentationRef,
-    currentSlideIndexRef,
-    backgroundLockRef,
-    lockedBackgroundValueRef,
-    userSelectedBackgroundRef,
-    videoStateRef,
-    appModeRef,
-    scriptureStateRef,
     setAutoplayBlocked,
-    syncState,
+    emitAudioTelemetry,
     handleSelectPresentationAndSlide,
   } = props;
 
@@ -137,58 +113,47 @@ export function useAudioPlayback(props: UseAudioPlaybackProps) {
     let intervalId: ReturnType<typeof setInterval> | null = null;
     let lastTimeEmitted = -1;
 
-    const emitAudioTelemetry = (force = false) => {
+    const emitCurrentAudioTelemetry = (force = false) => {
       const current = audioStateRef.current;
       if (!current) return;
 
-      // Throttle telemetry to reduce network traffic
-      const isSignificantJump = Math.abs(audio.currentTime - lastTimeEmitted) > 2.0;
-      const isPeriodicTick = !audio.paused && (Math.floor(audio.currentTime) % 5 === 0) && (Math.floor(audio.currentTime) !== Math.floor(lastTimeEmitted));
+      const hasTimeAdvanced = Math.abs(audio.currentTime - lastTimeEmitted) >= 0.25;
 
-      if (!force && !isSignificantJump && !isPeriodicTick) {
+      if (!force && !hasTimeAdvanced) {
         return;
       }
 
       lastTimeEmitted = audio.currentTime;
 
-      syncState({
-        presentation: currentPresentationRef.current,
-        slideIndex: currentSlideIndexRef.current,
-        bgLock: backgroundLockRef.current,
-        lockedBg: lockedBackgroundValueRef.current,
-        userSelectedBg: userSelectedBackgroundRef.current,
-        videoState: videoStateRef.current,
-        appMode: appModeRef.current,
-        scriptureState: scriptureStateRef.current,
-        audioState: {
-          ...current,
-          isPlaying: !audio.paused,
-          currentTime: audio.currentTime,
-          duration: Number.isFinite(audio.duration) ? audio.duration : 0,
-          volume: audio.volume,
-          lastUpdatedBy: 'projection',
-          timestamp: Date.now(),
-        },
+      emitAudioTelemetry({
+        ...current,
+        isPlaying: !audio.paused,
+        currentTime: audio.currentTime,
+        duration: Number.isFinite(audio.duration) ? audio.duration : 0,
+        volume: audio.volume,
+        lastUpdatedBy: 'projection',
+        changeType: 'seek',
+        timestamp: Date.now(),
       });
     };
 
     const handlePlay = () => {
       if (intervalId) clearInterval(intervalId);
-      intervalId = setInterval(() => emitAudioTelemetry(false), 500);
-      emitAudioTelemetry(true);
+      intervalId = setInterval(() => emitCurrentAudioTelemetry(false), 1000);
+      emitCurrentAudioTelemetry(true);
     };
 
     const handlePause = () => {
       if (intervalId) { clearInterval(intervalId); intervalId = null; }
-      emitAudioTelemetry(true);
+      emitCurrentAudioTelemetry(true);
     };
 
     const handleEnded = () => {
       if (intervalId) { clearInterval(intervalId); intervalId = null; }
-      emitAudioTelemetry(true);
+      emitCurrentAudioTelemetry(true);
     };
 
-    const handleLoadedMetadata = () => emitAudioTelemetry(true);
+    const handleLoadedMetadata = () => emitCurrentAudioTelemetry(true);
 
     audio.addEventListener('play', handlePlay);
     audio.addEventListener('pause', handlePause);
@@ -203,10 +168,7 @@ export function useAudioPlayback(props: UseAudioPlaybackProps) {
       audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
     };
   }, [
-    isControlMode, syncState, audioRef, audioStateRef,
-    currentPresentationRef, currentSlideIndexRef, backgroundLockRef,
-    lockedBackgroundValueRef, userSelectedBackgroundRef, videoStateRef,
-    appModeRef, scriptureStateRef,
+    isControlMode, emitAudioTelemetry, audioRef, audioStateRef,
   ]);
 
   // 4. Drive slide/verse navigation from audio cues (Unilateral / Bilateral)
@@ -282,22 +244,15 @@ export function useAudioPlayback(props: UseAudioPlaybackProps) {
       if (Math.abs(audio.currentTime - matchingCue.timeSec) > 1.0) {
         audio.currentTime = matchingCue.timeSec;
 
-        // Emit updated time to controller
-        syncState({
-          presentation: currentPresentationRef.current,
-          slideIndex: currentSlideIndexRef.current,
-          bgLock: backgroundLockRef.current,
-          lockedBg: lockedBackgroundValueRef.current,
-          userSelectedBg: userSelectedBackgroundRef.current,
-          videoState: videoStateRef.current,
-          appMode: appModeRef.current,
-          scriptureState: scriptureStateRef.current,
-          audioState: {
-            ...audioStateRef.current,
-            currentTime: matchingCue.timeSec,
-            lastUpdatedBy: 'projection',
-            timestamp: Date.now(),
-          },
+        emitAudioTelemetry({
+          ...audioStateRef.current,
+          currentTime: matchingCue.timeSec,
+          duration: Number.isFinite(audio.duration) ? audio.duration : audioStateRef.current.duration,
+          isPlaying: !audio.paused,
+          volume: audio.volume,
+          lastUpdatedBy: 'projection',
+          changeType: 'seek',
+          timestamp: Date.now(),
         });
       }
     }
@@ -309,16 +264,8 @@ export function useAudioPlayback(props: UseAudioPlaybackProps) {
     audioState.audioSrc,
     audioSyncMaps,
     isControlMode,
-    syncState,
+    emitAudioTelemetry,
     audioRef,
     audioStateRef,
-    currentPresentationRef,
-    currentSlideIndexRef,
-    backgroundLockRef,
-    lockedBackgroundValueRef,
-    userSelectedBackgroundRef,
-    videoStateRef,
-    appModeRef,
-    scriptureStateRef,
   ]);
 }

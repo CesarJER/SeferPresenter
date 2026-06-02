@@ -17,4 +17,5 @@ export interface SyncStatePayload {
 
 export type BroadcastMessage =
   | ({ type: 'SYNC_STATE' } & SyncStatePayload)
+  | { type: 'AUDIO_TELEMETRY'; clientId: string; origin: 'control' | 'presenter'; audioState: AudioState }
   | { type: 'AUDIO_SYNC_MAPS_UPDATE'; maps: unknown[] };

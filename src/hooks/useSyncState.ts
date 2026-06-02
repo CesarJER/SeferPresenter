@@ -41,6 +41,98 @@ interface UseSyncStateProps {
   setAudioSyncMaps: (maps: AudioSyncMap[]) => void;
 }
 
+const areStringArraysEqual = (left: string[] = [], right: string[] = []) =>
+  left.length === right.length && left.every((value, index) => value === right[index]);
+
+const areRecordsEqual = (left?: Record<string, string>, right?: Record<string, string>) => {
+  const leftEntries = Object.entries(left ?? {});
+  const rightRecord = right ?? {};
+  return (
+    leftEntries.length === Object.keys(rightRecord).length &&
+    leftEntries.every(([key, value]) => rightRecord[key] === value)
+  );
+};
+
+const arePresentationsEqual = (left: Presentation | null, right: Presentation | null) => {
+  if (left === right) return true;
+  if (!left || !right) return false;
+  if (
+    left.id !== right.id ||
+    left.title !== right.title ||
+    left.background !== right.background ||
+    left.mode !== right.mode ||
+    left.fontScale !== right.fontScale ||
+    left.slides.length !== right.slides.length
+  ) {
+    return false;
+  }
+
+  return left.slides.every((leftSlide, index) => {
+    const rightSlide = right.slides[index];
+    return (
+      leftSlide.id === rightSlide.id &&
+      leftSlide.label === rightSlide.label &&
+      leftSlide.background === rightSlide.background &&
+      leftSlide.type === rightSlide.type &&
+      leftSlide.videoSrc === rightSlide.videoSrc &&
+      leftSlide.videoVolume === rightSlide.videoVolume &&
+      leftSlide.videoSpeed === rightSlide.videoSpeed &&
+      leftSlide.videoLoop === rightSlide.videoLoop &&
+      leftSlide.videoPresenterNav === rightSlide.videoPresenterNav &&
+      leftSlide.videoStart === rightSlide.videoStart &&
+      leftSlide.videoEnd === rightSlide.videoEnd &&
+      leftSlide.scriptureBook === rightSlide.scriptureBook &&
+      leftSlide.scriptureChapter === rightSlide.scriptureChapter &&
+      leftSlide.scriptureVerseStart === rightSlide.scriptureVerseStart &&
+      leftSlide.scriptureVerseEnd === rightSlide.scriptureVerseEnd &&
+      areStringArraysEqual(leftSlide.lines, rightSlide.lines) &&
+      areRecordsEqual(leftSlide.scriptureVerseBackgrounds, rightSlide.scriptureVerseBackgrounds)
+    );
+  });
+};
+
+const areVideoStatesEqual = (left: VideoState | null, right: VideoState | null) => {
+  if (left === right) return true;
+  if (!left || !right) return false;
+  return (
+    left.isPlaying === right.isPlaying &&
+    left.currentTime === right.currentTime &&
+    left.duration === right.duration &&
+    left.volume === right.volume &&
+    left.speed === right.speed &&
+    left.loop === right.loop &&
+    left.videoSrc === right.videoSrc &&
+    left.startTime === right.startTime &&
+    left.endTime === right.endTime &&
+    left.lastUpdatedBy === right.lastUpdatedBy &&
+    left.timestamp === right.timestamp
+  );
+};
+
+const areScriptureStatesEqual = (left: ScriptureNavState | null, right: ScriptureNavState | null) => {
+  if (left === right) return true;
+  if (!left || !right) return false;
+  return (
+    left.bookEs === right.bookEs &&
+    left.bookHeb === right.bookHeb &&
+    left.bookAbbrevEs === right.bookAbbrevEs &&
+    left.chapter === right.chapter &&
+    left.verseStart === right.verseStart &&
+    left.verse === right.verse &&
+    left.verseEnd === right.verseEnd &&
+    left.verseNikud === right.verseNikud &&
+    left.transliteration === right.transliteration &&
+    left.translation === right.translation &&
+    left.verseIdx === right.verseIdx &&
+    left.totalVerses === right.totalVerses &&
+    left.scriptureKind === right.scriptureKind &&
+    left.command === right.command &&
+    left.commandId === right.commandId &&
+    left.hebrewFontSize === right.hebrewFontSize &&
+    left.combinedTextBaseSize === right.combinedTextBaseSize
+  );
+};
+
 export function useSyncState(props: UseSyncStateProps) {
   const {
     isControlMode, clientIdRef,
@@ -117,13 +209,53 @@ export function useSyncState(props: UseSyncStateProps) {
     }
   }, [channel, isControlMode, persistState, videoStateRef, appModeRef, scriptureStateRef, audioStateRef, clientIdRef]);
 
+  const applyAudioTelemetry = useCallback((incomingAudioState: AudioState) => {
+    const currentAudioState = audioStateRef.current;
+    const isDifferent =
+      currentAudioState.isPlaying !== incomingAudioState.isPlaying ||
+      Math.abs(currentAudioState.currentTime - incomingAudioState.currentTime) > 0.05 ||
+      currentAudioState.duration !== incomingAudioState.duration ||
+      currentAudioState.volume !== incomingAudioState.volume ||
+      currentAudioState.audioSrc !== incomingAudioState.audioSrc ||
+      currentAudioState.activeSyncMapId !== incomingAudioState.activeSyncMapId ||
+      currentAudioState.syncMode !== incomingAudioState.syncMode ||
+      currentAudioState.lastUpdatedBy !== incomingAudioState.lastUpdatedBy ||
+      currentAudioState.changeType !== incomingAudioState.changeType;
+
+    if (isDifferent) {
+      audioStateRef.current = incomingAudioState;
+      setAudioState(incomingAudioState);
+    }
+  }, [audioStateRef, setAudioState]);
+
+  const emitAudioTelemetry = useCallback((audioState: AudioState) => {
+    audioStateRef.current = audioState;
+
+    const payload = {
+      type: 'AUDIO_TELEMETRY' as const,
+      clientId: clientIdRef.current,
+      origin: isControlMode ? 'control' as const : 'presenter' as const,
+      audioState,
+    };
+
+    channel.postMessage(payload);
+
+    if (__APP_MODE__ !== 'singlefile') {
+      fetch('/api/audio-telemetry', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      }).catch(err => console.error('Error syncing audio telemetry to network', err));
+    }
+  }, [audioStateRef, channel, clientIdRef, isControlMode]);
+
   // ── Apply incoming remote state (unified for both BroadcastChannel and SSE) ─
   const applyRemoteState = useCallback((data: Record<string, unknown>, persist = true) => {
     const normalizedPresentation = data.presentation
       ? normalizePresentation(data.presentation as Presentation)
       : null;
 
-    if (JSON.stringify(currentPresentationRef.current) !== JSON.stringify(normalizedPresentation)) {
+    if (!arePresentationsEqual(currentPresentationRef.current, normalizedPresentation)) {
       setCurrentPresentation(normalizedPresentation);
     }
     if (currentSlideIndexRef.current !== data.slideIndex) {
@@ -138,17 +270,17 @@ export function useSyncState(props: UseSyncStateProps) {
     if (data.userSelectedBackground !== undefined && userSelectedBackgroundRef.current !== data.userSelectedBackground) {
       setUserSelectedBackground(data.userSelectedBackground as string | null);
     }
-    if (data.videoState !== undefined && JSON.stringify(videoStateRef.current) !== JSON.stringify(data.videoState)) {
+    if (data.videoState !== undefined && !areVideoStatesEqual(videoStateRef.current, data.videoState as VideoState | null)) {
       setVideoState(data.videoState as VideoState | null);
     }
     if (data.appMode !== undefined && appModeRef.current !== data.appMode) {
       setAppMode(data.appMode as AppMode);
     }
-    if (data.scriptureState !== undefined && JSON.stringify(scriptureStateRef.current) !== JSON.stringify(data.scriptureState)) {
+    if (data.scriptureState !== undefined && !areScriptureStatesEqual(scriptureStateRef.current, data.scriptureState as ScriptureNavState | null)) {
       setScriptureState(data.scriptureState as ScriptureNavState | null);
     }
-    if (data.audioState !== undefined && JSON.stringify(audioStateRef.current) !== JSON.stringify(data.audioState)) {
-      setAudioState(data.audioState as AudioState);
+    if (data.audioState !== undefined) {
+      applyAudioTelemetry(data.audioState as AudioState);
     }
 
     if (persist) {
@@ -165,7 +297,7 @@ export function useSyncState(props: UseSyncStateProps) {
     appModeRef, scriptureStateRef, audioStateRef,
     setCurrentPresentation, setCurrentSlideIndex, setBackgroundLock,
     setLockedBackgroundValue, setUserSelectedBackground, setVideoState,
-    setAppMode, setScriptureState, setAudioState, persistState,
+    setAppMode, setScriptureState, applyAudioTelemetry, persistState,
   ]);
 
   // ── BroadcastChannel listener ─────────────────────────────────────
@@ -176,6 +308,11 @@ export function useSyncState(props: UseSyncStateProps) {
 
       if (data.type === 'AUDIO_SYNC_MAPS_UPDATE') {
         setAudioSyncMaps(data.maps);
+        return;
+      }
+
+      if (data.type === 'AUDIO_TELEMETRY') {
+        applyAudioTelemetry(data.audioState as AudioState);
         return;
       }
 
@@ -209,7 +346,7 @@ export function useSyncState(props: UseSyncStateProps) {
 
     return () => channel.removeEventListener('message', handleMessage);
   }, [
-    isControlMode, channel, clientIdRef, syncState, applyRemoteState,
+    isControlMode, channel, clientIdRef, syncState, applyRemoteState, applyAudioTelemetry,
     setAudioSyncMaps, currentPresentationRef, currentSlideIndexRef,
     backgroundLockRef, lockedBackgroundValueRef, userSelectedBackgroundRef,
     videoStateRef, appModeRef, scriptureStateRef, audioStateRef,
@@ -226,25 +363,12 @@ export function useSyncState(props: UseSyncStateProps) {
         const data = JSON.parse(event.data);
         if (!data || data.clientId === clientIdRef.current) return;
 
-        const normalizedPresentation = data.presentation
-          ? normalizePresentation(data.presentation as Presentation)
-          : null;
-
-        const isDifferent =
-          !currentPresentationRef.current ||
-          currentPresentationRef.current.id !== (normalizedPresentation?.id ?? '') ||
-          currentSlideIndexRef.current !== data.slideIndex ||
-          backgroundLockRef.current !== data.backgroundLock ||
-          lockedBackgroundValueRef.current !== data.lockedBackgroundValue ||
-          userSelectedBackgroundRef.current !== data.userSelectedBackground ||
-          JSON.stringify(videoStateRef.current) !== JSON.stringify(data.videoState) ||
-          appModeRef.current !== data.appMode ||
-          JSON.stringify(scriptureStateRef.current) !== JSON.stringify(data.scriptureState) ||
-          JSON.stringify(audioStateRef.current) !== JSON.stringify(data.audioState);
-
-        if (isDifferent) {
-          applyRemoteState(data);
+        if (data.type === 'AUDIO_TELEMETRY') {
+          applyAudioTelemetry(data.audioState as AudioState);
+          return;
         }
+
+        applyRemoteState(data);
       } catch (err) {
         console.error('Error parsing network state sync event', err);
       }
@@ -252,11 +376,8 @@ export function useSyncState(props: UseSyncStateProps) {
 
     return () => eventSource.close();
   }, [
-    clientIdRef, applyRemoteState,
-    currentPresentationRef, currentSlideIndexRef, backgroundLockRef,
-    lockedBackgroundValueRef, userSelectedBackgroundRef, videoStateRef,
-    appModeRef, scriptureStateRef, audioStateRef,
+    clientIdRef, applyRemoteState, applyAudioTelemetry,
   ]);
 
-  return { channel, syncState, persistState };
+  return { channel, syncState, persistState, emitAudioTelemetry };
 }
