@@ -112,6 +112,58 @@ function fileBackendPlugin(): Plugin {
           return;
         }
 
+        if (req.url === '/api/video-telemetry' && req.method === 'POST') {
+          let body = '';
+          req.on('data', (chunk: Buffer) => {
+            body += chunk.toString();
+          });
+          req.on('end', () => {
+            try {
+              const telemetry = JSON.parse(body);
+              currentState = {
+                ...currentState,
+                videoState: telemetry.videoState,
+              };
+              clients.forEach(client => {
+                client.write(`data: ${body}\n\n`);
+              });
+              res.writeHead(200, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ success: true }));
+            } catch (err) {
+              res.writeHead(400, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: 'Invalid JSON' }));
+            }
+          });
+          return;
+        }
+
+        if (req.url === '/api/display-telemetry' && req.method === 'POST') {
+          let body = '';
+          req.on('data', (chunk: Buffer) => {
+            body += chunk.toString();
+          });
+          req.on('end', () => {
+            try {
+              const telemetry = JSON.parse(body);
+              currentState = {
+                ...currentState,
+                backgroundLock: telemetry.backgroundLock,
+                lockedBackgroundValue: telemetry.lockedBackgroundValue,
+                userSelectedBackground: telemetry.userSelectedBackground,
+              };
+              clients.forEach(client => {
+                client.write(`data: ${body}\n\n`);
+              });
+              res.writeHead(200, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ success: true }));
+            } catch (err) {
+              res.writeHead(400, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: 'Invalid JSON' }));
+            }
+          });
+          return;
+        }
+
         if (req.url === '/api/backgrounds' && req.method === 'GET') {
           const bgDir = path.resolve(__dirname, 'public/backgrounds');
           const videoDir = path.resolve(__dirname, 'public/videos');

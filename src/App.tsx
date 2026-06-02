@@ -113,7 +113,7 @@ function App() {
     }
   }, []);
 
-  const { channel, syncState, emitAudioTelemetry } = useSyncState({
+  const { channel, syncState, emitAudioTelemetry, emitVideoTelemetry, emitDisplayTelemetry } = useSyncState({
     isControlMode, clientIdRef,
     currentPresentationRef, currentSlideIndexRef, backgroundLockRef,
     lockedBackgroundValueRef, userSelectedBackgroundRef, videoStateRef,
@@ -127,9 +127,9 @@ function App() {
     currentPresentation, currentSlideIndex, backgroundLock,
     lockedBackgroundValue, userSelectedBackground, scriptureState,
     backgroundLockRef, lockedBackgroundValueRef, userSelectedBackgroundRef,
-    currentPresentationRef, currentSlideIndexRef, scriptureStateRef,
+    scriptureStateRef,
     setBackgroundLock, setLockedBackgroundValue, setUserSelectedBackground,
-    syncState,
+    emitDisplayTelemetry,
   });
 
   const activeBackground = getActiveBackground();
@@ -282,6 +282,11 @@ function App() {
     }
     : activeSlide;
 
+  const handleVideoStateChange = useCallback((state: VideoState | null) => {
+    setVideoState(state);
+    emitVideoTelemetry(state);
+  }, [emitVideoTelemetry]);
+
   const handleToggleAppMode = useCallback((mode: AppMode) => {
     if (mode === 'seferManual') {
       if (appModeRef.current !== 'seferManual') {
@@ -420,10 +425,7 @@ function App() {
             }
           }}
           videoState={videoState}
-          onVideoStateChange={(state) => syncState({
-            presentation: currentPresentation, slideIndex: currentSlideIndex, bgLock: backgroundLock,
-            lockedBg: lockedBackgroundValue, userSelectedBg: userSelectedBackground, videoState: state
-          })}
+          onVideoStateChange={handleVideoStateChange}
           audioState={audioState}
           audioSyncMaps={audioSyncMaps}
           availableAudioFiles={availableAudioFiles}
@@ -483,10 +485,7 @@ function App() {
               window.open(`${window.location.origin}?mode=control`, 'ControlPanel', 'width=1100,height=800');
             }}
             videoState={videoState}
-            onVideoStateChange={(state) => syncState({
-              presentation: currentPresentation, slideIndex: currentSlideIndex, bgLock: backgroundLock,
-              lockedBg: lockedBackgroundValue, userSelectedBg: userSelectedBackground, videoState: state
-            })}
+            onVideoStateChange={handleVideoStateChange}
           />
         </div>
       )}

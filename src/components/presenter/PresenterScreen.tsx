@@ -108,7 +108,6 @@ const PresenterScreen: React.FC<PresenterScreenProps> = ({
     let intervalId: any = null;
 
     const emitTelemetry = () => {
-      console.log("[PresenterScreen] emitTelemetry - currentTime:", videoElement.currentTime, "paused:", videoElement.paused);
       if (onVideoStateChangeRef.current) {
         onVideoStateChangeRef.current({
           isPlaying: !videoElement.paused,
@@ -131,7 +130,7 @@ const PresenterScreen: React.FC<PresenterScreenProps> = ({
       if (intervalId) {
         clearInterval(intervalId);
       }
-      // Periodic telemetry updates (every 500ms during playback)
+      // Periodic telemetry updates during playback.
       intervalId = setInterval(() => {
         if (!videoElement) return;
 
@@ -148,7 +147,7 @@ const PresenterScreen: React.FC<PresenterScreenProps> = ({
         }
 
         emitTelemetry();
-      }, 500);
+      }, 1000);
     };
 
     const handlePause = () => {

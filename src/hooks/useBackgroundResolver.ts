@@ -1,5 +1,6 @@
 import { useCallback, useRef } from 'react';
 import type { Presentation, ScriptureNavState } from '../types/presentation';
+import type { DisplayTelemetryState } from '../types/sync';
 
 interface UseBackgroundResolverProps {
   currentPresentation: Presentation | null;
@@ -12,21 +13,12 @@ interface UseBackgroundResolverProps {
   backgroundLockRef: React.MutableRefObject<boolean>;
   lockedBackgroundValueRef: React.MutableRefObject<string | null>;
   userSelectedBackgroundRef: React.MutableRefObject<string | null>;
-  currentPresentationRef: React.MutableRefObject<Presentation | null>;
-  currentSlideIndexRef: React.MutableRefObject<number>;
   scriptureStateRef: React.MutableRefObject<ScriptureNavState | null>;
   // Setters
   setBackgroundLock: (locked: boolean) => void;
   setLockedBackgroundValue: (bg: string | null) => void;
   setUserSelectedBackground: (bg: string | null) => void;
-  // Sync callback
-  syncState: (opts: {
-    presentation: Presentation | null;
-    slideIndex: number;
-    bgLock: boolean;
-    lockedBg: string | null;
-    userSelectedBg: string | null;
-  }) => void;
+  emitDisplayTelemetry: (displayState: DisplayTelemetryState) => void;
 }
 
 export function useBackgroundResolver(props: UseBackgroundResolverProps) {
@@ -34,9 +26,9 @@ export function useBackgroundResolver(props: UseBackgroundResolverProps) {
     currentPresentation, currentSlideIndex, backgroundLock,
     lockedBackgroundValue, userSelectedBackground,
     backgroundLockRef, lockedBackgroundValueRef, userSelectedBackgroundRef,
-    currentPresentationRef, currentSlideIndexRef, scriptureStateRef,
+    scriptureStateRef,
     setBackgroundLock, setLockedBackgroundValue, setUserSelectedBackground,
-    syncState,
+    emitDisplayTelemetry,
   } = props;
 
   const lastPhysicalBgRef = useRef<string>('');
@@ -126,44 +118,44 @@ export function useBackgroundResolver(props: UseBackgroundResolverProps) {
 
   const handleToggleBackgroundLock = useCallback((locked: boolean) => {
     const currentBg = getActiveBackground();
+    const nextLockedBg = locked ? currentBg : null;
+    const nextDisplayState = {
+      backgroundLock: locked,
+      lockedBackgroundValue: nextLockedBg,
+      userSelectedBackground: userSelectedBackgroundRef.current,
+    };
+
     setBackgroundLock(locked);
-    setLockedBackgroundValue(locked ? currentBg : null);
-    syncState({
-      presentation: currentPresentationRef.current,
-      slideIndex: currentSlideIndexRef.current,
-      bgLock: locked,
-      lockedBg: locked ? currentBg : null,
-      userSelectedBg: userSelectedBackgroundRef.current,
-    });
+    setLockedBackgroundValue(nextLockedBg);
+    emitDisplayTelemetry(nextDisplayState);
   }, [
     getActiveBackground, setBackgroundLock, setLockedBackgroundValue,
-    syncState, currentPresentationRef, currentSlideIndexRef, userSelectedBackgroundRef,
+    emitDisplayTelemetry, userSelectedBackgroundRef,
   ]);
 
   const handleSelectBackgroundOverride = useCallback((bg: string) => {
     if (backgroundLockRef.current) {
+      const nextDisplayState = {
+        backgroundLock: true,
+        lockedBackgroundValue: bg,
+        userSelectedBackground: userSelectedBackgroundRef.current,
+      };
+
       setLockedBackgroundValue(bg);
-      syncState({
-        presentation: currentPresentationRef.current,
-        slideIndex: currentSlideIndexRef.current,
-        bgLock: true,
-        lockedBg: bg,
-        userSelectedBg: userSelectedBackgroundRef.current,
-      });
+      emitDisplayTelemetry(nextDisplayState);
     } else {
+      const nextDisplayState = {
+        backgroundLock: false,
+        lockedBackgroundValue: lockedBackgroundValueRef.current,
+        userSelectedBackground: bg,
+      };
+
       setUserSelectedBackground(bg);
-      syncState({
-        presentation: currentPresentationRef.current,
-        slideIndex: currentSlideIndexRef.current,
-        bgLock: false,
-        lockedBg: lockedBackgroundValueRef.current,
-        userSelectedBg: bg,
-      });
+      emitDisplayTelemetry(nextDisplayState);
     }
   }, [
     backgroundLockRef, setLockedBackgroundValue, setUserSelectedBackground,
-    syncState, currentPresentationRef, currentSlideIndexRef,
-    lockedBackgroundValueRef, userSelectedBackgroundRef,
+    emitDisplayTelemetry, lockedBackgroundValueRef, userSelectedBackgroundRef,
   ]);
 
   return {

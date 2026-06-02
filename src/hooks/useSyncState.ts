@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo } from 'react';
 import type { AudioState, AudioSyncMap } from '../types/audio';
 import type { AppMode, Presentation, ScriptureNavState, VideoState } from '../types/presentation';
+import type { DisplayTelemetryState } from '../types/sync';
 import { normalizePresentation } from '../utils/normalizePresentation';
 
 interface SyncStateOptions {
@@ -249,6 +250,92 @@ export function useSyncState(props: UseSyncStateProps) {
     }
   }, [audioStateRef, channel, clientIdRef, isControlMode]);
 
+  const applyVideoTelemetry = useCallback((incomingVideoState: VideoState | null) => {
+    if (!areVideoStatesEqual(videoStateRef.current, incomingVideoState)) {
+      videoStateRef.current = incomingVideoState;
+      setVideoState(incomingVideoState);
+    }
+  }, [videoStateRef, setVideoState]);
+
+  const emitVideoTelemetry = useCallback((incomingVideoState: VideoState | null) => {
+    videoStateRef.current = incomingVideoState;
+
+    const payload = {
+      type: 'VIDEO_TELEMETRY' as const,
+      clientId: clientIdRef.current,
+      origin: isControlMode ? 'control' as const : 'presenter' as const,
+      videoState: incomingVideoState,
+    };
+
+    channel.postMessage(payload);
+
+    if (__APP_MODE__ !== 'singlefile') {
+      fetch('/api/video-telemetry', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      }).catch(err => console.error('Error syncing video telemetry to network', err));
+    }
+  }, [videoStateRef, channel, clientIdRef, isControlMode]);
+
+  const applyDisplayTelemetry = useCallback((displayState: DisplayTelemetryState) => {
+    if (backgroundLockRef.current !== displayState.backgroundLock) {
+      backgroundLockRef.current = displayState.backgroundLock;
+      setBackgroundLock(displayState.backgroundLock);
+      localStorage.setItem('sefer-presenter-bg-lock', String(displayState.backgroundLock));
+    }
+
+    if (lockedBackgroundValueRef.current !== displayState.lockedBackgroundValue) {
+      lockedBackgroundValueRef.current = displayState.lockedBackgroundValue;
+      setLockedBackgroundValue(displayState.lockedBackgroundValue);
+      if (displayState.lockedBackgroundValue) {
+        localStorage.setItem('sefer-presenter-locked-bg', displayState.lockedBackgroundValue);
+      } else {
+        localStorage.removeItem('sefer-presenter-locked-bg');
+      }
+    }
+
+    if (userSelectedBackgroundRef.current !== displayState.userSelectedBackground) {
+      userSelectedBackgroundRef.current = displayState.userSelectedBackground;
+      setUserSelectedBackground(displayState.userSelectedBackground);
+    }
+  }, [
+    backgroundLockRef, lockedBackgroundValueRef, userSelectedBackgroundRef,
+    setBackgroundLock, setLockedBackgroundValue, setUserSelectedBackground,
+  ]);
+
+  const emitDisplayTelemetry = useCallback((displayState: DisplayTelemetryState) => {
+    backgroundLockRef.current = displayState.backgroundLock;
+    lockedBackgroundValueRef.current = displayState.lockedBackgroundValue;
+    userSelectedBackgroundRef.current = displayState.userSelectedBackground;
+    localStorage.setItem('sefer-presenter-bg-lock', String(displayState.backgroundLock));
+    if (displayState.lockedBackgroundValue) {
+      localStorage.setItem('sefer-presenter-locked-bg', displayState.lockedBackgroundValue);
+    } else {
+      localStorage.removeItem('sefer-presenter-locked-bg');
+    }
+
+    const payload = {
+      type: 'DISPLAY_TELEMETRY' as const,
+      clientId: clientIdRef.current,
+      origin: isControlMode ? 'control' as const : 'presenter' as const,
+      ...displayState,
+    };
+
+    channel.postMessage(payload);
+
+    if (__APP_MODE__ !== 'singlefile') {
+      fetch('/api/display-telemetry', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      }).catch(err => console.error('Error syncing display telemetry to network', err));
+    }
+  }, [
+    backgroundLockRef, lockedBackgroundValueRef, userSelectedBackgroundRef,
+    channel, clientIdRef, isControlMode,
+  ]);
+
   // ── Apply incoming remote state (unified for both BroadcastChannel and SSE) ─
   const applyRemoteState = useCallback((data: Record<string, unknown>, persist = true) => {
     const normalizedPresentation = data.presentation
@@ -271,7 +358,7 @@ export function useSyncState(props: UseSyncStateProps) {
       setUserSelectedBackground(data.userSelectedBackground as string | null);
     }
     if (data.videoState !== undefined && !areVideoStatesEqual(videoStateRef.current, data.videoState as VideoState | null)) {
-      setVideoState(data.videoState as VideoState | null);
+      applyVideoTelemetry(data.videoState as VideoState | null);
     }
     if (data.appMode !== undefined && appModeRef.current !== data.appMode) {
       setAppMode(data.appMode as AppMode);
@@ -297,7 +384,7 @@ export function useSyncState(props: UseSyncStateProps) {
     appModeRef, scriptureStateRef, audioStateRef,
     setCurrentPresentation, setCurrentSlideIndex, setBackgroundLock,
     setLockedBackgroundValue, setUserSelectedBackground, setVideoState,
-    setAppMode, setScriptureState, applyAudioTelemetry, persistState,
+    setAppMode, setScriptureState, applyAudioTelemetry, applyVideoTelemetry, persistState,
   ]);
 
   // ── BroadcastChannel listener ─────────────────────────────────────
@@ -313,6 +400,16 @@ export function useSyncState(props: UseSyncStateProps) {
 
       if (data.type === 'AUDIO_TELEMETRY') {
         applyAudioTelemetry(data.audioState as AudioState);
+        return;
+      }
+
+      if (data.type === 'VIDEO_TELEMETRY') {
+        applyVideoTelemetry(data.videoState as VideoState | null);
+        return;
+      }
+
+      if (data.type === 'DISPLAY_TELEMETRY') {
+        applyDisplayTelemetry(data as DisplayTelemetryState);
         return;
       }
 
@@ -347,6 +444,7 @@ export function useSyncState(props: UseSyncStateProps) {
     return () => channel.removeEventListener('message', handleMessage);
   }, [
     isControlMode, channel, clientIdRef, syncState, applyRemoteState, applyAudioTelemetry,
+    applyVideoTelemetry, applyDisplayTelemetry,
     setAudioSyncMaps, currentPresentationRef, currentSlideIndexRef,
     backgroundLockRef, lockedBackgroundValueRef, userSelectedBackgroundRef,
     videoStateRef, appModeRef, scriptureStateRef, audioStateRef,
@@ -368,6 +466,16 @@ export function useSyncState(props: UseSyncStateProps) {
           return;
         }
 
+        if (data.type === 'VIDEO_TELEMETRY') {
+          applyVideoTelemetry(data.videoState as VideoState | null);
+          return;
+        }
+
+        if (data.type === 'DISPLAY_TELEMETRY') {
+          applyDisplayTelemetry(data as DisplayTelemetryState);
+          return;
+        }
+
         applyRemoteState(data);
       } catch (err) {
         console.error('Error parsing network state sync event', err);
@@ -376,8 +484,8 @@ export function useSyncState(props: UseSyncStateProps) {
 
     return () => eventSource.close();
   }, [
-    clientIdRef, applyRemoteState, applyAudioTelemetry,
+    clientIdRef, applyRemoteState, applyAudioTelemetry, applyVideoTelemetry, applyDisplayTelemetry,
   ]);
 
-  return { channel, syncState, persistState, emitAudioTelemetry };
+  return { channel, syncState, persistState, emitAudioTelemetry, emitVideoTelemetry, emitDisplayTelemetry };
 }

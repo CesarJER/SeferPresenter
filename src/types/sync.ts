@@ -1,6 +1,12 @@
 import type { AudioState } from './audio';
 import type { AppMode, Presentation, ScriptureNavState, VideoState } from './presentation';
 
+export interface DisplayTelemetryState {
+  backgroundLock: boolean;
+  lockedBackgroundValue: string | null;
+  userSelectedBackground: string | null;
+}
+
 export interface SyncStatePayload {
   clientId: string;
   origin: 'control' | 'presenter';
@@ -18,4 +24,6 @@ export interface SyncStatePayload {
 export type BroadcastMessage =
   | ({ type: 'SYNC_STATE' } & SyncStatePayload)
   | { type: 'AUDIO_TELEMETRY'; clientId: string; origin: 'control' | 'presenter'; audioState: AudioState }
+  | { type: 'VIDEO_TELEMETRY'; clientId: string; origin: 'control' | 'presenter'; videoState: VideoState | null }
+  | ({ type: 'DISPLAY_TELEMETRY'; clientId: string; origin: 'control' | 'presenter' } & DisplayTelemetryState)
   | { type: 'AUDIO_SYNC_MAPS_UPDATE'; maps: unknown[] };
