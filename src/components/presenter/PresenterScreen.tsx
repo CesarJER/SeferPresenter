@@ -105,7 +105,7 @@ const PresenterScreen: React.FC<PresenterScreenProps> = ({
   useEffect(() => {
     if (!videoElement || !slide || slide.type !== 'video') return;
 
-    let intervalId: any = null;
+    let intervalId: ReturnType<typeof setInterval> | null = null;
 
     const emitTelemetry = () => {
       if (onVideoStateChangeRef.current) {
@@ -126,7 +126,7 @@ const PresenterScreen: React.FC<PresenterScreenProps> = ({
     };
 
     const handlePlay = () => {
-      // Clear any existing interval to prevent duplicates
+      // Clear the existing interval to prevent duplicates
       if (intervalId) {
         clearInterval(intervalId);
       }

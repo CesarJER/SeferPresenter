@@ -5,12 +5,19 @@ import { viteSingleFile } from 'vite-plugin-singlefile'
 import fs from 'fs'
 import type { IncomingMessage, ServerResponse } from 'http'
 import path from 'path'
+import type { AudioState } from './src/types/audio'
+import type { VideoState } from './src/types/presentation'
+import type { DisplayTelemetryState, SyncStatePayload } from './src/types/sync'
 
 type NextFunction = () => void;
 type PresentationRecord = {
   background?: string;
   [key: string]: unknown;
 };
+type ServerSyncState = Partial<SyncStatePayload> & { type?: string };
+type AudioTelemetryPayload = { audioState: AudioState };
+type VideoTelemetryPayload = { videoState: VideoState | null };
+type DisplayTelemetryPayload = DisplayTelemetryState;
 
 const normalizePublicPath = (value: string) => {
   if (!value) return '';
@@ -37,7 +44,7 @@ const normalizePresentations = (presentations: PresentationRecord[]) =>
 const parsePresentations = (content: string) =>
   JSON.parse(content.replace(/^\uFEFF/, '')) as PresentationRecord[];
 
-let currentState: any = {
+let currentState: ServerSyncState = {
   presentation: null,
   slideIndex: -1,
   backgroundLock: false,
@@ -73,7 +80,7 @@ function fileBackendPlugin(): Plugin {
           });
           req.on('end', () => {
             try {
-              currentState = JSON.parse(body);
+              currentState = JSON.parse(body) as ServerSyncState;
               clients.forEach(client => {
                 client.write(`data: ${body}\n\n`);
               });
@@ -94,7 +101,7 @@ function fileBackendPlugin(): Plugin {
           });
           req.on('end', () => {
             try {
-              const telemetry = JSON.parse(body);
+              const telemetry = JSON.parse(body) as AudioTelemetryPayload;
               currentState = {
                 ...currentState,
                 audioState: telemetry.audioState,
@@ -119,7 +126,7 @@ function fileBackendPlugin(): Plugin {
           });
           req.on('end', () => {
             try {
-              const telemetry = JSON.parse(body);
+              const telemetry = JSON.parse(body) as VideoTelemetryPayload;
               currentState = {
                 ...currentState,
                 videoState: telemetry.videoState,
@@ -144,7 +151,7 @@ function fileBackendPlugin(): Plugin {
           });
           req.on('end', () => {
             try {
-              const telemetry = JSON.parse(body);
+              const telemetry = JSON.parse(body) as DisplayTelemetryPayload;
               currentState = {
                 ...currentState,
                 backgroundLock: telemetry.backgroundLock,

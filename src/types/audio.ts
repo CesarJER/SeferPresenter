@@ -54,7 +54,7 @@ export interface AudioState {
   volume: number;
   /** Path to the audio source file */
   audioSrc: string | null;
-  /** ID of the active AudioSyncMap (if any) */
+  /** ID of the active AudioSyncMap, when present */
   activeSyncMapId: string | null;
   /** Current sync mode */
   syncMode: AudioSyncMode;

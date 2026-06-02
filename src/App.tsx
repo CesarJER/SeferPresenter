@@ -134,8 +134,15 @@ function App() {
 
   const activeBackground = getActiveBackground();
 
-  const handleSelectPresentationAndSlideRef = useRef<any>(null);
-  const handleSaveRef = useRef<any>(null);
+  type SelectPresentationAndSlideHandler = (
+    presentation: Presentation | null,
+    slideIndex: number,
+    direction?: 'forward' | 'backward',
+    targetVerse?: string
+  ) => void;
+
+  const handleSelectPresentationAndSlideRef = useRef<SelectPresentationAndSlideHandler | null>(null);
+  const handleSaveRef = useRef<((presentation: Presentation) => void) | null>(null);
 
   const {
     buildScriptureSlideState,

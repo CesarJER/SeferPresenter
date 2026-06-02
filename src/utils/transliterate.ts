@@ -1,4 +1,5 @@
 // Port of transliterate_tanaj.py to TypeScript
+import type { TransliterationConfig } from '../types/transliteration';
 
 const HEB = {
     SHEVA: '\u05B0',
@@ -249,7 +250,7 @@ function getProperNounMatch(word: string, parts: string[], index: number) {
     return null;
 }
 
-function classifyShevas(clusters: Cluster[], stressIdx: number, config: any) {
+function classifyShevas(clusters: Cluster[], stressIdx: number, config: TransliterationConfig) {
     const states: (string | null)[] = new Array(clusters.length).fill(null);
     for (let i = 0; i < clusters.length; i++) {
         const curr = clusters[i];
@@ -281,7 +282,7 @@ function classifyShevas(clusters: Cluster[], stressIdx: number, config: any) {
     return states;
 }
 
-function isLongVowelCluster(clusters: Cluster[], idx: number, shevaStates: (string | null)[], stressIdx: number, config: any): boolean {
+function isLongVowelCluster(clusters: Cluster[], idx: number, shevaStates: (string | null)[], stressIdx: number, config: TransliterationConfig): boolean {
     const c = clusters[idx];
     if (c.isShuruq || c.isHolamVav) return true;
     if (!c.vowelChar || c.vowelChar === HEB.SHEVA) return false;
@@ -293,7 +294,7 @@ function isLongVowelCluster(clusters: Cluster[], idx: number, shevaStates: (stri
     return false;
 }
 
-function isQamatsQatan(clusters: Cluster[], idx: number, shevaStates: (string | null)[], stressIdx: number, config: any): boolean {
+function isQamatsQatan(clusters: Cluster[], idx: number, shevaStates: (string | null)[], stressIdx: number, config: TransliterationConfig): boolean {
     const c = clusters[idx];
     if (c.vowelChar === HEB.QAMATS_QATAN) return true;
     if (c.vowelChar !== HEB.QAMATS) return false;
@@ -318,7 +319,7 @@ function clusterHasPronouncedVowel(clusters: Cluster[], idx: number, shevaStates
 }
 
 function classifyDagesh(clusters: Cluster[], shevaStates: (string | null)[]) {
-    const kinds = [];
+    const kinds: string[] = [];
     for (let i = 0; i < clusters.length; i++) {
         const c = clusters[i];
         if (!c.dagesh) kinds.push('none');
@@ -334,7 +335,7 @@ function classifyDagesh(clusters: Cluster[], shevaStates: (string | null)[]) {
     return kinds;
 }
 
-function mapCons(cluster: Cluster, idx: number, clusters: Cluster[], dageshKinds: string[], config: any): string {
+function mapCons(cluster: Cluster, idx: number, clusters: Cluster[], dageshKinds: string[], config: TransliterationConfig): string {
     const char = cluster.consonant;
     if (cluster.isShuruq || cluster.isHolamVav) return '';
     const dagesh = dageshKinds[idx];
@@ -366,7 +367,7 @@ function mapCons(cluster: Cluster, idx: number, clusters: Cluster[], dageshKinds
     return mapping[char] || '';
 }
 
-function mapVowel(clusters: Cluster[], idx: number, shevaStates: (string | null)[], stressIdx: number, config: any): string {
+function mapVowel(clusters: Cluster[], idx: number, shevaStates: (string | null)[], stressIdx: number, config: TransliterationConfig): string {
     const c = clusters[idx];
     let v = c.vowelChar;
     if (c.isShuruq) v = HEB.QUBUTS;
@@ -403,7 +404,7 @@ function capitalizeFirst(s: string): string {
     return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
-function transliterateWord(word: string, capIdx: number = -1, config: any = {}): string {
+function transliterateWord(word: string, capIdx: number = -1, config: TransliterationConfig = {}): string {
     const clusters = parseClusters(word);
     if (!clusters.length) return word;
     const stressIdx = findStress(clusters);
@@ -460,14 +461,14 @@ function transliterateWord(word: string, capIdx: number = -1, config: any = {}):
     return output.trim();
 }
 
-export function transliterateText(text: string, config: any = null): string {
-    if (!config) config = { qereDivine: true, properNamesOnly: true, showForteMarker: true, forceInitialCapital: true, ayinMode: 'underline' };
+export function transliterateText(text: string, config: TransliterationConfig | null = null): string {
+    const activeConfig: TransliterationConfig = config ?? { qereDivine: true, properNamesOnly: true, showForteMarker: true, forceInitialCapital: true, ayinMode: 'underline' };
     
     // Replace html tokens or custom marks
     text = text.replace(/<[^>]*>/g, '').replace(/[\[\]*()]/g, '');
 
     const parts = text.split(/(\s+|-|\||\u05BE)/);
-    let result = [];
+    const result: string[] = [];
 
     for (let i = 0; i < parts.length; i++) {
         let part = parts[i];
@@ -479,7 +480,7 @@ export function transliterateText(text: string, config: any = null): string {
 
         let word = part.normalize('NFD');
 
-        if (config.qereDivine) {
+        if (activeConfig.qereDivine) {
             const cands = getCandidates(word);
             let foundDivine = false;
             for (const c of cands) {
@@ -491,7 +492,7 @@ export function transliterateText(text: string, config: any = null): string {
                     let prefTrans = "";
                     if (prefClusters.length > 0) {
                         const prefHeb = prefClusters.map(cl => cl.text).join('');
-                        prefTrans = transliterateWord(prefHeb, -1, config);
+                        prefTrans = transliterateWord(prefHeb, -1, activeConfig);
                         while (prefTrans && 'aeiouáéíóúAEIOUÁÉÍÓÚ\u0331'.includes(prefTrans[prefTrans.length - 1])) {
                             prefTrans = prefTrans.substring(0, prefTrans.length - 1);
                         }
@@ -509,7 +510,7 @@ export function transliterateText(text: string, config: any = null): string {
         }
 
         let capIdx = -1;
-        if (config.properNamesOnly) {
+        if (activeConfig.properNamesOnly) {
             const match = getProperNounMatch(word, parts, i);
             if (match) capIdx = match.prefixLen;
         }
@@ -530,13 +531,13 @@ export function transliterateText(text: string, config: any = null): string {
             }
         }
 
-        const trans = transliterateWord(word, capIdx, config);
+        const trans = transliterateWord(word, capIdx, activeConfig);
         result.push(trans);
     }
 
     let res = result.join('').replace(/\|/g, ' | ');
     res = res.replace(/\s+/g, ' ').trim();
-    if (config.forceInitialCapital && res) {
+    if (activeConfig.forceInitialCapital && res) {
         res = capitalizeFirst(res);
     }
     return res;

@@ -3,7 +3,7 @@ export interface TransliterationConfig {
   properNamesOnly?: boolean;
   showForteMarker?: boolean;
   forceInitialCapital?: boolean;
-  ayinMode?: 'apostrophe' | 'left-single-quote' | 'none';
+  ayinMode?: 'apostrophe' | 'left-single-quote' | 'none' | 'underline';
   finalHeMode?: 'h' | 'silent';
   qamatsQatanInference?: boolean;
 }
