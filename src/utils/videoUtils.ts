@@ -28,7 +28,7 @@ export const parseVideoSlideString = (text: string): {
   }
 
   let paramStrings: string[];
-  let rawSrc = '';
+  let rawSrc: string;
 
   if (pathEndIdx !== -1) {
     rawSrc = parts.slice(0, pathEndIdx + 1).join(' - ');

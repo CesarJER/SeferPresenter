@@ -465,7 +465,12 @@ export function transliterateText(text: string, config: TransliterationConfig | 
     const activeConfig: TransliterationConfig = config ?? { qereDivine: true, properNamesOnly: true, showForteMarker: true, forceInitialCapital: true, ayinMode: 'underline' };
     
     // Replace html tokens or custom marks
-    text = text.replace(/<[^>]*>/g, '').replace(/[\[\]*()]/g, '');
+    text = text
+        .replace(/<[^>]*>/g, '')
+        .replace(/\[/g, '')
+        .replace(/]/g, '')
+        .replace(/\*/g, '')
+        .replace(/[()]/g, '');
 
     const parts = text.split(/(\s+|-|\||\u05BE)/);
     const result: string[] = [];
@@ -478,7 +483,7 @@ export function transliterateText(text: string, config: TransliterationConfig | 
             continue;
         }
 
-        let word = part.normalize('NFD');
+        const word = part.normalize('NFD');
 
         if (activeConfig.qereDivine) {
             const cands = getCandidates(word);

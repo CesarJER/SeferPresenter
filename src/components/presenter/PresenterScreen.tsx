@@ -289,7 +289,7 @@ const PresenterScreen: React.FC<PresenterScreenProps> = ({
                         {slide.lines.map((line, idx) => (
                           <section
                             key={idx}
-                            className="flex-1 min-h-[12vh] rounded-lg bg-black/52 px-[3vw] py-[2.4vh] shadow-[0_20px_70px_rgba(0,0,0,0.42)] backdrop-blur-md flex flex-col min-h-0"
+                            className="glass-panel flex min-h-0 min-h-[12vh] flex-1 flex-col px-[3vw] py-[2.4vh]"
                           >
                             <div className="flex-1 overflow-hidden">
                               <AutoResizeText
@@ -307,7 +307,7 @@ const PresenterScreen: React.FC<PresenterScreenProps> = ({
                         ))}
                       </div>
                     ) : (
-                      <section className="flex-1 min-h-[40vh] w-full rounded-lg bg-black/52 px-[4vw] py-[5vh] shadow-[0_20px_70px_rgba(0,0,0,0.42)] backdrop-blur-md flex flex-col min-h-0">
+                      <section className="glass-panel flex min-h-0 min-h-[40vh] w-full flex-1 flex-col px-[4vw] py-[5vh]">
                         <div className="flex-1 overflow-hidden">
                           <AutoResizeText
                             text={slide.lines[0]}
@@ -325,7 +325,7 @@ const PresenterScreen: React.FC<PresenterScreenProps> = ({
             <footer
               className={`group/nav grid h-[7vh] min-h-14 max-h-20 w-full grid-cols-[1.25fr_0.5fr_auto] gap-2 text-center font-bold transition-opacity duration-200 ${presenterNavVisible ? 'opacity-100' : 'opacity-0 hover:opacity-100'}`}
             >
-              <div className="flex min-w-0 items-center justify-center rounded-lg bg-black/52 px-3 text-sky-50 shadow-[0_20px_70px_rgba(0,0,0,0.36)] backdrop-blur-md text-[clamp(0.72rem,1vw,1.18rem)] sm:px-4">
+              <div className="glass-panel-nav flex min-w-0 items-center justify-center px-3 text-[clamp(0.72rem,1vw,1.18rem)] sm:px-4">
                 {titleText}
               </div>
               <AnimatePresence mode="wait">
@@ -335,14 +335,14 @@ const PresenterScreen: React.FC<PresenterScreenProps> = ({
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -8 }}
                   transition={{ duration: 0.2 }}
-                  className="flex min-w-0 items-center justify-center rounded-lg bg-black/52 px-3 text-sky-50 shadow-[0_20px_70px_rgba(0,0,0,0.36)] backdrop-blur-md text-[clamp(0.72rem,1vw,1.18rem)] sm:px-4"
+                  className="glass-panel-nav flex min-w-0 items-center justify-center px-3 text-[clamp(0.72rem,1vw,1.18rem)] sm:px-4"
                 >
                   {slideLabel}
                 </motion.div>
               </AnimatePresence>
               <button
                 onClick={onLogoClick}
-                className="flex aspect-square h-full min-w-0 items-center justify-center rounded-lg bg-black/52 p-2 shadow-[0_20px_70px_rgba(0,0,0,0.36)] backdrop-blur-md transition-colors hover:bg-black/62 focus:outline-none focus:ring-2 focus:ring-white/70 cursor-pointer"
+                className="glass-panel-button flex aspect-square h-full min-w-0 cursor-pointer items-center justify-center p-2"
                 title="Abrir Menú"
               >
                 <img src="/logo.svg" alt="La operador" className="object-contain h-full w-auto" />

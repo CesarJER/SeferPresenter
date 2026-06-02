@@ -62,22 +62,22 @@ const SeferControlPanelMini: React.FC<SeferControlPanelMiniProps> = ({
                 type="button"
                 onClick={() => setShowFontSettings(!showFontSettings)}
                 title="Ajustar tamaños de letra"
-                className={`flex items-center justify-center p-2 rounded-md transition-all ${showFontSettings
+                className={`control-icon-btn p-2 ${showFontSettings
                   ? 'bg-yellow-600 text-white'
-                  : 'bg-gray-800 text-gray-450 hover:bg-gray-705 hover:text-white border border-gray-700'
-                  } cursor-pointer`}
+                  : 'control-icon-btn-neutral'
+                  }`}
               >
                 <Sliders size={14} />
               </button>
             )}
 
-            <div className="rounded-md border border-gray-800 bg-gray-950/60 p-2 space-y-2">
+            <div className="control-mini-panel">
               <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={handlePrev}
                   disabled={!currentVerse}
-                  className="flex-none flex items-center justify-center gap-1 py-2 px-2.5 rounded-md bg-gray-800 hover:bg-gray-700 text-white text-xs font-semibold transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                  className="control-nav-btn flex-none px-2.5"
                   title="Versículo anterior"
                 >
                   <ChevronLeft size={14} />
@@ -105,7 +105,7 @@ const SeferControlPanelMini: React.FC<SeferControlPanelMiniProps> = ({
                   type="button"
                   onClick={handleNext}
                   disabled={!currentVerse}
-                  className="flex-none flex items-center justify-center gap-1 py-2 px-2.5 rounded-md bg-gray-800 hover:bg-gray-700 text-white text-xs font-semibold transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                  className="control-nav-btn flex-none px-2.5"
                   title="Versículo siguiente"
                 >
                   <ChevronRight size={14} />
@@ -116,27 +116,27 @@ const SeferControlPanelMini: React.FC<SeferControlPanelMiniProps> = ({
         </div>
 
         {canAdjustFont && showFontSettings && (
-          <div id="section-font-adjustments" className="p-2.5 bg-gray-800 border border-gray-700 rounded-md space-y-2 text-[10px]">
+          <div id="section-font-adjustments" className="control-font-drawer">
             <div className="flex items-center justify-between gap-2">
-              <span className="text-gray-300 font-semibold">Hebreo: {hebrewFontSize}px</span>
+              <span className="control-font-label">Hebreo: {hebrewFontSize}px</span>
               <input
                 type="range"
                 min="20"
                 max="72"
                 value={hebrewFontSize}
                 onChange={(e) => updateHebrewFontSize(Number(e.target.value))}
-                className="w-24 accent-yellow-500 cursor-pointer"
+                className="control-range w-24"
               />
             </div>
             <div className="flex items-center justify-between gap-2">
-              <span className="text-gray-300 font-semibold">Texto combinado: {combinedTextBaseSize}px</span>
+              <span className="control-font-label">Texto combinado: {combinedTextBaseSize}px</span>
               <input
                 type="range"
                 min="12"
                 max="70"
                 value={combinedTextBaseSize}
                 onChange={(e) => updateCombinedTextBaseSize(Number(e.target.value))}
-                className="w-24 accent-yellow-500 cursor-pointer"
+                className="control-range w-24"
               />
             </div>
           </div>

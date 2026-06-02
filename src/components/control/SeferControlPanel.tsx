@@ -66,8 +66,6 @@ const SeferControlPanel: React.FC<SeferControlPanelProps> = ({
     );
   }
 
-  const selectClass = "bg-gray-800 border border-gray-700 rounded-md px-2 py-1.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-yellow-500 cursor-pointer min-w-0";
-
   return (
     <div className="flex flex-col h-full overflow-hidden bg-gray-900 text-white">
 
@@ -79,7 +77,7 @@ const SeferControlPanel: React.FC<SeferControlPanelProps> = ({
             id="sefer-book-select"
             value={selectedBook}
             onChange={(e) => setSelectedBook(e.target.value)}
-            className={`${selectClass} flex-[2]`}
+            className="control-select flex-[2]"
           >
             {bookList.map((book) => (
               <option key={book} value={book}>{book}</option>
@@ -89,7 +87,7 @@ const SeferControlPanel: React.FC<SeferControlPanelProps> = ({
             id="sefer-chapter-select"
             value={selectedChapter}
             onChange={(e) => setSelectedChapter(e.target.value)}
-            className={`${selectClass} flex-[1]`}
+            className="control-select flex-[1]"
           >
             {chapters.map((ch) => (
               <option key={ch} value={ch}>{ch}</option>
@@ -99,7 +97,7 @@ const SeferControlPanel: React.FC<SeferControlPanelProps> = ({
             id="sefer-verse-select"
             value={selectedVerse}
             onChange={(e) => setSelectedVerse(e.target.value)}
-            className={`${selectClass} flex-[1]`}
+            className="control-select flex-[1]"
           >
             {verses.map((v) => (
               <option key={v} value={v}>{v}</option>
@@ -115,10 +113,10 @@ const SeferControlPanel: React.FC<SeferControlPanelProps> = ({
               onClick={handleActivate}
               disabled={isLoading || !currentVerse}
               title={isActive ? 'Detener Proyección' : 'Proyectar'}
-              className={`flex items-center justify-center p-2 rounded-md transition-all ${isActive
+              className={`control-icon-btn p-2 ${isActive
                 ? 'bg-orange-500 text-white hover:bg-orange-600 shadow-[0_0_10px_rgba(249,115,22,0.5)]'
                 : 'bg-gray-700 text-gray-300 hover:bg-gray-600 hover:text-white'
-                } disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer`}
+                } disabled:opacity-40`}
             >
               <Play size={14} className={isActive ? 'fill-current' : ''} />
             </button>
@@ -127,10 +125,10 @@ const SeferControlPanel: React.FC<SeferControlPanelProps> = ({
               type="button"
               onClick={() => setShowFontSettings(!showFontSettings)}
               title="Ajustar tamaños de letra"
-              className={`flex items-center justify-center p-2 rounded-md transition-all ${showFontSettings
+              className={`control-icon-btn p-2 ${showFontSettings
                 ? 'bg-yellow-600 text-white'
-                : 'bg-gray-800 text-gray-450 hover:bg-gray-705 hover:text-white border border-gray-700'
-                } cursor-pointer`}
+                : 'control-icon-btn-neutral'
+                }`}
             >
               <Sliders size={14} />
             </button>
@@ -143,7 +141,7 @@ const SeferControlPanel: React.FC<SeferControlPanelProps> = ({
               id="sefer-prev-btn"
               onClick={handlePrev}
               disabled={!currentVerse || currentVerse.verseIdx === 0}
-              className="flex-1 flex items-center justify-center gap-1 py-2 rounded-md bg-gray-800 hover:bg-gray-700 text-white text-xs font-semibold transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+              className="control-nav-btn flex-1"
             >
               <ChevronLeft size={14} /> Anterior
             </button>
@@ -155,7 +153,7 @@ const SeferControlPanel: React.FC<SeferControlPanelProps> = ({
                 onClick={() => handleAddSlide('sefer')}
                 disabled={!currentVerse}
                 title="Presentar y añadir como slide Sefer a la presentación actual"
-                className="flex items-center justify-center gap-1 px-3 py-2 rounded-md bg-green-700 hover:bg-green-600 text-white text-xs font-bold transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                className="control-action-btn bg-green-700 hover:bg-green-600"
               >
                 <span>+📜</span>
               </button>
@@ -178,7 +176,7 @@ const SeferControlPanel: React.FC<SeferControlPanelProps> = ({
                 onClick={() => handleAddSlide('tanaj')}
                 disabled={!currentVerse}
                 title="Presentar y añadir como slide Tanaj a la presentación actual"
-                className="flex items-center justify-center gap-1 px-3 py-2 rounded-md bg-blue-700 hover:bg-blue-600 text-white text-xs font-bold transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                className="control-action-btn bg-blue-700 hover:bg-blue-600"
               >
                 <span>+📖</span>
               </button>
@@ -189,7 +187,7 @@ const SeferControlPanel: React.FC<SeferControlPanelProps> = ({
               id="sefer-next-btn"
               onClick={handleNext}
               disabled={!currentVerse || currentVerse.verseIdx >= currentVerse.totalVerses - 1}
-              className="flex-1 flex items-center justify-center gap-1 py-2 rounded-md bg-gray-800 hover:bg-gray-700 text-white text-xs font-semibold transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+              className="control-nav-btn flex-1"
             >
               Siguiente <ChevronRight size={14} />
             </button>
@@ -204,9 +202,9 @@ const SeferControlPanel: React.FC<SeferControlPanelProps> = ({
 
         {/* Font Adjustment Drawer */}
         {showFontSettings && (
-          <div className="p-2.5 bg-gray-800 border border-gray-700 rounded-md space-y-2 text-[10px]">
+          <div className="control-font-drawer">
             <div className="flex items-center justify-between gap-2">
-              <span className="text-gray-300 font-semibold">Hebreo: {hebrewFontSize}px</span>
+              <span className="control-font-label">Hebreo: {hebrewFontSize}px</span>
               <input
                 type="range"
                 min="20"
@@ -215,11 +213,11 @@ const SeferControlPanel: React.FC<SeferControlPanelProps> = ({
                 onChange={(e) => {
                   updateHebrewFontSize(Number(e.target.value));
                 }}
-                className="w-24 accent-yellow-500 cursor-pointer"
+                className="control-range w-24"
               />
             </div>
             <div className="flex items-center justify-between gap-2">
-              <span className="text-gray-300 font-semibold">Texto combinado: {combinedTextBaseSize}px</span>
+              <span className="control-font-label">Texto combinado: {combinedTextBaseSize}px</span>
               <input
                 type="range"
                 min="12"
@@ -228,7 +226,7 @@ const SeferControlPanel: React.FC<SeferControlPanelProps> = ({
                 onChange={(e) => {
                   updateCombinedTextBaseSize(Number(e.target.value));
                 }}
-                className="w-24 accent-yellow-500 cursor-pointer"
+                className="control-range w-24"
               />
             </div>
           </div>

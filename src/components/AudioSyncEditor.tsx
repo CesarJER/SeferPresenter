@@ -426,7 +426,7 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
         } else {
           alert('El archivo JSON debe contener un arreglo de mapas.');
         }
-      } catch (err) {
+      } catch {
         alert('Error al leer el archivo JSON.');
       }
     };

@@ -9,7 +9,7 @@ export const numberToHebrewNumeral = (num: number): string => {
   if (num === 15) return 'ט״ו';
   if (num === 16) return 'ט״ז';
 
-  let result = '';
+  let result: string;
   const parts: string[] = [];
 
   if (num >= 400) {

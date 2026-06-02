@@ -1,73 +1,104 @@
-# React + TypeScript + Vite
+# SeferPresenter
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+SeferPresenter es una aplicación React/Vite para proyectar presentaciones litúrgicas con soporte para diapositivas, fondos, video, audio sincronizado y navegación de textos bíblicos. Está pensada para funcionar tanto en una pantalla de proyección como en una ventana de control, con una ruta de evolución clara hacia control remoto móvil.
 
-Currently, two official plugins are available:
+## Modos de uso
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- **Proyección**: abre la app sin parámetros. Muestra la diapositiva, fondo, video o lector bíblico activo.
+- **Control**: abre `?mode=control`. Permite seleccionar presentaciones, editar slides, cambiar fondos, controlar audio/video y navegar textos.
+- **Editor de audio**: abre `?mode=audio-editor`. Permite asociar pistas de audio a presentaciones y cues de diapositiva.
+- **Singlefile**: genera un HTML autocontenido para entornos sin servidor.
 
-## React Compiler
+## Scripts
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm run dev        # servidor Vite en modo web
+npm run build      # build web
+npm run build:app  # build singlefile, genera dist/app_presenter.html
+npm run test       # Vitest
+npm run lint       # ESLint
+npx tsc --noEmit   # verificación estricta de tipos
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+Los scripts `predev`, `prebuild` y `prebuild:app` regeneran `public/books/*.tsv` y `public/metadata.json` desde los datos bíblicos externos.
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+## Arquitectura
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+La aplicación se organiza por consumidor:
+
+- `src/components/control/`: panel de operador y controles interactivos.
+- `src/components/presenter/`: pantalla de proyección y lector visual.
+- `src/components/shared/`: componentes comunes.
+- `src/hooks/`: lógica de sincronización, navegación, fondos, audio, escritura y teclado.
+- `src/types/`: contratos compartidos de presentación, audio, sincronización y transliteración.
+- `src/utils/`: normalización, parsing, lookup bíblico, metadata y utilidades puras.
+
+## Sincronización
+
+La sincronización usa `BroadcastChannel` para pestañas locales y SSE/API para red local en modo web.
+
+Canales principales:
+
+- `SYNC_STATE`: navegación y estado completo necesario para inicialización.
+- `AUDIO_TELEMETRY`: estado ligero de reproducción de audio.
+- `VIDEO_TELEMETRY`: estado ligero de reproducción de video.
+- `DISPLAY_TELEMETRY`: cambios de fondo, override y candado.
+
+Esta separación evita reenviar el JSON completo de presentaciones durante ticks de reproducción o manipulación de fondos, algo importante para futuros controladores móviles.
+
+## Estilos
+
+Tailwind se usa como base, con clases repetitivas agrupadas en `src/index.css` dentro de `@layer components`.
+
+Clases destacadas:
+
+- `control-*`: botones, sliders, selects y paneles compactos del control remoto.
+- `audio-*`: controles específicos del panel de audio.
+- `glass-panel`, `glass-panel-nav`, `glass-panel-button`: superficies glassmorphism oscuras de la proyección.
+
+La idea es mantener el JSX más legible y reducir cadenas largas repetidas, especialmente en elementos renderizados o mantenidos en pantalla durante sesiones largas.
+
+## Tests
+
+Hay una primera base de pruebas unitarias con Vitest:
+
+- Normalización de presentaciones y hashes.
+- Parsing/serialización de tags de escritura.
+- Numerales bíblicos.
+
+Los tests viven en `__tests__/` y se ejecutan con:
+
+```bash
+npm run test
 ```
+
+## Verificación recomendada
+
+Antes de cerrar cambios importantes:
+
+```bash
+npx tsc --noEmit
+npm run test
+npm run build
+npm run build:app
+npm run lint
+```
+
+`npm run lint` puede mostrar warnings de `react-hooks/exhaustive-deps`; los errores deben quedar en cero.
+
+## Checklist manual
+
+- Abrir proyección y control en ventanas separadas.
+- Seleccionar una presentación y navegar slides.
+- Probar fondos: override manual, candado, `Principal`, `Anterior`, `Ignorar`.
+- Probar audio: pista, play/pause, volumen, seek y modos de sync.
+- Probar video: play/pause, loop, velocidad, volumen y seek.
+- Probar Sefer/Tanaj: proyectar, navegar versos, añadir slide.
+- Probar `npm run build:app` abriendo `dist/app_presenter.html`.
+
+## Notas de mantenimiento
+
+- No editar datos generados en `public/books/` a mano; se regeneran desde `scripts/generate-verses.js`.
+- Mantener telemetría de media/display en canales ligeros.
+- Preferir utilidades compartidas en `src/utils/` antes de duplicar parsing o normalización.
+- Mantener la pantalla de proyección liviana: sus paneles visuales deben apoyarse en clases compartidas como `glass-panel`.

@@ -55,7 +55,7 @@ export const VideoControls: React.FC<VideoControlsProps> = ({
               timestamp: Date.now()
             });
           }}
-          className="w-8 h-8 rounded-full bg-yellow-600 hover:bg-yellow-500 text-white flex items-center justify-center transition-all cursor-pointer shadow-md"
+          className="control-icon-btn h-8 w-8 rounded-full bg-yellow-600 text-white shadow-md hover:bg-yellow-500"
           title={videoState?.isPlaying ? 'Pausar video' : 'Reproducir video'}
         >
           {videoState?.isPlaying ? (
@@ -86,7 +86,7 @@ export const VideoControls: React.FC<VideoControlsProps> = ({
                 timestamp: Date.now()
               });
             }}
-            className="w-16 accent-yellow-500 cursor-pointer"
+            className="control-range w-16"
           />
         </div>
 
@@ -130,10 +130,10 @@ export const VideoControls: React.FC<VideoControlsProps> = ({
               timestamp: Date.now()
             });
           }}
-          className={`rounded border px-2 py-1 text-[10px] font-black ${(videoState?.loop ?? true)
+          className={`cursor-pointer rounded border px-2 py-1 text-[10px] font-black ${(videoState?.loop ?? true)
             ? 'bg-yellow-600/25 border-yellow-800 text-yellow-500'
             : 'bg-gray-950/60 border-gray-800 text-gray-500 hover:text-gray-300'
-            } cursor-pointer`}
+            }`}
         >
           BUCLE
         </button>
@@ -163,7 +163,7 @@ export const VideoControls: React.FC<VideoControlsProps> = ({
               timestamp: Date.now()
             });
           }}
-          className="min-w-[160px] flex-1 accent-yellow-500 cursor-pointer"
+          className="control-range min-w-[160px] flex-1"
         />
       </div>
     </div>

@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite'
+import { defineConfig } from 'vitest/config'
 import type { Plugin, ViteDevServer } from 'vite'
 import react from '@vitejs/plugin-react'
 import { viteSingleFile } from 'vite-plugin-singlefile'
@@ -86,7 +86,7 @@ function fileBackendPlugin(): Plugin {
               });
               res.writeHead(200, { 'Content-Type': 'application/json' });
               res.end(JSON.stringify({ success: true }));
-            } catch (err) {
+            } catch {
               res.writeHead(400, { 'Content-Type': 'application/json' });
               res.end(JSON.stringify({ error: 'Invalid JSON' }));
             }
@@ -111,7 +111,7 @@ function fileBackendPlugin(): Plugin {
               });
               res.writeHead(200, { 'Content-Type': 'application/json' });
               res.end(JSON.stringify({ success: true }));
-            } catch (err) {
+            } catch {
               res.writeHead(400, { 'Content-Type': 'application/json' });
               res.end(JSON.stringify({ error: 'Invalid JSON' }));
             }
@@ -136,7 +136,7 @@ function fileBackendPlugin(): Plugin {
               });
               res.writeHead(200, { 'Content-Type': 'application/json' });
               res.end(JSON.stringify({ success: true }));
-            } catch (err) {
+            } catch {
               res.writeHead(400, { 'Content-Type': 'application/json' });
               res.end(JSON.stringify({ error: 'Invalid JSON' }));
             }
@@ -163,7 +163,7 @@ function fileBackendPlugin(): Plugin {
               });
               res.writeHead(200, { 'Content-Type': 'application/json' });
               res.end(JSON.stringify({ success: true }));
-            } catch (err) {
+            } catch {
               res.writeHead(400, { 'Content-Type': 'application/json' });
               res.end(JSON.stringify({ error: 'Invalid JSON' }));
             }
@@ -266,7 +266,7 @@ function fileBackendPlugin(): Plugin {
               fs.writeFileSync(syncPath, JSON.stringify(parsed, null, 2), 'utf-8');
               res.writeHead(200, { 'Content-Type': 'application/json' });
               res.end(JSON.stringify({ success: true }));
-            } catch (err) {
+            } catch {
               res.writeHead(400, { 'Content-Type': 'application/json' });
               res.end(JSON.stringify({ error: 'Invalid JSON' }));
             }
@@ -312,6 +312,10 @@ function fileBackendPlugin(): Plugin {
 export default defineConfig({
   define: {
     __APP_MODE__: JSON.stringify(process.env.VITE_APP_MODE ?? 'web'),
+  },
+  test: {
+    environment: 'node',
+    include: ['__tests__/**/*.test.ts'],
   },
   plugins: [
     react(),

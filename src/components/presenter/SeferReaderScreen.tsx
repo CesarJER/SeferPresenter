@@ -258,9 +258,9 @@ export const SeferReaderScreen: React.FC<SeferReaderScreenProps> = ({
   }, [scriptureState.combinedTextBaseSize]);
 
   const isGreek = useMemo(() => {
-    const nativeBookName = currentSelectedVerse?.bookHeb || scriptureState?.bookHeb || '';
+    const nativeBookName = currentSelectedVerse?.bookHeb || scriptureState.bookHeb || '';
     return /[\u0370-\u03FF\u1F00-\u1FFF]/.test(nativeBookName);
-  }, [currentSelectedVerse?.bookHeb, scriptureState?.bookHeb]);
+  }, [currentSelectedVerse?.bookHeb, scriptureState.bookHeb]);
 
   const formatReferenceNav = useCallback((bookName: string, useHebrewNumbers = false) => {
     const chapter = Number(scriptureState.chapter);

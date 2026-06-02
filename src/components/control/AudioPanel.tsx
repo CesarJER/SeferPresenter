@@ -77,7 +77,7 @@ export const AudioPanel: React.FC<AudioPanelProps> = ({
           <select
             value={audioState.audioSrc || ''}
             onChange={(e) => handleSelectAudioTrack(e.target.value)}
-            className="w-full bg-gray-900 border border-gray-700 rounded px-2.5 py-1.5 focus:border-yellow-500 outline-none text-white cursor-pointer"
+            className="w-full rounded border border-gray-700 bg-gray-900 px-2.5 py-1.5 text-white outline-none focus:border-yellow-500 cursor-pointer"
           >
             <option value="">-- Sin Música / Silencio --</option>
             {availableAudioFiles.map((file) => {
@@ -111,7 +111,7 @@ export const AudioPanel: React.FC<AudioPanelProps> = ({
                   timestamp: Date.now(),
                 });
               }}
-              className={`flex items-center justify-center p-2.5 rounded bg-sky-700 hover:bg-sky-650 border border-sky-600 text-white transition-all cursor-pointer shadow-sm ${
+              className={`audio-panel-btn border border-sky-600 bg-sky-700 hover:bg-sky-650 ${
                 audioState.syncMode === 'none' || currentPresentation?.id !== matchedSyncMap.presentationId
                   ? 'animate-pulse hover:animate-none'
                   : ''
@@ -127,7 +127,7 @@ export const AudioPanel: React.FC<AudioPanelProps> = ({
             type="button"
             onClick={togglePlayback}
             disabled={!audioState.audioSrc}
-            className="flex items-center justify-center p-2.5 rounded bg-yellow-600 hover:bg-yellow-500 text-white transition-all disabled:opacity-40 disabled:hover:bg-yellow-600 cursor-pointer shadow-sm"
+            className="audio-panel-btn bg-yellow-600 hover:bg-yellow-500 disabled:hover:bg-yellow-600"
             title={audioState.isPlaying ? "Pausar" : "Reproducir"}
           >
             {audioState.isPlaying ? <Pause size={14} /> : <Play size={14} />}
@@ -138,7 +138,7 @@ export const AudioPanel: React.FC<AudioPanelProps> = ({
             type="button"
             onClick={toggleMute}
             disabled={!audioState.audioSrc}
-            className={`flex items-center justify-center p-2.5 rounded transition-all cursor-pointer ${audioState.volume === 0
+            className={`audio-panel-btn ${audioState.volume === 0
                 ? 'bg-red-650 text-white animate-pulse border border-red-500'
                 : 'bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700'
               }`}
@@ -173,7 +173,7 @@ export const AudioPanel: React.FC<AudioPanelProps> = ({
               });
             }}
             disabled={!audioState.audioSrc}
-            className="w-16 h-1 bg-gray-700 rounded appearance-none cursor-pointer accent-yellow-500 disabled:opacity-30"
+            className="control-range-slim w-16"
           />
         </div>
       </div>
@@ -198,7 +198,7 @@ export const AudioPanel: React.FC<AudioPanelProps> = ({
             });
           }}
           disabled={!audioState.audioSrc}
-          className="flex-1 h-1 bg-gray-700 rounded appearance-none cursor-pointer accent-yellow-500 disabled:opacity-30 min-w-0"
+          className="control-range-slim min-w-0 flex-1"
         />
         <span className="font-mono text-gray-400 text-[11px] shrink-0">{formatTime(audioState.duration)}</span>
       </div>
@@ -241,7 +241,7 @@ export const AudioPanel: React.FC<AudioPanelProps> = ({
                 });
               }}
               disabled={!audioState.audioSrc}
-              className={`flex-1 py-1 px-1.5 rounded text-[10px] font-semibold transition-all flex items-center justify-center gap-1 cursor-pointer disabled:opacity-40 disabled:hover:bg-transparent ${
+              className={`audio-sync-btn ${
                 audioState.syncMode === 'none'
                   ? 'bg-gray-700 text-white font-bold'
                   : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800'
@@ -263,7 +263,7 @@ export const AudioPanel: React.FC<AudioPanelProps> = ({
                 });
               }}
               disabled={!audioState.audioSrc}
-              className={`flex-1 py-1 px-1.5 rounded text-[10px] font-semibold transition-all flex items-center justify-center gap-1 cursor-pointer disabled:opacity-40 disabled:hover:bg-transparent ${
+              className={`audio-sync-btn ${
                 audioState.syncMode === 'unilateral'
                   ? 'bg-sky-600 text-white font-bold'
                   : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800'
@@ -285,7 +285,7 @@ export const AudioPanel: React.FC<AudioPanelProps> = ({
                 });
               }}
               disabled={!audioState.audioSrc}
-              className={`flex-1 py-1 px-1.5 rounded text-[10px] font-semibold transition-all flex items-center justify-center gap-1 cursor-pointer disabled:opacity-40 disabled:hover:bg-transparent ${
+              className={`audio-sync-btn ${
                 audioState.syncMode === 'bilateral'
                   ? 'bg-emerald-600 text-white font-bold'
                   : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800'
