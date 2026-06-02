@@ -1,4 +1,4 @@
-import type { Presentation, Slide } from '../types/presentation';
+import type { Presentation } from '../types/presentation';
 
 // ── URL helpers ───────────────────────────────────────────────────
 export const parseSlideHash = (hash: string) => {
@@ -56,13 +56,6 @@ export const normalizePresentation = (presentation: Presentation): Presentation 
   let mode = presentation.mode || 'standard';
   let slides = presentation.slides || [];
 
-  // Migrate legacy 'scripture' type to 'sefer'
-  slides = slides.map((slide) => {
-    if ((slide as Slide & { type?: string }).type === 'scripture') {
-      return { ...slide, type: 'sefer' as const };
-    }
-    return slide;
-  });
 
   if (mode === 'trilingual' && slides.length > 0) {
     const allSlidesAreFallback = slides.every(slide => {
