@@ -157,7 +157,7 @@ export const ScriptureRangeEditor: React.FC<ScriptureRangeEditorProps> = ({ slid
                     <tr><td colSpan={isTanaj ? 4 : 3} className="px-2 py-2 text-gray-500">Cargando versos...</td></tr>
                   ) : selectedVerses.length > 0 ? selectedVerses.map((verse) => (
                     <tr key={`${verse.chapter}-${verse.verse}`}>
-                      <td className="px-2 py-1.5 text-right text-[#f3c96a]" dir="rtl" dangerouslySetInnerHTML={{ __html: verse.verseNikud }} />
+                      <td className="px-2 py-1.5 text-right text-[#f3c96a]" dir="rtl" dangerouslySetInnerHTML={{ __html: verse.verseNikudSanitized || verse.verseNikud }} />
                       <td className="px-2 py-1.5 text-sky-200">{verse.transliteration}</td>
                       <td className="px-2 py-1.5 text-gray-300">{verse.translation}</td>
                       {isTanaj && <td className="px-2 py-1.5">

@@ -8,6 +8,8 @@ export interface ScriptureVerse {
   chapter: string;
   verse: string;
   verseNikud: string;
+  verseNikudSanitized?: string;
+  verseNikudCleanSanitized?: string;
   transliteration: string;
   translation: string;
 }
