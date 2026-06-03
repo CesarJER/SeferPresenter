@@ -63,7 +63,7 @@ interface PresentationEditorProps {
   getScriptureRangeEndIndex: (startIdx: number) => number;
   isScriptureRangeRoot: (slide: Slide) => boolean;
   parseSlides: () => Slide[];
-  onSelectPresentation: (presentation: Presentation, slideIdx?: number) => void;
+  onSelectPresentation: (p: Presentation, slideIdx?: number, targetVerse?: string) => void;
   handleUpdateLabel: (idx: number, newLabel: string) => void;
   handleUpdateScriptureVerseBackground: (idx: number, verse: string, bgValue: string) => void;
   handleUpdateScriptureSlide: (idx: number, payload: ScriptureSlideUpdate) => void;

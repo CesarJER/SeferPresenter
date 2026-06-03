@@ -294,6 +294,7 @@ const PresenterScreen: React.FC<PresenterScreenProps> = ({
                             <div className="flex-1 overflow-hidden">
                               <AutoResizeText
                                 text={line}
+                                html={true}
                                 fontScale={fontScale}
                                 className={`drop-shadow-2xl font-semibold ${idx === 0
                                     ? 'hebrew-text text-[#f3c96a] text-[calc(clamp(1.8rem,4vw,5.8rem)*var(--font-scale))]'
@@ -311,6 +312,7 @@ const PresenterScreen: React.FC<PresenterScreenProps> = ({
                         <div className="flex-1 overflow-hidden">
                           <AutoResizeText
                             text={slide.lines[0]}
+                            html={true}
                             fontScale={fontScale}
                             className="font-bold text-white drop-shadow-2xl text-[calc(clamp(2rem,4.8vw,7rem)*var(--font-scale))]"
                           />

@@ -47,7 +47,7 @@ interface SlideRowProps {
   getScriptureRangeEndIndex: (startIdx: number) => number;
   isScriptureRangeRoot: (slide: Slide) => boolean;
   parseSlides: () => Slide[];
-  onSelectPresentation: (presentation: Presentation, slideIdx?: number) => void;
+  onSelectPresentation: (presentation: Presentation, slideIdx?: number, targetVerse?: string) => void;
   handleUpdateLabel: (idx: number, newLabel: string) => void;
   handleUpdateScriptureVerseBackground: (idx: number, verse: string, bgValue: string) => void;
   handleUpdateScriptureSlide: (idx: number, payload: ScriptureSlideUpdate) => void;
@@ -184,6 +184,11 @@ export const SlideRow: React.FC<SlideRowProps> = ({
                                       slide={slide}
                                       backgrounds={backgrounds}
                                       onVerseBackgroundChange={(verse, value) => handleUpdateScriptureVerseBackground(idx, verse, value)}
+                                      onPlayVerse={(verse) => {
+                                        if (currentPresentation) {
+                                          onSelectPresentation(currentPresentation, idx, verse);
+                                        }
+                                      }}
                                       onCommit={(payload) => handleUpdateScriptureSlide(idx, payload)}
                                     />
                                   ) : slide.type === 'video' ? (

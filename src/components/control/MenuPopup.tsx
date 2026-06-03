@@ -26,7 +26,7 @@ interface MenuPopupProps {
   onToggleBackgroundLock: (locked: boolean) => void;
   onSelectBackgroundOverride: (bg: string) => void;
   onSave: (p: Presentation) => void | Promise<void>;
-  onSelectPresentation: (p: Presentation, slideIdx?: number) => void;
+  onSelectPresentation: (p: Presentation, slideIdx?: number, targetVerse?: string) => void;
   onSelectSlide: (idx: number) => void;
   onImport: (imported: Presentation[]) => void;
   videoState?: VideoState | null;

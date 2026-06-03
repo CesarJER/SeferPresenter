@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import type { Slide } from '../../types/presentation';
 import { getScriptureChapterVerses } from '../../utils/scriptureLookup';
-import { ChevronUp, ChevronDown } from 'lucide-react';
+import { ChevronUp, ChevronDown, Play } from 'lucide-react';
 
 interface ScriptureRangeEditorProps {
   slide: Slide;
   backgrounds: string[];
   onVerseBackgroundChange: (verse: string, value: string) => void;
+  onPlayVerse?: (verse: string) => void;
   onCommit: (payload: {
     scriptureBook: string;
     scriptureChapter: string;
@@ -16,7 +17,7 @@ interface ScriptureRangeEditorProps {
   }) => void;
 }
 
-export const ScriptureRangeEditor: React.FC<ScriptureRangeEditorProps> = ({ slide, backgrounds, onVerseBackgroundChange, onCommit }) => {
+export const ScriptureRangeEditor: React.FC<ScriptureRangeEditorProps> = ({ slide, backgrounds, onVerseBackgroundChange, onPlayVerse, onCommit }) => {
   const [bookToken, setBookToken] = useState(slide.scriptureBook || slide.label.split(' ')[0] || '');
   const [chapter, setChapter] = useState(slide.scriptureChapter || '1');
   const [verseStart, setVerseStart] = useState(slide.scriptureVerseStart || '1');
@@ -146,17 +147,31 @@ export const ScriptureRangeEditor: React.FC<ScriptureRangeEditorProps> = ({ slid
               <table className="w-full min-w-[680px] text-left text-[11px]">
                 <thead className="bg-gray-950/60 text-[9px] uppercase tracking-wide text-gray-500">
                   <tr>
-                    <th className="px-2 py-1.5 w-[34%]">Hebreo</th>
-                    <th className="px-2 py-1.5 w-[24%]">Transliteración</th>
-                    <th className="px-2 py-1.5 w-[24%]">Traducción</th>
-                    {isTanaj && <th className="px-2 py-1.5 w-[18%]">Fondo slide</th>}
+                    <th className="px-2 py-1.5 w-[5%] text-center">v.</th>
+                    <th className="px-2 py-1.5 w-[32%]">Hebreo</th>
+                    <th className="px-2 py-1.5 w-[22%]">Transliteración</th>
+                    <th className="px-2 py-1.5 w-[22%]">Traducción</th>
+                    {isTanaj && <th className="px-2 py-1.5 w-[19%]">Fondo slide</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-800">
                   {loadingVerses ? (
-                    <tr><td colSpan={isTanaj ? 4 : 3} className="px-2 py-2 text-gray-500">Cargando versos...</td></tr>
+                    <tr><td colSpan={isTanaj ? 5 : 4} className="px-2 py-2 text-gray-500">Cargando versos...</td></tr>
                   ) : selectedVerses.length > 0 ? selectedVerses.map((verse) => (
                     <tr key={`${verse.chapter}-${verse.verse}`}>
+                      <td className="px-2 py-1.5 align-middle w-[5%]">
+                        <div className="flex flex-col items-center justify-center gap-1.5">
+                          <span className="text-[10px] font-bold text-white">{verse.verse}</span>
+                          <button
+                            type="button"
+                            onClick={() => onPlayVerse?.(verse.verse)}
+                            className="w-5 h-5 rounded-full bg-white/5 hover:bg-yellow-600 text-gray-400 hover:text-white border border-white/10 transition-all flex items-center justify-center cursor-pointer"
+                            title={`Ir al verso ${verse.verse}`}
+                          >
+                            <Play size={9} fill="currentColor" className="ml-[1px]" />
+                          </button>
+                        </div>
+                      </td>
                       <td className="px-2 py-1.5 text-right text-[#f3c96a]" dir="rtl" dangerouslySetInnerHTML={{ __html: verse.verseNikudSanitized || verse.verseNikud }} />
                       <td className="px-2 py-1.5 text-sky-200">{verse.transliteration}</td>
                       <td className="px-2 py-1.5 text-gray-300">{verse.translation}</td>
@@ -173,7 +188,7 @@ export const ScriptureRangeEditor: React.FC<ScriptureRangeEditorProps> = ({ slid
                       </td>}
                     </tr>
                   )) : (
-                    <tr><td colSpan={isTanaj ? 4 : 3} className="px-2 py-2 text-gray-500">Sin versos para este rango.</td></tr>
+                    <tr><td colSpan={isTanaj ? 5 : 4} className="px-2 py-2 text-gray-500">Sin versos para este rango.</td></tr>
                   )}
                 </tbody>
               </table>

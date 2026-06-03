@@ -418,10 +418,7 @@ function App() {
           onSelectBackgroundOverride={handleSelectBackgroundOverride}
           onSave={handleSave}
           onResetState={handleResetState}
-          onSelectPresentation={(p, slideIndex) => {
-            const targetIdx = slideIndex !== undefined ? slideIndex : (p.slides.length > 0 ? 0 : -1);
-            handleSelectPresentationAndSlide(p, targetIdx);
-          }}
+          onSelectPresentation={(p, idx, targetVerse) => handleSelectPresentationAndSlide(p, idx ?? 0, 'forward', targetVerse)}
           onSelectSlide={(idx) => handleSelectPresentationAndSlide(currentPresentation, idx)}
           onImport={(imported) => {
             savePresentations(imported);
