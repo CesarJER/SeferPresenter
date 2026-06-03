@@ -3,6 +3,8 @@ import { Play, Pause, Save, Download, Upload, X, Clock, Trash2, Volume2, Music, 
 import type { Presentation } from '../types/presentation';
 import type { AudioSyncMap, AudioSyncCue, AudioSyncMode } from '../types/audio';
 import { findScriptureRange } from '../utils/scriptureLookup';
+import { sanitizeSlideHtml } from '../utils/hebrewText';
+import { validateAudioSyncMaps } from '../utils/validation';
 
 interface AudioSyncEditorProps {
   isOpen: boolean;
@@ -418,7 +420,12 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
             (item) => typeof item.id === 'string' && typeof item.audioSrc === 'string' && Array.isArray(item.cues)
           );
           if (isValid) {
-            onAudioSyncMapsChange(parsed);
+            const validation = validateAudioSyncMaps(parsed);
+            if (!validation.ok || !validation.value) {
+              alert(`El formato del archivo JSON no es valido:\n${validation.errors.slice(0, 8).join('\n')}`);
+              return;
+            }
+            onAudioSyncMapsChange(validation.value);
             alert('Mapas de sincronización importados correctamente.');
           } else {
             alert('El formato del archivo JSON no es válido.');
@@ -720,6 +727,7 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
                     
                     // Slide lines rendering
                     const line0 = row.lines[0] || '';
+                    const safeLine0 = sanitizeSlideHtml(line0);
                     const line1 = row.lines[1] || '';
                     const line2 = row.lines[2] || '';
                     const isFallback1x = row.lines.length === 3 && line1 === '-' && line2 === '-';
@@ -756,7 +764,7 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
                               <p 
                                 className="text-[#f3c96a] font-bold text-right leading-relaxed" 
                                 dir="rtl"
-                                dangerouslySetInnerHTML={{ __html: line0 }}
+                                dangerouslySetInnerHTML={{ __html: safeLine0 }}
                               />
                               {line1 && line1 !== '-' && <p className="text-sky-300/80 italic text-[11px]">{line1}</p>}
                               {line2 && line2 !== '-' && <p className="text-gray-450 text-[11px]">{line2}</p>}
@@ -764,7 +772,7 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
                           ) : (
                             <p 
                               className="text-gray-300 leading-relaxed font-medium"
-                              dangerouslySetInnerHTML={{ __html: line0 }}
+                              dangerouslySetInnerHTML={{ __html: safeLine0 }}
                             />
                           )}
                         </td>

@@ -24,6 +24,8 @@ import { useUrlSync } from './hooks/useUrlSync';
 import { useKeyboardNavigation } from './hooks/useKeyboardNavigation';
 import { useAudioPlayback } from './hooks/useAudioPlayback';
 import { useScriptureNavigation } from './hooks/useScriptureNavigation';
+import { validateAudioSyncMaps, validatePresentationList } from './utils/validation';
+import { makeSyncMessage } from './utils/syncProtocol';
 
 function App() {
   const modeParam = new URLSearchParams(window.location.search).get('mode');
@@ -85,13 +87,34 @@ function App() {
       if (stored) {
         try {
           const parsed = JSON.parse(stored);
-          setPresentations(parsed.map(normalizePresentation));
+          const validation = validatePresentationList(parsed);
+          if (validation.ok && validation.value) {
+            setPresentations(validation.value.map(normalizePresentation));
+          } else {
+            console.error("Invalid stored presentations", validation.errors);
+            setPresentations((defaultPresentations as Presentation[]).map(normalizePresentation));
+          }
         } catch (err) {
           console.error("Error parsing stored presentations", err);
           setPresentations((defaultPresentations as Presentation[]).map(normalizePresentation));
         }
       } else {
         setPresentations((defaultPresentations as Presentation[]).map(normalizePresentation));
+      }
+
+      const storedAudioSync = localStorage.getItem('sefer-presenter-audio-sync');
+      if (storedAudioSync) {
+        try {
+          const parsed = JSON.parse(storedAudioSync);
+          const validation = validateAudioSyncMaps(parsed);
+          if (validation.ok && validation.value) {
+            setAudioSyncMaps(validation.value);
+          } else {
+            console.error("Invalid stored audio sync maps", validation.errors);
+          }
+        } catch (err) {
+          console.error("Error parsing stored audio sync maps", err);
+        }
       }
     } else {
       fetch('/api/backgrounds')
@@ -100,7 +123,14 @@ function App() {
         .catch(err => console.error("Error loading backgrounds", err));
       fetch('/api/presentations')
         .then(res => res.json())
-        .then(data => setPresentations(data.map(normalizePresentation)))
+        .then(data => {
+          const validation = validatePresentationList(data);
+          if (validation.ok && validation.value) {
+            setPresentations(validation.value.map(normalizePresentation));
+          } else {
+            console.error("Invalid presentations payload", validation.errors);
+          }
+        })
         .catch(err => console.error("Error loading presentations", err));
       fetch('/api/audio')
         .then(res => res.json())
@@ -108,7 +138,14 @@ function App() {
         .catch(err => console.error("Error loading audio files", err));
       fetch('/api/audio-sync')
         .then(res => res.json())
-        .then(data => setAudioSyncMaps(data))
+        .then(data => {
+          const validation = validateAudioSyncMaps(data);
+          if (validation.ok && validation.value) {
+            setAudioSyncMaps(validation.value);
+          } else {
+            console.error("Invalid audio sync payload", validation.errors);
+          }
+        })
         .catch(err => console.error("Error loading audio sync maps", err));
     }
   }, []);
@@ -198,6 +235,12 @@ function App() {
 
   const savePresentations = async (updated: Presentation[]) => {
     const normalized = updated.map(normalizePresentation);
+    const validation = validatePresentationList(normalized);
+    if (!validation.ok || !validation.value) {
+      console.error("Refusing to save invalid presentations", validation.errors);
+      alert(`No se guardaron las presentaciones porque contienen datos inv\u00e1lidos:\n${validation.errors.slice(0, 5).join('\n')}`);
+      return;
+    }
     setPresentations(normalized);
     if (__APP_MODE__ === 'singlefile') {
       localStorage.setItem('sefer-presenter-presentations', JSON.stringify(normalized));
@@ -387,17 +430,23 @@ function App() {
           availableAudioFiles={availableAudioFiles}
           audioSyncMaps={audioSyncMaps}
           onAudioSyncMapsChange={(maps) => {
-            setAudioSyncMaps(maps);
+            const validation = validateAudioSyncMaps(maps);
+            if (!validation.ok || !validation.value) {
+              console.error('Refusing to save invalid audio sync maps', validation.errors);
+              alert(`No se guardaron los mapas de audio porque contienen datos inv\u00e1lidos:\n${validation.errors.slice(0, 5).join('\n')}`);
+              return;
+            }
+            setAudioSyncMaps(validation.value);
             if (__APP_MODE__ !== 'singlefile') {
               fetch('/api/audio-sync', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(maps)
+                body: JSON.stringify(validation.value)
               }).catch(err => console.error('Error saving audio sync maps', err));
             } else {
-              localStorage.setItem('sefer-presenter-audio-sync', JSON.stringify(maps));
+              localStorage.setItem('sefer-presenter-audio-sync', JSON.stringify(validation.value));
             }
-            channel.postMessage({ type: 'AUDIO_SYNC_MAPS_UPDATE', maps });
+            channel.postMessage(makeSyncMessage({ type: 'AUDIO_SYNC_MAPS_UPDATE', maps: validation.value }));
           }}
         />
       </div>
@@ -441,15 +490,21 @@ function App() {
             });
           }}
           onAudioSyncMapsChange={(maps) => {
-            setAudioSyncMaps(maps);
+            const validation = validateAudioSyncMaps(maps);
+            if (!validation.ok || !validation.value) {
+              console.error('Refusing to save invalid audio sync maps', validation.errors);
+              alert(`No se guardaron los mapas de audio porque contienen datos inv\u00e1lidos:\n${validation.errors.slice(0, 5).join('\n')}`);
+              return;
+            }
+            setAudioSyncMaps(validation.value);
             if (__APP_MODE__ !== 'singlefile') {
               fetch('/api/audio-sync', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(maps)
+                body: JSON.stringify(validation.value)
               }).catch(err => console.error('Error saving audio sync maps', err));
             } else {
-              localStorage.setItem('sefer-presenter-audio-sync', JSON.stringify(maps));
+              localStorage.setItem('sefer-presenter-audio-sync', JSON.stringify(validation.value));
             }
           }}
           appMode={appMode}

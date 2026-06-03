@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useCallback, useEffect, useState, useRef } from 'react';
 import type { Presentation, Slide, VideoState, AppMode, ScriptureNavState } from '../../types/presentation';
 import type { SeferReaderState } from '../../hooks/useSeferReader';
 import { transliterateText } from '../../utils/transliterate';
@@ -233,7 +233,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
   // ────────────────────────────────────────────────────────────────
   // Handlers
   // ────────────────────────────────────────────────────────────────
-  const handleNew = () => {
+  const handleNew = useCallback(() => {
     setId(Date.now().toString());
     setTitle('');
     setBg(backgrounds[0] || '');
@@ -247,7 +247,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
       { id: 'slide-title', label: 'Título', lines: ['', '-', '-'] }
     ]);
     setIsTableMode(true);
-  };
+  }, [backgrounds]);
 
   const handleStartEditing = (p: Presentation) => {
     setEditorMode('edit');
@@ -357,7 +357,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
         .filter(Boolean)
         .join('\n\n')
     );
-  }, [currentPresentation, backgrounds, editorMode]);
+  }, [currentPresentation, backgrounds, editorMode, handleNew]);
 
   const getStandardTextFromSlides = (slidesList: Slide[]): string => {
     const contentSlides = slidesList.filter(slide => !isTitleSlide(slide));

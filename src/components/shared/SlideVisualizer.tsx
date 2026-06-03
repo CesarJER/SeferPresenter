@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ChevronDown, ChevronUp, Eye } from 'lucide-react';
 import type { Slide, ScriptureNavState, AppMode } from '../../types/presentation';
+import { sanitizeSlideHtml } from '../../utils/hebrewText';
 
 interface SlideVisualizerProps {
   slide: Slide | null;
@@ -58,6 +59,7 @@ const SlideVisualizer: React.FC<SlideVisualizerProps> = ({
   }
 
   const line0 = lines[0] || '';
+  const safeLine0 = sanitizeSlideHtml(line0);
   const line1 = lines[1] || '';
   const line2 = lines[2] || '';
 
@@ -102,7 +104,7 @@ const SlideVisualizer: React.FC<SlideVisualizerProps> = ({
                 dir={textDir}
                 className={`text-sm md:text-base leading-relaxed text-[#f3c96a] font-bold ${textAlignment}`}
                 style={{ fontFamily: isRtl ? "'Frank Ruhl Libre', 'SBL Hebrew', serif" : 'inherit' }}
-                dangerouslySetInnerHTML={{ __html: line0 }}
+                dangerouslySetInnerHTML={{ __html: safeLine0 }}
               />
 
               {/* Transliteration & Translation */}
@@ -126,7 +128,7 @@ const SlideVisualizer: React.FC<SlideVisualizerProps> = ({
                 dir={textDir}
                 className={`text-sm md:text-base leading-relaxed text-white font-bold ${textAlignment}`}
                 style={{ fontFamily: isRtl ? "'Frank Ruhl Libre', 'SBL Hebrew', serif" : 'inherit' }}
-                dangerouslySetInnerHTML={{ __html: line0 }}
+                dangerouslySetInnerHTML={{ __html: safeLine0 }}
               />
             </div>
           )}

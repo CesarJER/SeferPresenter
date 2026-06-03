@@ -1,4 +1,5 @@
 import type { Presentation } from '../types/presentation';
+import { validatePresentation } from './validation';
 
 // ── URL helpers ───────────────────────────────────────────────────
 export const parseSlideHash = (hash: string) => {
@@ -106,9 +107,14 @@ export const loadStoredPresenterState = (): { presentation: Presentation | null;
     if (!stored) return null;
 
     const data = JSON.parse(stored);
+    const validation = data.presentation ? validatePresentation(data.presentation) : null;
+    if (validation && (!validation.ok || !validation.value)) {
+      console.error('Invalid stored presenter state', validation.errors);
+      return null;
+    }
     return {
-      presentation: data.presentation ? normalizePresentation(data.presentation) : null,
-      slideIndex: data.slideIndex
+      presentation: validation?.value ? normalizePresentation(validation.value) : null,
+      slideIndex: typeof data.slideIndex === 'number' ? data.slideIndex : -1
     };
   } catch (err) {
     console.error('Error loading stored presenter state', err);

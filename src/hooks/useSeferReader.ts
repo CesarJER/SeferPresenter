@@ -118,7 +118,7 @@ export function useSeferReader(): UseSeferReaderResult {
         }
       })
       .catch((e) => console.error('SeferReader: error loading metadata', e));
-  }, []);
+  }, [selectedBook]);
 
   // ------------------------------------------------------------------
   // Load book data when selectedBook changes
@@ -265,7 +265,7 @@ export function useSeferReader(): UseSeferReaderResult {
       verseStart,
       verseEnd
     );
-  }, [bookData, buildState, chapterVerses, hasActiveRange, rangeChapterVerses.length]);
+  }, [bookData, buildState, chapterVerses, hasActiveRange, rangeChapterVerses.length, selectedChapter]);
 
   const deactivate = useCallback(() => {
     setIsActive(false);
@@ -309,7 +309,7 @@ export function useSeferReader(): UseSeferReaderResult {
       verseStart,
       verseEnd
     );
-  }, [bookData, buildState, chapterVerses, hasActiveRange, rangeChapterVerses, selectedChapter, selectedVerse]);
+  }, [bookData, buildState, hasActiveRange, rangeChapterVerses, selectedChapter, selectedVerse]);
 
   const goPrev = useCallback((): SeferReaderState | null => {
     const versesSource = hasActiveRange ? rangeChapterVerses : bookData;
@@ -332,7 +332,7 @@ export function useSeferReader(): UseSeferReaderResult {
       verseStart,
       verseEnd
     );
-  }, [bookData, buildState, chapterVerses, hasActiveRange, rangeChapterVerses, selectedChapter, selectedVerse]);
+  }, [bookData, buildState, hasActiveRange, rangeChapterVerses, selectedChapter, selectedVerse]);
 
   return {
     metadata,

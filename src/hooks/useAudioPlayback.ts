@@ -284,5 +284,6 @@ export function useAudioPlayback(props: UseAudioPlaybackProps) {
     emitAudioTelemetry,
     audioRef,
     audioStateRef,
+    currentPresentationRef,
   ]);
 }

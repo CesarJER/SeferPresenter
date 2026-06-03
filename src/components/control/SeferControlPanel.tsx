@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight, Play, Sliders } from 'lucide-react';
 import type { ScriptureNavState } from '../../types/presentation';
 import type { SeferReaderState } from '../../hooks/useSeferReader';
 import { useSeferControlLogic } from '../../hooks/useSeferControlLogic';
+import { sanitizeSlideHtml } from '../../utils/hebrewText';
 
 interface SeferControlPanelProps {
   /** Called whenever a verse should be projected (activate ▶️ or arrow nav while active) */
@@ -242,7 +243,7 @@ const SeferControlPanel: React.FC<SeferControlPanelProps> = ({
               dir={/[\u0590-\u05FF]/.test(currentVerse.verseNikud || '') ? "rtl" : "ltr"}
               className={`text-sm leading-relaxed text-[#f3c96a] font-bold ${/[\u0590-\u05FF]/.test(currentVerse.verseNikud || '') ? "text-right" : "text-left"}`}
               style={{ fontFamily: /[\u0590-\u05FF]/.test(currentVerse.verseNikud || '') ? "'Frank Ruhl Libre', 'SBL Hebrew', serif" : 'inherit' }}
-              dangerouslySetInnerHTML={{ __html: currentVerse.verseNikudSanitized ?? currentVerse.verseNikud }}
+              dangerouslySetInnerHTML={{ __html: sanitizeSlideHtml(currentVerse.verseNikudSanitized ?? currentVerse.verseNikud) }}
             />
 
             {/* Transliteration & Translation in compact format */}

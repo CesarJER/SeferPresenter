@@ -30,7 +30,7 @@ export const VideoControls: React.FC<VideoControlsProps> = ({
         setLocalTime(activeSlide?.videoStart ?? 0);
       }
     }
-  }, [videoState?.currentTime, activeSlide?.id, isScrubbing]);
+  }, [videoState, videoState?.currentTime, activeSlide?.id, activeSlide?.videoStart, isScrubbing]);
 
   if (activeSlide?.type !== 'video') return null;
 

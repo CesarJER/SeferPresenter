@@ -99,7 +99,18 @@ const PresenterScreen: React.FC<PresenterScreenProps> = ({
       lastUpdatedBy: 'projection',
       timestamp: Date.now()
     });
-  }, [videoSrc, slide?.id, videoElement]);
+  }, [
+    onVideoStateChange,
+    slide,
+    videoSrc,
+    slide?.id,
+    slide?.videoEnd,
+    slide?.videoLoop,
+    slide?.videoSpeed,
+    slide?.videoStart,
+    slide?.videoVolume,
+    videoElement,
+  ]);
 
   // 3. Playback timeupdate & loadedmetadata event listeners for bidirectional telemetry
   useEffect(() => {
@@ -197,7 +208,7 @@ const PresenterScreen: React.FC<PresenterScreenProps> = ({
         videoElement.removeEventListener('durationchange', handleDurationChange);
       }
     };
-  }, [videoSrc, slide?.id, slide?.videoStart, slide?.videoEnd, videoElement]);
+  }, [slide, videoSrc, slide?.id, slide?.videoSrc, slide?.videoStart, slide?.videoEnd, videoElement]);
 
   const isVideoBg = /\.(mp4|webm)$/i.test(background);
   const isFallback1x = slide?.lines.length === 3 && slide.lines[1] === '-' && slide.lines[2] === '-';

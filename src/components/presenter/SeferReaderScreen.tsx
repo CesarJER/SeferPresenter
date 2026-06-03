@@ -55,7 +55,7 @@ export const SeferReaderScreen: React.FC<SeferReaderScreenProps> = ({
       })
       .catch((e) => console.error('SeferReaderScreen: error loading book', e))
       .finally(() => setIsLoading(false));
-  }, [metadata, scriptureState.bookEs, scriptureState.bookAbbrevEs, resolveBookName]);
+  }, [metadata, scriptureState.bookEs, scriptureState.bookAbbrevEs]);
 
   const hasVerseRange = !!scriptureState.verseEnd;
 

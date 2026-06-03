@@ -1,6 +1,13 @@
 import type { AudioState } from './audio';
 import type { AppMode, Presentation, ScriptureNavState, VideoState } from './presentation';
 
+export const SYNC_PROTOCOL_VERSION = 1;
+
+export interface SyncProtocolMeta {
+  protocolVersion?: typeof SYNC_PROTOCOL_VERSION;
+  timestamp?: number;
+}
+
 export interface DisplayTelemetryState {
   backgroundLock: boolean;
   lockedBackgroundValue: string | null;
@@ -22,8 +29,9 @@ export interface SyncStatePayload {
 }
 
 export type BroadcastMessage =
-  | ({ type: 'SYNC_STATE' } & SyncStatePayload)
-  | { type: 'AUDIO_TELEMETRY'; clientId: string; origin: 'control' | 'presenter'; audioState: AudioState }
-  | { type: 'VIDEO_TELEMETRY'; clientId: string; origin: 'control' | 'presenter'; videoState: VideoState | null }
-  | ({ type: 'DISPLAY_TELEMETRY'; clientId: string; origin: 'control' | 'presenter' } & DisplayTelemetryState)
-  | { type: 'AUDIO_SYNC_MAPS_UPDATE'; maps: unknown[] };
+  | ({ type: 'SYNC_STATE' } & SyncStatePayload & SyncProtocolMeta)
+  | ({ type: 'AUDIO_TELEMETRY'; clientId: string; origin: 'control' | 'presenter'; audioState: AudioState } & SyncProtocolMeta)
+  | ({ type: 'VIDEO_TELEMETRY'; clientId: string; origin: 'control' | 'presenter'; videoState: VideoState | null } & SyncProtocolMeta)
+  | ({ type: 'DISPLAY_TELEMETRY'; clientId: string; origin: 'control' | 'presenter' } & DisplayTelemetryState & SyncProtocolMeta)
+  | ({ type: 'AUDIO_SYNC_MAPS_UPDATE'; maps: unknown[] } & SyncProtocolMeta)
+  | ({ type: 'REQUEST_STATE'; clientId?: string } & SyncProtocolMeta);

@@ -1,6 +1,7 @@
 import React from 'react';
 import { Download, Upload } from 'lucide-react';
 import type { Presentation } from '../../types/presentation';
+import { validatePresentationList } from '../../utils/validation';
 
 interface ImportExportPanelProps {
   presentations: Presentation[];
@@ -32,18 +33,13 @@ export const ImportExportPanel: React.FC<ImportExportPanelProps> = ({
     reader.onload = (readerEvent) => {
       try {
         const parsed = JSON.parse(readerEvent.target?.result as string);
-        if (!Array.isArray(parsed)) {
-          throw new Error('El archivo JSON debe contener una lista (array) de presentaciones.');
+        const validation = validatePresentationList(parsed);
+        if (!validation.ok || !validation.value) {
+          throw new Error(`Formato de presentación inválido:\n${validation.errors.slice(0, 8).join('\n')}`);
         }
 
-        for (const presentation of parsed) {
-          if (!presentation.id || !presentation.title || !Array.isArray(presentation.slides)) {
-            throw new Error('Formato de presentación inválido. Cada elemento debe tener "id", "title" y un array "slides".');
-          }
-        }
-
-        if (window.confirm(`¿Estás seguro de que deseas importar ${parsed.length} presentaciones? Esto reemplazará tu lista actual.`)) {
-          onImport(parsed);
+        if (window.confirm(`¿Estás seguro de que deseas importar ${validation.value.length} presentaciones? Esto reemplazará tu lista actual.`)) {
+          onImport(validation.value);
         }
       } catch (err) {
         alert('Error al importar: ' + (err as Error).message);

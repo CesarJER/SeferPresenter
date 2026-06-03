@@ -8,11 +8,11 @@ import path from 'path'
 import type { AudioState } from './src/types/audio'
 import type { VideoState } from './src/types/presentation'
 import type { DisplayTelemetryState, SyncStatePayload } from './src/types/sync'
+import { validateAudioSyncMaps, validatePresentationList, validateSyncMessage } from './src/utils/validation'
 
 type NextFunction = () => void;
 type PresentationRecord = {
   background?: string;
-  [key: string]: unknown;
 };
 type ServerSyncState = Partial<SyncStatePayload> & { type?: string };
 type AudioTelemetryPayload = { audioState: AudioState };
@@ -80,7 +80,14 @@ function fileBackendPlugin(): Plugin {
           });
           req.on('end', () => {
             try {
-              currentState = JSON.parse(body) as ServerSyncState;
+              const parsed = JSON.parse(body) as ServerSyncState;
+              const validation = validateSyncMessage(parsed);
+              if (!validation.ok) {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'Invalid sync state', details: validation.errors }));
+                return;
+              }
+              currentState = parsed;
               clients.forEach(client => {
                 client.write(`data: ${body}\n\n`);
               });
@@ -102,6 +109,12 @@ function fileBackendPlugin(): Plugin {
           req.on('end', () => {
             try {
               const telemetry = JSON.parse(body) as AudioTelemetryPayload;
+              const validation = validateSyncMessage(telemetry);
+              if (!validation.ok) {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'Invalid audio telemetry', details: validation.errors }));
+                return;
+              }
               currentState = {
                 ...currentState,
                 audioState: telemetry.audioState,
@@ -127,6 +140,12 @@ function fileBackendPlugin(): Plugin {
           req.on('end', () => {
             try {
               const telemetry = JSON.parse(body) as VideoTelemetryPayload;
+              const validation = validateSyncMessage(telemetry);
+              if (!validation.ok) {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'Invalid video telemetry', details: validation.errors }));
+                return;
+              }
               currentState = {
                 ...currentState,
                 videoState: telemetry.videoState,
@@ -152,6 +171,12 @@ function fileBackendPlugin(): Plugin {
           req.on('end', () => {
             try {
               const telemetry = JSON.parse(body) as DisplayTelemetryPayload;
+              const validation = validateSyncMessage(telemetry);
+              if (!validation.ok) {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'Invalid display telemetry', details: validation.errors }));
+                return;
+              }
               currentState = {
                 ...currentState,
                 backgroundLock: telemetry.backgroundLock,
@@ -244,9 +269,20 @@ function fileBackendPlugin(): Plugin {
         if (req.url === '/api/audio-sync' && req.method === 'GET') {
           const syncPath = path.resolve(__dirname, 'audio_sync.json');
           if (fs.existsSync(syncPath)) {
-            const content = fs.readFileSync(syncPath, 'utf-8').replace(/^\uFEFF/, '');
-            res.setHeader('Content-Type', 'application/json');
-            res.end(content);
+            try {
+              const content = fs.readFileSync(syncPath, 'utf-8').replace(/^\uFEFF/, '');
+              const validation = validateAudioSyncMaps(JSON.parse(content));
+              if (!validation.ok) {
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'Invalid audio sync file', details: validation.errors }));
+                return;
+              }
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify(validation.value));
+            } catch {
+              res.writeHead(500, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: 'Invalid audio sync JSON' }));
+            }
           } else {
             res.setHeader('Content-Type', 'application/json');
             res.end(JSON.stringify([]));
@@ -263,7 +299,13 @@ function fileBackendPlugin(): Plugin {
             try {
               const syncPath = path.resolve(__dirname, 'audio_sync.json');
               const parsed = JSON.parse(body);
-              fs.writeFileSync(syncPath, JSON.stringify(parsed, null, 2), 'utf-8');
+              const validation = validateAudioSyncMaps(parsed);
+              if (!validation.ok) {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'Invalid audio sync maps', details: validation.errors }));
+                return;
+              }
+              fs.writeFileSync(syncPath, JSON.stringify(validation.value, null, 2), 'utf-8');
               res.writeHead(200, { 'Content-Type': 'application/json' });
               res.end(JSON.stringify({ success: true }));
             } catch {
@@ -277,9 +319,20 @@ function fileBackendPlugin(): Plugin {
         if (req.url === '/api/presentations' && req.method === 'GET') {
           const pPath = path.resolve(__dirname, 'presentations.json');
           if (fs.existsSync(pPath)) {
-            const presentations = parsePresentations(fs.readFileSync(pPath, 'utf-8'));
-            res.setHeader('Content-Type', 'application/json');
-            res.end(JSON.stringify(normalizePresentations(presentations)));
+            try {
+              const presentations = parsePresentations(fs.readFileSync(pPath, 'utf-8'));
+              const validation = validatePresentationList(presentations);
+              if (!validation.ok || !validation.value) {
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'Invalid presentations file', details: validation.errors }));
+                return;
+              }
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify(normalizePresentations(validation.value)));
+            } catch {
+              res.writeHead(500, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: 'Invalid presentations JSON' }));
+            }
           } else {
             res.setHeader('Content-Type', 'application/json');
             res.end(JSON.stringify([]));
@@ -293,11 +346,22 @@ function fileBackendPlugin(): Plugin {
             body += chunk.toString();
           });
           req.on('end', () => {
-            const pPath = path.resolve(__dirname, 'presentations.json');
-            const presentations = parsePresentations(body);
-            fs.writeFileSync(pPath, JSON.stringify(normalizePresentations(presentations)), 'utf-8');
-            res.setHeader('Content-Type', 'application/json');
-            res.end(JSON.stringify({ success: true }));
+            try {
+              const pPath = path.resolve(__dirname, 'presentations.json');
+              const presentations = parsePresentations(body);
+              const validation = validatePresentationList(presentations);
+              if (!validation.ok || !validation.value) {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'Invalid presentations', details: validation.errors }));
+                return;
+              }
+              fs.writeFileSync(pPath, JSON.stringify(normalizePresentations(validation.value)), 'utf-8');
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify({ success: true }));
+            } catch {
+              res.writeHead(400, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: 'Invalid JSON' }));
+            }
           });
           return;
         }

@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion';
 import type { VerseData } from '../../hooks/useSeferReader';
+import { sanitizeSlideHtml } from '../../utils/hebrewText';
 
 interface SeferFlowViewProps {
   groupedVerses: { type: 'normal' | 'shira'; verses: { verse: VerseData; idxVerse: number }[] }[];
@@ -48,7 +49,7 @@ export const SeferFlowView = ({
             ? `text-red-900 font-semibold verse-selected ${hasBricks ? 'verse-shira' : 'bg-yellow-100 px-2 rounded'}`
             : `${isWithinRange ? 'text-gray-800' : 'text-gray-500/70'} ${hasBricks ? 'verse-shira' : ''}`;
 
-          const htmlString = `${textToShow} `.replace(/<br\s*\/?>\s+/gi, '<br/>');
+          const htmlString = sanitizeSlideHtml(`${textToShow} `.replace(/<br\s*\/?>\s+/gi, '<br/>'));
 
           return (
             <span

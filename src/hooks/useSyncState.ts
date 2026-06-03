@@ -3,6 +3,8 @@ import type { AudioState, AudioSyncMap } from '../types/audio';
 import type { AppMode, Presentation, ScriptureNavState, VideoState } from '../types/presentation';
 import type { DisplayTelemetryState } from '../types/sync';
 import { normalizePresentation } from '../utils/normalizePresentation';
+import { makeSyncMessage } from '../utils/syncProtocol';
+import { validateRemoteStatePayload, validateSyncMessage } from '../utils/validation';
 
 interface SyncStateOptions {
   presentation: Presentation | null;
@@ -184,7 +186,7 @@ export function useSyncState(props: UseSyncStateProps) {
 
     persistState(presentation, slideIndex, bgLock, lockedBg);
 
-    const payload = {
+    const payload = makeSyncMessage({
       type: 'SYNC_STATE' as const,
       clientId: clientIdRef.current,
       origin: isControlMode ? 'control' as const : 'presenter' as const,
@@ -197,7 +199,7 @@ export function useSyncState(props: UseSyncStateProps) {
       appMode: activeAppMode,
       scriptureState: activeScriptureState,
       audioState: activeAudioState,
-    };
+    });
 
     channel.postMessage(payload);
 
@@ -232,12 +234,12 @@ export function useSyncState(props: UseSyncStateProps) {
   const emitAudioTelemetry = useCallback((audioState: AudioState) => {
     audioStateRef.current = audioState;
 
-    const payload = {
+    const payload = makeSyncMessage({
       type: 'AUDIO_TELEMETRY' as const,
       clientId: clientIdRef.current,
       origin: isControlMode ? 'control' as const : 'presenter' as const,
       audioState,
-    };
+    });
 
     channel.postMessage(payload);
 
@@ -260,12 +262,12 @@ export function useSyncState(props: UseSyncStateProps) {
   const emitVideoTelemetry = useCallback((incomingVideoState: VideoState | null) => {
     videoStateRef.current = incomingVideoState;
 
-    const payload = {
+    const payload = makeSyncMessage({
       type: 'VIDEO_TELEMETRY' as const,
       clientId: clientIdRef.current,
       origin: isControlMode ? 'control' as const : 'presenter' as const,
       videoState: incomingVideoState,
-    };
+    });
 
     channel.postMessage(payload);
 
@@ -315,12 +317,12 @@ export function useSyncState(props: UseSyncStateProps) {
       localStorage.removeItem('sefer-presenter-locked-bg');
     }
 
-    const payload = {
+    const payload = makeSyncMessage({
       type: 'DISPLAY_TELEMETRY' as const,
       clientId: clientIdRef.current,
       origin: isControlMode ? 'control' as const : 'presenter' as const,
       ...displayState,
-    };
+    });
 
     channel.postMessage(payload);
 
@@ -338,63 +340,78 @@ export function useSyncState(props: UseSyncStateProps) {
 
   // ── Apply incoming remote state (unified for both BroadcastChannel and SSE) ─
   const applyRemoteState = useCallback((data: Record<string, unknown>, persist = true) => {
-    const normalizedPresentation = data.presentation
-      ? normalizePresentation(data.presentation as Presentation)
+    const validation = validateRemoteStatePayload(data);
+    if (!validation.ok || !validation.value) {
+      console.error('Ignoring invalid remote state payload', validation.errors);
+      return;
+    }
+
+    const safeData = { ...data, ...validation.value };
+    const normalizedPresentation = safeData.presentation
+      ? normalizePresentation(safeData.presentation as Presentation)
       : null;
 
     if (!arePresentationsEqual(currentPresentationRef.current, normalizedPresentation)) {
       setCurrentPresentation(normalizedPresentation);
     }
-    if (currentSlideIndexRef.current !== data.slideIndex) {
-      setCurrentSlideIndex(data.slideIndex as number);
+    if (safeData.slideIndex !== undefined && currentSlideIndexRef.current !== safeData.slideIndex) {
+      setCurrentSlideIndex(safeData.slideIndex as number);
     }
-    if (data.backgroundLock !== undefined && backgroundLockRef.current !== data.backgroundLock) {
-      setBackgroundLock(data.backgroundLock as boolean);
+    if (safeData.backgroundLock !== undefined && backgroundLockRef.current !== safeData.backgroundLock) {
+      setBackgroundLock(safeData.backgroundLock as boolean);
     }
-    if (data.lockedBackgroundValue !== undefined && lockedBackgroundValueRef.current !== data.lockedBackgroundValue) {
-      setLockedBackgroundValue(data.lockedBackgroundValue as string | null);
+    if (safeData.lockedBackgroundValue !== undefined && lockedBackgroundValueRef.current !== safeData.lockedBackgroundValue) {
+      setLockedBackgroundValue(safeData.lockedBackgroundValue as string | null);
     }
-    if (data.userSelectedBackground !== undefined && userSelectedBackgroundRef.current !== data.userSelectedBackground) {
-      setUserSelectedBackground(data.userSelectedBackground as string | null);
+    if (safeData.userSelectedBackground !== undefined && userSelectedBackgroundRef.current !== safeData.userSelectedBackground) {
+      setUserSelectedBackground(safeData.userSelectedBackground as string | null);
     }
-    if (data.videoState !== undefined && !areVideoStatesEqual(videoStateRef.current, data.videoState as VideoState | null)) {
-      applyVideoTelemetry(data.videoState as VideoState | null);
+    if (safeData.videoState !== undefined && !areVideoStatesEqual(videoStateRef.current, safeData.videoState as VideoState | null)) {
+      applyVideoTelemetry(safeData.videoState as VideoState | null);
     }
-    if (data.appMode !== undefined && appModeRef.current !== data.appMode) {
-      setAppMode(data.appMode as AppMode);
+    if (safeData.appMode !== undefined && appModeRef.current !== safeData.appMode) {
+      setAppMode(safeData.appMode as AppMode);
     }
-    if (data.scriptureState !== undefined && !areScriptureStatesEqual(scriptureStateRef.current, data.scriptureState as ScriptureNavState | null)) {
-      setScriptureState(data.scriptureState as ScriptureNavState | null);
+    if (safeData.scriptureState !== undefined && !areScriptureStatesEqual(scriptureStateRef.current, safeData.scriptureState as ScriptureNavState | null)) {
+      setScriptureState(safeData.scriptureState as ScriptureNavState | null);
     }
-    if (data.audioState !== undefined) {
-      applyAudioTelemetry(data.audioState as AudioState);
+    if (safeData.audioState !== undefined) {
+      applyAudioTelemetry(safeData.audioState as AudioState);
     }
 
-    if (persist) {
+    if (persist && safeData.slideIndex !== undefined) {
       persistState(
         normalizedPresentation,
-        data.slideIndex as number,
-        (data.backgroundLock ?? backgroundLockRef.current) as boolean,
-        (data.lockedBackgroundValue ?? lockedBackgroundValueRef.current) as string | null
+        safeData.slideIndex as number,
+        (safeData.backgroundLock ?? backgroundLockRef.current) as boolean,
+        (safeData.lockedBackgroundValue ?? lockedBackgroundValueRef.current) as string | null
       );
     }
   }, [
     currentPresentationRef, currentSlideIndexRef, backgroundLockRef,
     lockedBackgroundValueRef, userSelectedBackgroundRef, videoStateRef,
-    appModeRef, scriptureStateRef, audioStateRef,
+    appModeRef, scriptureStateRef,
     setCurrentPresentation, setCurrentSlideIndex, setBackgroundLock,
-    setLockedBackgroundValue, setUserSelectedBackground, setVideoState,
+    setLockedBackgroundValue, setUserSelectedBackground,
     setAppMode, setScriptureState, applyAudioTelemetry, applyVideoTelemetry, persistState,
   ]);
 
   // ── BroadcastChannel listener ─────────────────────────────────────
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
-      const data = event.data;
-      if (data?.clientId === clientIdRef.current) return;
+      const rawData = event.data;
+      if (rawData?.clientId === clientIdRef.current) return;
+
+      const validation = validateSyncMessage(rawData);
+      if (!validation.ok || !validation.value) {
+        console.error('Ignoring invalid sync message', validation.errors);
+        return;
+      }
+
+      const data = validation.value;
 
       if (data.type === 'AUDIO_SYNC_MAPS_UPDATE') {
-        setAudioSyncMaps(data.maps);
+        setAudioSyncMaps(data.maps as AudioSyncMap[]);
         return;
       }
 
@@ -430,7 +447,7 @@ export function useSyncState(props: UseSyncStateProps) {
       }
 
       if (data.type === 'SYNC_STATE') {
-        applyRemoteState(data);
+        applyRemoteState(data as unknown as Record<string, unknown>);
       }
     };
 
@@ -438,7 +455,7 @@ export function useSyncState(props: UseSyncStateProps) {
 
     // Presenter asks for current state on open
     if (!isControlMode) {
-      channel.postMessage({ type: 'REQUEST_STATE' });
+      channel.postMessage(makeSyncMessage({ type: 'REQUEST_STATE', clientId: clientIdRef.current }));
     }
 
     return () => channel.removeEventListener('message', handleMessage);
@@ -461,18 +478,31 @@ export function useSyncState(props: UseSyncStateProps) {
         const data = JSON.parse(event.data);
         if (!data || data.clientId === clientIdRef.current) return;
 
-        if (data.type === 'AUDIO_TELEMETRY') {
-          applyAudioTelemetry(data.audioState as AudioState);
-          return;
-        }
+        if (data.type) {
+          const validation = validateSyncMessage(data);
+          if (!validation.ok || !validation.value) {
+            console.error('Ignoring invalid network sync message', validation.errors);
+            return;
+          }
 
-        if (data.type === 'VIDEO_TELEMETRY') {
-          applyVideoTelemetry(data.videoState as VideoState | null);
-          return;
-        }
+          const safeData = validation.value;
 
-        if (data.type === 'DISPLAY_TELEMETRY') {
-          applyDisplayTelemetry(data as DisplayTelemetryState);
+          if (safeData.type === 'AUDIO_TELEMETRY') {
+            applyAudioTelemetry(safeData.audioState as AudioState);
+            return;
+          }
+
+          if (safeData.type === 'VIDEO_TELEMETRY') {
+            applyVideoTelemetry(safeData.videoState as VideoState | null);
+            return;
+          }
+
+          if (safeData.type === 'DISPLAY_TELEMETRY') {
+            applyDisplayTelemetry(safeData as DisplayTelemetryState);
+            return;
+          }
+
+          applyRemoteState(safeData as unknown as Record<string, unknown>);
           return;
         }
 

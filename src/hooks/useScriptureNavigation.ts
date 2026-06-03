@@ -345,15 +345,19 @@ export function useScriptureNavigation(props: UseScriptureNavigationProps) {
     });
   }, [scriptureStateRef, setScriptureState, syncState, currentPresentationRef, currentSlideIndexRef, backgroundLockRef, lockedBackgroundValueRef, userSelectedBackgroundRef, videoStateRef, appModeRef]);
 
+  const scriptureStateForHydration = scriptureStateRef.current;
+  const activeSlideForHydration = currentPresentationRef.current && currentSlideIndexRef.current >= 0
+    ? currentPresentationRef.current.slides[currentSlideIndexRef.current]
+    : null;
+  const appModeForHydration = appModeRef.current;
+
   // Scripture Hydration Effect
   useEffect(() => {
-    const scriptureState = scriptureStateRef.current;
-    const activeSlide = currentPresentationRef.current && currentSlideIndexRef.current >= 0 
-      ? currentPresentationRef.current.slides[currentSlideIndexRef.current] 
-      : null;
+    const scriptureState = scriptureStateForHydration;
+    const activeSlide = activeSlideForHydration;
       
     if (!scriptureState || !activeSlide || (activeSlide.type !== 'sefer' && activeSlide.type !== 'tanaj')) return;
-    if (appModeRef.current === 'seferManual') return;
+    if (appModeForHydration === 'seferManual') return;
 
     let cancelled = false;
     getScriptureChapterVerses(scriptureState.bookAbbrevEs || scriptureState.bookEs, scriptureState.chapter)
@@ -404,9 +408,9 @@ export function useScriptureNavigation(props: UseScriptureNavigationProps) {
       cancelled = true;
     };
   }, [
-    scriptureStateRef.current,
-    currentPresentationRef.current?.slides[currentSlideIndexRef.current]?.type,
-    appModeRef.current,
+    scriptureStateForHydration,
+    activeSlideForHydration,
+    appModeForHydration,
     isControlMode,
     syncState,
     setScriptureState,

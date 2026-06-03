@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import type { Slide } from '../../types/presentation';
 import { getScriptureChapterVerses } from '../../utils/scriptureLookup';
 import { ChevronUp, ChevronDown, Play } from 'lucide-react';
+import { sanitizeSlideHtml } from '../../utils/hebrewText';
 
 interface ScriptureRangeEditorProps {
   slide: Slide;
@@ -172,7 +173,7 @@ export const ScriptureRangeEditor: React.FC<ScriptureRangeEditorProps> = ({ slid
                           </button>
                         </div>
                       </td>
-                      <td className="px-2 py-1.5 text-right text-[#f3c96a]" dir="rtl" dangerouslySetInnerHTML={{ __html: verse.verseNikudSanitized || verse.verseNikud }} />
+                      <td className="px-2 py-1.5 text-right text-[#f3c96a]" dir="rtl" dangerouslySetInnerHTML={{ __html: sanitizeSlideHtml(verse.verseNikudSanitized || verse.verseNikud) }} />
                       <td className="px-2 py-1.5 text-sky-200">{verse.transliteration}</td>
                       <td className="px-2 py-1.5 text-gray-300">{verse.translation}</td>
                       {isTanaj && <td className="px-2 py-1.5">
