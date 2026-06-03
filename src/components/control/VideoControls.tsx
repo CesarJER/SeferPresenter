@@ -7,6 +7,13 @@ interface VideoControlsProps {
   onVideoStateChange: (state: VideoState | null) => void;
 }
 
+const formatTime = (secs: number | undefined) => {
+  if (secs === undefined || isNaN(secs)) return '00:00';
+  const m = Math.floor(secs / 60);
+  const s = Math.floor(secs % 60);
+  return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+};
+
 export const VideoControls: React.FC<VideoControlsProps> = ({
   activeSlide,
   videoState,
@@ -138,33 +145,41 @@ export const VideoControls: React.FC<VideoControlsProps> = ({
           BUCLE
         </button>
 
-        <input
-          type="range"
-          min="0"
-          max={videoState?.duration || activeSlide.videoEnd || 100}
-          step="0.1"
-          value={localTime}
-          onMouseDown={() => setIsScrubbing(true)}
-          onTouchStart={() => setIsScrubbing(true)}
-          onMouseUp={() => setIsScrubbing(false)}
-          onTouchEnd={() => setIsScrubbing(false)}
-          onChange={(e) => {
-            const val = parseFloat(e.target.value);
-            setLocalTime(val);
-            onVideoStateChange({
-              isPlaying: videoState?.isPlaying ?? false,
-              currentTime: val,
-              duration: videoState?.duration ?? activeSlide.videoEnd ?? 0,
-              volume: videoState?.volume ?? 0.8,
-              speed: videoState?.speed ?? 1.0,
-              loop: videoState?.loop ?? true,
-              videoSrc: activeSlide.videoSrc || null,
-              lastUpdatedBy: 'controller',
-              timestamp: Date.now()
-            });
-          }}
-          className="control-range min-w-[160px] flex-1"
-        />
+        <div className="flex-1 flex items-center gap-2.5 min-w-[160px]">
+          <span className="font-mono text-gray-400 text-[10px] shrink-0">
+            {formatTime(localTime)}
+          </span>
+          <input
+            type="range"
+            min="0"
+            max={videoState?.duration || activeSlide.videoEnd || 100}
+            step="0.1"
+            value={localTime}
+            onMouseDown={() => setIsScrubbing(true)}
+            onTouchStart={() => setIsScrubbing(true)}
+            onMouseUp={() => setIsScrubbing(false)}
+            onTouchEnd={() => setIsScrubbing(false)}
+            onChange={(e) => {
+              const val = parseFloat(e.target.value);
+              setLocalTime(val);
+              onVideoStateChange({
+                isPlaying: videoState?.isPlaying ?? false,
+                currentTime: val,
+                duration: videoState?.duration ?? activeSlide.videoEnd ?? 0,
+                volume: videoState?.volume ?? 0.8,
+                speed: videoState?.speed ?? 1.0,
+                loop: videoState?.loop ?? true,
+                videoSrc: activeSlide.videoSrc || null,
+                lastUpdatedBy: 'controller',
+                timestamp: Date.now()
+              });
+            }}
+            className="control-range-slim min-w-0 flex-1"
+          />
+          <span className="font-mono text-gray-400 text-[10px] shrink-0">
+            {formatTime(videoState?.duration || activeSlide.videoEnd || 0)}
+          </span>
+        </div>
       </div>
     </div>
   );

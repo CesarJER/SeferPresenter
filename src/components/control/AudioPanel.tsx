@@ -36,12 +36,17 @@ export const AudioPanel: React.FC<AudioPanelProps> = ({
     : undefined;
 
   const handleSelectAudioTrack = (src: string) => {
+    const newMatchedMap = src ? audioSyncMaps.find(m => m.audioSrc === src) : undefined;
+
     onAudioStateChange({
       ...audioState,
       audioSrc: src || null,
       currentTime: 0,
       duration: 0,
       isPlaying: false,
+      activeSyncMapId: newMatchedMap ? newMatchedMap.id : null,
+      syncMode: newMatchedMap ? (newMatchedMap.defaultSyncMode || 'none') : 'none',
+      volume: newMatchedMap && newMatchedMap.defaultVolume !== undefined ? newMatchedMap.defaultVolume : audioState.volume,
       lastUpdatedBy: 'controller',
       changeType: 'track',
       timestamp: Date.now()

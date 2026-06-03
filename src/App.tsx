@@ -261,7 +261,7 @@ function App() {
   });
 
   useAudioPlayback({
-    isControlMode, audioState, audioStateRef, audioSyncMaps, currentSlideIndex, scriptureState,
+    isControlMode, audioState, audioStateRef, audioSyncMaps, currentSlideIndex, currentPresentationId: currentPresentation?.id, scriptureState,
     audioRef, currentPresentationRef, setAutoplayBlocked, emitAudioTelemetry,
     handleSelectPresentationAndSlide
   });

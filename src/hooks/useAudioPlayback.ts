@@ -8,6 +8,7 @@ interface UseAudioPlaybackProps {
   audioStateRef: React.MutableRefObject<AudioState>;
   audioSyncMaps: AudioSyncMap[];
   currentSlideIndex: number;
+  currentPresentationId: string | undefined;
   scriptureState: ScriptureNavState | null;
   // Refs
   audioRef: React.RefObject<HTMLAudioElement | null>;
@@ -25,6 +26,7 @@ export function useAudioPlayback(props: UseAudioPlaybackProps) {
     audioStateRef,
     audioSyncMaps,
     currentSlideIndex,
+    currentPresentationId,
     scriptureState,
     audioRef,
     currentPresentationRef,
@@ -180,6 +182,7 @@ export function useAudioPlayback(props: UseAudioPlaybackProps) {
 
     const syncMap = audioSyncMaps.find((m) => m.id === audioState.activeSyncMapId);
     if (!syncMap || syncMap.cues.length === 0) return;
+    if (currentPresentationRef.current?.id !== syncMap.presentationId) return;
 
     const intervalId = setInterval(() => {
       const currentTime = audio.currentTime;
@@ -212,6 +215,7 @@ export function useAudioPlayback(props: UseAudioPlaybackProps) {
     audioState.syncMode,
     audioState.activeSyncMapId,
     audioSyncMaps,
+    currentPresentationId,
     isControlMode,
     handleSelectPresentationAndSlide,
     audioRef,
@@ -227,22 +231,34 @@ export function useAudioPlayback(props: UseAudioPlaybackProps) {
 
     const syncMap = audioSyncMaps.find((m) => m.id === audioState.activeSyncMapId);
     if (!syncMap || syncMap.cues.length === 0) return;
+    if (currentPresentationRef.current?.id !== syncMap.presentationId) return;
 
     // Find cue matching current slide and verse
     const currentVerse = scriptureState?.verse;
 
-    // Find matching cue
-    const matchingCue = syncMap.cues.find((cue) => {
+    let cueIndex = -1;
+    const matchingCue = syncMap.cues.find((cue, idx) => {
       if (cue.slideIndex !== currentSlideIndex) return false;
-      if (cue.verse || currentVerse) {
-        return cue.verse === currentVerse;
+      
+      // If both define a verse, they must match exactly
+      if (cue.verse && currentVerse) {
+        if (cue.verse !== currentVerse) return false;
       }
+      
+      // If cue requires a verse, but we don't have one (e.g. root of the slide), don't match this specific verse cue
+      if (cue.verse && !currentVerse) return false;
+      
+      // If cue is generic (no verse) but we are on a specific verse, it's a valid fallback match!
+      
+      cueIndex = idx;
       return true;
     });
 
     if (matchingCue) {
       if (Math.abs(audio.currentTime - matchingCue.timeSec) > 1.0) {
         audio.currentTime = matchingCue.timeSec;
+        lastSyncCueRef.current = cueIndex; // Evitar que la Sección 4 detecte este salto como un evento nuevo
+
 
         emitAudioTelemetry({
           ...audioStateRef.current,
@@ -263,6 +279,7 @@ export function useAudioPlayback(props: UseAudioPlaybackProps) {
     audioState.activeSyncMapId,
     audioState.audioSrc,
     audioSyncMaps,
+    currentPresentationId,
     isControlMode,
     emitAudioTelemetry,
     audioRef,
