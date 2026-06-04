@@ -299,12 +299,20 @@ export const validateRemoteStatePayload = (value: unknown): ValidationResult<Par
     else errors.push('remote.backgroundLock debe ser booleano.');
   }
   if (value.lockedBackgroundValue !== undefined) {
-    if (value.lockedBackgroundValue === null || typeof value.lockedBackgroundValue === 'string') next.lockedBackgroundValue = value.lockedBackgroundValue;
-    else errors.push('remote.lockedBackgroundValue debe ser texto o null.');
+    const lockedBg = value.lockedBackgroundValue;
+    if (lockedBg === null || typeof lockedBg === 'string') {
+      next.lockedBackgroundValue = lockedBg as string | null;
+    } else {
+      errors.push('remote.lockedBackgroundValue debe ser texto o null.');
+    }
   }
   if (value.userSelectedBackground !== undefined) {
-    if (value.userSelectedBackground === null || typeof value.userSelectedBackground === 'string') next.userSelectedBackground = value.userSelectedBackground;
-    else errors.push('remote.userSelectedBackground debe ser texto o null.');
+    const userBg = value.userSelectedBackground;
+    if (userBg === null || typeof userBg === 'string') {
+      next.userSelectedBackground = userBg as string | null;
+    } else {
+      errors.push('remote.userSelectedBackground debe ser texto o null.');
+    }
   }
   if (value.videoState !== undefined) {
     const result = validateVideoState(value.videoState, 'remote.videoState');
@@ -325,8 +333,20 @@ export const validateRemoteStatePayload = (value: unknown): ValidationResult<Par
     if (result.ok) next.audioState = result.value;
     else errors.push(...result.errors);
   }
-  if (value.clientId !== undefined && typeof value.clientId !== 'string') errors.push('remote.clientId debe ser texto.');
-  if (value.origin !== undefined && (typeof value.origin !== 'string' || !origins.has(value.origin))) errors.push('remote.origin no es valido.');
+  if (value.clientId !== undefined) {
+    if (typeof value.clientId === 'string') {
+      next.clientId = value.clientId;
+    } else {
+      errors.push('remote.clientId debe ser texto.');
+    }
+  }
+  if (value.origin !== undefined) {
+    if (typeof value.origin === 'string' && origins.has(value.origin)) {
+      next.origin = value.origin as 'control' | 'presenter';
+    } else {
+      errors.push('remote.origin no es valido.');
+    }
+  }
 
   return errors.length > 0 ? fail(errors) : ok(next);
 };
@@ -385,7 +405,7 @@ export const validateSyncMessage = (value: unknown): ValidationResult<BroadcastM
     if (value.appMode === undefined) errors.push('appMode es requerido.');
     if (value.scriptureState === undefined) errors.push('scriptureState es requerido.');
     if (value.audioState === undefined) errors.push('audioState es requerido.');
-    return errors.length > 0 ? fail(errors) : ok(value as unknown as BroadcastMessage);
+    return errors.length > 0 ? fail(errors) : ok({ ...value, ...remote.value } as unknown as BroadcastMessage);
   }
 
   return fail([`Tipo de mensaje no soportado: ${value.type}`]);

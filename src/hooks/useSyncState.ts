@@ -339,14 +339,14 @@ export function useSyncState(props: UseSyncStateProps) {
   ]);
 
   // ── Apply incoming remote state (unified for both BroadcastChannel and SSE) ─
-  const applyRemoteState = useCallback((data: Record<string, unknown>, persist = true) => {
-    const validation = validateRemoteStatePayload(data);
-    if (!validation.ok || !validation.value) {
+  const applyRemoteState = useCallback((data: Record<string, unknown>, persist = true, alreadyValidated = false) => {
+    const validation = alreadyValidated ? null : validateRemoteStatePayload(data);
+    if (validation && (!validation.ok || !validation.value)) {
       console.error('Ignoring invalid remote state payload', validation.errors);
       return;
     }
 
-    const safeData = { ...data, ...validation.value };
+    const safeData = validation?.value ? { ...data, ...validation.value } : data;
     const normalizedPresentation = safeData.presentation
       ? normalizePresentation(safeData.presentation as Presentation)
       : null;
@@ -447,7 +447,7 @@ export function useSyncState(props: UseSyncStateProps) {
       }
 
       if (data.type === 'SYNC_STATE') {
-        applyRemoteState(data as unknown as Record<string, unknown>);
+        applyRemoteState(data as unknown as Record<string, unknown>, true, true);
       }
     };
 
@@ -502,7 +502,7 @@ export function useSyncState(props: UseSyncStateProps) {
             return;
           }
 
-          applyRemoteState(safeData as unknown as Record<string, unknown>);
+          applyRemoteState(safeData as unknown as Record<string, unknown>, true, true);
           return;
         }
 
