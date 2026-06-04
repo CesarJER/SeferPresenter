@@ -1,10 +1,10 @@
 # SeferPresenter
 
-SeferPresenter es una aplicación React/Vite para proyectar presentaciones litúrgicas con soporte para diapositivas, fondos, video, audio sincronizado y navegación de textos bíblicos. Está pensada para funcionar tanto en una pantalla de proyección como en una ventana de control, con una ruta de evolución clara hacia control remoto móvil.
+SeferPresenter es una aplicación React/Vite para proyectar presentaciones con soporte para diapositivas, fondos, video, audio sincronizado y navegación de textos sagrados. Está pensada para funcionar tanto en una pantalla de proyección como en una ventana de control, con una ruta de evolución clara hacia control remoto móvil.
 
 ## Modos de uso
 
-- **Proyección**: abre la app sin parámetros. Muestra la diapositiva, fondo, video o lector bíblico activo.
+- **Proyección**: abre la app sin parámetros. Muestra la diapositiva, fondo, video o lector de textos sagrados activo.
 - **Control**: abre `?mode=control`. Permite seleccionar presentaciones, editar slides, cambiar fondos, controlar audio/video y navegar textos.
 - **Editor de audio**: abre `?mode=audio-editor`. Permite asociar pistas de audio a presentaciones y cues de diapositiva.
 - **Singlefile**: genera un HTML autocontenido para entornos sin servidor.
