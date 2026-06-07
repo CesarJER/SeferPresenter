@@ -1,104 +1,138 @@
 # SeferPresenter
 
-SeferPresenter es una aplicación React/Vite para proyectar presentaciones con soporte para diapositivas, fondos, video, audio sincronizado y navegación de textos sagrados. Está pensada para funcionar tanto en una pantalla de proyección como en una ventana de control, con una ruta de evolución clara hacia control remoto móvil.
+SeferPresenter es una aplicacion React/Vite para proyectar presentaciones con soporte para diapositivas, fondos, video, audio sincronizado y navegacion de textos sagrados. Esta orientada a un flujo online/local con control remoto, presenter y audiencia movil sincronizada.
 
 ## Modos de uso
 
-- **Proyección**: abre la app sin parámetros. Muestra la diapositiva, fondo, video o lector de textos sagrados activo.
-- **Control**: abre `?mode=control`. Permite seleccionar presentaciones, editar slides, cambiar fondos, controlar audio/video y navegar textos.
-- **Editor de audio**: abre `?mode=audio-editor`. Permite asociar pistas de audio a presentaciones y cues de diapositiva.
-- **Singlefile**: genera un HTML autocontenido para entornos sin servidor.
+- **Presenter**: abre `/presenter`. Muestra la diapositiva, fondo, video o lector de textos sagrados activo.
+- **Control**: abre `/control`. Permite seleccionar presentaciones, editar slides, cambiar fondos, controlar audio/video y navegar textos.
+- **Editor de audio**: abre `/audio-editor`. Permite asociar pistas de audio a presentaciones y cues de diapositiva.
+- **Audiencia**: abre `/audience`. Muestra la misma proyeccion visual que presenter, en modo solo lectura y sincronizada.
 
 ## Scripts
 
 ```bash
-npm run dev        # servidor Vite en modo web
-npm run build      # build web
-npm run build:app  # build singlefile, genera dist/app_presenter.html
-npm run test       # Vitest
-npm run lint       # ESLint
-npx tsc --noEmit   # verificación estricta de tipos
+npm run dev          # backend local + servidor Vite frontend
+npm run dev:frontend # solo servidor Vite frontend
+npm run dev:backend  # backend local Node en http://localhost:8787
+npm run build        # build web
+npm run start:local  # backend local sirviendo dist/
+npm run test         # Vitest
+npm run lint         # ESLint
+npx tsc --noEmit     # verificacion estricta de tipos
 ```
 
-Los scripts `predev`, `prebuild` y `prebuild:app` regeneran `public/books/*.tsv` y `public/metadata.json` desde los datos bíblicos externos.
+Los scripts `predev`, `prebuild` y `prebuild:web` regeneran `public/books/*.tsv` y `public/metadata.json` desde los datos biblicos externos.
+
+## Backend local
+
+El backend local vive en `server/local-server.mjs`. Mantiene inicialmente la misma superficie API que tenia el backend embebido en Vite:
+
+- `GET /api/state`
+- `GET /api/state-events`
+- `POST /api/state`
+- `POST /api/audio-telemetry`
+- `POST /api/video-telemetry`
+- `POST /api/display-telemetry`
+- `GET /api/backgrounds`
+- `GET /api/audio`
+- `GET /api/audio-sync`
+- `POST /api/audio-sync`
+- `GET /api/presentations`
+- `POST /api/presentations`
+- `GET /api/audience/state`
+- `GET /api/audience/events`
+- `GET /api/audience-cache-assets`
+
+En desarrollo, `npm run dev` arranca el backend local y Vite juntos. Vite proxya `/api` a `http://localhost:8787`. Si arrancas solo `npm run dev:frontend`, debes tener `npm run dev:backend` abierto en otra terminal. Para pruebas locales estables, ejecuta `npm run build` y despues `npm run start:local`.
+
+## Seguridad por fases
+
+En LAN/local no se exige autenticacion por defecto. Si se expone el servidor por puerto abierto o dominio, activa proteccion declarativa:
+
+```bash
+SEFER_REQUIRE_AUTH=true
+SEFER_CONTROL_PASSWORD=una-clave-fuerte
+npm run start:local
+```
+
+Con `SEFER_REQUIRE_AUTH=true`, `/control`, `/audio-editor` y endpoints mutantes bajo `/api` quedan protegidos con Basic Auth.
+
+## Audiencia PWA
+
+La PWA aplica solo a `/audience`. Cachea:
+
+- shell minimo de audiencia;
+- `metadata.json`;
+- TSV biblicos bajo demanda;
+- assets extra listados manualmente en `public/audience-cache-assets.txt`.
+
+El archivo `public/audience-cache-assets.txt` acepta una ruta publica por linea y comentarios con `#`. No cachea videos ni audios pesados salvo que se incluyan explicitamente.
 
 ## Arquitectura
 
-La aplicación se organiza por consumidor:
+La aplicacion se organiza por consumidor:
 
 - `src/components/control/`: panel de operador y controles interactivos.
-- `src/components/presenter/`: pantalla de proyección y lector visual.
+- `src/components/presenter/`: pantalla de proyeccion y lector visual.
+- `src/components/audience/`: envoltorio de audiencia para mostrar la proyeccion sin controles.
 - `src/components/shared/`: componentes comunes.
-- `src/hooks/`: lógica de sincronización, navegación, fondos, audio, escritura y teclado.
-- `src/types/`: contratos compartidos de presentación, audio, sincronización y transliteración.
-- `src/utils/`: normalización, parsing, lookup bíblico, metadata y utilidades puras.
+- `src/hooks/`: logica de sincronizacion, navegacion, fondos, audio, escritura y teclado.
+- `src/types/`: contratos compartidos de presentacion, audio, audiencia, sincronizacion y transliteracion.
+- `src/utils/`: normalizacion, parsing, lookup biblico, metadata y utilidades puras.
+- `server/`: backend local Node.
 
-## Sincronización
+## Sincronizacion
 
-La sincronización usa `BroadcastChannel` para pestañas locales y SSE/API para red local en modo web.
+La sincronizacion usa `BroadcastChannel` para pestanas locales y SSE/API para red local.
 
 Canales principales:
 
-- `SYNC_STATE`: navegación y estado completo necesario para inicialización.
-- `AUDIO_TELEMETRY`: estado ligero de reproducción de audio.
-- `VIDEO_TELEMETRY`: estado ligero de reproducción de video.
+- `SYNC_STATE`: navegacion y estado completo necesario para inicializacion.
+- `AUDIO_TELEMETRY`: estado ligero de reproduccion de audio.
+- `VIDEO_TELEMETRY`: estado ligero de reproduccion de video.
 - `DISPLAY_TELEMETRY`: cambios de fondo, override y candado.
 
-Esta separación evita reenviar el JSON completo de presentaciones durante ticks de reproducción o manipulación de fondos, algo importante para futuros controladores móviles.
+La audiencia muestra la misma imagen viva del presenter, sin controles de navegacion ni apertura del panel de control.
 
-## Estilos
+## Legacy
 
-Tailwind se usa como base, con clases repetitivas agrupadas en `src/index.css` dentro de `@layer components`.
+`legacy/` es registro local de desarrollo. No forma parte del producto, no debe ir al build y queda fuera de ESLint.
 
-Clases destacadas:
-
-- `control-*`: botones, sliders, selects y paneles compactos del control remoto.
-- `audio-*`: controles específicos del panel de audio.
-- `glass-panel`, `glass-panel-nav`, `glass-panel-button`: superficies glassmorphism oscuras de la proyección.
-
-La idea es mantener el JSX más legible y reducir cadenas largas repetidas, especialmente en elementos renderizados o mantenidos en pantalla durante sesiones largas.
-
-## Tests
-
-Hay una primera base de pruebas unitarias con Vitest:
-
-- Normalización de presentaciones y hashes.
-- Parsing/serialización de tags de escritura.
-- Numerales bíblicos.
-
-Los tests viven en `__tests__/` y se ejecutan con:
-
-```bash
-npm run test
-```
-
-## Verificación recomendada
+## Verificacion recomendada
 
 Antes de cerrar cambios importantes:
 
 ```bash
 npx tsc --noEmit
 npm run test
-npm run build
-npm run build:app
 npm run lint
+npm run build
 ```
 
-`npm run lint` puede mostrar warnings de `react-hooks/exhaustive-deps`; los errores deben quedar en cero.
+En Windows, si PowerShell bloquea `npm.ps1` o `npx.ps1`, usa:
+
+```bash
+npm.cmd run test
+npx.cmd tsc --noEmit
+npm.cmd run lint
+npm.cmd run build
+```
 
 ## Checklist manual
 
-- Abrir proyección y control en ventanas separadas.
-- Seleccionar una presentación y navegar slides.
+- Abrir `/presenter` y `/control` en ventanas separadas.
+- Seleccionar una presentacion y navegar slides.
 - Probar fondos: override manual, candado, `Principal`, `Anterior`, `Ignorar`.
 - Probar audio: pista, play/pause, volumen, seek y modos de sync.
 - Probar video: play/pause, loop, velocidad, volumen y seek.
-- Probar Sefer/Tanaj: proyectar, navegar versos, añadir slide.
-- Probar `npm run build:app` abriendo `dist/app_presenter.html`.
+- Probar Sefer/Tanaj: proyectar, navegar versos, anadir slide.
+- Abrir `/audio-editor` y guardar mapas de audio.
+- Abrir `/audience` en movil o viewport movil y verificar que no hay controles.
 
 ## Notas de mantenimiento
 
 - No editar datos generados en `public/books/` a mano; se regeneran desde `scripts/generate-verses.js`.
-- Mantener telemetría de media/display en canales ligeros.
-- Preferir utilidades compartidas en `src/utils/` antes de duplicar parsing o normalización.
-- Mantener la pantalla de proyección liviana: sus paneles visuales deben apoyarse en clases compartidas como `glass-panel`.
+- Mantener telemetria de media/display en canales ligeros.
+- Preferir utilidades compartidas en `src/utils/` antes de duplicar parsing o normalizacion.
+- Mantener la pantalla de proyeccion liviana y la audiencia aun mas ligera.

@@ -45,11 +45,7 @@ export const normalizePublicPath = (value: string) => {
     normalized = `/${normalized.slice('public/'.length)}`;
   }
 
-  if (__APP_MODE__ === 'singlefile') {
-    return normalized.startsWith('/') ? normalized.slice(1) : normalized;
-  } else {
-    return normalized.startsWith('/') ? normalized : `/${normalized}`;
-  }
+  return normalized.startsWith('/') ? normalized : `/${normalized}`;
 };
 
 // ── Presentation normalization ────────────────────────────────────

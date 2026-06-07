@@ -8,6 +8,8 @@ interface UseUrlSyncProps {
   currentSlideIndex: number;
   appMode: AppMode;
   scriptureState: ScriptureNavState | null;
+  enabled?: boolean;
+  routeBase?: string;
   // Refs
   currentPresentationRef: React.MutableRefObject<Presentation | null>;
   currentSlideIndexRef: React.MutableRefObject<number>;
@@ -29,6 +31,8 @@ export function useUrlSync(props: UseUrlSyncProps) {
     currentSlideIndex,
     appMode,
     scriptureState,
+    enabled = true,
+    routeBase = '/presenter',
     currentPresentationRef,
     currentSlideIndexRef,
     scriptureStateRef,
@@ -37,12 +41,15 @@ export function useUrlSync(props: UseUrlSyncProps) {
   } = props;
 
   const parseUrlAndSync = useCallback(() => {
+    if (!enabled) return;
     if (presentations.length === 0) return;
 
     const pathSegments = window.location.pathname.split('/').filter(Boolean);
-    if (pathSegments.length === 0) return;
+    const baseSegment = routeBase.replace(/^\//, '').replace(/\/$/, '');
+    if (pathSegments[0] !== baseSegment) return;
+    if (pathSegments.length < 2) return;
 
-    const urlTitle = decodeURIComponent(pathSegments[0]);
+    const urlTitle = decodeURIComponent(pathSegments[1]);
     const matched = presentations.find((p) => slugify(p.title) === slugify(urlTitle));
 
     if (matched) {
@@ -64,6 +71,8 @@ export function useUrlSync(props: UseUrlSyncProps) {
     }
   }, [
     presentations,
+    enabled,
+    routeBase,
     handleSelectPresentationAndSlide,
     currentPresentationRef,
     currentSlideIndexRef,
@@ -72,6 +81,7 @@ export function useUrlSync(props: UseUrlSyncProps) {
 
   // Sync URL when state changes
   useEffect(() => {
+    if (!enabled) return;
     if (currentPresentation) {
       const slug = slugify(currentPresentation.title);
       const activeSlide =
@@ -85,21 +95,22 @@ export function useUrlSync(props: UseUrlSyncProps) {
         currentSlideIndex >= 0
           ? formatSlideHash(currentSlideIndex, isScriptureSlide ? hashVerse : undefined)
           : '';
-      const search = window.location.search;
       const normalizedPath = window.location.pathname.replace(/\/$/, '');
-      const targetPath = `/${slug}${search}${hash}`;
-      if (normalizedPath !== `/${slug}` || window.location.hash !== hash) {
+      const targetBasePath = `${routeBase}/${slug}`;
+      const targetPath = `${targetBasePath}${hash}`;
+      if (normalizedPath !== targetBasePath || window.location.hash !== hash) {
         window.history.replaceState(null, '', targetPath);
       }
     } else {
       // Clear path and hash when no presentation is active
-      const search = window.location.search;
-      const targetPath = `/${search}`;
-      if (window.location.pathname !== '/' || window.location.hash !== '') {
+      const targetPath = routeBase;
+      if (window.location.pathname !== targetPath || window.location.hash !== '') {
         window.history.replaceState(null, '', targetPath);
       }
     }
   }, [
+    enabled,
+    routeBase,
     appMode,
     currentPresentation,
     currentSlideIndex,

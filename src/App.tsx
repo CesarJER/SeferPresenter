@@ -1,7 +1,8 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import PresenterScreen from './components/presenter/PresenterScreen';
 import MenuPopup from './components/control/MenuPopup';
 import SeferReaderScreen from './components/presenter/SeferReaderScreen';
+import AudienceScreen from './components/audience/AudienceScreen';
 import defaultPresentations from '../presentations.json';
 import { Music } from 'lucide-react';
 import { AudioSyncEditor } from './components/AudioSyncEditor';
@@ -12,8 +13,6 @@ import type { AppMode, Presentation, ScriptureNavState, VideoState } from './typ
 
 import {
   normalizePresentation,
-  normalizePublicPath,
-  fallbackBackgrounds,
   makeClientId,
   loadStoredPresenterState,
 } from './utils/normalizePresentation';
@@ -28,9 +27,10 @@ import { validateAudioSyncMaps, validatePresentationList } from './utils/validat
 import { makeSyncMessage } from './utils/syncProtocol';
 
 function App() {
-  const modeParam = new URLSearchParams(window.location.search).get('mode');
-  const isControlMode = modeParam === 'control';
-  const isAudioEditorMode = modeParam === 'audio-editor';
+  const routeName = window.location.pathname.split('/').filter(Boolean)[0] || 'presenter';
+  const isControlMode = routeName === 'control';
+  const isAudioEditorMode = routeName === 'audio-editor';
+  const isAudienceMode = routeName === 'audience';
   const storedPresenterState = loadStoredPresenterState();
 
   const [presentations, setPresentations] = useState<Presentation[]>([]);
@@ -81,73 +81,40 @@ function App() {
   }, [currentPresentation, currentSlideIndex, backgroundLock, lockedBackgroundValue, userSelectedBackground, videoState, audioState, appMode, scriptureState]);
 
   useEffect(() => {
-    if (__APP_MODE__ === 'singlefile') {
-      setBackgrounds(fallbackBackgrounds.map(normalizePublicPath));
-      const stored = localStorage.getItem('sefer-presenter-presentations');
-      if (stored) {
-        try {
-          const parsed = JSON.parse(stored);
-          const validation = validatePresentationList(parsed);
-          if (validation.ok && validation.value) {
-            setPresentations(validation.value.map(normalizePresentation));
-          } else {
-            console.error("Invalid stored presentations", validation.errors);
-            setPresentations((defaultPresentations as Presentation[]).map(normalizePresentation));
-          }
-        } catch (err) {
-          console.error("Error parsing stored presentations", err);
+    fetch('/api/backgrounds')
+      .then(res => res.json())
+      .then(data => setBackgrounds(data))
+      .catch(err => console.error("Error loading backgrounds", err));
+    fetch('/api/presentations')
+      .then(res => res.json())
+      .then(data => {
+        const validation = validatePresentationList(data);
+        if (validation.ok && validation.value) {
+          setPresentations(validation.value.map(normalizePresentation));
+        } else {
+          console.error("Invalid presentations payload", validation.errors);
           setPresentations((defaultPresentations as Presentation[]).map(normalizePresentation));
         }
-      } else {
+      })
+      .catch(err => {
+        console.error("Error loading presentations", err);
         setPresentations((defaultPresentations as Presentation[]).map(normalizePresentation));
-      }
-
-      const storedAudioSync = localStorage.getItem('sefer-presenter-audio-sync');
-      if (storedAudioSync) {
-        try {
-          const parsed = JSON.parse(storedAudioSync);
-          const validation = validateAudioSyncMaps(parsed);
-          if (validation.ok && validation.value) {
-            setAudioSyncMaps(validation.value);
-          } else {
-            console.error("Invalid stored audio sync maps", validation.errors);
-          }
-        } catch (err) {
-          console.error("Error parsing stored audio sync maps", err);
+      });
+    fetch('/api/audio')
+      .then(res => res.json())
+      .then(data => setAvailableAudioFiles(data))
+      .catch(err => console.error("Error loading audio files", err));
+    fetch('/api/audio-sync')
+      .then(res => res.json())
+      .then(data => {
+        const validation = validateAudioSyncMaps(data);
+        if (validation.ok && validation.value) {
+          setAudioSyncMaps(validation.value);
+        } else {
+          console.error("Invalid audio sync payload", validation.errors);
         }
-      }
-    } else {
-      fetch('/api/backgrounds')
-        .then(res => res.json())
-        .then(data => setBackgrounds(data))
-        .catch(err => console.error("Error loading backgrounds", err));
-      fetch('/api/presentations')
-        .then(res => res.json())
-        .then(data => {
-          const validation = validatePresentationList(data);
-          if (validation.ok && validation.value) {
-            setPresentations(validation.value.map(normalizePresentation));
-          } else {
-            console.error("Invalid presentations payload", validation.errors);
-          }
-        })
-        .catch(err => console.error("Error loading presentations", err));
-      fetch('/api/audio')
-        .then(res => res.json())
-        .then(data => setAvailableAudioFiles(data))
-        .catch(err => console.error("Error loading audio files", err));
-      fetch('/api/audio-sync')
-        .then(res => res.json())
-        .then(data => {
-          const validation = validateAudioSyncMaps(data);
-          if (validation.ok && validation.value) {
-            setAudioSyncMaps(validation.value);
-          } else {
-            console.error("Invalid audio sync payload", validation.errors);
-          }
-        })
-        .catch(err => console.error("Error loading audio sync maps", err));
-    }
+      })
+      .catch(err => console.error("Error loading audio sync maps", err));
   }, []);
 
   const { channel, syncState, emitAudioTelemetry, emitVideoTelemetry, emitDisplayTelemetry } = useSyncState({
@@ -242,18 +209,14 @@ function App() {
       return;
     }
     setPresentations(normalized);
-    if (__APP_MODE__ === 'singlefile') {
-      localStorage.setItem('sefer-presenter-presentations', JSON.stringify(normalized));
-    } else {
-      try {
-        await fetch('/api/presentations', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(normalized)
-        });
-      } catch (err) {
-        console.error("Error saving presentations", err);
-      }
+    try {
+      await fetch('/api/presentations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(normalized)
+      });
+    } catch (err) {
+      console.error("Error saving presentations", err);
     }
   };
 
@@ -288,19 +251,22 @@ function App() {
     setScriptureState(null);
 
     syncState({ presentation: null, slideIndex: -1, bgLock: false, lockedBg: null, userSelectedBg: null, videoState: null, appMode: 'slides', scriptureState: null });
-    window.history.replaceState(null, '', `/${window.location.search}`);
+    window.history.replaceState(null, '', '/presenter');
   }, [syncState]);
 
   useUrlSync({
     presentations, currentPresentation, currentSlideIndex, appMode, scriptureState,
     currentPresentationRef, currentSlideIndexRef, scriptureStateRef, slideScriptureStateBeforeManualRef,
-    handleSelectPresentationAndSlide
+    handleSelectPresentationAndSlide,
+    enabled: !isControlMode && !isAudioEditorMode && !isAudienceMode,
+    routeBase: '/presenter',
   });
 
   useKeyboardNavigation({
     isControlMode, currentPresentation, currentSlideIndex, appModeRef, scriptureStateRef,
     currentPresentationRef, currentSlideIndexRef,
-    handleSelectPresentationAndSlide, handleScriptureEscape, handleScriptureArrowNav
+    handleSelectPresentationAndSlide, handleScriptureEscape, handleScriptureArrowNav,
+    enabled: !isAudienceMode,
   });
 
   useAudioPlayback({
@@ -318,7 +284,7 @@ function App() {
   }, [currentPresentation]);
 
   const activeSlide = currentPresentation && currentSlideIndex >= 0 ? currentPresentation.slides[currentSlideIndex] : null;
-  const activePresenterSlide = scriptureState?.scriptureKind === 'tanaj'
+  const activePresenterSlide = useMemo(() => scriptureState?.scriptureKind === 'tanaj'
     ? {
       id: activeSlide?.id || `tanaj-${scriptureState.bookAbbrevEs}-${scriptureState.chapter}-${scriptureState.verse}`,
       label: `${scriptureState.bookAbbrevEs} ${scriptureState.chapter}:${scriptureState.verse}`,
@@ -330,8 +296,7 @@ function App() {
       type: 'tanaj' as const,
       background: activeBackground,
     }
-    : activeSlide;
-
+    : activeSlide, [activeBackground, activeSlide, scriptureState]);
   const handleVideoStateChange = useCallback((state: VideoState | null) => {
     setVideoState(state);
     emitVideoTelemetry(state);
@@ -418,6 +383,20 @@ function App() {
     });
   }, [buildScriptureSlideState, presentations, storedPresenterState, syncState]);
 
+  if (isAudienceMode) {
+    return (
+      <AudienceScreen
+        appMode={appMode}
+        background={activeBackground}
+        fontScale={currentPresentation?.fontScale ?? 1}
+        presentationTitle={currentPresentation?.title || ''}
+        scriptureState={scriptureState}
+        slide={activePresenterSlide}
+        videoState={videoState}
+      />
+    );
+  }
+
   if (isAudioEditorMode) {
     return (
       <div className="w-screen h-screen bg-gray-900 overflow-hidden">
@@ -437,15 +416,11 @@ function App() {
               return;
             }
             setAudioSyncMaps(validation.value);
-            if (__APP_MODE__ !== 'singlefile') {
-              fetch('/api/audio-sync', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(validation.value)
-              }).catch(err => console.error('Error saving audio sync maps', err));
-            } else {
-              localStorage.setItem('sefer-presenter-audio-sync', JSON.stringify(validation.value));
-            }
+            fetch('/api/audio-sync', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(validation.value)
+            }).catch(err => console.error('Error saving audio sync maps', err));
             channel.postMessage(makeSyncMessage({ type: 'AUDIO_SYNC_MAPS_UPDATE', maps: validation.value }));
           }}
         />
@@ -497,15 +472,11 @@ function App() {
               return;
             }
             setAudioSyncMaps(validation.value);
-            if (__APP_MODE__ !== 'singlefile') {
-              fetch('/api/audio-sync', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(validation.value)
-              }).catch(err => console.error('Error saving audio sync maps', err));
-            } else {
-              localStorage.setItem('sefer-presenter-audio-sync', JSON.stringify(validation.value));
-            }
+            fetch('/api/audio-sync', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(validation.value)
+            }).catch(err => console.error('Error saving audio sync maps', err));
           }}
           appMode={appMode}
           scriptureState={scriptureState}
@@ -529,7 +500,7 @@ function App() {
             onVerseSelected={handleSeferOnlineRef}
             onBoundaryReached={handleScriptureBoundary}
             onLogoClick={() => {
-              window.open(`${window.location.origin}?mode=control`, 'ControlPanel', 'width=1100,height=800');
+              window.open(`${window.location.origin}/control`, 'ControlPanel', 'width=1100,height=800');
             }}
           />
         </div>
@@ -541,7 +512,7 @@ function App() {
             presentationTitle={currentPresentation?.title || ''}
             fontScale={currentPresentation?.fontScale ?? 1}
             onLogoClick={() => {
-              window.open(`${window.location.origin}?mode=control`, 'ControlPanel', 'width=1100,height=800');
+              window.open(`${window.location.origin}/control`, 'ControlPanel', 'width=1100,height=800');
             }}
             videoState={videoState}
             onVideoStateChange={handleVideoStateChange}

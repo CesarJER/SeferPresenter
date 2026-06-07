@@ -20,7 +20,7 @@ export interface AudioSyncCue {
 
 /** 
  * A complete sync map: ties one audio file to one presentation's slide sequence.
- * Stored in audio_sync.json (server) or localStorage (singlefile).
+ * Stored in audio_sync.json by the local/backend server.
  */
 export interface AudioSyncMap {
   /** Unique ID for this mapping */

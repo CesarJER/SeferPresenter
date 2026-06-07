@@ -7,13 +7,14 @@
         "predev": "node scripts/generate-verses.js",
         "prebuild": "node scripts/generate-verses.js",
         "prebuild:web": "node scripts/generate-verses.js",
-        "prebuild:app": "node scripts/generate-verses.js",
-        "dev": "cross-env VITE_APP_MODE=web vite",
+        "dev": "node server/dev.mjs",
+        "dev:frontend": "vite",
+        "dev:backend": "node server/local-server.mjs",
         "build": "tsc -b && vite build",
-        "build:web": "cross-env VITE_APP_MODE=web tsc -b && vite build",
-        "build:app": "tsc -b && cross-env VITE_APP_MODE=singlefile vite build && node -e \"require('fs').renameSync('dist/index.html', 'dist/app_presenter.html')\"",
+        "build:web": "tsc -b && vite build",
         "lint": "eslint .",
         "preview": "vite preview",
+        "start:local": "node server/local-server.mjs --static dist",
         "pingpong": "node scripts/make-pingpong.js",
         "test": "vitest run",
         "test:watch": "vitest"
@@ -37,7 +38,6 @@
         "@types/react-dom": "^19.2.3",
         "@vitejs/plugin-react": "^6.0.1",
         "autoprefixer": "^10.5.0",
-        "cross-env": "^10.1.0",
         "eslint": "^10.3.0",
         "eslint-plugin-react-hooks": "^7.1.1",
         "eslint-plugin-react-refresh": "^0.5.2",
@@ -48,7 +48,6 @@
         "typescript": "~6.0.2",
         "typescript-eslint": "^8.59.2",
         "vite": "^8.0.12",
-        "vite-plugin-singlefile": "^2.3.3",
         "vitest": "^4.1.8"
     }
 }

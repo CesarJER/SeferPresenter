@@ -3,6 +3,7 @@ import type { AppMode, Presentation, ScriptureNavState } from '../types/presenta
 
 interface UseKeyboardNavigationProps {
   isControlMode: boolean;
+  enabled?: boolean;
   currentPresentation: Presentation | null;
   currentSlideIndex: number;
   appModeRef: React.MutableRefObject<AppMode>;
@@ -21,6 +22,7 @@ interface UseKeyboardNavigationProps {
 export function useKeyboardNavigation(props: UseKeyboardNavigationProps) {
   const {
     isControlMode,
+    enabled = true,
     currentPresentation,
     currentSlideIndex,
     appModeRef,
@@ -31,6 +33,8 @@ export function useKeyboardNavigation(props: UseKeyboardNavigationProps) {
   } = props;
 
   useEffect(() => {
+    if (!enabled) return;
+
     const handleKeyDown = (e: KeyboardEvent) => {
       // Don't navigate if user is typing in the editor or focusing a select element
       const targetTag = (e.target as HTMLElement).tagName.toUpperCase();
@@ -73,6 +77,7 @@ export function useKeyboardNavigation(props: UseKeyboardNavigationProps) {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [
     currentPresentation,
+    enabled,
     currentSlideIndex,
     handleSelectPresentationAndSlide,
     handleScriptureEscape,

@@ -145,7 +145,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
     const top = (window.screen.height - height) / 2;
 
     window.open(
-      `${window.location.origin}${window.location.pathname}?mode=audio-editor`,
+      `${window.location.origin}/audio-editor`,
       'AudioSyncEditor',
       `width=${width},height=${height},top=${top},left=${left},resizable=yes,scrollbars=yes`
     );

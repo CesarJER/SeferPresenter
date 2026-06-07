@@ -203,13 +203,11 @@ export function useSyncState(props: UseSyncStateProps) {
 
     channel.postMessage(payload);
 
-    if (__APP_MODE__ !== 'singlefile') {
-      fetch('/api/state', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      }).catch(err => console.error('Error syncing state to network', err));
-    }
+    fetch('/api/state', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).catch(err => console.error('Error syncing state to network', err));
   }, [channel, isControlMode, persistState, videoStateRef, appModeRef, scriptureStateRef, audioStateRef, clientIdRef]);
 
   const applyAudioTelemetry = useCallback((incomingAudioState: AudioState) => {
@@ -243,13 +241,11 @@ export function useSyncState(props: UseSyncStateProps) {
 
     channel.postMessage(payload);
 
-    if (__APP_MODE__ !== 'singlefile') {
-      fetch('/api/audio-telemetry', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      }).catch(err => console.error('Error syncing audio telemetry to network', err));
-    }
+    fetch('/api/audio-telemetry', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).catch(err => console.error('Error syncing audio telemetry to network', err));
   }, [audioStateRef, channel, clientIdRef, isControlMode]);
 
   const applyVideoTelemetry = useCallback((incomingVideoState: VideoState | null) => {
@@ -271,13 +267,11 @@ export function useSyncState(props: UseSyncStateProps) {
 
     channel.postMessage(payload);
 
-    if (__APP_MODE__ !== 'singlefile') {
-      fetch('/api/video-telemetry', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      }).catch(err => console.error('Error syncing video telemetry to network', err));
-    }
+    fetch('/api/video-telemetry', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).catch(err => console.error('Error syncing video telemetry to network', err));
   }, [videoStateRef, channel, clientIdRef, isControlMode]);
 
   const applyDisplayTelemetry = useCallback((displayState: DisplayTelemetryState) => {
@@ -326,13 +320,11 @@ export function useSyncState(props: UseSyncStateProps) {
 
     channel.postMessage(payload);
 
-    if (__APP_MODE__ !== 'singlefile') {
-      fetch('/api/display-telemetry', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      }).catch(err => console.error('Error syncing display telemetry to network', err));
-    }
+    fetch('/api/display-telemetry', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).catch(err => console.error('Error syncing display telemetry to network', err));
   }, [
     backgroundLockRef, lockedBackgroundValueRef, userSelectedBackgroundRef,
     channel, clientIdRef, isControlMode,
@@ -469,8 +461,6 @@ export function useSyncState(props: UseSyncStateProps) {
 
   // ── SSE listener (web mode only) ──────────────────────────────────
   useEffect(() => {
-    if (__APP_MODE__ === 'singlefile') return;
-
     const eventSource = new EventSource('/api/state-events');
 
     eventSource.onmessage = (event) => {
