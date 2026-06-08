@@ -20,6 +20,7 @@ function Get-LocalIP {
 
 $localIP = Get-LocalIP
 $port = "5173" # Puerto por defecto de Vite
+$backendPort = "8787" # Puerto por defecto del backend
 $networkUrl = "http://$localIP`:$port"
 $localUrl = "http://localhost`:$port"
 
@@ -307,8 +308,9 @@ function Stop-Server {
     }
     
     $portActive = $null -ne (Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue)
-    if ($script:viteProcess -or $portActive) {
-        $consoleLog.AppendText("[Launcher] Deteniendo procesos asociados a Vite...`r`n")
+    $backendPortActive = $null -ne (Get-NetTCPConnection -LocalPort $backendPort -State Listen -ErrorAction SilentlyContinue)
+    if ($script:viteProcess -or $portActive -or $backendPortActive) {
+        $consoleLog.AppendText("[Launcher] Deteniendo procesos asociados a Vite y al Backend...`r`n")
         if ($script:viteProcess -and -not $script:viteProcess.HasExited) {
             Stop-Process -Id $script:viteProcess.Id -Force -ErrorAction SilentlyContinue
         }
@@ -368,11 +370,19 @@ $btnOpenNetwork.add_Click({
 # 7. Comprobacion manual del estado del puerto
 function Test-ServerStatus {
     $portActive = $null -ne (Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue)
-    if ($portActive) {
+    $backendPortActive = $null -ne (Get-NetTCPConnection -LocalPort $backendPort -State Listen -ErrorAction SilentlyContinue)
+    
+    if ($portActive -and $backendPortActive) {
         Update-UI-Status -running $true
-        $statusText.Text = "Servidor Activo (En uso)"
+        $statusText.Text = "Servidor Activo (Completo)"
         $statusText.Foreground = [System.Windows.Media.Brushes]::LimeGreen
         $statusDot.Fill = [System.Windows.Media.Brushes]::LimeGreen
+    }
+    elseif ($portActive -or $backendPortActive) {
+        Update-UI-Status -running $true
+        $statusText.Text = "Servidor Parcialmente Activo"
+        $statusText.Foreground = [System.Windows.Media.Brushes]::Orange
+        $statusDot.Fill = [System.Windows.Media.Brushes]::Orange
     }
     else {
         if (-not $script:viteProcess) {
