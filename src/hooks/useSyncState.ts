@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import type { AudioState, AudioSyncMap } from '../types/audio';
 import type { AppMode, Presentation, ScriptureNavState, VideoState } from '../types/presentation';
 import type { QuizSyncState } from '../types/quiz';
-import type { DisplayTelemetryState } from '../types/sync';
+import type { RemoteCommandPayload, DisplayTelemetryState } from '../types/sync';
 import { normalizePresentation } from '../utils/normalizePresentation';
 import { makeSyncMessage } from '../utils/syncProtocol';
 import { validateRemoteStatePayload, validateSyncMessage } from '../utils/validation';
@@ -22,6 +22,8 @@ interface SyncStateOptions {
 
 interface UseSyncStateProps {
   isControlMode: boolean;
+  isPresenterMode: boolean;
+  onRemoteCommand?: (payload: RemoteCommandPayload) => void;
   clientIdRef: React.MutableRefObject<string>;
   // Refs to current state (to read inside message handlers without stale closures)
   currentPresentationRef: React.MutableRefObject<Presentation | null>;
@@ -145,7 +147,7 @@ const areScriptureStatesEqual = (left: ScriptureNavState | null, right: Scriptur
 
 export function useSyncState(props: UseSyncStateProps) {
   const {
-    isControlMode, clientIdRef,
+    isControlMode, isPresenterMode, onRemoteCommand, clientIdRef,
     currentPresentationRef, currentSlideIndexRef, backgroundLockRef,
     lockedBackgroundValueRef, userSelectedBackgroundRef, videoStateRef,
     audioStateRef, appModeRef, scriptureStateRef,
@@ -222,6 +224,20 @@ export function useSyncState(props: UseSyncStateProps) {
     }).catch(err => console.error('Error syncing state to network', err));
   }, [channel, isControlMode, persistState, videoStateRef, appModeRef, scriptureStateRef, audioStateRef, quizStateRef, clientIdRef]);
 
+  const emitCommand = useCallback((payload: RemoteCommandPayload) => {
+    const message = makeSyncMessage({
+      type: 'REMOTE_COMMAND' as const,
+      clientId: clientIdRef.current,
+      payload,
+    });
+    channel.postMessage(message);
+    fetch('/api/command', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(message)
+    }).catch(err => console.error('Error syncing command to network', err));
+  }, [channel, clientIdRef]);
+
   const applyAudioTelemetry = useCallback((incomingAudioState: AudioState) => {
     const currentAudioState = audioStateRef.current;
     const isDifferent =
@@ -259,13 +275,6 @@ export function useSyncState(props: UseSyncStateProps) {
       body: JSON.stringify(payload)
     }).catch(err => console.error('Error syncing audio telemetry to network', err));
   }, [audioStateRef, channel, clientIdRef, isControlMode]);
-
-  const applyVideoTelemetry = useCallback((incomingVideoState: VideoState | null) => {
-    if (!areVideoStatesEqual(videoStateRef.current, incomingVideoState)) {
-      videoStateRef.current = incomingVideoState;
-      setVideoState(incomingVideoState);
-    }
-  }, [videoStateRef, setVideoState]);
 
   const emitVideoTelemetry = useCallback((incomingVideoState: VideoState | null) => {
     videoStateRef.current = incomingVideoState;
@@ -371,7 +380,8 @@ export function useSyncState(props: UseSyncStateProps) {
       setUserSelectedBackground(safeData.userSelectedBackground as string | null);
     }
     if (safeData.videoState !== undefined && !areVideoStatesEqual(videoStateRef.current, safeData.videoState as VideoState | null)) {
-      applyVideoTelemetry(safeData.videoState as VideoState | null);
+      if (videoStateRef) videoStateRef.current = safeData.videoState as VideoState | null;
+      setVideoState(safeData.videoState as VideoState | null);
     }
     if (safeData.appMode !== undefined && appModeRef.current !== safeData.appMode) {
       setAppMode(safeData.appMode as AppMode);
@@ -402,9 +412,26 @@ export function useSyncState(props: UseSyncStateProps) {
     appModeRef, scriptureStateRef,
     setCurrentPresentation, setCurrentSlideIndex, setBackgroundLock,
     setLockedBackgroundValue, setUserSelectedBackground,
-    setAppMode, setScriptureState, applyAudioTelemetry, applyVideoTelemetry, persistState,
-    quizStateRef, setQuizState,
+    setAppMode, setScriptureState, applyAudioTelemetry, persistState,
+    quizStateRef, setQuizState, setVideoState,
   ]);
+
+  // Use refs for callbacks so event listeners don't re-bind constantly
+  const applyRemoteStateRef = useRef(applyRemoteState);
+  const onRemoteCommandRef = useRef(onRemoteCommand);
+  const applyAudioTelemetryRef = useRef(applyAudioTelemetry);
+  const applyDisplayTelemetryRef = useRef(applyDisplayTelemetry);
+  const setVideoStateRef = useRef(setVideoState);
+  const setAudioSyncMapsRef = useRef(setAudioSyncMaps);
+
+  useEffect(() => {
+    applyRemoteStateRef.current = applyRemoteState;
+    onRemoteCommandRef.current = onRemoteCommand;
+    applyAudioTelemetryRef.current = applyAudioTelemetry;
+    applyDisplayTelemetryRef.current = applyDisplayTelemetry;
+    setVideoStateRef.current = setVideoState;
+    setAudioSyncMapsRef.current = setAudioSyncMaps;
+  }, [applyRemoteState, onRemoteCommand, applyAudioTelemetry, applyDisplayTelemetry, setVideoState, setAudioSyncMaps]);
 
   // ── BroadcastChannel listener ─────────────────────────────────────
   useEffect(() => {
@@ -421,27 +448,28 @@ export function useSyncState(props: UseSyncStateProps) {
       const data = validation.value;
 
       if (data.type === 'AUDIO_SYNC_MAPS_UPDATE') {
-        setAudioSyncMaps(data.maps as AudioSyncMap[]);
+        setAudioSyncMapsRef.current(data.maps as AudioSyncMap[]);
         return;
       }
 
       if (data.type === 'AUDIO_TELEMETRY') {
-        applyAudioTelemetry(data.audioState as AudioState);
+        applyAudioTelemetryRef.current(data.audioState as AudioState);
         return;
       }
 
       if (data.type === 'VIDEO_TELEMETRY') {
-        applyVideoTelemetry(data.videoState as VideoState | null);
+        if (videoStateRef) videoStateRef.current = data.videoState as VideoState | null;
+        setVideoStateRef.current(data.videoState as VideoState | null);
         return;
       }
 
       if (data.type === 'DISPLAY_TELEMETRY') {
-        applyDisplayTelemetry(data as DisplayTelemetryState);
+        applyDisplayTelemetryRef.current(data as DisplayTelemetryState);
         return;
       }
 
       if (data.type === 'REQUEST_STATE') {
-        if (!isControlMode) return; // only control responds
+        if (!isPresenterMode) return; // only presenter responds
         syncState({
           presentation: currentPresentationRef.current,
           slideIndex: currentSlideIndexRef.current,
@@ -457,25 +485,27 @@ export function useSyncState(props: UseSyncStateProps) {
         return;
       }
 
+      if (data.type === 'REMOTE_COMMAND') {
+        if (!isPresenterMode) return; // only presenter processes commands
+        onRemoteCommandRef.current?.(data.payload as RemoteCommandPayload);
+        return;
+      }
+
       if (data.type === 'SYNC_STATE') {
-        applyRemoteState(data as unknown as Record<string, unknown>, true, true);
+        applyRemoteStateRef.current(data as unknown as Record<string, unknown>, true, true);
       }
     };
 
     channel.addEventListener('message', handleMessage);
 
-    // Presenter asks for current state on open
-    if (!isControlMode) {
+    // Clients ask for current state on open (except Presenter, who is the source of truth)
+    if (!isPresenterMode) {
       channel.postMessage(makeSyncMessage({ type: 'REQUEST_STATE', clientId: clientIdRef.current }));
     }
 
     return () => channel.removeEventListener('message', handleMessage);
   }, [
-    isControlMode, channel, clientIdRef, syncState, applyRemoteState, applyAudioTelemetry,
-    applyVideoTelemetry, applyDisplayTelemetry,
-    setAudioSyncMaps, currentPresentationRef, currentSlideIndexRef,
-    backgroundLockRef, lockedBackgroundValueRef, userSelectedBackgroundRef,
-    videoStateRef, appModeRef, scriptureStateRef, audioStateRef,
+    isPresenterMode, channel, clientIdRef, syncState
   ]);
 
   // ── SSE listener (web mode only) ──────────────────────────────────
@@ -497,25 +527,32 @@ export function useSyncState(props: UseSyncStateProps) {
           const safeData = validation.value;
 
           if (safeData.type === 'AUDIO_TELEMETRY') {
-            applyAudioTelemetry(safeData.audioState as AudioState);
+            applyAudioTelemetryRef.current(safeData.audioState as AudioState);
             return;
           }
 
           if (safeData.type === 'VIDEO_TELEMETRY') {
-            applyVideoTelemetry(safeData.videoState as VideoState | null);
+            if (videoStateRef) videoStateRef.current = safeData.videoState as VideoState | null;
+            setVideoStateRef.current(safeData.videoState as VideoState | null);
             return;
           }
 
           if (safeData.type === 'DISPLAY_TELEMETRY') {
-            applyDisplayTelemetry(safeData as DisplayTelemetryState);
+            applyDisplayTelemetryRef.current(safeData as DisplayTelemetryState);
             return;
           }
 
-          applyRemoteState(safeData as unknown as Record<string, unknown>, true, true);
+          if (safeData.type === 'REMOTE_COMMAND') {
+            if (!isPresenterMode) return;
+            onRemoteCommandRef.current?.(safeData.payload as RemoteCommandPayload);
+            return;
+          }
+
+          applyRemoteStateRef.current(safeData as unknown as Record<string, unknown>, true, true);
           return;
         }
 
-        applyRemoteState(data);
+        applyRemoteStateRef.current(data);
       } catch (err) {
         console.error('Error parsing network state sync event', err);
       }
@@ -523,8 +560,8 @@ export function useSyncState(props: UseSyncStateProps) {
 
     return () => eventSource.close();
   }, [
-    clientIdRef, applyRemoteState, applyAudioTelemetry, applyVideoTelemetry, applyDisplayTelemetry,
+    clientIdRef, isPresenterMode
   ]);
 
-  return { channel, syncState, persistState, emitAudioTelemetry, emitVideoTelemetry, emitDisplayTelemetry };
+  return { channel, syncState, emitCommand, persistState, emitAudioTelemetry, emitVideoTelemetry, emitDisplayTelemetry };
 }

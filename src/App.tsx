@@ -5,13 +5,14 @@ import SeferReaderScreen from './components/presenter/SeferReaderScreen';
 import AudienceScreen from './components/audience/AudienceScreen';
 import defaultPresentations from '../presentations.json';
 import { Music } from 'lucide-react';
-import { AudioSyncEditor } from './components/AudioSyncEditor';
 
+import { AudioSyncEditor } from './components/AudioSyncEditor';
 
 import type { AudioState, AudioSyncMap } from './types/audio';
 import { DEFAULT_AUDIO_STATE } from './types/audio';
 import type { AppMode, Presentation, ScriptureNavState, Slide, VideoState, QuizData } from './types/presentation';
 import type { QuizOptionId, QuizSyncState } from './types/quiz';
+import type { RemoteCommandPayload } from './types/sync';
 
 import {
   normalizePresentation,
@@ -26,6 +27,7 @@ import { useKeyboardNavigation } from './hooks/useKeyboardNavigation';
 import { useAudioPlayback } from './hooks/useAudioPlayback';
 import { useScriptureNavigation } from './hooks/useScriptureNavigation';
 import { useQuizAudio } from './hooks/useQuizAudio';
+import type { SeferReaderState } from './hooks/useSeferReader';
 import { useQuizTimer } from './hooks/useQuizTimer';
 import { validateAudioSyncMaps, validatePresentationList } from './utils/validation';
 import { makeSyncMessage } from './utils/syncProtocol';
@@ -36,6 +38,7 @@ function App() {
   const isControlMode = routeName === 'control';
   const isAudioEditorMode = routeName === 'audio-editor';
   const isAudienceMode = routeName === 'audience';
+  const isPresenterMode = !isControlMode && !isAudienceMode && !isAudioEditorMode;
   const storedPresenterState = loadStoredPresenterState();
 
   const [presentations, setPresentations] = useState<Presentation[]>([]);
@@ -146,10 +149,10 @@ function App() {
   }, [activeQuizData?.timerSeconds, activeSlide, quizTimer.resetTimer, quizTimer.setTimerState]);
 
   useEffect(() => {
-    if (isControlMode && quizSubslides[quizCurrentSubslideIndex]?.kind === 'pregunta' && quizTimer.timerState.status === 'idle') {
+    if (isPresenterMode && quizSubslides[quizCurrentSubslideIndex]?.kind === 'pregunta' && quizTimer.timerState.status === 'idle') {
       quizTimer.startTimer();
     }
-  }, [isControlMode, quizSubslides, quizCurrentSubslideIndex, quizTimer.timerState.status, quizTimer.startTimer]);
+  }, [isPresenterMode, quizSubslides, quizCurrentSubslideIndex, quizTimer.timerState.status, quizTimer.startTimer]);
 
   useEffect(() => {
     currentPresentationRef.current = currentPresentation;
@@ -163,6 +166,8 @@ function App() {
     scriptureStateRef.current = scriptureState;
     quizStateRef.current = activeQuizState;
   }, [currentPresentation, currentSlideIndex, backgroundLock, lockedBackgroundValue, userSelectedBackground, videoState, audioState, appMode, scriptureState, activeQuizState]);
+
+
 
   useEffect(() => {
     fetch('/api/backgrounds')
@@ -201,8 +206,90 @@ function App() {
       .catch(err => console.error("Error loading audio sync maps", err));
   }, []);
 
-  const { channel, syncState, emitAudioTelemetry, emitVideoTelemetry, emitDisplayTelemetry } = useSyncState({
-    isControlMode, clientIdRef,
+  const handleRemoteCommand = useCallback((payload: RemoteCommandPayload) => {
+    switch (payload.command) {
+      case 'SELECT_PRESENTATION_AND_SLIDE':
+        handleSelectPresentationAndSlideRef.current?.(payload.presentation, payload.slideIndex, payload.direction, payload.targetVerse);
+        break;
+      case 'TOGGLE_APP_MODE':
+        handleToggleAppModeRef.current?.(payload.mode);
+        break;
+      case 'TOGGLE_BG_LOCK':
+        handleToggleBackgroundLockRef.current?.(!backgroundLockRef.current);
+        break;
+      case 'SELECT_BG_OVERRIDE':
+        if (payload.bg !== null) {
+          handleSelectBackgroundOverrideRef.current?.(payload.bg);
+        }
+        break;
+      case 'QUIZ_START_TIMER':
+        quizTimer.startTimer();
+        break;
+      case 'QUIZ_PAUSE_TIMER':
+        quizTimer.pauseTimer();
+        break;
+      case 'QUIZ_RESUME_TIMER':
+        quizTimer.resumeTimer();
+        break;
+      case 'QUIZ_RESET_TIMER':
+        quizTimer.resetTimer(activeQuizData?.timerSeconds ? activeQuizData.timerSeconds * 1000 : 30000);
+        break;
+      case 'QUIZ_COMPLETE': {
+        quizTimer.completeTimer();
+        const subslides = activeQuizData ? generateQuizSubslides(activeQuizData) : [];
+        const answerIndex = subslides.findIndex(s => s.kind === 'respuesta');
+        if (answerIndex >= 0) setQuizCurrentSubslideIndex(answerIndex);
+        break;
+      }
+      case 'QUIZ_SELECT_SUBSLIDE':
+        setQuizCurrentSubslideIndex(payload.index);
+        break;
+      case 'QUIZ_DEMO_SELECT':
+        setQuizPresenterDemoSelection(payload.optionId as QuizOptionId | null);
+        if (payload.optionId) {
+          const selected = activeQuizData?.options.find(o => o.id === payload.optionId);
+          if (selected?.isCorrect) quizAudio.playApplause();
+          if (selected && !selected.isCorrect) quizAudio.playMal();
+        }
+        break;
+      case 'QUIZ_PLAY_APPLAUSE':
+        quizAudio.playApplause();
+        break;
+      case 'QUIZ_PLAY_MAL':
+        quizAudio.playMal();
+        break;
+      case 'SCRIPTURE_PROJECT':
+        if (handleProjectScriptureRef.current) handleProjectScriptureRef.current(payload.state, payload.navCommand);
+        break;
+      case 'SCRIPTURE_ADD_SLIDE':
+        if (handleAddScriptureSlideRef.current) handleAddScriptureSlideRef.current(payload.state, payload.kind);
+        break;
+      case 'SCRIPTURE_BOUNDARY':
+        if (handleScriptureBoundaryRef.current) handleScriptureBoundaryRef.current(payload.direction);
+        break;
+      case 'SCRIPTURE_ESCAPE':
+        if (handleScriptureEscapeRef.current) handleScriptureEscapeRef.current();
+        break;
+      case 'SCRIPTURE_ARROW_NAV':
+        if (handleScriptureArrowNavRef.current) handleScriptureArrowNavRef.current(payload.direction === 'up' ? 'previous' : 'next');
+        break;
+      case 'UPDATE_FONT_SIZES':
+        if (handleUpdateScriptureFontSizesRef.current) handleUpdateScriptureFontSizesRef.current({ hebrewFontSize: payload.hebrewFontSize ?? 42, combinedTextBaseSize: payload.combinedTextBaseSize ?? 50 });
+        break;
+      case 'VIDEO_STATE_CHANGE':
+        handleVideoStateChangeRef.current?.(payload.state);
+        break;
+      case 'AUDIO_STATE_CHANGE':
+        setAudioState(payload.state);
+        break;
+      case 'RESET_STATE':
+        handleResetStateRef.current?.();
+        break;
+    }
+  }, [quizTimer, activeQuizData, quizAudio]);
+
+  const { channel, syncState, emitCommand, emitAudioTelemetry, emitVideoTelemetry, emitDisplayTelemetry } = useSyncState({
+    isControlMode, isPresenterMode, onRemoteCommand: handleRemoteCommand, clientIdRef,
     currentPresentationRef, currentSlideIndexRef, backgroundLockRef,
     lockedBackgroundValueRef, userSelectedBackgroundRef, videoStateRef,
     audioStateRef, appModeRef, scriptureStateRef, quizStateRef,
@@ -213,7 +300,7 @@ function App() {
   });
 
   useEffect(() => {
-    if (!isControlMode) return;
+    if (!isPresenterMode) return;
     syncState({
       presentation: currentPresentationRef.current,
       slideIndex: currentSlideIndexRef.current,
@@ -226,7 +313,7 @@ function App() {
       audioState: audioStateRef.current,
       quizState: activeQuizState,
     });
-  }, [isControlMode, activeQuizState, syncState]);
+  }, [isPresenterMode, activeQuizState, syncState]);
 
   const { getActiveBackground, handleToggleBackgroundLock, handleSelectBackgroundOverride } = useBackgroundResolver({
     currentPresentation, currentSlideIndex, backgroundLock,
@@ -240,18 +327,16 @@ function App() {
   const activeBackground = getActiveBackground();
 
   useEffect(() => {
-    if (!isControlMode) return;
+    if (!isPresenterMode) return;
     
     const isNewSlide = activeSlide?.id !== lastActiveSlideIdRef.current;
     lastActiveSlideIdRef.current = activeSlide?.id;
 
     if (isNewSlide && activeSlide?.id !== navigatedSlideIdRef.current) {
-      // Intentionally NOT resetting quizCurrentSubslideIndex here. 
-      // handleSelectPresentationAndSlide already sets the correct initialIndex (0 for forward, N for backward).
       setQuizPresenterDemoSelection(null);
     }
     quizTimer.resetTimer((activeQuizData?.timerSeconds ?? 30) * 1000);
-  }, [isControlMode, activeSlide?.id, activeQuizData?.timerSeconds, quizTimer.resetTimer]);
+  }, [isPresenterMode, activeSlide?.id, activeQuizData?.timerSeconds, quizTimer.resetTimer]);
 
   type SelectPresentationAndSlideHandler = (
     presentation: Presentation | null,
@@ -262,6 +347,15 @@ function App() {
 
   const handleSelectPresentationAndSlideRef = useRef<SelectPresentationAndSlideHandler | null>(null);
   const handleSaveRef = useRef<((presentation: Presentation) => void) | null>(null);
+
+  const handleProjectScriptureRef = useRef<((state: SeferReaderState, command?: ScriptureNavState['command']) => void) | null>(null);
+  const handleUpdateScriptureFontSizesRef = useRef<((sizes: { hebrewFontSize: number; combinedTextBaseSize: number }) => void) | null>(null);
+  const handleAddScriptureSlideRef = useRef<((state: SeferReaderState, kind?: 'sefer' | 'tanaj') => void) | null>(null);
+  const handleScriptureBoundaryRef = useRef<((direction: 'next' | 'previous') => void) | null>(null);
+  const handleScriptureEscapeRef = useRef<(() => void) | null>(null);
+  const handleScriptureArrowNavRef = useRef<((direction: 'next' | 'previous') => void) | null>(null);
+
+
 
   const {
     buildScriptureSlideState,
@@ -276,10 +370,17 @@ function App() {
     isControlMode, currentPresentationRef, currentSlideIndexRef, backgroundLockRef,
     lockedBackgroundValueRef, userSelectedBackgroundRef, videoStateRef, appModeRef, scriptureStateRef,
     setAppMode, setScriptureState, syncState, 
-    handleSelectPresentationAndSlide: (...args) => handleSelectPresentationAndSlideRef.current?.(...args),
-    handleSave: (p) => handleSaveRef.current?.(p), 
+    handleSelectPresentationAndSlide: (p: Presentation | null, idx: number, direction?: 'forward' | 'backward', targetVerse?: string) => handleSelectPresentationAndSlideRef.current?.(p, idx, direction, targetVerse),
+    handleSave: (p: Presentation) => handleSaveRef.current?.(p), 
     slideScriptureStateBeforeManualRef
   });
+
+  handleProjectScriptureRef.current = handleProjectScripture;
+  handleUpdateScriptureFontSizesRef.current = handleUpdateScriptureFontSizes;
+  handleAddScriptureSlideRef.current = handleAddScriptureSlide;
+  handleScriptureBoundaryRef.current = handleScriptureBoundary;
+  handleScriptureEscapeRef.current = handleScriptureEscape;
+  handleScriptureArrowNavRef.current = handleScriptureArrowNav;
 
   const handleSelectPresentationAndSlide = useCallback((p: Presentation | null, idx: number, direction: 'forward' | 'backward' = 'forward', targetVerse?: string) => {
     const normalizedPresentation = p ? normalizePresentation(p) : null;
@@ -379,7 +480,8 @@ function App() {
     syncState({ presentation: null, slideIndex: -1, bgLock: false, lockedBg: null, userSelectedBg: null, videoState: null, appMode: 'slides', scriptureState: null, quizState: null });
     window.history.replaceState(null, '', '/presenter');
   }, [syncState]);
-
+  const handleResetStateRef = useRef<(() => void) | null>(null);
+  handleResetStateRef.current = handleResetState;
   useUrlSync({
     presentations, currentPresentation, currentSlideIndex, appMode, scriptureState,
     currentPresentationRef, currentSlideIndexRef, scriptureStateRef, slideScriptureStateBeforeManualRef,
@@ -391,11 +493,24 @@ function App() {
   useKeyboardNavigation({
     isControlMode, currentPresentation, currentSlideIndex, appModeRef, scriptureStateRef,
     currentPresentationRef, currentSlideIndexRef,
-    handleSelectPresentationAndSlide, handleScriptureEscape, handleScriptureArrowNav,
+    handleSelectPresentationAndSlide: (p, idx, direction) => {
+      if (isControlMode) {
+        emitCommand({ command: 'SELECT_PRESENTATION_AND_SLIDE', presentation: p, slideIndex: idx, direction });
+      } else {
+        handleSelectPresentationAndSlide(p, idx, direction);
+      }
+    },
+    handleScriptureEscape, handleScriptureArrowNav,
     enabled: !isAudienceMode,
     quizCurrentSubslideIndex,
     quizSubslideCount: quizSubslides.length,
-    onQuizSubslideSelect: setQuizCurrentSubslideIndex,
+    onQuizSubslideSelect: (idx) => {
+      if (isControlMode) {
+        emitCommand({ command: 'QUIZ_SELECT_SUBSLIDE', index: idx });
+      } else {
+        setQuizCurrentSubslideIndex(idx);
+      }
+    },
   });
 
   useAudioPlayback({
@@ -425,10 +540,18 @@ function App() {
       background: activeBackground,
     }
     : activeSlide, [activeBackground, activeSlide, scriptureState]);
+  const handleVideoStateChangeRef = useRef<((state: VideoState | null) => void) | null>(null);
   const handleVideoStateChange = useCallback((state: VideoState | null) => {
     setVideoState(state);
     emitVideoTelemetry(state);
   }, [emitVideoTelemetry]);
+  handleVideoStateChangeRef.current = handleVideoStateChange;
+
+  const handleToggleBackgroundLockRef = useRef<((locked: boolean) => void) | null>(null);
+  handleToggleBackgroundLockRef.current = handleToggleBackgroundLock;
+  const handleSelectBackgroundOverrideRef = useRef<((bg: string) => void) | null>(null);
+  handleSelectBackgroundOverrideRef.current = handleSelectBackgroundOverride;
+  const handleToggleAppModeRef = useRef<((mode: AppMode) => void) | null>(null);
 
   const handleToggleAppMode = useCallback((mode: AppMode) => {
     if (mode === 'seferManual') {
@@ -510,6 +633,7 @@ function App() {
       appMode: mode, scriptureState: scriptureStateRef.current
     });
   }, [buildScriptureSlideState, presentations, storedPresenterState, syncState]);
+  handleToggleAppModeRef.current = handleToggleAppMode;
 
   if (isAudienceMode) {
     return (
@@ -569,31 +693,37 @@ function App() {
           currentSlideIndex={currentSlideIndex}
           activeBackground={activeBackground}
           backgroundLock={backgroundLock}
-          onToggleBackgroundLock={handleToggleBackgroundLock}
-          onSelectBackgroundOverride={handleSelectBackgroundOverride}
+          onToggleBackgroundLock={(locked) => isControlMode ? emitCommand({ command: 'TOGGLE_BG_LOCK' }) : handleToggleBackgroundLock(locked)}
+          onSelectBackgroundOverride={(bg) => isControlMode ? emitCommand({ command: 'SELECT_BG_OVERRIDE', bg }) : handleSelectBackgroundOverride(bg)}
           onSave={handleSave}
-          onResetState={handleResetState}
-          onSelectPresentation={(p, idx, targetVerse) => handleSelectPresentationAndSlide(p, idx ?? 0, 'forward', targetVerse)}
-          onSelectSlide={(idx) => handleSelectPresentationAndSlide(currentPresentation, idx, idx < currentSlideIndex ? 'backward' : 'forward')}
+          onResetState={() => isControlMode ? emitCommand({ command: 'RESET_STATE' }) : handleResetState()}
+          onSelectPresentation={(p, idx, targetVerse) => isControlMode ? emitCommand({ command: 'SELECT_PRESENTATION_AND_SLIDE', presentation: p, slideIndex: idx ?? 0, direction: 'forward', targetVerse }) : handleSelectPresentationAndSlide(p, idx ?? 0, 'forward', targetVerse)}
+          onSelectSlide={(idx) => isControlMode ? emitCommand({ command: 'SELECT_PRESENTATION_AND_SLIDE', presentation: currentPresentation, slideIndex: idx, direction: idx < currentSlideIndex ? 'backward' : 'forward' }) : handleSelectPresentationAndSlide(currentPresentation, idx, idx < currentSlideIndex ? 'backward' : 'forward')}
           onImport={(imported) => {
             savePresentations(imported);
             if (imported.length > 0) {
-              handleSelectPresentationAndSlide(imported[0], imported[0].slides.length > 0 ? 0 : -1);
+              if (isControlMode) emitCommand({ command: 'SELECT_PRESENTATION_AND_SLIDE', presentation: imported[0], slideIndex: imported[0].slides.length > 0 ? 0 : -1, direction: 'forward' });
+              else handleSelectPresentationAndSlide(imported[0], imported[0].slides.length > 0 ? 0 : -1);
             } else {
-              handleSelectPresentationAndSlide(null, -1);
+              if (isControlMode) emitCommand({ command: 'SELECT_PRESENTATION_AND_SLIDE', presentation: null, slideIndex: -1, direction: 'forward' });
+              else handleSelectPresentationAndSlide(null, -1);
             }
           }}
           videoState={videoState}
-          onVideoStateChange={handleVideoStateChange}
+          onVideoStateChange={(s) => isControlMode ? emitCommand({ command: 'VIDEO_STATE_CHANGE', state: s }) : handleVideoStateChange(s)}
           audioState={audioState}
           audioSyncMaps={audioSyncMaps}
           availableAudioFiles={availableAudioFiles}
           onAudioStateChange={(state) => {
-            setAudioState(state);
-            syncState({
-              presentation: currentPresentation, slideIndex: currentSlideIndex, bgLock: backgroundLock,
-              lockedBg: lockedBackgroundValue, userSelectedBg: userSelectedBackground, audioState: state
-            });
+            if (isControlMode) {
+              emitCommand({ command: 'AUDIO_STATE_CHANGE', state });
+            } else {
+              setAudioState(state);
+              syncState({
+                presentation: currentPresentation, slideIndex: currentSlideIndex, bgLock: backgroundLock,
+                lockedBg: lockedBackgroundValue, userSelectedBg: userSelectedBackground, audioState: state
+              });
+            }
           }}
           onAudioSyncMapsChange={(maps) => {
             const validation = validateAudioSyncMaps(maps);
@@ -611,33 +741,39 @@ function App() {
           }}
           appMode={appMode}
           scriptureState={scriptureState}
-          onUpdateScriptureFontSizes={handleUpdateScriptureFontSizes}
-          onToggleAppMode={handleToggleAppMode}
-          onProjectScripture={handleProjectScripture}
-          onAddScriptureSlide={handleAddScriptureSlide}
-          onBoundaryReached={handleScriptureBoundary}
+          onUpdateScriptureFontSizes={(sizes) => isControlMode ? emitCommand({ command: 'UPDATE_FONT_SIZES', hebrewFontSize: sizes.hebrewFontSize, combinedTextBaseSize: sizes.combinedTextBaseSize }) : handleUpdateScriptureFontSizes(sizes)}
+          onToggleAppMode={(mode) => isControlMode ? emitCommand({ command: 'TOGGLE_APP_MODE', mode }) : handleToggleAppMode(mode)}
+          onProjectScripture={(state, command) => isControlMode ? emitCommand({ command: 'SCRIPTURE_PROJECT', state, navCommand: command as any }) : handleProjectScripture(state, command as any)}
+          onAddScriptureSlide={(state, kind) => isControlMode ? emitCommand({ command: 'SCRIPTURE_ADD_SLIDE', state, kind }) : handleAddScriptureSlide(state, kind)}
+          onBoundaryReached={(dir) => isControlMode ? emitCommand({ command: 'SCRIPTURE_BOUNDARY', direction: dir }) : handleScriptureBoundary(dir)}
           quizSubslides={quizSubslides}
           quizCurrentSubslideIndex={quizCurrentSubslideIndex}
           quizTimerState={quizTimer.timerState}
           quizPresenterDemoSelection={quizPresenterDemoSelection}
-          onQuizSubslideSelect={setQuizCurrentSubslideIndex}
-          onQuizStartTimer={quizTimer.startTimer}
-          onQuizPauseTimer={quizTimer.pauseTimer}
-          onQuizResumeTimer={quizTimer.resumeTimer}
-          onQuizResetTimer={() => quizTimer.resetTimer((activeQuizData?.timerSeconds ?? 30) * 1000)}
+          onQuizSubslideSelect={(idx) => isControlMode ? emitCommand({ command: 'QUIZ_SELECT_SUBSLIDE', index: idx }) : setQuizCurrentSubslideIndex(idx)}
+          onQuizStartTimer={() => isControlMode ? emitCommand({ command: 'QUIZ_START_TIMER' }) : quizTimer.startTimer()}
+          onQuizPauseTimer={() => isControlMode ? emitCommand({ command: 'QUIZ_PAUSE_TIMER' }) : quizTimer.pauseTimer()}
+          onQuizResumeTimer={() => isControlMode ? emitCommand({ command: 'QUIZ_RESUME_TIMER' }) : quizTimer.resumeTimer()}
+          onQuizResetTimer={() => isControlMode ? emitCommand({ command: 'QUIZ_RESET_TIMER' }) : quizTimer.resetTimer((activeQuizData?.timerSeconds ?? 30) * 1000)}
           onQuizComplete={() => {
-            quizTimer.completeTimer();
-            const answerIndex = quizSubslides.findIndex(subslide => subslide.kind === 'respuesta');
-            if (answerIndex >= 0) setQuizCurrentSubslideIndex(answerIndex);
+            if (isControlMode) emitCommand({ command: 'QUIZ_COMPLETE' });
+            else {
+              quizTimer.completeTimer();
+              const answerIndex = quizSubslides.findIndex(subslide => subslide.kind === 'respuesta');
+              if (answerIndex >= 0) setQuizCurrentSubslideIndex(answerIndex);
+            }
           }}
           onQuizDemoSelect={(optionId) => {
-            setQuizPresenterDemoSelection(optionId);
-            const selected = activeQuizData?.options.find(option => option.id === optionId);
-            if (selected?.isCorrect) quizAudio.playApplause();
-            if (selected && !selected.isCorrect) quizAudio.playMal();
+            if (isControlMode) emitCommand({ command: 'QUIZ_DEMO_SELECT', optionId });
+            else {
+              setQuizPresenterDemoSelection(optionId);
+              const selected = activeQuizData?.options.find(option => option.id === optionId);
+              if (selected?.isCorrect) quizAudio.playApplause();
+              if (selected && !selected.isCorrect) quizAudio.playMal();
+            }
           }}
-          onQuizPlayApplause={quizAudio.playApplause}
-          onQuizPlayMal={quizAudio.playMal}
+          onQuizPlayApplause={() => isControlMode ? emitCommand({ command: 'QUIZ_PLAY_APPLAUSE' }) : quizAudio.playApplause()}
+          onQuizPlayMal={() => isControlMode ? emitCommand({ command: 'QUIZ_PLAY_MAL' }) : quizAudio.playMal()}
         />
       </div>
     );

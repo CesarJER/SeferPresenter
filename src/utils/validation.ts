@@ -470,5 +470,35 @@ export const validateSyncMessage = (value: unknown): ValidationResult<BroadcastM
     return errors.length > 0 ? fail(errors) : ok({ ...value, ...remote.value } as unknown as BroadcastMessage);
   }
 
+  if (value.type === 'REMOTE_COMMAND') {
+    if (typeof value.clientId !== 'string') baseErrors.push('clientId debe ser texto.');
+    if (!isRecord(value.payload)) {
+      baseErrors.push('payload debe ser un objeto.');
+    } else if (typeof value.payload.command !== 'string') {
+      baseErrors.push('payload.command debe ser texto.');
+    } else {
+      // Basic semantic checks on known commands
+      const payload = value.payload as Record<string, unknown>;
+      switch (payload.command) {
+        case 'TOGGLE_APP_MODE':
+          if (!appModes.has(payload.mode as string)) baseErrors.push(`Modo invalido: ${payload.mode}`);
+          break;
+        case 'SELECT_BG_OVERRIDE':
+          if (payload.bg !== null && typeof payload.bg !== 'string') baseErrors.push('bg debe ser texto o null');
+          break;
+        case 'QUIZ_SELECT_SUBSLIDE':
+          if (!Number.isInteger(payload.index) || (payload.index as number) < 0) baseErrors.push('index debe ser entero >= 0');
+          break;
+        case 'SCRIPTURE_ARROW_NAV':
+          if (payload.direction !== 'up' && payload.direction !== 'down') baseErrors.push('direction debe ser up o down');
+          break;
+        case 'SCRIPTURE_BOUNDARY':
+          if (payload.direction !== 'next' && payload.direction !== 'previous') baseErrors.push('direction debe ser next o previous');
+          break;
+      }
+    }
+    return baseErrors.length > 0 ? fail(baseErrors) : ok(value as unknown as BroadcastMessage);
+  }
+
   return fail([`Tipo de mensaje no soportado: ${value.type}`]);
 };

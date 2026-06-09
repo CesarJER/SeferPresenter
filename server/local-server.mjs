@@ -278,6 +278,19 @@ const handleApi = async (req, res, url) => {
     return true
   }
 
+  if (url.pathname === '/api/command' && req.method === 'POST') {
+    try {
+      const body = await readBody(req)
+      const parsed = JSON.parse(body)
+      // Broadcast the command to all SSE clients without mutating currentState in the backend
+      broadcast(JSON.stringify(parsed))
+      sendJson(res, 200, { success: true })
+    } catch (err) {
+      sendJson(res, 400, { error: err.message || 'Invalid JSON' })
+    }
+    return true
+  }
+
   if (url.pathname === '/api/audio-telemetry' && req.method === 'POST') {
     try {
       const body = await readBody(req)

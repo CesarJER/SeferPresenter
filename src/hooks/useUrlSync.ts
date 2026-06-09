@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import type { AppMode, Presentation, ScriptureNavState } from '../types/presentation';
 import { formatSlideHash, parseSlideHash, slugify } from '../utils/normalizePresentation';
 
@@ -119,8 +119,12 @@ export function useUrlSync(props: UseUrlSyncProps) {
   ]);
 
   // Handle URL parsing on presentations load
+  const hasParsedInitialUrlRef = useRef(false);
   useEffect(() => {
-    parseUrlAndSync();
+    if (presentations.length > 0 && !hasParsedInitialUrlRef.current) {
+      hasParsedInitialUrlRef.current = true;
+      parseUrlAndSync();
+    }
   }, [presentations, parseUrlAndSync]);
 
   // Handle popstate & hashchange events (manually entered URLs or back button)
