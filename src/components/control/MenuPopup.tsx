@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState, useRef } from 'react';
-import type { Presentation, Slide, VideoState, AppMode, ScriptureNavState } from '../../types/presentation';
+import type { Presentation, QuizData, Slide, VideoState, AppMode, ScriptureNavState } from '../../types/presentation';
 import type { SeferReaderState } from '../../hooks/useSeferReader';
 import { transliterateText } from '../../utils/transliterate';
 import { parseVideoSlideString } from '../../utils/videoUtils';
@@ -15,6 +15,17 @@ import { PresentationList } from './PresentationList';
 import { PresentationEditor } from './PresentationEditor';
 import { CustomSearchSelect } from '../shared/CustomSearchSelect';
 import type { AudioState, AudioSyncMap } from '../../types/audio';
+import type { QuizOptionId, QuizSubslide, QuizTimerState } from '../../types/quiz';
+import { useControllerAnswers } from '../../hooks/useQuizAnswers';
+import { QuizControllerView } from '../quiz/QuizControllerView';
+import {
+  looksLikeQuizBlock,
+  makeDefaultQuizData,
+  parseQuizBlock,
+  parseResultProfiles,
+  serializeQuizToText,
+  serializeResultProfiles,
+} from '../../utils/quizUtils';
 
 interface MenuPopupProps {
   presentations: Presentation[];
@@ -44,6 +55,19 @@ interface MenuPopupProps {
   onAudioStateChange: (state: AudioState) => void;
   onAudioSyncMapsChange: (maps: AudioSyncMap[]) => void;
   onResetState?: () => void;
+  quizSubslides?: QuizSubslide[];
+  quizCurrentSubslideIndex?: number;
+  quizTimerState?: QuizTimerState;
+  quizPresenterDemoSelection?: QuizOptionId | null;
+  onQuizSubslideSelect?: (idx: number) => void;
+  onQuizStartTimer?: () => void;
+  onQuizPauseTimer?: () => void;
+  onQuizResumeTimer?: () => void;
+  onQuizResetTimer?: () => void;
+  onQuizComplete?: () => void;
+  onQuizDemoSelect?: (optionId: QuizOptionId | null) => void;
+  onQuizPlayApplause?: () => void;
+  onQuizPlayMal?: () => void;
 }
 
 const isTitleSlide = (slide: Slide) =>
@@ -99,7 +123,21 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
   availableAudioFiles,
   onAudioStateChange,
   onResetState,
+  quizSubslides = [],
+  quizCurrentSubslideIndex = 0,
+  quizTimerState,
+  quizPresenterDemoSelection = null,
+  onQuizSubslideSelect = () => { },
+  onQuizStartTimer = () => { },
+  onQuizPauseTimer = () => { },
+  onQuizResumeTimer = () => { },
+  onQuizResetTimer = () => { },
+  onQuizComplete = () => { },
+  onQuizDemoSelect = () => { },
+  onQuizPlayApplause = () => { },
+  onQuizPlayMal = () => { },
 }) => {
+  const controllerAnswers = useControllerAnswers();
   // ────────────────────────────────────────────────────────────────
   // States
   // ────────────────────────────────────────────────────────────────
@@ -369,7 +407,11 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
       titleBlock,
       ...contentSlides.map(slide => {
         const tag = scriptureSlideToTag(slide);
-        const content = tag || (slide.lines[0] || '');
+        const content = slide.type === 'quiz' && slide.quizData
+          ? slide.quizData.isResultsSlide && slide.quizData.resultProfiles
+            ? serializeResultProfiles(slide.quizData.resultProfiles)
+            : serializeQuizToText(slide.quizData)
+          : tag || (slide.lines[0] || '');
         return (slide.label ? `#${slide.label}\n` : '') + content;
       })
     ].filter(Boolean);
@@ -517,13 +559,30 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
     setSlides([...slides, newSlide]);
   };
 
-  const handleChangeSlideType = (idx: number, newType: 'text' | 'video' | 'image' | 'tanaj' | 'sefer') => {
+  const handleAddQuizSlide = () => {
+    const randomSuffix = Math.random().toString(36).substring(2, 9);
+    const newId = `slide-quiz-${slides.length}-${Date.now()}-${randomSuffix}`;
+    const newLabel = slides.length.toString();
+    const quizData = makeDefaultQuizData();
+    const newSlide: Slide = {
+      id: newId,
+      label: newLabel,
+      lines: [serializeQuizToText(quizData), '-', '-'],
+      type: 'quiz',
+      quizData,
+    };
+
+    setSlides([...slides, newSlide]);
+  };
+
+  const handleChangeSlideType = (idx: number, newType: 'text' | 'video' | 'image' | 'tanaj' | 'sefer' | 'quiz') => {
     const updated = [...slides];
     const slide = { ...updated[idx] };
     const fallbackVal = '-';
 
     if (newType === 'text') {
       delete slide.type;
+      delete slide.quizData;
       delete slide.videoSrc;
       delete slide.videoVolume;
       delete slide.videoSpeed;
@@ -547,6 +606,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
       ];
     } else if (newType === 'image') {
       delete slide.type;
+      delete slide.quizData;
       delete slide.videoSrc;
       delete slide.videoVolume;
       delete slide.videoSpeed;
@@ -561,6 +621,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
       slide.lines = ['[IMAGE]', fallbackVal, fallbackVal];
     } else if (newType === 'video') {
       slide.type = 'video';
+      delete slide.quizData;
       slide.videoSrc = slide.videoSrc || '';
       slide.videoVolume = slide.videoVolume ?? 0.8;
       slide.videoSpeed = slide.videoSpeed ?? 1.0;
@@ -589,8 +650,24 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
         parts.pop();
       }
       slide.lines = [`[${parts.join(' - ')}]`, fallbackVal, fallbackVal];
+    } else if (newType === 'quiz') {
+      const quizData = slide.quizData ?? makeDefaultQuizData();
+      slide.type = 'quiz';
+      slide.quizData = quizData;
+      delete slide.videoSrc;
+      delete slide.videoVolume;
+      delete slide.videoSpeed;
+      delete slide.videoStart;
+      delete slide.videoEnd;
+      delete slide.videoPresenterNav;
+      delete slide.scriptureBook;
+      delete slide.scriptureChapter;
+      delete slide.scriptureVerseStart;
+      delete slide.scriptureVerseEnd;
+      slide.lines = [serializeQuizToText(quizData), fallbackVal, fallbackVal];
     } else if (newType === 'tanaj' || newType === 'sefer') {
       slide.type = newType;
+      delete slide.quizData;
     }
 
     updated[idx] = slide;
@@ -646,6 +723,20 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
       updated[idx] = slide;
       setSlides(updated);
     }
+  };
+
+  const handleUpdateQuizData = (idx: number, quizData: QuizData) => {
+    const updated = [...slides];
+    const slide = { ...updated[idx], type: 'quiz' as const, quizData };
+    slide.lines = [
+      quizData.isResultsSlide && quizData.resultProfiles
+        ? serializeResultProfiles(quizData.resultProfiles)
+        : serializeQuizToText(quizData),
+      slide.lines[1] ?? '-',
+      slide.lines[2] ?? '-',
+    ];
+    updated[idx] = slide;
+    setSlides(updated);
   };
 
   const handleDeleteSlide = (idx: number) => {
@@ -839,6 +930,41 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
 
         const videoData = parseVideoSlideString(content);
         const randomSuffix = Math.random().toString(36).substring(2, 9);
+        const resultProfiles = parseResultProfiles(content);
+        if (resultProfiles.length > 0) {
+          return {
+            id: `slide-${idx}-${Date.now()}-${randomSuffix}`,
+            label,
+            lines: [content.trim(), '-', '-'],
+            type: 'quiz' as const,
+            quizData: {
+              question: '',
+              options: [],
+              timerSeconds: 30,
+              randomize: false,
+              multiSelect: false,
+              isResultsSlide: true,
+              resultProfiles,
+            },
+          };
+        }
+
+        if (looksLikeQuizBlock(content)) {
+          const quiz = parseQuizBlock(content);
+          if (quiz.ok) {
+            if (quiz.warnings.length > 0) {
+              console.warn('Quiz parse warnings', quiz.warnings);
+            }
+            return {
+              id: `slide-${idx}-${Date.now()}-${randomSuffix}`,
+              label,
+              lines: [content.trim(), '-', '-'],
+              type: 'quiz' as const,
+              quizData: quiz.data,
+            };
+          }
+        }
+
         if (videoData) {
           return {
             id: `slide-${idx}-${Date.now()}-${randomSuffix}`,
@@ -911,6 +1037,41 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
 
         const videoData = parseVideoSlideString(contentHeb) || parseVideoSlideString(row.transliteration) || parseVideoSlideString(row.translation);
         const randomSuffix = Math.random().toString(36).substring(2, 9);
+        const resultProfiles = parseResultProfiles(contentHeb);
+        if (resultProfiles.length > 0) {
+          return {
+            id: `slide-${idx}-${Date.now()}-${randomSuffix}`,
+            label,
+            lines: [contentHeb.trim(), '-', '-'],
+            type: 'quiz' as const,
+            quizData: {
+              question: '',
+              options: [],
+              timerSeconds: 30,
+              randomize: false,
+              multiSelect: false,
+              isResultsSlide: true,
+              resultProfiles,
+            },
+          };
+        }
+
+        if (looksLikeQuizBlock(contentHeb)) {
+          const quiz = parseQuizBlock(contentHeb);
+          if (quiz.ok) {
+            if (quiz.warnings.length > 0) {
+              console.warn('Quiz parse warnings', quiz.warnings);
+            }
+            return {
+              id: `slide-${idx}-${Date.now()}-${randomSuffix}`,
+              label,
+              lines: [contentHeb.trim(), '-', '-'],
+              type: 'quiz' as const,
+              quizData: quiz.data,
+            };
+          }
+        }
+
         if (videoData) {
           return {
             id: `slide-${idx}-${Date.now()}-${randomSuffix}`,
@@ -951,10 +1112,15 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
         : mode;
       const normalizedSlides = slides.map(slide => {
         const fallbackVal = '-';
+        const firstLine = slide.type === 'quiz' && slide.quizData
+          ? slide.quizData.isResultsSlide && slide.quizData.resultProfiles
+            ? serializeResultProfiles(slide.quizData.resultProfiles)
+            : serializeQuizToText(slide.quizData)
+          : slide.lines[0] || '';
         return {
           ...slide,
           lines: [
-            slide.lines[0] || '',
+            firstLine,
             slide.lines[1] !== undefined && slide.lines[1] !== '' ? slide.lines[1] : fallbackVal,
             slide.lines[2] !== undefined && slide.lines[2] !== '' ? slide.lines[2] : fallbackVal
           ]
@@ -1000,6 +1166,44 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
           autoId++;
         }
 
+        const randomSuffix = Math.random().toString(36).substring(2, 9);
+        const resultProfiles = parseResultProfiles(content);
+        if (resultProfiles.length > 0) {
+          parsed.push({
+            id: `slide-${idx}-${Date.now()}-${randomSuffix}`,
+            label,
+            lines: [content.trim(), '-', '-'],
+            type: 'quiz',
+            quizData: {
+              question: '',
+              options: [],
+              timerSeconds: 30,
+              randomize: false,
+              multiSelect: false,
+              isResultsSlide: true,
+              resultProfiles,
+            },
+          });
+          continue;
+        }
+
+        if (looksLikeQuizBlock(content)) {
+          const quiz = parseQuizBlock(content);
+          if (quiz.ok) {
+            if (quiz.warnings.length > 0) {
+              console.warn('Quiz parse warnings', quiz.warnings);
+            }
+            parsed.push({
+              id: `slide-${idx}-${Date.now()}-${randomSuffix}`,
+              label,
+              lines: [content.trim(), '-', '-'],
+              type: 'quiz',
+              quizData: quiz.data,
+            });
+            continue;
+          }
+        }
+
         const scriptureSlides = await parseScriptureDirectiveFromText(content.trim());
         if (scriptureSlides) {
           hasScriptureSlides = true;
@@ -1008,7 +1212,6 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
         }
 
         const videoData = parseVideoSlideString(content);
-        const randomSuffix = Math.random().toString(36).substring(2, 9);
         if (videoData) {
           parsed.push({
             id: `slide-${idx}-${Date.now()}-${randomSuffix}`,
@@ -1076,6 +1279,44 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
       } else {
         label = autoId.toString();
         autoId++;
+      }
+
+      const randomSuffix = Math.random().toString(36).substring(2, 9);
+      const resultProfiles = parseResultProfiles(contentHeb);
+      if (resultProfiles.length > 0) {
+        parsed.push({
+          id: `slide-${idx}-${Date.now()}-${randomSuffix}`,
+          label,
+          lines: [contentHeb.trim(), '-', '-'],
+          type: 'quiz',
+          quizData: {
+            question: '',
+            options: [],
+            timerSeconds: 30,
+            randomize: false,
+            multiSelect: false,
+            isResultsSlide: true,
+            resultProfiles,
+          },
+        });
+        continue;
+      }
+
+      if (looksLikeQuizBlock(contentHeb)) {
+        const quiz = parseQuizBlock(contentHeb);
+        if (quiz.ok) {
+          if (quiz.warnings.length > 0) {
+            console.warn('Quiz parse warnings', quiz.warnings);
+          }
+          parsed.push({
+            id: `slide-${idx}-${Date.now()}-${randomSuffix}`,
+            label,
+            lines: [contentHeb.trim(), '-', '-'],
+            type: 'quiz',
+            quizData: quiz.data,
+          });
+          continue;
+        }
       }
 
       const scriptureSlides = await parseScriptureDirectiveFromText(contentHeb.trim());
@@ -1442,6 +1683,27 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                       videoState={videoState}
                       onVideoStateChange={onVideoStateChange}
                     />
+
+                    {activeSlide?.type === 'quiz' && activeSlide.quizData && quizTimerState && (
+                      <QuizControllerView
+                        slide={activeSlide}
+                        quizData={activeSlide.quizData}
+                        subslides={quizSubslides}
+                        currentSubslideIndex={quizCurrentSubslideIndex}
+                        onSubslideSelect={onQuizSubslideSelect}
+                        timerState={quizTimerState}
+                        onStartTimer={onQuizStartTimer}
+                        onPauseTimer={onQuizPauseTimer}
+                        onResumeTimer={onQuizResumeTimer}
+                        onResetTimer={onQuizResetTimer}
+                        onComplete={onQuizComplete}
+                        presenterDemoSelection={quizPresenterDemoSelection}
+                        onDemoSelect={onQuizDemoSelect}
+                        submittedCount={controllerAnswers.getSubmittedCount(activeSlide.id)}
+                        onPlayApplause={onQuizPlayApplause}
+                        onPlayMal={onQuizPlayMal}
+                      />
+                    )}
                   </div>
                 ) : (
                   <div className="text-center py-2 text-xs text-gray-500 italic">
@@ -1520,6 +1782,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                 handleUpdateScriptureSlide={handleUpdateScriptureSlide}
                 handleUpdateVideoParams={handleUpdateVideoParams}
                 handleUpdateImagePresenterNav={handleUpdateImagePresenterNav}
+                handleUpdateQuizData={handleUpdateQuizData}
                 handleUpdateLine={handleUpdateLine}
                 handleUpdateSlideBg={handleUpdateSlideBg}
                 handleTransliterateRow={handleTransliterateRow}
@@ -1530,6 +1793,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                 handleAddImageSlide={handleAddImageSlide}
                 handleAddSlide={handleAddSlide}
                 handleAddVideoSlide={handleAddVideoSlide}
+                handleAddQuizSlide={handleAddQuizSlide}
                 handleTransliterate={handleTransliterate}
               />            )}
           </div>

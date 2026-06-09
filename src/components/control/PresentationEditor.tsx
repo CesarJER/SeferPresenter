@@ -1,13 +1,13 @@
 import React from 'react';
-import { FileText, Image as ImageIcon, Languages, Layers, Plus, Save, Table, Video, X } from 'lucide-react';
-import type { Presentation, Slide, VideoState } from '../../types/presentation';
+import { FileText, HelpCircle, Image as ImageIcon, Languages, Layers, Plus, Save, Table, Video, X } from 'lucide-react';
+import type { Presentation, QuizData, Slide, VideoState } from '../../types/presentation';
 import { CustomSearchSelect } from '../shared/CustomSearchSelect';
 import { FormatLegend } from '../shared/FormatLegend';
 import { SlideRow } from './SlideRow';
 
 type EditorMode = 'list' | 'edit';
 type PresentationMode = 'standard' | 'trilingual';
-type SlideType = 'text' | 'video' | 'image' | 'tanaj' | 'sefer';
+type SlideType = 'text' | 'video' | 'image' | 'tanaj' | 'sefer' | 'quiz';
 type ScriptureSlideUpdate = {
   scriptureBook: string;
   scriptureChapter: string;
@@ -69,6 +69,7 @@ interface PresentationEditorProps {
   handleUpdateScriptureSlide: (idx: number, payload: ScriptureSlideUpdate) => void;
   handleUpdateVideoParams: (idx: number, changes: VideoParamUpdate) => void;
   handleUpdateImagePresenterNav: (idx: number, visible: boolean) => void;
+  handleUpdateQuizData: (idx: number, quizData: QuizData) => void;
   handleUpdateLine: (slideIdx: number, lineIdx: number, textValue: string) => void;
   handleUpdateSlideBg: (idx: number, bgValue: string) => void;
   handleTransliterateRow: (idx: number) => void;
@@ -79,6 +80,7 @@ interface PresentationEditorProps {
   handleAddImageSlide: () => void;
   handleAddSlide: () => void;
   handleAddVideoSlide: () => void;
+  handleAddQuizSlide: () => void;
   handleTransliterate: () => void;
 }
 
@@ -125,6 +127,7 @@ export const PresentationEditor: React.FC<PresentationEditorProps> = ({
   handleUpdateScriptureSlide,
   handleUpdateVideoParams,
   handleUpdateImagePresenterNav,
+  handleUpdateQuizData,
   handleUpdateLine,
   handleUpdateSlideBg,
   handleTransliterateRow,
@@ -135,6 +138,7 @@ export const PresentationEditor: React.FC<PresentationEditorProps> = ({
   handleAddImageSlide,
   handleAddSlide,
   handleAddVideoSlide,
+  handleAddQuizSlide,
   handleTransliterate,
 }) => (              <div id="section-presentation-editor">
                 {/* Header del Editor */}
@@ -336,6 +340,7 @@ export const PresentationEditor: React.FC<PresentationEditorProps> = ({
                               handleUpdateScriptureSlide={handleUpdateScriptureSlide}
                               handleUpdateVideoParams={handleUpdateVideoParams}
                               handleUpdateImagePresenterNav={handleUpdateImagePresenterNav}
+                              handleUpdateQuizData={handleUpdateQuizData}
                               handleUpdateLine={handleUpdateLine}
                               handleUpdateSlideBg={handleUpdateSlideBg}
                               handleTransliterateRow={handleTransliterateRow}
@@ -381,6 +386,15 @@ export const PresentationEditor: React.FC<PresentationEditorProps> = ({
                       >
                         <span className="text-[11px] font-black text-gray-400">+</span>
                         <Video size={14} className="text-gray-400" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleAddQuizSlide}
+                        className="flex items-center gap-1 text-gray-500 hover:text-white transition-colors cursor-pointer pl-2 border-l border-gray-800"
+                        title="Añadir Diapositiva de Quiz"
+                      >
+                        <span className="text-[11px] font-black text-gray-400">+</span>
+                        <HelpCircle size={14} className="text-gray-400" />
                       </button>
                     </div>
                   </div>

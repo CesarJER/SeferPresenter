@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo } from 'react';
 import type { AudioState, AudioSyncMap } from '../types/audio';
 import type { AppMode, Presentation, ScriptureNavState, VideoState } from '../types/presentation';
+import type { QuizSyncState } from '../types/quiz';
 import type { DisplayTelemetryState } from '../types/sync';
 import { normalizePresentation } from '../utils/normalizePresentation';
 import { makeSyncMessage } from '../utils/syncProtocol';
@@ -16,6 +17,7 @@ interface SyncStateOptions {
   appMode?: AppMode;
   scriptureState?: ScriptureNavState | null;
   audioState?: AudioState;
+  quizState?: QuizSyncState | null;
 }
 
 interface UseSyncStateProps {
@@ -31,6 +33,7 @@ interface UseSyncStateProps {
   audioStateRef: React.MutableRefObject<AudioState>;
   appModeRef: React.MutableRefObject<AppMode>;
   scriptureStateRef: React.MutableRefObject<ScriptureNavState | null>;
+  quizStateRef?: React.MutableRefObject<QuizSyncState | null>;
   // State setters
   setCurrentPresentation: (p: Presentation | null) => void;
   setCurrentSlideIndex: (idx: number) => void;
@@ -42,6 +45,7 @@ interface UseSyncStateProps {
   setScriptureState: (state: ScriptureNavState | null) => void;
   setAudioState: (state: AudioState) => void;
   setAudioSyncMaps: (maps: AudioSyncMap[]) => void;
+  setQuizState?: (state: QuizSyncState | null) => void;
 }
 
 const areStringArraysEqual = (left: string[] = [], right: string[] = []) =>
@@ -55,6 +59,8 @@ const areRecordsEqual = (left?: Record<string, string>, right?: Record<string, s
     leftEntries.every(([key, value]) => rightRecord[key] === value)
   );
 };
+
+const areJsonEqual = (left: unknown, right: unknown) => JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
 
 const arePresentationsEqual = (left: Presentation | null, right: Presentation | null) => {
   if (left === right) return true;
@@ -89,7 +95,8 @@ const arePresentationsEqual = (left: Presentation | null, right: Presentation | 
       leftSlide.scriptureVerseStart === rightSlide.scriptureVerseStart &&
       leftSlide.scriptureVerseEnd === rightSlide.scriptureVerseEnd &&
       areStringArraysEqual(leftSlide.lines, rightSlide.lines) &&
-      areRecordsEqual(leftSlide.scriptureVerseBackgrounds, rightSlide.scriptureVerseBackgrounds)
+      areRecordsEqual(leftSlide.scriptureVerseBackgrounds, rightSlide.scriptureVerseBackgrounds) &&
+      areJsonEqual(leftSlide.quizData, rightSlide.quizData)
     );
   });
 };
@@ -142,9 +149,11 @@ export function useSyncState(props: UseSyncStateProps) {
     currentPresentationRef, currentSlideIndexRef, backgroundLockRef,
     lockedBackgroundValueRef, userSelectedBackgroundRef, videoStateRef,
     audioStateRef, appModeRef, scriptureStateRef,
+    quizStateRef,
     setCurrentPresentation, setCurrentSlideIndex, setBackgroundLock,
     setLockedBackgroundValue, setUserSelectedBackground, setVideoState,
     setAppMode, setScriptureState, setAudioState, setAudioSyncMaps,
+    setQuizState,
   } = props;
 
   const channel = useMemo(() => new BroadcastChannel('sefer-presenter'), []);
@@ -172,17 +181,19 @@ export function useSyncState(props: UseSyncStateProps) {
   const syncState = useCallback((opts: SyncStateOptions) => {
     const {
       presentation, slideIndex, bgLock, lockedBg, userSelectedBg,
-      videoState, appMode, scriptureState, audioState,
+      videoState, appMode, scriptureState, audioState, quizState,
     } = opts;
 
     const activeVideoState = videoState !== undefined ? videoState : videoStateRef.current;
     const activeAppMode = appMode !== undefined ? appMode : appModeRef.current;
     const activeScriptureState = scriptureState !== undefined ? scriptureState : scriptureStateRef.current;
     const activeAudioState = audioState !== undefined ? audioState : audioStateRef.current;
+    const activeQuizState = quizState !== undefined ? quizState : quizStateRef?.current ?? null;
 
     // Update local refs immediately (avoid stale reads before React re-renders)
     if (videoState !== undefined) videoStateRef.current = activeVideoState;
     if (audioState !== undefined) audioStateRef.current = activeAudioState;
+    if (quizState !== undefined && quizStateRef) quizStateRef.current = activeQuizState;
 
     persistState(presentation, slideIndex, bgLock, lockedBg);
 
@@ -199,6 +210,7 @@ export function useSyncState(props: UseSyncStateProps) {
       appMode: activeAppMode,
       scriptureState: activeScriptureState,
       audioState: activeAudioState,
+      quizState: activeQuizState,
     });
 
     channel.postMessage(payload);
@@ -208,7 +220,7 @@ export function useSyncState(props: UseSyncStateProps) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     }).catch(err => console.error('Error syncing state to network', err));
-  }, [channel, isControlMode, persistState, videoStateRef, appModeRef, scriptureStateRef, audioStateRef, clientIdRef]);
+  }, [channel, isControlMode, persistState, videoStateRef, appModeRef, scriptureStateRef, audioStateRef, quizStateRef, clientIdRef]);
 
   const applyAudioTelemetry = useCallback((incomingAudioState: AudioState) => {
     const currentAudioState = audioStateRef.current;
@@ -370,6 +382,11 @@ export function useSyncState(props: UseSyncStateProps) {
     if (safeData.audioState !== undefined) {
       applyAudioTelemetry(safeData.audioState as AudioState);
     }
+    if (safeData.quizState !== undefined && quizStateRef && setQuizState) {
+      const incomingQuizState = safeData.quizState as QuizSyncState | null;
+      quizStateRef.current = incomingQuizState;
+      setQuizState(incomingQuizState);
+    }
 
     if (persist && safeData.slideIndex !== undefined) {
       persistState(
@@ -386,6 +403,7 @@ export function useSyncState(props: UseSyncStateProps) {
     setCurrentPresentation, setCurrentSlideIndex, setBackgroundLock,
     setLockedBackgroundValue, setUserSelectedBackground,
     setAppMode, setScriptureState, applyAudioTelemetry, applyVideoTelemetry, persistState,
+    quizStateRef, setQuizState,
   ]);
 
   // ── BroadcastChannel listener ─────────────────────────────────────
@@ -434,6 +452,7 @@ export function useSyncState(props: UseSyncStateProps) {
           appMode: appModeRef.current,
           scriptureState: scriptureStateRef.current,
           audioState: audioStateRef.current,
+          quizState: quizStateRef?.current ?? null,
         });
         return;
       }

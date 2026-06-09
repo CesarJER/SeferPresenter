@@ -58,6 +58,61 @@ describe('runtime validation', () => {
     expect(result.errors.join('\n')).toContain('lines');
   });
 
+  it('accepts quiz result slides without answer options', () => {
+    const result = validatePresentationList([
+      {
+        ...validPresentation,
+        slides: [
+          {
+            id: 'r1',
+            label: 'Resultados',
+            lines: ['R1: Excelente /// Alto /// Texto', '-', '-'],
+            type: 'quiz',
+            quizData: {
+              question: 'Resultados',
+              options: [],
+              timerSeconds: 30,
+              randomize: false,
+              multiSelect: false,
+              isResultsSlide: true,
+              resultProfiles: [
+                { rank: 1, title: 'Excelente', description: 'Alto', giftText: 'Texto' },
+              ],
+            },
+          },
+        ],
+      },
+    ]);
+
+    expect(result.ok).toBe(true);
+  });
+
+  it('still rejects normal quiz slides with fewer than two options', () => {
+    const result = validatePresentationList([
+      {
+        ...validPresentation,
+        slides: [
+          {
+            id: 'q1',
+            label: 'Pregunta',
+            lines: ['P: Pregunta [30, 0, 0]', '-', '-'],
+            type: 'quiz',
+            quizData: {
+              question: 'Pregunta',
+              options: [{ id: 'A', text: 'Uno', isCorrect: true }],
+              timerSeconds: 30,
+              randomize: false,
+              multiSelect: false,
+            },
+          },
+        ],
+      },
+    ]);
+
+    expect(result.ok).toBe(false);
+    expect(result.errors.join('\n')).toContain('entre 2 y 4 opciones');
+  });
+
   it('accepts valid audio sync maps and rejects bad cues', () => {
     expect(validateAudioSyncMaps([validAudioMap]).ok).toBe(true);
 

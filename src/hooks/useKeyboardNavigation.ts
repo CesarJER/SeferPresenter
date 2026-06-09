@@ -17,6 +17,9 @@ interface UseKeyboardNavigationProps {
   ) => void;
   handleScriptureEscape: () => void;
   handleScriptureArrowNav: (direction: 'next' | 'previous') => void;
+  quizCurrentSubslideIndex?: number;
+  quizSubslideCount?: number;
+  onQuizSubslideSelect?: (idx: number) => void;
 }
 
 export function useKeyboardNavigation(props: UseKeyboardNavigationProps) {
@@ -30,6 +33,9 @@ export function useKeyboardNavigation(props: UseKeyboardNavigationProps) {
     handleSelectPresentationAndSlide,
     handleScriptureEscape,
     handleScriptureArrowNav,
+    quizCurrentSubslideIndex = 0,
+    quizSubslideCount = 0,
+    onQuizSubslideSelect,
   } = props;
 
   useEffect(() => {
@@ -61,13 +67,23 @@ export function useKeyboardNavigation(props: UseKeyboardNavigationProps) {
       }
 
       if (!currentPresentation || currentPresentation.slides.length === 0) return;
+      const currentSlide = currentPresentation.slides[currentSlideIndex];
+      const isQuizSlide = currentSlide?.type === 'quiz' && !!currentSlide.quizData && quizSubslideCount > 0;
 
       if (e.key === 'ArrowRight') {
         e.preventDefault();
+        if (isQuizSlide && onQuizSubslideSelect && quizCurrentSubslideIndex < quizSubslideCount - 1) {
+          onQuizSubslideSelect(quizCurrentSubslideIndex + 1);
+          return;
+        }
         const nextIdx = Math.min(currentSlideIndex + 1, currentPresentation.slides.length - 1);
         handleSelectPresentationAndSlide(currentPresentation, nextIdx, 'forward');
       } else if (e.key === 'ArrowLeft') {
         e.preventDefault();
+        if (isQuizSlide && onQuizSubslideSelect && quizCurrentSubslideIndex > 0) {
+          onQuizSubslideSelect(quizCurrentSubslideIndex - 1);
+          return;
+        }
         const prevIdx = Math.max(currentSlideIndex - 1, 0);
         handleSelectPresentationAndSlide(currentPresentation, prevIdx, 'backward');
       }
@@ -79,6 +95,9 @@ export function useKeyboardNavigation(props: UseKeyboardNavigationProps) {
     currentPresentation,
     enabled,
     currentSlideIndex,
+    quizCurrentSubslideIndex,
+    quizSubslideCount,
+    onQuizSubslideSelect,
     handleSelectPresentationAndSlide,
     handleScriptureEscape,
     handleScriptureArrowNav,

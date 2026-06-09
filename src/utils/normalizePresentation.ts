@@ -53,9 +53,10 @@ export const normalizePresentation = (presentation: Presentation): Presentation 
   let mode = presentation.mode || 'standard';
   let slides = presentation.slides || [];
 
-
   if (mode === 'trilingual' && slides.length > 0) {
     const allSlidesAreFallback = slides.every(slide => {
+      // Quiz slides don't count as fallback — they have no transliteration lines
+      if (slide.type === 'quiz') return true;
       const l1 = slide.lines[1] ?? '';
       const l2 = slide.lines[2] ?? '';
       const isL1Fallback = l1 === '-' || l1 === '>-' || l1 === '';
@@ -69,6 +70,9 @@ export const normalizePresentation = (presentation: Presentation): Presentation 
   }
 
   slides = slides.map((slide) => {
+    // Quiz slides: never overwrite lines — their content lives in quizData
+    if (slide.type === 'quiz') return slide;
+
     const fallbackVal = '-';
     let l1 = slide.lines[1];
     let l2 = slide.lines[2];

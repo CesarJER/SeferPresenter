@@ -7,9 +7,11 @@ import defaultPresentations from '../presentations.json';
 import { Music } from 'lucide-react';
 import { AudioSyncEditor } from './components/AudioSyncEditor';
 
+
 import type { AudioState, AudioSyncMap } from './types/audio';
 import { DEFAULT_AUDIO_STATE } from './types/audio';
-import type { AppMode, Presentation, ScriptureNavState, VideoState } from './types/presentation';
+import type { AppMode, Presentation, ScriptureNavState, Slide, VideoState, QuizData } from './types/presentation';
+import type { QuizOptionId, QuizSyncState } from './types/quiz';
 
 import {
   normalizePresentation,
@@ -23,8 +25,11 @@ import { useUrlSync } from './hooks/useUrlSync';
 import { useKeyboardNavigation } from './hooks/useKeyboardNavigation';
 import { useAudioPlayback } from './hooks/useAudioPlayback';
 import { useScriptureNavigation } from './hooks/useScriptureNavigation';
+import { useQuizAudio } from './hooks/useQuizAudio';
+import { useQuizTimer } from './hooks/useQuizTimer';
 import { validateAudioSyncMaps, validatePresentationList } from './utils/validation';
 import { makeSyncMessage } from './utils/syncProtocol';
+import { generateQuizSubslides, calcMaxBaseCentipunts } from './utils/quizUtils';
 
 function App() {
   const routeName = window.location.pathname.split('/').filter(Boolean)[0] || 'presenter';
@@ -66,7 +71,82 @@ function App() {
   const appModeRef = useRef<AppMode>(appMode);
   const scriptureStateRef = useRef<ScriptureNavState | null>(scriptureState);
   const slideScriptureStateBeforeManualRef = useRef<ScriptureNavState | null>(null);
+  const quizStateRef = useRef<QuizSyncState | null>(null);
   const clientIdRef = useRef(makeClientId());
+  const navigatedSlideIdRef = useRef<string | undefined>(undefined);
+  const lastActiveSlideIdRef = useRef<string | undefined>(undefined);
+
+  const activeSlide = currentPresentation && currentSlideIndex >= 0 ? currentPresentation.slides[currentSlideIndex] : null;
+  const activeQuizData = activeSlide?.type === 'quiz' ? activeSlide.quizData : undefined;
+  const quizSubslides = useMemo(
+    () => activeQuizData ? generateQuizSubslides(activeQuizData) : [],
+    [activeQuizData],
+  );
+  const [quizCurrentSubslideIndex, setQuizCurrentSubslideIndex] = useState(0);
+  const [quizPresenterDemoSelection, setQuizPresenterDemoSelection] = useState<QuizOptionId | null>(null);
+  const quizTimer = useQuizTimer({
+    timerSeconds: activeQuizData?.timerSeconds ?? 30,
+  });
+  const makeInitialQuizState = useCallback((slide: Slide | null, direction: 'forward' | 'backward' = 'forward'): QuizSyncState | null => {
+    const quizData = slide?.type === 'quiz' ? slide.quizData : undefined;
+    if (!quizData || !slide) return null;
+    
+    let initialIndex = 0;
+    if (direction === 'backward') {
+      const subslides = generateQuizSubslides(quizData);
+      if (subslides.length > 0) initialIndex = subslides.length - 1;
+    }
+
+    return {
+      currentSubslideIndex: initialIndex,
+      timerState: {
+        status: 'idle',
+        timerStartedAt: null,
+        timerDurationMs: quizData.timerSeconds * 1000,
+        pausedRemainingMs: null,
+      },
+      presenterDemoSelection: {
+        [slide.id]: null,
+      },
+    };
+  }, []);
+  const quizAudio = useQuizAudio({
+    isPresenterOrControl: !isAudienceMode && !isControlMode,
+    timerStatus: quizTimer.timerState.status,
+    isQuestionSubslide: quizSubslides[quizCurrentSubslideIndex]?.kind === 'pregunta',
+  });
+  const activeQuizState = useMemo<QuizSyncState | null>(() => {
+    if (!activeQuizData || !activeSlide) return null;
+    return {
+      currentSubslideIndex: quizCurrentSubslideIndex,
+      timerState: quizTimer.timerState,
+      presenterDemoSelection: {
+        [activeSlide.id]: quizPresenterDemoSelection,
+      },
+    };
+  }, [activeQuizData, activeSlide, quizCurrentSubslideIndex, quizTimer.timerState, quizPresenterDemoSelection]);
+
+  const applyRemoteQuizState = useCallback((state: QuizSyncState | null) => {
+    if (!state) {
+      quizStateRef.current = null;
+      setQuizCurrentSubslideIndex(0);
+      setQuizPresenterDemoSelection(null);
+      quizTimer.resetTimer((activeQuizData?.timerSeconds ?? 30) * 1000);
+      return;
+    }
+
+    const rawIndex = Number.isFinite(state.currentSubslideIndex)
+      ? Math.max(0, Math.floor(state.currentSubslideIndex))
+      : 0;
+    const nextIndex = quizSubslides.length > 0
+      ? Math.min(rawIndex, quizSubslides.length - 1)
+      : rawIndex;
+    const fallbackSelection = Object.values(state.presenterDemoSelection ?? {})[0] ?? null;
+
+    setQuizCurrentSubslideIndex(nextIndex);
+    quizTimer.setTimerState(state.timerState);
+    setQuizPresenterDemoSelection(activeSlide ? state.presenterDemoSelection?.[activeSlide.id] ?? fallbackSelection : fallbackSelection);
+  }, [activeQuizData?.timerSeconds, activeSlide, quizSubslides.length, quizTimer.resetTimer, quizTimer.setTimerState]);
 
   useEffect(() => {
     currentPresentationRef.current = currentPresentation;
@@ -78,7 +158,8 @@ function App() {
     audioStateRef.current = audioState;
     appModeRef.current = appMode;
     scriptureStateRef.current = scriptureState;
-  }, [currentPresentation, currentSlideIndex, backgroundLock, lockedBackgroundValue, userSelectedBackground, videoState, audioState, appMode, scriptureState]);
+    quizStateRef.current = activeQuizState;
+  }, [currentPresentation, currentSlideIndex, backgroundLock, lockedBackgroundValue, userSelectedBackground, videoState, audioState, appMode, scriptureState, activeQuizState]);
 
   useEffect(() => {
     fetch('/api/backgrounds')
@@ -121,11 +202,28 @@ function App() {
     isControlMode, clientIdRef,
     currentPresentationRef, currentSlideIndexRef, backgroundLockRef,
     lockedBackgroundValueRef, userSelectedBackgroundRef, videoStateRef,
-    audioStateRef, appModeRef, scriptureStateRef,
+    audioStateRef, appModeRef, scriptureStateRef, quizStateRef,
     setCurrentPresentation, setCurrentSlideIndex, setBackgroundLock,
     setLockedBackgroundValue, setUserSelectedBackground, setVideoState,
     setAppMode, setScriptureState, setAudioState, setAudioSyncMaps,
+    setQuizState: applyRemoteQuizState,
   });
+
+  useEffect(() => {
+    if (!isControlMode) return;
+    syncState({
+      presentation: currentPresentationRef.current,
+      slideIndex: currentSlideIndexRef.current,
+      bgLock: backgroundLockRef.current,
+      lockedBg: lockedBackgroundValueRef.current,
+      userSelectedBg: userSelectedBackgroundRef.current,
+      videoState: videoStateRef.current,
+      appMode: appModeRef.current,
+      scriptureState: scriptureStateRef.current,
+      audioState: audioStateRef.current,
+      quizState: activeQuizState,
+    });
+  }, [isControlMode, activeQuizState, syncState]);
 
   const { getActiveBackground, handleToggleBackgroundLock, handleSelectBackgroundOverride } = useBackgroundResolver({
     currentPresentation, currentSlideIndex, backgroundLock,
@@ -137,6 +235,19 @@ function App() {
   });
 
   const activeBackground = getActiveBackground();
+
+  useEffect(() => {
+    if (!isControlMode) return;
+    
+    const isNewSlide = activeSlide?.id !== lastActiveSlideIdRef.current;
+    lastActiveSlideIdRef.current = activeSlide?.id;
+
+    if (isNewSlide && activeSlide?.id !== navigatedSlideIdRef.current) {
+      setQuizCurrentSubslideIndex(0);
+      setQuizPresenterDemoSelection(null);
+    }
+    quizTimer.resetTimer((activeQuizData?.timerSeconds ?? 30) * 1000);
+  }, [isControlMode, activeSlide?.id, activeQuizData?.timerSeconds, quizTimer.resetTimer]);
 
   type SelectPresentationAndSlideHandler = (
     presentation: Presentation | null,
@@ -177,6 +288,15 @@ function App() {
     const isIgnored = bgVal === 'Ignorar' || bgVal === 'No cambiar';
     const scriptureSlideState = buildScriptureSlideState(slide, direction, targetVerse);
     const nextAppMode: AppMode = scriptureSlideState ? 'scripture' : 'slides';
+    navigatedSlideIdRef.current = slide?.id;
+    const nextQuizState = makeInitialQuizState(slide, direction);
+
+    quizStateRef.current = nextQuizState;
+    setQuizCurrentSubslideIndex(nextQuizState?.currentSubslideIndex ?? 0);
+    setQuizPresenterDemoSelection(null);
+    if (slide?.type === 'quiz' && slide.quizData) {
+      quizTimer.resetTimer(slide.quizData.timerSeconds * 1000);
+    }
 
     setAppMode(nextAppMode);
     if (scriptureSlideState) {
@@ -187,17 +307,19 @@ function App() {
       syncState({
         presentation: normalizedPresentation, slideIndex: idx, bgLock: backgroundLockRef.current,
         lockedBg: lockedBackgroundValueRef.current, userSelectedBg: userSelectedBackgroundRef.current,
-        videoState: null, appMode: nextAppMode, scriptureState: scriptureSlideState ?? scriptureStateRef.current
+        videoState: null, appMode: nextAppMode, scriptureState: scriptureSlideState ?? scriptureStateRef.current,
+        quizState: nextQuizState,
       });
     } else {
       setUserSelectedBackground(null);
       syncState({
         presentation: normalizedPresentation, slideIndex: idx, bgLock: backgroundLockRef.current,
         lockedBg: lockedBackgroundValueRef.current, userSelectedBg: null,
-        videoState: null, appMode: nextAppMode, scriptureState: scriptureSlideState ?? scriptureStateRef.current
+        videoState: null, appMode: nextAppMode, scriptureState: scriptureSlideState ?? scriptureStateRef.current,
+        quizState: nextQuizState,
       });
     }
-  }, [syncState, buildScriptureSlideState, backgroundLockRef, lockedBackgroundValueRef, userSelectedBackgroundRef, scriptureStateRef]);
+  }, [syncState, buildScriptureSlideState, makeInitialQuizState, quizTimer.resetTimer, backgroundLockRef, lockedBackgroundValueRef, userSelectedBackgroundRef, scriptureStateRef]);
   handleSelectPresentationAndSlideRef.current = handleSelectPresentationAndSlide;
 
   const savePresentations = async (updated: Presentation[]) => {
@@ -250,7 +372,7 @@ function App() {
     setAppMode('slides');
     setScriptureState(null);
 
-    syncState({ presentation: null, slideIndex: -1, bgLock: false, lockedBg: null, userSelectedBg: null, videoState: null, appMode: 'slides', scriptureState: null });
+    syncState({ presentation: null, slideIndex: -1, bgLock: false, lockedBg: null, userSelectedBg: null, videoState: null, appMode: 'slides', scriptureState: null, quizState: null });
     window.history.replaceState(null, '', '/presenter');
   }, [syncState]);
 
@@ -267,6 +389,9 @@ function App() {
     currentPresentationRef, currentSlideIndexRef,
     handleSelectPresentationAndSlide, handleScriptureEscape, handleScriptureArrowNav,
     enabled: !isAudienceMode,
+    quizCurrentSubslideIndex,
+    quizSubslideCount: quizSubslides.length,
+    onQuizSubslideSelect: setQuizCurrentSubslideIndex,
   });
 
   useAudioPlayback({
@@ -283,7 +408,6 @@ function App() {
     }
   }, [currentPresentation]);
 
-  const activeSlide = currentPresentation && currentSlideIndex >= 0 ? currentPresentation.slides[currentSlideIndex] : null;
   const activePresenterSlide = useMemo(() => scriptureState?.scriptureKind === 'tanaj'
     ? {
       id: activeSlide?.id || `tanaj-${scriptureState.bookAbbrevEs}-${scriptureState.chapter}-${scriptureState.verse}`,
@@ -393,6 +517,9 @@ function App() {
         scriptureState={scriptureState}
         slide={activePresenterSlide}
         videoState={videoState}
+        quizSubslides={quizSubslides}
+        quizCurrentSubslideIndex={quizCurrentSubslideIndex}
+        quizTimerState={quizTimer.timerState}
       />
     );
   }
@@ -443,7 +570,7 @@ function App() {
           onSave={handleSave}
           onResetState={handleResetState}
           onSelectPresentation={(p, idx, targetVerse) => handleSelectPresentationAndSlide(p, idx ?? 0, 'forward', targetVerse)}
-          onSelectSlide={(idx) => handleSelectPresentationAndSlide(currentPresentation, idx)}
+          onSelectSlide={(idx) => handleSelectPresentationAndSlide(currentPresentation, idx, idx < currentSlideIndex ? 'backward' : 'forward')}
           onImport={(imported) => {
             savePresentations(imported);
             if (imported.length > 0) {
@@ -485,15 +612,69 @@ function App() {
           onProjectScripture={handleProjectScripture}
           onAddScriptureSlide={handleAddScriptureSlide}
           onBoundaryReached={handleScriptureBoundary}
+          quizSubslides={quizSubslides}
+          quizCurrentSubslideIndex={quizCurrentSubslideIndex}
+          quizTimerState={quizTimer.timerState}
+          quizPresenterDemoSelection={quizPresenterDemoSelection}
+          onQuizSubslideSelect={setQuizCurrentSubslideIndex}
+          onQuizStartTimer={quizTimer.startTimer}
+          onQuizPauseTimer={quizTimer.pauseTimer}
+          onQuizResumeTimer={quizTimer.resumeTimer}
+          onQuizResetTimer={() => quizTimer.resetTimer((activeQuizData?.timerSeconds ?? 30) * 1000)}
+          onQuizComplete={() => {
+            quizTimer.completeTimer();
+            const answerIndex = quizSubslides.findIndex(subslide => subslide.kind === 'respuesta');
+            if (answerIndex >= 0) setQuizCurrentSubslideIndex(answerIndex);
+          }}
+          onQuizDemoSelect={(optionId) => {
+            setQuizPresenterDemoSelection(optionId);
+            const selected = activeQuizData?.options.find(option => option.id === optionId);
+            if (selected?.isCorrect) quizAudio.playApplause();
+            if (selected && !selected.isCorrect) quizAudio.playMal();
+          }}
+          onQuizPlayApplause={quizAudio.playApplause}
+          onQuizPlayMal={quizAudio.playMal}
         />
       </div>
     );
   }
 
+  const activeQuizSubslide = quizSubslides[quizCurrentSubslideIndex];
+  const isQuizCitaVerse = activeQuizSubslide?.kind === 'cita-verse';
+  const quizScriptureState = useMemo<ScriptureNavState | null>(() => {
+    if (!isQuizCitaVerse || !activeQuizSubslide.bookToken) return null;
+    return {
+      bookEs: activeQuizSubslide.bookToken,
+      bookHeb: '',
+      bookAbbrevEs: activeQuizSubslide.bookToken,
+      chapter: activeQuizSubslide.chapter,
+      verseStart: activeQuizSubslide.verseStart,
+      verse: activeQuizSubslide.verse,
+      verseEnd: activeQuizSubslide.verseEnd,
+      verseNikud: '',
+      transliteration: '',
+      translation: '',
+      verseIdx: Number(activeQuizSubslide.verse) - 1,
+      totalVerses: 100,
+      scriptureKind: 'sefer',
+    };
+  }, [isQuizCitaVerse, activeQuizSubslide]);
+
   // Presenter (big screen) mode
   return (
     <div className="w-full h-screen overflow-hidden bg-black relative">
-      {(appMode === 'seferManual' || (appMode === 'scripture' && scriptureState?.scriptureKind !== 'tanaj')) && scriptureState ? (
+      {quizScriptureState ? (
+        <div id="section-app-scripture-reader-view" className="w-full h-full overflow-hidden">
+          <SeferReaderScreen
+            scriptureState={quizScriptureState}
+            onVerseSelected={handleSeferOnlineRef}
+            onBoundaryReached={handleScriptureBoundary}
+            onLogoClick={() => {
+              window.open(`${window.location.origin}/control`, 'ControlPanel', 'width=1100,height=800');
+            }}
+          />
+        </div>
+      ) : (appMode === 'seferManual' || (appMode === 'scripture' && scriptureState?.scriptureKind !== 'tanaj')) && scriptureState ? (
         <div id="section-app-scripture-reader-view" className="w-full h-full overflow-hidden">
           <SeferReaderScreen
             scriptureState={scriptureState}
@@ -516,6 +697,11 @@ function App() {
             }}
             videoState={videoState}
             onVideoStateChange={handleVideoStateChange}
+            quizSubslides={quizSubslides}
+            quizCurrentSubslideIndex={quizCurrentSubslideIndex}
+            quizTimerState={quizTimer.timerState}
+            quizPresenterDemoSelection={quizPresenterDemoSelection}
+            quizMaxBaseCentipunts={calcMaxBaseCentipunts(currentPresentation?.slides.map(s => s.quizData).filter(Boolean) as QuizData[] || [])}
           />
         </div>
       )}
@@ -524,6 +710,7 @@ function App() {
       <audio ref={audioRef} preload="auto" style={{ display: 'none' }} />
 
       {/* Autoplay block overlay banner */}
+
       {autoplayBlocked && (
         <div 
           onClick={() => {

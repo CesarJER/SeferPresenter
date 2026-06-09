@@ -1,5 +1,6 @@
 import type { AudioState, AudioSyncMap, AudioSyncMode } from '../types/audio';
 import type { AppMode, Presentation, ScriptureNavState, Slide, VideoState } from '../types/presentation';
+import type { QuizSyncState } from '../types/quiz';
 import type { BroadcastMessage, DisplayTelemetryState, SyncStatePayload } from '../types/sync';
 
 export interface ValidationResult<T> {
@@ -28,12 +29,60 @@ const isBooleanOrUndefined = (value: unknown): value is boolean | undefined =>
 const isStringRecordOrUndefined = (value: unknown): value is Record<string, string> | undefined =>
   value === undefined || (isRecord(value) && Object.values(value).every((entry) => typeof entry === 'string'));
 
-const slideTypes = new Set(['text', 'video', 'tanaj', 'sefer']);
+const slideTypes = new Set(['text', 'video', 'tanaj', 'sefer', 'quiz']);
+const quizOptionIds = new Set(['A', 'B', 'C', 'D']);
 const presentationModes = new Set(['standard', 'trilingual']);
 const appModes = new Set(['slides', 'scripture', 'seferManual']);
 const origins = new Set(['control', 'presenter']);
 const audioSyncModes = new Set<AudioSyncMode>(['none', 'unilateral', 'bilateral']);
 const audioChangeTypes = new Set(['track', 'volume', 'playState', 'seek', 'syncMode']);
+
+// ── Quiz validators ──────────────────────────────────────────────────────────
+
+const validateQuizOption = (value: unknown, path: string): ValidationResult<unknown> => {
+  if (!isRecord(value)) return fail([`${path} debe ser un objeto.`]);
+  const errors: string[] = [];
+  if (typeof value.id !== 'string' || !quizOptionIds.has(value.id)) errors.push(`${path}.id debe ser A, B, C o D.`);
+  if (typeof value.text !== 'string') errors.push(`${path}.text debe ser texto.`);
+  if (typeof value.isCorrect !== 'boolean') errors.push(`${path}.isCorrect debe ser booleano.`);
+  return errors.length > 0 ? fail(errors) : ok(value);
+};
+
+const validateQuizData = (value: unknown, path: string): ValidationResult<unknown> => {
+  if (!isRecord(value)) return fail([`${path} debe ser un objeto.`]);
+  const errors: string[] = [];
+  const isResultsSlide = value.isResultsSlide === true;
+
+  if (typeof value.question !== 'string') errors.push(`${path}.question debe ser texto.`);
+  if (!Array.isArray(value.options)) {
+    errors.push(`${path}.options debe ser un array.`);
+  } else if (isResultsSlide) {
+    if (value.options.length !== 0) errors.push(`${path}.options debe estar vacio en una diapositiva de resultados.`);
+  } else if (value.options.length < 2 || value.options.length > 4) {
+    errors.push(`${path}.options debe tener entre 2 y 4 opciones.`);
+  } else {
+    value.options.forEach((opt: unknown, i: number) => {
+      const r = validateQuizOption(opt, `${path}.options[${i}]`);
+      if (!r.ok) errors.push(...r.errors);
+    });
+  }
+  if (typeof value.timerSeconds !== 'number' || !Number.isFinite(value.timerSeconds) || value.timerSeconds < 1) {
+    errors.push(`${path}.timerSeconds debe ser un numero >= 1.`);
+  }
+  if (typeof value.randomize !== 'boolean') errors.push(`${path}.randomize debe ser booleano.`);
+  if (typeof value.multiSelect !== 'boolean') errors.push(`${path}.multiSelect debe ser booleano.`);
+  if (!isStringOrUndefined(value.citaRef)) errors.push(`${path}.citaRef debe ser texto.`);
+  if (!isStringOrUndefined(value.citaReviewRef)) errors.push(`${path}.citaReviewRef debe ser texto.`);
+  if (value.citaRef && value.citaReviewRef) errors.push(`${path}: no se puede tener CITA: y CITA!: a la vez.`);
+  if (!isBooleanOrUndefined(value.isResultsSlide)) errors.push(`${path}.isResultsSlide debe ser booleano.`);
+  if (isResultsSlide && !Array.isArray(value.resultProfiles)) {
+    errors.push(`${path}.resultProfiles debe ser un array en una diapositiva de resultados.`);
+  }
+
+  return errors.length > 0 ? fail(errors) : ok(value);
+};
+
+// ── Slide validator ───────────────────────────────────────────────────────────
 
 const validateSlideValue = (value: unknown, path: string): ValidationResult<Slide> => {
   if (!isRecord(value)) return fail([`${path} debe ser un objeto.`]);
@@ -61,6 +110,12 @@ const validateSlideValue = (value: unknown, path: string): ValidationResult<Slid
   if (!isStringOrUndefined(value.scriptureVerseEnd)) errors.push(`${path}.scriptureVerseEnd debe ser texto.`);
   if (!isStringRecordOrUndefined(value.scriptureVerseBackgrounds)) {
     errors.push(`${path}.scriptureVerseBackgrounds debe ser un objeto texto/texto.`);
+  }
+
+  // Validate quizData if present
+  if (value.quizData !== undefined) {
+    const qr = validateQuizData(value.quizData, `${path}.quizData`);
+    if (!qr.ok) errors.push(...qr.errors);
   }
 
   if (errors.length > 0) return fail(errors);
@@ -332,6 +387,13 @@ export const validateRemoteStatePayload = (value: unknown): ValidationResult<Par
     const result = validateAudioState(value.audioState, 'remote.audioState');
     if (result.ok) next.audioState = result.value;
     else errors.push(...result.errors);
+  }
+  if (value.quizState !== undefined) {
+    if (value.quizState === null || isRecord(value.quizState)) {
+      next.quizState = value.quizState as QuizSyncState | null;
+    } else {
+      errors.push('remote.quizState debe ser objeto o null.');
+    }
   }
   if (value.clientId !== undefined) {
     if (typeof value.clientId === 'string') {

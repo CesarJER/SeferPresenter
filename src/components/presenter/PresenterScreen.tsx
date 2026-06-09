@@ -1,7 +1,9 @@
 import React, { useEffect, useState, useRef } from 'react';
 import type { Slide, VideoState } from '../../types/presentation';
+import type { QuizOptionId, QuizSubslide, QuizTimerState } from '../../types/quiz';
 import { AnimatePresence, motion } from 'framer-motion';
 import AutoResizeText from '../shared/AutoResizeText';
+import { QuizPresenterView } from '../quiz/QuizPresenterView';
 
 interface PresenterScreenProps {
   background: string;
@@ -11,6 +13,12 @@ interface PresenterScreenProps {
   onLogoClick: () => void;
   videoState: VideoState | null;
   onVideoStateChange: (state: VideoState | null) => void;
+  // Quiz props (optional — only used when slide.type === 'quiz')
+  quizSubslides?: QuizSubslide[];
+  quizCurrentSubslideIndex?: number;
+  quizTimerState?: QuizTimerState;
+  quizPresenterDemoSelection?: QuizOptionId | null;
+  quizMaxBaseCentipunts?: number;
 }
 
 const PresenterScreen: React.FC<PresenterScreenProps> = ({
@@ -20,7 +28,12 @@ const PresenterScreen: React.FC<PresenterScreenProps> = ({
   fontScale,
   onLogoClick,
   videoState,
-  onVideoStateChange
+  onVideoStateChange,
+  quizSubslides,
+  quizCurrentSubslideIndex = 0,
+  quizTimerState,
+  quizPresenterDemoSelection = null,
+  quizMaxBaseCentipunts = 0,
 }) => {
   const [videoElement, setVideoElement] = useState<HTMLVideoElement | null>(null);
 
@@ -220,9 +233,11 @@ const PresenterScreen: React.FC<PresenterScreenProps> = ({
   // Hiding overlays based on special image slide content ([IMAGE]) or dedicated video slides
   const isImageSlide = slide?.lines[0]?.trim() === '[IMAGE]';
   const isVideoSlide = slide?.type === 'video';
+  const isQuizSlide = slide?.type === 'quiz' && !!slide.quizData;
   const isPhotoSlide = isImageSlide;
   const presenterNavVisible = !(isVideoSlide || isPhotoSlide) || slide?.videoPresenterNav !== false;
-  const hideLyricsOverlay = isPhotoSlide || isVideoSlide;
+  const isResultsSlide = isQuizSlide && quizSubslides?.[quizCurrentSubslideIndex]?.kind === 'results';
+  const hideLyricsOverlay = isPhotoSlide || isVideoSlide || isQuizSlide;
 
   return (
     <div className="relative h-full w-full overflow-hidden bg-slate-950 text-white">
@@ -283,7 +298,7 @@ const PresenterScreen: React.FC<PresenterScreenProps> = ({
         </div>
       ) : (
         <div className="relative z-20 h-full w-full px-[6vw] pt-[7vh] pb-[9vh]" style={scaleStyle}>
-          <div className="grid h-full w-[min(88vw,920px)] grid-rows-[minmax(0,1fr)_auto] gap-[3vh] lg:w-[min(58vw,920px)]">
+          <div className={`grid h-full grid-rows-[minmax(0,1fr)_auto] gap-[3vh] transition-all duration-500 ease-in-out ${isResultsSlide ? 'w-full' : 'w-[min(88vw,920px)] lg:w-[min(58vw,920px)]'}`}>
             <main className="flex min-w-0 items-center h-full max-h-full">
               {!hideLyricsOverlay && (
                 <AnimatePresence mode="wait">
@@ -330,6 +345,30 @@ const PresenterScreen: React.FC<PresenterScreenProps> = ({
                         </div>
                       </section>
                     )}
+                  </motion.div>
+                </AnimatePresence>
+              )}
+              {/* Quiz overlay */}
+              {isQuizSlide && slide.quizData && quizSubslides && quizTimerState && (
+                <AnimatePresence mode="wait">
+                  <motion.div
+                    key={`quiz-${slide.id}`}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.25 }}
+                    className="w-full flex flex-col justify-center max-h-full h-full min-h-0"
+                  >
+                    <QuizPresenterView
+                      slide={slide}
+                      quizData={slide.quizData}
+                      subslides={quizSubslides}
+                      currentSubslideIndex={quizCurrentSubslideIndex}
+                      timerState={quizTimerState}
+                      presenterDemoSelection={quizPresenterDemoSelection}
+                      maxBaseCentipunts={quizMaxBaseCentipunts}
+                      fontScale={fontScale}
+                    />
                   </motion.div>
                 </AnimatePresence>
               )}

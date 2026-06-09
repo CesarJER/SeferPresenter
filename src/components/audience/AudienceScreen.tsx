@@ -1,7 +1,10 @@
 import { useCallback, useEffect } from 'react';
 import type { AppMode, ScriptureNavState, Slide, VideoState } from '../../types/presentation';
+import type { QuizSubslide, QuizTimerState } from '../../types/quiz';
+import { useAudienceAnswers } from '../../hooks/useQuizAnswers';
 import PresenterScreen from '../presenter/PresenterScreen';
 import SeferReaderScreen from '../presenter/SeferReaderScreen';
+import { QuizAudienceView } from '../quiz/QuizAudienceView';
 
 interface AudienceScreenProps {
   appMode: AppMode;
@@ -11,6 +14,9 @@ interface AudienceScreenProps {
   scriptureState: ScriptureNavState | null;
   slide: Slide | null;
   videoState: VideoState | null;
+  quizSubslides?: QuizSubslide[];
+  quizCurrentSubslideIndex?: number;
+  quizTimerState?: QuizTimerState;
 }
 
 const AudienceScreen = ({
@@ -21,7 +27,12 @@ const AudienceScreen = ({
   scriptureState,
   slide,
   videoState,
+  quizSubslides = [],
+  quizCurrentSubslideIndex = 0,
+  quizTimerState,
 }: AudienceScreenProps) => {
+  const audienceAnswers = useAudienceAnswers();
+
   useEffect(() => {
     if (!('serviceWorker' in navigator)) return;
     navigator.serviceWorker
@@ -31,6 +42,28 @@ const AudienceScreen = ({
 
   const ignorePresenterControl = useCallback(() => {}, []);
   const ignoreVideoState = useCallback(() => {}, []);
+
+  if (slide?.type === 'quiz' && slide.quizData && quizTimerState) {
+    const answer = audienceAnswers.getAnswer(slide.id);
+    return (
+      <div className="h-screen w-screen overflow-hidden bg-black">
+        <QuizAudienceView
+          slide={slide}
+          quizData={slide.quizData}
+          subslides={quizSubslides}
+          currentSubslideIndex={quizCurrentSubslideIndex}
+          timerState={quizTimerState}
+          answer={answer}
+          onSelectRadio={(optionId) => audienceAnswers.selectRadioOption(slide.id, optionId)}
+          onToggleCheckbox={(optionId) => audienceAnswers.toggleCheckboxOption(slide.id, optionId)}
+          onSetCitaField={(fields) => audienceAnswers.setCitaField(slide.id, fields)}
+          onSubmit={() => audienceAnswers.submitAnswer(slide.id)}
+          onClear={() => audienceAnswers.clearAnswer(slide.id)}
+          onBonusClaim={(claimed) => audienceAnswers.setBonusClaim(slide.id, claimed)}
+        />
+      </div>
+    );
+  }
 
   if ((appMode === 'seferManual' || (appMode === 'scripture' && scriptureState?.scriptureKind !== 'tanaj')) && scriptureState) {
     return (
@@ -54,6 +87,9 @@ const AudienceScreen = ({
         onLogoClick={ignorePresenterControl}
         videoState={videoState}
         onVideoStateChange={ignoreVideoState}
+        quizSubslides={quizSubslides}
+        quizCurrentSubslideIndex={quizCurrentSubslideIndex}
+        quizTimerState={quizTimerState}
       />
     </div>
   );

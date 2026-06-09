@@ -23,6 +23,7 @@ let currentState = {
 
 let clients = new Set()
 let audienceClients = new Set()
+let quizClients = new Set()
 
 const contentTypes = {
   '.css': 'text/css; charset=utf-8',
@@ -120,6 +121,12 @@ const broadcast = (body) => {
   const audienceBody = JSON.stringify(deriveAudienceState(currentState))
   for (const client of audienceClients) {
     client.write(`data: ${audienceBody}\n\n`)
+  }
+}
+
+const broadcastQuizAnswer = (body) => {
+  for (const client of quizClients) {
+    client.write(`data: ${body}\n\n`)
   }
 }
 
@@ -230,6 +237,31 @@ const handleApi = async (req, res, url) => {
     req.on('close', () => {
       audienceClients.delete(res)
     })
+    return true
+  }
+
+  if (url.pathname === '/api/quiz-events' && req.method === 'GET') {
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive',
+    })
+    quizClients.add(res)
+    req.on('close', () => {
+      quizClients.delete(res)
+    })
+    return true
+  }
+
+  if (url.pathname === '/api/quiz-answer' && req.method === 'POST') {
+    try {
+      const body = await readBody(req)
+      JSON.parse(body)
+      broadcastQuizAnswer(body)
+      sendJson(res, 200, { success: true })
+    } catch (err) {
+      sendJson(res, 400, { error: err.message || 'Invalid JSON' })
+    }
     return true
   }
 

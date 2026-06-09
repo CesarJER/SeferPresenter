@@ -1,13 +1,14 @@
 import React from 'react';
-import { ArrowDown, ArrowUp, BookOpen, ChevronDown, ChevronUp, FileText, Image as ImageIcon, Languages, Play, ScrollText, Trash2, Video } from 'lucide-react';
-import type { Presentation, Slide, VideoState } from '../../types/presentation';
+import { ArrowDown, ArrowUp, BookOpen, ChevronDown, ChevronUp, FileText, HelpCircle, Image as ImageIcon, Languages, Play, ScrollText, Trash2, Video } from 'lucide-react';
+import type { Presentation, QuizData, Slide, VideoState } from '../../types/presentation';
 import AutoResizeText from '../shared/AutoResizeText';
 import { AutoResizeInput, AutoResizeTextarea } from '../shared/AutoResizeInput';
 import { CustomSearchSelect } from '../shared/CustomSearchSelect';
 import { ScriptureRangeEditor } from './ScriptureRangeEditor';
+import { QuizSlideEditor } from '../quiz/QuizSlideEditor';
 
 type PresentationMode = 'standard' | 'trilingual';
-type SlideType = 'text' | 'video' | 'image' | 'tanaj' | 'sefer';
+type SlideType = 'text' | 'video' | 'image' | 'tanaj' | 'sefer' | 'quiz';
 
 type VideoParamUpdate = {
   videoSrc?: string;
@@ -53,6 +54,7 @@ interface SlideRowProps {
   handleUpdateScriptureSlide: (idx: number, payload: ScriptureSlideUpdate) => void;
   handleUpdateVideoParams: (idx: number, changes: VideoParamUpdate) => void;
   handleUpdateImagePresenterNav: (idx: number, visible: boolean) => void;
+  handleUpdateQuizData: (idx: number, quizData: QuizData) => void;
   handleUpdateLine: (slideIdx: number, lineIdx: number, textValue: string) => void;
   handleUpdateSlideBg: (idx: number, bgValue: string) => void;
   handleTransliterateRow: (idx: number) => void;
@@ -91,6 +93,7 @@ export const SlideRow: React.FC<SlideRowProps> = ({
   handleUpdateScriptureSlide,
   handleUpdateVideoParams,
   handleUpdateImagePresenterNav,
+  handleUpdateQuizData,
   handleUpdateLine,
   handleUpdateSlideBg,
   handleTransliterateRow,
@@ -179,7 +182,14 @@ export const SlideRow: React.FC<SlideRowProps> = ({
 
                                 {/* 2. Text/Video/Image fields column */}
                                 <td className={`px-3 py-3 align-top ${isScriptureGroupChild ? 'bg-gray-950/20' : ''}`}>
-                                  {slide.type === 'sefer' || slide.type === 'tanaj' || !!slide.scriptureBook ? (
+                                  {slide.type === 'quiz' && slide.quizData ? (
+                                    <QuizSlideEditor
+                                      quizData={slide.quizData}
+                                      slideId={slide.id}
+                                      backgrounds={backgrounds}
+                                      onChange={(quizData) => handleUpdateQuizData(idx, quizData)}
+                                    />
+                                  ) : slide.type === 'sefer' || slide.type === 'tanaj' || !!slide.scriptureBook ? (
                                     <ScriptureRangeEditor
                                       slide={slide}
                                       backgrounds={backgrounds}
@@ -546,7 +556,7 @@ export const SlideRow: React.FC<SlideRowProps> = ({
                                           <button
                                             type="button"
                                             onClick={() => handleChangeSlideType(idx, 'text')}
-                                            className={`transition-colors cursor-pointer p-0.5 ${!isImage && slide.type !== 'video' && slide.type !== 'tanaj' && slide.type !== 'sefer'
+                                            className={`transition-colors cursor-pointer p-0.5 ${!isImage && slide.type !== 'video' && slide.type !== 'tanaj' && slide.type !== 'sefer' && slide.type !== 'quiz'
                                               ? 'text-yellow-500 font-bold'
                                               : 'text-gray-500 hover:text-gray-350'
                                               }`}
@@ -602,6 +612,17 @@ export const SlideRow: React.FC<SlideRowProps> = ({
                                             title="Tipo: Sefer nativo"
                                           >
                                             <ScrollText size={12} />
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleChangeSlideType(idx, 'quiz')}
+                                            className={`transition-colors cursor-pointer p-0.5 ${slide.type === 'quiz'
+                                              ? 'text-yellow-500 font-bold'
+                                              : 'text-gray-500 hover:text-gray-350'
+                                              }`}
+                                            title="Tipo: Quiz"
+                                          >
+                                            <HelpCircle size={12} />
                                           </button>
                                         </div>
                                       </div>

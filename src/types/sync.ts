@@ -1,5 +1,6 @@
 import type { AudioState } from './audio';
 import type { AppMode, Presentation, ScriptureNavState, VideoState } from './presentation';
+import type { QuizSyncState } from './quiz';
 
 export const SYNC_PROTOCOL_VERSION = 1;
 
@@ -26,6 +27,7 @@ export interface SyncStatePayload {
   appMode: AppMode;
   scriptureState: ScriptureNavState | null;
   audioState: AudioState;
+  quizState?: QuizSyncState | null;
 }
 
 export type BroadcastMessage =
