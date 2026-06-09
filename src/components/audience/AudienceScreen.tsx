@@ -60,6 +60,10 @@ const AudienceScreen = ({
           onSubmit={() => audienceAnswers.submitAnswer(slide.id)}
           onClear={() => audienceAnswers.clearAnswer(slide.id)}
           onBonusClaim={(claimed) => audienceAnswers.setBonusClaim(slide.id, claimed)}
+          savedScore={audienceAnswers.getScores()[slide.id]}
+          allScores={audienceAnswers.getScores()}
+          onSaveScore={(score) => audienceAnswers.saveScore(slide.id, score)}
+          onSendFinalScore={audienceAnswers.sendFinalScore}
         />
       </div>
     );

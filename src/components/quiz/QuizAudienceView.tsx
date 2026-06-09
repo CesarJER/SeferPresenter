@@ -12,7 +12,7 @@ import React, { useEffect } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { CheckCircle, XCircle, Send, RotateCcw } from 'lucide-react';
 import type { QuizData, QuizOptionId } from '../../types/presentation';
-import type { QuizAudienceAnswer, QuizSubslide, QuizTimerState } from '../../types/quiz';
+import type { QuizAudienceAnswer, QuizSubslide, QuizTimerState, QuizQuestionScore, QuizTotalScore } from '../../types/quiz';
 import { formatCentipunts, getDisplayOptions, scoreAnswer } from '../../utils/quizUtils';
 import { getMetadata, resolveBookName } from '../../utils/metadataCache';
 import type { AppMetadata } from '../../utils/metadataCache';
@@ -32,6 +32,11 @@ interface QuizAudienceViewProps {
   onSubmit: () => void;
   onClear: () => void;
   onBonusClaim: (claimed: boolean) => void;
+  /** Scoring support */
+  savedScore?: QuizQuestionScore;
+  allScores?: Record<string, QuizQuestionScore>;
+  onSaveScore?: (score: QuizQuestionScore) => void;
+  onSendFinalScore?: (rank: number) => void;
 }
 
 const OPTION_LETTERS = ['A', 'B', 'C', 'D'];
@@ -49,6 +54,10 @@ export const QuizAudienceView: React.FC<QuizAudienceViewProps> = ({
   onSubmit,
   onClear,
   onBonusClaim,
+  savedScore,
+  allScores,
+  onSaveScore,
+  onSendFinalScore,
 }) => {
   const currentSubslide = subslides[currentSubslideIndex];
   const displayOptions = getDisplayOptions(quizData, slide.id);
@@ -76,6 +85,40 @@ export const QuizAudienceView: React.FC<QuizAudienceViewProps> = ({
 
   // Score for respuesta phase
   const questionScore = isRespuesta ? scoreAnswer(quizData, answer) : null;
+
+  // Save score locally when on 'respuesta'
+  useEffect(() => {
+    if (isRespuesta && questionScore && onSaveScore) {
+      // Avoid infinite loop if the score hasn't actually changed
+      if (JSON.stringify(savedScore) !== JSON.stringify(questionScore)) {
+        onSaveScore(questionScore);
+      }
+    }
+  }, [isRespuesta, questionScore, savedScore, onSaveScore]);
+
+  // Aggregate total score when on 'results' slide
+  const [totalScore, setTotalScore] = React.useState<QuizTotalScore | null>(null);
+
+  useEffect(() => {
+    if (isResults && allScores && quizData.resultProfiles) {
+      // Sum everything
+      let totalCentipunts = 0;
+      const questions: QuizQuestionScore[] = [];
+      for (const sc of Object.values(allScores)) {
+        totalCentipunts += sc.totalCentipunts;
+        questions.push(sc);
+      }
+      const aggregated: QuizTotalScore = {
+        totalCentipunts,
+        maxBaseCentipunts: 0, // Audience doesn't compute this
+        questions,
+      };
+      setTotalScore(aggregated);
+
+      // We just send the points to the controller, the controller figures out the rank
+      onSendFinalScore?.(totalCentipunts);
+    }
+  }, [isResults, allScores, quizData, onSendFinalScore]);
 
   return (
     <div className="flex h-full w-full flex-col gap-3 overflow-auto px-4 py-4 pointer-events-auto">
@@ -324,10 +367,10 @@ export const QuizAudienceView: React.FC<QuizAudienceViewProps> = ({
       )}
 
       {/* Results phase */}
-      {isResults && (
+      {isResults && totalScore && (
         <QuizResultsDiploma
-          profile={quizData.resultProfiles?.[0] ?? null}
-          totalScore={{ totalCentipunts: 0, maxBaseCentipunts: 0, questions: [] }}
+          profile={null}
+          totalScore={totalScore}
         />
       )}
     </div>

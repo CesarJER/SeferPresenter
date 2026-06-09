@@ -81,7 +81,6 @@ export const QuizControllerView: React.FC<QuizControllerViewProps> = ({
   const isPaused = status === 'paused';
   const isIdle = status === 'idle';
   const isResults = subslides[currentSubslideIndex]?.kind === 'results';
-  const isLectura = subslides[currentSubslideIndex]?.kind === 'lectura';
   const isPregunta = subslides[currentSubslideIndex]?.kind === 'pregunta';
 
   return (

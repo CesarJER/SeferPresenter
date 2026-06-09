@@ -20,6 +20,7 @@ import type {
   QuizAudienceAnswer,
   QuizAudienceSession,
   QuizRangeStats,
+  QuizQuestionScore,
 } from '../types/quiz';
 import { makeEmptyAudienceAnswer } from '../types/quiz';
 
@@ -53,7 +54,7 @@ interface QuizClearMessage {
 interface QuizFinalScoreMessage {
   type: 'QUIZ_FINAL_SCORE';
   sessionId: string;
-  rank: number;
+  totalCentipunts: number;
 }
 
 type QuizMessage = QuizAnswerMessage | QuizClearMessage | QuizFinalScoreMessage;
@@ -79,8 +80,12 @@ export interface UseAudienceAnswersReturn {
   submitAll: (slideId: string) => void;
   /** Clear answer for a slide (for retry/reset) */
   clearAnswer: (slideId: string) => void;
-  /** Send final calculated rank to controller */
-  sendFinalScore: (rank: number) => void;
+  /** Send final calculated score to controller */
+  sendFinalScore: (totalCentipunts: number) => void;
+  /** Get all locally saved scores */
+  getScores: () => Record<string, QuizQuestionScore>;
+  /** Save a calculated score for a slide */
+  saveScore: (slideId: string, score: QuizQuestionScore) => void;
 }
 
 export function useAudienceAnswers(): UseAudienceAnswersReturn {
@@ -97,6 +102,15 @@ export function useAudienceAnswers(): UseAudienceAnswersReturn {
     }
   });
 
+  const [scores, setScores] = useState<Record<string, QuizQuestionScore>>(() => {
+    try {
+      const stored = sessionStorage.getItem('sefer-quiz-scores');
+      return stored ? JSON.parse(stored) : {};
+    } catch {
+      return {};
+    }
+  });
+
   // Persist to sessionStorage whenever answers change
   useEffect(() => {
     try {
@@ -105,6 +119,15 @@ export function useAudienceAnswers(): UseAudienceAnswersReturn {
       // Storage quota exceeded — silently ignore
     }
   }, [answers]);
+
+  // Persist to sessionStorage whenever scores change
+  useEffect(() => {
+    try {
+      sessionStorage.setItem('sefer-quiz-scores', JSON.stringify(scores));
+    } catch {
+      // Ignore
+    }
+  }, [scores]);
 
   // Listen for CLEAR commands from controller
   useEffect(() => {
@@ -118,9 +141,15 @@ export function useAudienceAnswers(): UseAudienceAnswersReturn {
           [slideId]: {
             ...current,
             submitted: false,
-            submittedAt: undefined
+            submittedAt: null
           }
         };
+      });
+      setScores(prev => {
+        if (!prev[slideId]) return prev;
+        const next = { ...prev };
+        delete next[slideId];
+        return next;
       });
     };
 
@@ -241,16 +270,27 @@ export function useAudienceAnswers(): UseAudienceAnswersReturn {
       delete next[slideId];
       return next;
     });
+    setScores(prev => {
+      const next = { ...prev };
+      delete next[slideId];
+      return next;
+    });
   }, []);
 
-  const sendFinalScore = useCallback((rank: number) => {
+  const sendFinalScore = useCallback((totalCentipunts: number) => {
     const msg: QuizFinalScoreMessage = {
       type: 'QUIZ_FINAL_SCORE',
       sessionId,
-      rank,
+      totalCentipunts,
     };
     channel.postMessage(msg);
   }, [channel, sessionId]);
+
+  const getScores = useCallback(() => scores, [scores]);
+
+  const saveScore = useCallback((slideId: string, score: QuizQuestionScore) => {
+    setScores(prev => ({ ...prev, [slideId]: score }));
+  }, []);
 
   return {
     getAnswers,
@@ -263,6 +303,8 @@ export function useAudienceAnswers(): UseAudienceAnswersReturn {
     submitAll,
     clearAnswer,
     sendFinalScore,
+    getScores,
+    saveScore,
   };
 }
 
@@ -278,9 +320,9 @@ export interface UseControllerAnswersReturn {
   /** Clear all received answers (between quiz rounds) */
   clearAll: () => void;
   /**
-   * Calculate range stats for results slide using reported ranks.
+   * Calculate range stats for results slide using reported scores.
    */
-  calcRangeStats: (profiles: QuizResultProfile[]) => QuizRangeStats[];
+  calcRangeStats: (profiles: QuizResultProfile[], maxBaseCentipunts: number) => QuizRangeStats[];
   /** Clear answers for a specific slide across all audiences */
   clearSlideAnswers: (slideId: string) => void;
 }
@@ -288,7 +330,7 @@ export interface UseControllerAnswersReturn {
 export function useControllerAnswers(): UseControllerAnswersReturn {
   const channel = useMemo(() => new BroadcastChannel('sefer-quiz'), []);
   const [sessions, setSessions] = useState<Record<string, QuizAudienceSession>>({});
-  const [ranks, setRanks] = useState<Record<string, number>>({});
+  const [sessionTotalScores, setSessionTotalScores] = useState<Record<string, number>>({});
 
   // Listen for incoming answers from audience
   useEffect(() => {
@@ -311,9 +353,9 @@ export function useControllerAnswers(): UseControllerAnswersReturn {
           };
         });
       } else if (data.type === 'QUIZ_FINAL_SCORE') {
-        const { sessionId, rank } = data;
-        if (!sessionId || rank == null) return;
-        setRanks(prev => ({ ...prev, [sessionId]: rank }));
+        const { sessionId, totalCentipunts } = data;
+        if (!sessionId || totalCentipunts == null) return;
+        setSessionTotalScores(prev => ({ ...prev, [sessionId]: totalCentipunts }));
       }
     };
 
@@ -348,7 +390,7 @@ export function useControllerAnswers(): UseControllerAnswersReturn {
 
   const clearAll = useCallback(() => {
     setSessions({});
-    setRanks({});
+    setSessionTotalScores({});
   }, []);
 
   const clearSlideAnswers = useCallback((slideId: string) => {
@@ -379,21 +421,44 @@ export function useControllerAnswers(): UseControllerAnswersReturn {
 
   const calcRangeStats = useCallback((
     profiles: QuizResultProfile[],
+    maxBaseCentipunts: number
   ): QuizRangeStats[] => {
     const stats: Record<number, QuizRangeStats> = {};
     for (const profile of profiles) {
       stats[profile.rank] = { rank: profile.rank, title: profile.title, count: 0, sessionIds: [] };
     }
 
-    for (const [sid, rank] of Object.entries(ranks)) {
-      if (stats[rank]) {
-        stats[rank].count++;
-        stats[rank].sessionIds.push(sid);
+    if (profiles.length === 0) return [];
+    
+    // Sort profiles to calculate ranges manually
+    const sorted = [...profiles].sort((a, b) => a.rank - b.rank);
+    const count = sorted.length;
+    const rangeSize = Math.floor(maxBaseCentipunts / count);
+    
+    // Evaluate ranks based on total score
+    for (const [sid, totalPts] of Object.entries(sessionTotalScores)) {
+      // Find the appropriate rank
+      let assignedRank = sorted[0].rank; // default
+      for (let i = 0; i < sorted.length; i++) {
+        const rank = sorted[i].rank;
+        const reverseIdx = count - 1 - i;
+        const min = reverseIdx === 0 ? 0 : reverseIdx * rangeSize;
+        const max = reverseIdx === count - 1 ? Infinity : (reverseIdx + 1) * rangeSize - 1;
+        
+        if (totalPts >= min && totalPts <= max) {
+          assignedRank = rank;
+          break;
+        }
+      }
+
+      if (stats[assignedRank]) {
+        stats[assignedRank].count++;
+        stats[assignedRank].sessionIds.push(sid);
       }
     }
 
     return Object.values(stats).sort((a, b) => a.rank - b.rank);
-  }, [ranks]);
+  }, [sessionTotalScores]);
 
   return { sessions, getSessionAnswer, getSubmittedCount, clearAll, calcRangeStats, clearSlideAnswers };
 }

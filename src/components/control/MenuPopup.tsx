@@ -1724,7 +1724,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                         onPlayMal={onQuizPlayMal}
                         optionCounts={optionCounts}
                         onClearAnswers={() => controllerAnswers.clearSlideAnswers(activeSlide.id)}
-                        rangeStats={controllerAnswers.calcRangeStats(activeSlide.quizData.resultProfiles || [])}
+                        rangeStats={controllerAnswers.calcRangeStats(activeSlide.quizData.resultProfiles || [], maxBaseCentipunts)}
                         totalSessions={Object.keys(controllerAnswers.sessions).length}
                         maxBaseCentipunts={maxBaseCentipunts}
                       />

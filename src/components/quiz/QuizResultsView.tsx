@@ -119,7 +119,7 @@ export const QuizResultsDiploma: React.FC<QuizResultsDiplomaProps> = ({
     );
   }
 
-  if (!profile) {
+  if (!profile && !totalScore) {
     return (
       <div className="flex flex-col items-center gap-3 p-8 text-center">
         <Star size={32} className="text-yellow-400/40" />
@@ -147,25 +147,29 @@ export const QuizResultsDiploma: React.FC<QuizResultsDiplomaProps> = ({
       </motion.div>
 
       {/* Rank badge */}
-      <div className="rounded-full border border-violet-500/50 bg-violet-950/50 px-4 py-1">
-        <span className="text-xs font-black text-violet-300 uppercase tracking-widest">
-          Perfil R{profile.rank}
-        </span>
-      </div>
+      {profile && (
+        <div className="rounded-full border border-violet-500/50 bg-violet-950/50 px-4 py-1">
+          <span className="text-xs font-black text-violet-300 uppercase tracking-widest">
+            Perfil R{profile.rank}
+          </span>
+        </div>
+      )}
 
       {/* Title */}
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.3 }}
-        className="space-y-2"
-      >
-        <h2 className="text-xl font-black text-white">{profile.title}</h2>
-        <p className="text-sm text-white/60 leading-relaxed">{profile.description}</p>
-      </motion.div>
+      {profile && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3 }}
+          className="space-y-2"
+        >
+          <h2 className="text-xl font-black text-white">{profile.title}</h2>
+          <p className="text-sm text-white/60 leading-relaxed">{profile.description}</p>
+        </motion.div>
+      )}
 
       {/* Gift text */}
-      {profile.giftText && (
+      {profile?.giftText && (
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
