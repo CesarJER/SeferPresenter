@@ -25,6 +25,7 @@ export interface UseQuizTimerReturn {
   setTimerState: (state: QuizTimerState) => void;
   /** Manually mark as completed (e.g. controller clicked "Mostrar Respuesta") */
   completeTimer: () => void;
+  adjustTimer: (seconds: number) => void;
 }
 
 export function useQuizTimer(options: {
@@ -134,6 +135,18 @@ export function useQuizTimer(options: {
     setTimerState(prev => ({ ...prev, status: 'completed' }));
   }, []);
 
+  const adjustTimer = useCallback((seconds: number) => {
+    const ms = seconds * 1000;
+    setTimerState(prev => {
+      if (prev.status === 'paused') {
+        return { ...prev, pausedRemainingMs: ms };
+      } else if (prev.status === 'idle') {
+        return { ...prev, timerDurationMs: ms };
+      }
+      return prev;
+    });
+  }, []);
+
   const getRemainingMs = useCallback(() => {
     return calcRemainingMs(timerStateRef.current);
   }, []);
@@ -146,5 +159,5 @@ export function useQuizTimer(options: {
     });
   }, [timerSeconds]);
 
-  return { timerState, getRemainingMs, startTimer, pauseTimer, resumeTimer, resetTimer, setTimerState, completeTimer };
+  return { timerState, getRemainingMs, startTimer, pauseTimer, resumeTimer, resetTimer, setTimerState, completeTimer, adjustTimer };
 }

@@ -68,7 +68,7 @@ export const QuizPresenterView: React.FC<QuizPresenterViewProps> = ({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
             transition={{ duration: 0.25 }}
-            className="glass-panel flex flex-1 px-[4vw] py-[2vh] items-center gap-[4vw]"
+            className="glass-panel flex flex-[0.7] min-h-0 px-[4vw] py-[2vh] items-center gap-[4vw]"
           >
             <div className="flex-1 h-full overflow-hidden flex items-center">
               <AutoResizeText
@@ -185,48 +185,54 @@ export const QuizPresenterView: React.FC<QuizPresenterViewProps> = ({
 
       {/* Options grid (lectura + pregunta + respuesta) */}
       <AnimatePresence mode="wait">
-        {(isLectura || isPregunta || isRespuesta) && (
-          <motion.div
-            key={`options-${slide.id}-${isRespuesta}`}
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.3, delay: 0.05 }}
-            className="grid grid-cols-2 gap-[1.5vh] flex-[1.5]"
-          >
-            {displayOptions.map((opt, idx) => {
-              const letter = OPTION_LETTERS[idx] ?? opt.id;
-              const showCorrect = isRespuesta && opt.isCorrect;
-              const isDemoSelected = isRespuesta && presenterDemoSelection === opt.id;
-              const isWrongDemo = isDemoSelected && !opt.isCorrect;
+        {(isLectura || isPregunta || isRespuesta) && (() => {
+          const numOptions = displayOptions.length;
+          const gridCols = numOptions <= 2 ? 'grid-cols-1' : 'grid-cols-2';
+          const gridRows = 'grid-rows-2';
 
-              let borderColor = 'glass-panel';
-              if (showCorrect) borderColor = 'glass-panel border-emerald-500/70 !bg-emerald-950/60 shadow-[inset_0_0_20px_rgba(16,185,129,0.3)]';
-              if (isDemoSelected && showCorrect) borderColor = 'glass-panel border-emerald-400 !bg-emerald-900/70 shadow-lg shadow-emerald-500/30';
-              if (isWrongDemo) borderColor = 'glass-panel border-red-500/70 !bg-red-950/60 shadow-[inset_0_0_20px_rgba(239,68,68,0.3)]';
+          return (
+            <motion.div
+              key={`options-${slide.id}-${isRespuesta}`}
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.3, delay: 0.05 }}
+              className={`grid ${gridCols} ${gridRows} gap-[1.5vh] flex-[2.3] min-h-0 h-full`}
+            >
+              {displayOptions.map((opt, idx) => {
+                const letter = OPTION_LETTERS[idx] ?? opt.id;
+                const showCorrect = isRespuesta && opt.isCorrect;
+                const isDemoSelected = isRespuesta && presenterDemoSelection === opt.id;
+                const isWrongDemo = isDemoSelected && !opt.isCorrect;
 
-              return (
-                <div
-                  key={opt.id}
-                  className={`flex items-center gap-[2vw] rounded-2xl border px-[2vw] py-[2vh] transition-all duration-300 min-h-[12vh] ${borderColor}`}
-                >
-                  <span className={`shrink-0 flex h-[4vh] w-[4vh] items-center justify-center rounded-full text-[2vh] font-black ${showCorrect ? 'bg-emerald-500 text-black' : isWrongDemo ? 'bg-red-500 text-white' : 'bg-white/10 text-white/60'}`}>
-                    {letter}
-                  </span>
-                  <div className="flex-1 overflow-hidden h-full flex items-center">
-                    <AutoResizeText
-                      text={opt.text}
-                      html={true}
-                      fontScale={fontScale}
-                      allowGrow={true}
-                      className={`font-medium ${showCorrect ? 'text-emerald-200' : isWrongDemo ? 'text-red-200' : 'text-white/80'}`}
-                    />
+                let borderColor = 'glass-panel';
+                if (showCorrect) borderColor = 'glass-panel border-emerald-500/70 !bg-emerald-950/60 shadow-[inset_0_0_20px_rgba(16,185,129,0.3)]';
+                if (isDemoSelected && showCorrect) borderColor = 'glass-panel border-emerald-400 !bg-emerald-900/70 shadow-lg shadow-emerald-500/30';
+                if (isWrongDemo) borderColor = 'glass-panel border-red-500/70 !bg-red-950/60 shadow-[inset_0_0_20px_rgba(239,68,68,0.3)]';
+
+                return (
+                  <div
+                    key={opt.id}
+                    className={`flex items-center gap-[2vw] rounded-2xl border px-[2vw] py-[1vh] transition-all duration-300 h-full min-h-0 ${borderColor}`}
+                  >
+                    <span className={`shrink-0 flex h-[4vh] w-[4vh] items-center justify-center rounded-full text-[2vh] font-black ${showCorrect ? 'bg-emerald-500 text-black' : isWrongDemo ? 'bg-red-500 text-white' : 'bg-white/10 text-white/60'}`}>
+                      {letter}
+                    </span>
+                    <div className="flex-1 overflow-hidden h-full flex items-center">
+                      <AutoResizeText
+                        text={opt.text}
+                        html={true}
+                        fontScale={fontScale}
+                        baseFontSize={28 * fontScale}
+                        className={`font-medium ${showCorrect ? 'text-emerald-200' : isWrongDemo ? 'text-red-200' : 'text-white/80'}`}
+                      />
+                    </div>
                   </div>
-                </div>
-              );
-            })}
-          </motion.div>
-        )}
+                );
+              })}
+            </motion.div>
+          );
+        })()}
       </AnimatePresence>
 
       {/* Cita hint during pregunta (if there's an evaluable CITA:) */}

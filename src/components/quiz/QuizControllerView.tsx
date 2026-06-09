@@ -45,6 +45,7 @@ interface QuizControllerViewProps {
   totalSessions: number;
   maxBaseCentipunts: number;
   renderMode?: 'top' | 'bottom' | 'both';
+  onAdjustTimer?: (seconds: number) => void;
 }
 
 const OPTION_LETTERS = ['A', 'B', 'C', 'D'];
@@ -74,6 +75,7 @@ export const QuizControllerView: React.FC<QuizControllerViewProps> = ({
   totalSessions,
   maxBaseCentipunts,
   renderMode = 'both',
+  onAdjustTimer,
 }) => {
   const displayOptions = getDisplayOptions(quizData, slide.id);
   const remaining = calcRemainingMs(timerState);
@@ -181,7 +183,29 @@ export const QuizControllerView: React.FC<QuizControllerViewProps> = ({
           )}
           {isPregunta && (
             <div className="text-[11px] text-gray-500 self-center ml-auto">
-              {isExpired ? '¡Tiempo!' : isIdle ? `${quizData.timerSeconds}s` : formatRemainingTime(remaining)}
+              {isExpired ? (
+                '¡Tiempo!'
+              ) : (isIdle || isPaused) && onAdjustTimer ? (
+                <div className="flex items-center gap-1">
+                  <input
+                    type="number"
+                    min="1"
+                    max="600"
+                    value={isIdle ? quizData.timerSeconds : Math.round(remaining / 1000)}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value, 10);
+                      if (!isNaN(val) && val > 0) onAdjustTimer(val);
+                    }}
+                    className="w-12 rounded border border-gray-700 bg-gray-900 px-1 py-0.5 text-center text-white focus:outline-none focus:ring-1 focus:ring-yellow-500 font-mono text-[11px]"
+                    title="Editar segundos"
+                  />
+                  <span>s</span>
+                </div>
+              ) : isIdle ? (
+                `${quizData.timerSeconds}s`
+              ) : (
+                formatRemainingTime(remaining)
+              )}
             </div>
           )}
         </div>

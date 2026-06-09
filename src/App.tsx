@@ -90,6 +90,27 @@ function App() {
   const quizTimer = useQuizTimer({
     timerSeconds: activeQuizData?.timerSeconds ?? 30,
   });
+  const activeQuizSubslide = quizSubslides[quizCurrentSubslideIndex];
+  const isQuizCitaVerse = activeQuizSubslide?.kind === 'cita-verse';
+  const quizScriptureState = useMemo<ScriptureNavState | null>(() => {
+    if (!isQuizCitaVerse || !activeQuizSubslide.bookToken) return null;
+    return {
+      bookEs: activeQuizSubslide.bookToken,
+      bookHeb: '',
+      bookAbbrevEs: activeQuizSubslide.bookToken,
+      chapter: activeQuizSubslide.chapter,
+      verseStart: activeQuizSubslide.verseStart,
+      verse: activeQuizSubslide.verse,
+      verseEnd: activeQuizSubslide.verseEnd,
+      verseNikud: '',
+      transliteration: '',
+      translation: '',
+      verseIdx: Number(activeQuizSubslide.verse) - 1,
+      totalVerses: 100,
+      scriptureKind: 'sefer',
+    };
+  }, [isQuizCitaVerse, activeQuizSubslide]);
+
   const makeInitialQuizState = useCallback((slide: Slide | null, direction: 'forward' | 'backward' = 'forward'): QuizSyncState | null => {
     const quizData = slide?.type === 'quiz' ? slide.quizData : undefined;
     if (!quizData || !slide) return null;
@@ -242,6 +263,9 @@ function App() {
         break;
       case 'QUIZ_RESET_TIMER':
         quizTimer.resetTimer(activeQuizData?.timerSeconds ? activeQuizData.timerSeconds * 1000 : 30000);
+        break;
+      case 'QUIZ_ADJUST_TIMER':
+        quizTimer.adjustTimer(payload.seconds);
         break;
       case 'QUIZ_COMPLETE': {
         quizTimer.completeTimer();
@@ -658,7 +682,7 @@ function App() {
         background={activeBackground}
         fontScale={currentPresentation?.fontScale ?? 1}
         presentationTitle={currentPresentation?.title || ''}
-        scriptureState={scriptureState}
+        scriptureState={quizScriptureState || scriptureState}
         slide={activePresenterSlide}
         videoState={videoState}
         quizSubslides={quizSubslides}
@@ -798,31 +822,19 @@ function App() {
           }}
           onQuizPlayApplause={() => isControlMode ? emitCommand({ command: 'QUIZ_PLAY_APPLAUSE' }) : quizAudio.playApplause()}
           onQuizPlayMal={() => isControlMode ? emitCommand({ command: 'QUIZ_PLAY_MAL' }) : quizAudio.playMal()}
+          onQuizAdjustTimer={(seconds) => {
+            if (isControlMode) {
+              emitCommand({ command: 'QUIZ_ADJUST_TIMER', seconds });
+            } else {
+              quizTimer.adjustTimer(seconds);
+            }
+          }}
         />
       </div>
     );
   }
 
-  const activeQuizSubslide = quizSubslides[quizCurrentSubslideIndex];
-  const isQuizCitaVerse = activeQuizSubslide?.kind === 'cita-verse';
-  const quizScriptureState = useMemo<ScriptureNavState | null>(() => {
-    if (!isQuizCitaVerse || !activeQuizSubslide.bookToken) return null;
-    return {
-      bookEs: activeQuizSubslide.bookToken,
-      bookHeb: '',
-      bookAbbrevEs: activeQuizSubslide.bookToken,
-      chapter: activeQuizSubslide.chapter,
-      verseStart: activeQuizSubslide.verseStart,
-      verse: activeQuizSubslide.verse,
-      verseEnd: activeQuizSubslide.verseEnd,
-      verseNikud: '',
-      transliteration: '',
-      translation: '',
-      verseIdx: Number(activeQuizSubslide.verse) - 1,
-      totalVerses: 100,
-      scriptureKind: 'sefer',
-    };
-  }, [isQuizCitaVerse, activeQuizSubslide]);
+
 
   // Presenter (big screen) mode
   return (

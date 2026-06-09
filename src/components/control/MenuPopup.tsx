@@ -69,6 +69,7 @@ interface MenuPopupProps {
   onQuizDemoSelect?: (optionId: QuizOptionId | null) => void;
   onQuizPlayApplause?: () => void;
   onQuizPlayMal?: () => void;
+  onQuizAdjustTimer?: (seconds: number) => void;
 }
 
 const isTitleSlide = (slide: Slide) =>
@@ -137,6 +138,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
   onQuizDemoSelect = () => { },
   onQuizPlayApplause = () => { },
   onQuizPlayMal = () => { },
+  onQuizAdjustTimer = () => { },
 }) => {
   const controllerAnswers = useControllerAnswers();
   // ────────────────────────────────────────────────────────────────
@@ -1728,6 +1730,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                         totalSessions={Object.keys(controllerAnswers.sessions).length}
                         maxBaseCentipunts={maxBaseCentipunts}
                         renderMode="top"
+                        onAdjustTimer={onQuizAdjustTimer}
                       />
                       );
                     })()}
@@ -1791,6 +1794,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                 totalSessions={Object.keys(controllerAnswers.sessions).length}
                 maxBaseCentipunts={maxBaseCentipunts}
                 renderMode="bottom"
+                onAdjustTimer={onQuizAdjustTimer}
               />
               );
             })()}

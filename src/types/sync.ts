@@ -40,6 +40,7 @@ export type RemoteCommandPayload =
   | { command: 'QUIZ_PAUSE_TIMER' }
   | { command: 'QUIZ_RESUME_TIMER' }
   | { command: 'QUIZ_RESET_TIMER' }
+  | { command: 'QUIZ_ADJUST_TIMER'; seconds: number }
   | { command: 'QUIZ_COMPLETE' }
   | { command: 'QUIZ_SELECT_SUBSLIDE'; index: number }
   | { command: 'QUIZ_DEMO_SELECT'; optionId: string | null }

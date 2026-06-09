@@ -34,6 +34,8 @@ const AudienceScreen = ({
   quizMaxBaseCentipunts,
 }: AudienceScreenProps) => {
   const audienceAnswers = useAudienceAnswers();
+  const activeSubslide = quizSubslides[quizCurrentSubslideIndex];
+  const isCitaVerse = activeSubslide?.kind === 'cita-verse';
 
   useEffect(() => {
     if (!('serviceWorker' in navigator)) return;
@@ -45,7 +47,19 @@ const AudienceScreen = ({
   const ignorePresenterControl = useCallback(() => {}, []);
   const ignoreVideoState = useCallback(() => {}, []);
 
-  if (slide?.type === 'quiz' && slide.quizData && quizTimerState) {
+  if (isCitaVerse && scriptureState) {
+    return (
+      <div className="pointer-events-none h-screen w-screen select-none overflow-hidden bg-black">
+        <SeferReaderScreen
+          scriptureState={scriptureState}
+          onVerseSelected={ignorePresenterControl}
+          onLogoClick={ignorePresenterControl}
+        />
+      </div>
+    );
+  }
+
+  if (slide?.type === 'quiz' && slide.quizData && quizTimerState && !isCitaVerse) {
     const answer = audienceAnswers.getAnswer(slide.id);
     return (
       <div className="h-screen w-screen overflow-hidden bg-black">
