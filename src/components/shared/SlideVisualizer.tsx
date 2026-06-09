@@ -1,12 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { ChevronDown, ChevronUp, Eye } from 'lucide-react';
 import type { Slide, ScriptureNavState, AppMode } from '../../types/presentation';
+import type { QuizSubslide } from '../../types/quiz';
 import { sanitizeSlideHtml } from '../../utils/hebrewText';
+import { findScriptureRange } from '../../utils/scriptureLookup';
 
 interface SlideVisualizerProps {
   slide: Slide | null;
   appMode: AppMode;
   scriptureState: ScriptureNavState | null;
+  quizSubslide?: QuizSubslide;
 }
 
 const containsHebrew = (text: string): boolean => {
@@ -17,8 +20,10 @@ const SlideVisualizer: React.FC<SlideVisualizerProps> = ({
   slide,
   appMode,
   scriptureState,
+  quizSubslide,
 }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [quizVerseLines, setQuizVerseLines] = useState<string[]>([]);
 
   // Auto expand when switching to scripture mode
   useEffect(() => {
@@ -26,6 +31,31 @@ const SlideVisualizer: React.FC<SlideVisualizerProps> = ({
       setIsCollapsed(false);
     }
   }, [appMode]);
+
+  // Fetch quiz verse content if needed
+  useEffect(() => {
+    if (slide?.type === 'quiz' && quizSubslide?.kind === 'cita-verse' && quizSubslide.bookToken && quizSubslide.chapter && quizSubslide.verse) {
+      findScriptureRange(quizSubslide.bookToken, quizSubslide.chapter, quizSubslide.verse)
+        .then(verses => {
+          if (verses && verses.length > 0) {
+            const v = verses[0];
+            setQuizVerseLines([
+              v.verseNikud || '',
+              v.transliteration || '',
+              v.translation || ''
+            ]);
+          } else {
+            setQuizVerseLines([]);
+          }
+        })
+        .catch(err => {
+          console.error("Error fetching quiz verse", err);
+          setQuizVerseLines([]);
+        });
+    } else {
+      setQuizVerseLines([]);
+    }
+  }, [slide, quizSubslide]);
 
   // If in manual mode, the manual control panel handles its own visualizer
   if (appMode === 'seferManual') {
@@ -43,6 +73,9 @@ const SlideVisualizer: React.FC<SlideVisualizerProps> = ({
       scriptureState.translation || '',
     ];
     labelText = `${scriptureState.bookAbbrevEs || scriptureState.bookEs} ${scriptureState.chapter}:${scriptureState.verse}`;
+  } else if (slide?.type === 'quiz' && quizSubslide?.kind === 'cita-verse') {
+    lines = quizVerseLines;
+    labelText = quizSubslide.label || '';
   } else if (slide) {
     lines = slide.lines || [];
     labelText = slide.label || '';
@@ -139,4 +172,3 @@ const SlideVisualizer: React.FC<SlideVisualizerProps> = ({
 };
 
 export default SlideVisualizer;
-

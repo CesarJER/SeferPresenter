@@ -10,7 +10,7 @@
 
 import React, { useEffect } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { CheckCircle, XCircle, BookOpen, Send, RotateCcw } from 'lucide-react';
+import { CheckCircle, XCircle, Send, RotateCcw } from 'lucide-react';
 import type { QuizData, QuizOptionId } from '../../types/presentation';
 import type { QuizAudienceAnswer, QuizSubslide, QuizTimerState } from '../../types/quiz';
 import { formatCentipunts, getDisplayOptions, scoreAnswer } from '../../utils/quizUtils';
@@ -59,6 +59,9 @@ export const QuizAudienceView: React.FC<QuizAudienceViewProps> = ({
   const isCitaVerse = currentSubslide?.kind === 'cita-verse';
   const isResults = currentSubslide?.kind === 'results';
 
+  const isTimerRunning = timerState.status === 'running';
+  const isDisabled = answer.submitted || !isTimerRunning;
+
   // Auto-submit on timer expire
   useEffect(() => {
     if (isExpired && isPregunta && !answer.submitted) {
@@ -77,21 +80,6 @@ export const QuizAudienceView: React.FC<QuizAudienceViewProps> = ({
   return (
     <div className="flex h-full w-full flex-col gap-3 overflow-auto px-4 py-4 pointer-events-auto">
 
-      {/* Lectura phase */}
-      {isLectura && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="flex flex-col gap-3 items-center justify-center flex-1 text-center"
-        >
-          <BookOpen size={40} className="text-yellow-400/60" />
-          <p className="text-white/60 text-sm">Tiempo de lectura</p>
-          {quizData.citaReviewRef && (
-            <p className="text-yellow-300 font-semibold text-base">{quizData.citaReviewRef}</p>
-          )}
-        </motion.div>
-      )}
-
       {/* Cita verse phase */}
       {isCitaVerse && (
         <motion.div
@@ -105,8 +93,8 @@ export const QuizAudienceView: React.FC<QuizAudienceViewProps> = ({
         </motion.div>
       )}
 
-      {/* Pregunta phase */}
-      {isPregunta && (
+      {/* Lectura and Pregunta phase */}
+      {(isLectura || isPregunta) && (
         <AnimatePresence>
           <motion.div
             key="pregunta-audience"
@@ -131,7 +119,6 @@ export const QuizAudienceView: React.FC<QuizAudienceViewProps> = ({
               {displayOptions.map((opt, idx) => {
                 const letter = OPTION_LETTERS[idx] ?? opt.id;
                 const isSelected = answer.selectedOptionIds.includes(opt.id);
-                const isDisabled = answer.submitted;
 
                 return (
                   <button
@@ -169,7 +156,7 @@ export const QuizAudienceView: React.FC<QuizAudienceViewProps> = ({
             </div>
 
             {/* Cita identification (only if CITA:) */}
-            {quizData.citaRef && !answer.submitted && metadata && (
+            {quizData.citaRef && metadata && (
               <div className="rounded-lg border border-yellow-600/30 bg-yellow-950/20 p-3">
                 <p className="text-[11px] font-bold uppercase tracking-wider text-yellow-400 mb-2">
                   📖 Identifica la cita
@@ -180,11 +167,12 @@ export const QuizAudienceView: React.FC<QuizAudienceViewProps> = ({
                     onChange={e => {
                       onSetCitaField({ citaBook: e.target.value, citaChapter: '', citaVerseStart: '', citaVerseEnd: '' });
                     }}
-                    className="rounded border border-yellow-600/30 bg-black/30 px-2 py-1.5 text-xs text-white focus:outline-none focus:border-yellow-500 appearance-none"
+                    className="rounded border border-yellow-600/30 bg-black/30 py-1.5 text-xs focus:outline-none focus:border-yellow-500 text-center disabled:appearance-none"
+                    disabled={isDisabled}
                   >
-                    <option value="">Libro</option>
+                    <option value="" className="bg-black text-gray-400">Libro</option>
                     {Object.values(metadata).map(m => (
-                      <option key={m.bookAbbrevEs} value={m.bookAbbrevEs}>{m.bookAbbrevEs}</option>
+                      <option key={m.bookAbbrevEs} value={m.bookAbbrevEs} className="bg-black text-white text-center">{m.bookAbbrevEs}</option>
                     ))}
                   </select>
 
@@ -202,30 +190,30 @@ export const QuizAudienceView: React.FC<QuizAudienceViewProps> = ({
                         <select
                           value={answer.citaChapter ?? ''}
                           onChange={e => onSetCitaField({ citaChapter: e.target.value, citaVerseStart: '', citaVerseEnd: '' })}
-                          disabled={!bookMeta}
-                          className="rounded border border-yellow-600/30 bg-black/30 px-2 py-1.5 text-xs text-white focus:outline-none focus:border-yellow-500 appearance-none text-center disabled:opacity-50"
+                          className="rounded border border-yellow-600/30 bg-black/30 py-1.5 text-xs focus:outline-none focus:border-yellow-500 text-center disabled:appearance-none"
+                          disabled={!bookMeta || isDisabled}
                         >
-                          <option value="">Cap</option>
-                          {chapters.map(c => <option key={c} value={c}>{c}</option>)}
+                          <option value="" className="bg-black text-gray-400">Cap</option>
+                          {chapters.map(c => <option key={c} value={c} className="bg-black text-white text-center">{c}</option>)}
                         </select>
                         <select
                           value={answer.citaVerseStart ?? ''}
                           onChange={e => onSetCitaField({ citaVerseStart: e.target.value })}
-                          disabled={!answer.citaChapter}
-                          className="rounded border border-yellow-600/30 bg-black/30 px-2 py-1.5 text-xs text-white focus:outline-none focus:border-yellow-500 appearance-none text-center disabled:opacity-50"
+                          className="rounded border border-yellow-600/30 bg-black/30 py-1.5 text-xs focus:outline-none focus:border-yellow-500 text-center disabled:appearance-none"
+                          disabled={!answer.citaChapter || isDisabled}
                         >
-                          <option value="">V.ini</option>
-                          {verses.map(v => <option key={v} value={v}>{v}</option>)}
+                          <option value="" className="bg-black text-gray-400">V.ini</option>
+                          {verses.map(v => <option key={v} value={v} className="bg-black text-white text-center">{v}</option>)}
                         </select>
                         <select
                           value={answer.citaVerseEnd ?? ''}
                           onChange={e => onSetCitaField({ citaVerseEnd: e.target.value })}
-                          disabled={!answer.citaVerseStart}
-                          className="rounded border border-yellow-600/30 bg-black/30 px-2 py-1.5 text-xs text-white focus:outline-none focus:border-yellow-500 appearance-none text-center disabled:opacity-50"
+                          className="rounded border border-yellow-600/30 bg-black/30 py-1.5 text-xs focus:outline-none focus:border-yellow-500 text-center disabled:appearance-none"
+                          disabled={!answer.citaVerseStart || isDisabled}
                         >
-                          <option value="">V.fin</option>
+                          <option value="" className="bg-black text-gray-400">V.fin</option>
                           {verses.filter(v => Number(v) >= Number(answer.citaVerseStart)).map(v => (
-                            <option key={v} value={v}>{v}</option>
+                            <option key={v} value={v} className="bg-black text-white text-center">{v}</option>
                           ))}
                         </select>
                       </>

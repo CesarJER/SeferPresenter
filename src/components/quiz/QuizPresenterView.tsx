@@ -57,24 +57,25 @@ export const QuizPresenterView: React.FC<QuizPresenterViewProps> = ({
   const ranges = isResults && maxBaseCentipunts > 0 ? calcResultRanges(quizData.resultProfiles || [], maxBaseCentipunts) : [];
 
   return (
-    <div className="relative z-0 flex flex-col w-full h-full max-h-full min-h-0 gap-[2.4vh] py-[2.4vh] text-left" style={{ '--font-scale': fontScale } as React.CSSProperties}>
+    <div className="relative z-0 flex flex-col w-full h-full max-h-full min-h-0 gap-[1.5vh] py-[1.5vh] text-left" style={{ '--font-scale': fontScale } as React.CSSProperties}>
 
-      {/* Question text (shown in pregunta and respuesta) */}
+      {/* Question text (shown in lectura, pregunta and respuesta) */}
       <AnimatePresence mode="wait">
-        {(isPregunta || isRespuesta) && (
+        {(isLectura || isPregunta || isRespuesta) && (
           <motion.div
             key={`question-${slide.id}`}
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
             transition={{ duration: 0.25 }}
-            className="glass-panel flex min-h-[15vh] max-h-[35vh] px-[4vw] py-[3vh] items-center gap-[4vw]"
+            className="glass-panel flex flex-1 px-[4vw] py-[2vh] items-center gap-[4vw]"
           >
             <div className="flex-1 h-full overflow-hidden flex items-center">
               <AutoResizeText
                 text={quizData.question}
                 html={true}
                 fontScale={fontScale}
+                allowGrow={true}
                 className="font-bold text-white drop-shadow-lg"
               />
             </div>
@@ -86,20 +87,7 @@ export const QuizPresenterView: React.FC<QuizPresenterViewProps> = ({
           </motion.div>
         )}
 
-        {/* Lectura — review citation */}
-        {isLectura && quizData.citaReviewRef && (
-          <motion.div
-            key="lectura"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.3 }}
-            className="glass-panel flex flex-1 flex-col px-[4vw] py-[4vh]"
-          >
-            <p className="text-xs font-bold uppercase tracking-widest text-yellow-400/70 mb-3">Lectura</p>
-            <p className="text-white/80 text-base">{quizData.citaReviewRef}</p>
-          </motion.div>
-        )}
+
 
         {/* Cita verse content */}
         {isCitaVerse && citaVerseContent && (
@@ -153,16 +141,22 @@ export const QuizPresenterView: React.FC<QuizPresenterViewProps> = ({
               const range = ranges.find(r => r.rank === profile.rank);
               
               const formatPts = (c: number) => {
-                if (c === Infinity) return '';
                 const pts = c / 100;
                 return Number.isInteger(pts) ? pts.toString() : pts.toFixed(1);
               };
 
-              const minStr = range ? formatPts(range.minCentipunts) : '0';
-              const maxStr = range ? formatPts(range.maxCentipunts) : '0';
-              const rangeText = range 
-                ? (range.maxCentipunts === Infinity ? `> ${minStr}` : `${minStr} - ${maxStr}`)
-                : '';
+              let rangeText = '';
+              if (range) {
+                if (range.maxCentipunts === Infinity) {
+                  rangeText = `>${formatPts(range.minCentipunts)}`;
+                } else if (range.minCentipunts === 0) {
+                  rangeText = `0 - ${formatPts(range.maxCentipunts)}`;
+                } else if (range.minCentipunts === range.maxCentipunts) {
+                  rangeText = formatPts(range.minCentipunts);
+                } else {
+                  rangeText = `>${formatPts(range.minCentipunts)} - ${formatPts(range.maxCentipunts)}`;
+                }
+              }
 
               return (
                 <div key={profile.rank} className="flex-1 min-h-0 flex gap-[1.5vw] rounded-xl border border-white/10 bg-black/30 px-[1.5vw] py-[1vh] items-center">
@@ -189,16 +183,16 @@ export const QuizPresenterView: React.FC<QuizPresenterViewProps> = ({
 
       {/* Confetti or visual effects could be added conditionally here */}
 
-      {/* Options grid (pregunta + respuesta) */}
+      {/* Options grid (lectura + pregunta + respuesta) */}
       <AnimatePresence mode="wait">
-        {(isPregunta || isRespuesta) && (
+        {(isLectura || isPregunta || isRespuesta) && (
           <motion.div
             key={`options-${slide.id}-${isRespuesta}`}
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.3, delay: 0.05 }}
-            className="grid grid-cols-2 gap-2"
+            className="grid grid-cols-2 gap-[1.5vh] flex-[1.5]"
           >
             {displayOptions.map((opt, idx) => {
               const letter = OPTION_LETTERS[idx] ?? opt.id;
@@ -224,6 +218,7 @@ export const QuizPresenterView: React.FC<QuizPresenterViewProps> = ({
                       text={opt.text}
                       html={true}
                       fontScale={fontScale}
+                      allowGrow={true}
                       className={`font-medium ${showCorrect ? 'text-emerald-200' : isWrongDemo ? 'text-red-200' : 'text-white/80'}`}
                     />
                   </div>

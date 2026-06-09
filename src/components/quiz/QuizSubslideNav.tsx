@@ -38,7 +38,7 @@ export const QuizSubslideNav: React.FC<QuizSubslideNavProps> = ({
 
         return (
           <button
-            key={`${sub.kind}-${sub.verse ?? idx}`}
+            key={`${sub.kind}-${'verse' in sub ? sub.verse : idx}`}
             type="button"
             disabled={!isInteractive}
             onClick={() => isInteractive && onSelect?.(idx)}

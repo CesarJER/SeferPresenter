@@ -25,6 +25,7 @@ import {
   parseResultProfiles,
   serializeQuizToText,
   serializeResultProfiles,
+  calcMaxBaseCentipunts,
 } from '../../utils/quizUtils';
 
 interface MenuPopupProps {
@@ -1684,7 +1685,26 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                       onVideoStateChange={onVideoStateChange}
                     />
 
-                    {activeSlide?.type === 'quiz' && activeSlide.quizData && quizTimerState && (
+                    {activeSlide?.type === 'quiz' && activeSlide.quizData && quizTimerState && (() => {
+                      const allQuizData = currentPresentation?.slides
+                        .filter(s => s.type === 'quiz' && s.quizData)
+                        .map(s => s.quizData!) || [];
+                      const maxBaseCentipunts = calcMaxBaseCentipunts(allQuizData);
+                      const optionCounts: Record<string, number> = {};
+                      for (const opt of activeSlide.quizData.options) {
+                        optionCounts[opt.id] = 0;
+                      }
+                      for (const session of Object.values(controllerAnswers.sessions)) {
+                        const answer = session.answers[activeSlide.id];
+                        if (answer?.submitted) {
+                          for (const optId of answer.selectedOptionIds) {
+                            if (optionCounts[optId] !== undefined) {
+                              optionCounts[optId]++;
+                            }
+                          }
+                        }
+                      }
+                      return (
                       <QuizControllerView
                         slide={activeSlide}
                         quizData={activeSlide.quizData}
@@ -1702,8 +1722,14 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                         submittedCount={controllerAnswers.getSubmittedCount(activeSlide.id)}
                         onPlayApplause={onQuizPlayApplause}
                         onPlayMal={onQuizPlayMal}
+                        optionCounts={optionCounts}
+                        onClearAnswers={() => controllerAnswers.clearSlideAnswers(activeSlide.id)}
+                        rangeStats={controllerAnswers.calcRangeStats(activeSlide.quizData.resultProfiles || [])}
+                        totalSessions={Object.keys(controllerAnswers.sessions).length}
+                        maxBaseCentipunts={maxBaseCentipunts}
                       />
-                    )}
+                      );
+                    })()}
                   </div>
                 ) : (
                   <div className="text-center py-2 text-xs text-gray-500 italic">
@@ -1719,6 +1745,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
             slide={activeSlide}
             appMode={appMode}
             scriptureState={scriptureState}
+            quizSubslide={activeSlide?.type === 'quiz' ? quizSubslides[quizCurrentSubslideIndex] : undefined}
           />
 
           {/* ── Main Area ───────────────────────────────── */}

@@ -9,6 +9,7 @@ interface AutoResizeTextProps {
   fontScale?: number;
   baseFontSize?: number;
   html?: boolean;
+  allowGrow?: boolean;
 }
 
 const AutoResizeText: React.FC<AutoResizeTextProps> = ({
@@ -19,6 +20,7 @@ const AutoResizeText: React.FC<AutoResizeTextProps> = ({
   fontScale = 1,
   baseFontSize,
   html = false,
+  allowGrow = false,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const textRef = useRef<HTMLDivElement>(null);
@@ -36,37 +38,75 @@ const AutoResizeText: React.FC<AutoResizeTextProps> = ({
     const resizeText = () => {
       if (!containerRef.current || !textRef.current) return;
 
-      // Reset to the intended base size before measuring
-      if (baseFontSize !== undefined) {
-        textRef.current.style.fontSize = `${baseFontSize}px`;
-      } else {
-        textRef.current.style.fontSize = '';
-      }
-      
-      const computedStyle = window.getComputedStyle(textRef.current);
-      const computedSize = parseFloat(computedStyle.fontSize);
-      const initialSize = baseFontSize ?? computedSize;
-      
       const containerHeight = containerRef.current.clientHeight;
       const containerWidth = containerRef.current.clientWidth;
+      if (containerHeight === 0 || containerWidth === 0) return;
 
-      if (textRef.current.scrollHeight <= containerHeight && textRef.current.scrollWidth <= containerWidth) {
-        setFontSize(baseFontSize !== undefined ? initialSize : undefined);
-        return;
+      if (allowGrow) {
+        // Reset style to get the original/computed base size
+        textRef.current.style.fontSize = '';
+        
+        const parentStyle = window.getComputedStyle(containerRef.current);
+        const parentSize = parseFloat(parentStyle.fontSize);
+        
+        const computedStyle = window.getComputedStyle(textRef.current);
+        const computedSize = parseFloat(computedStyle.fontSize);
+
+        // Determine if a custom font size is applied via classes/inline styles
+        const hasCustomSize = Math.abs(computedSize - parentSize) > 0.1;
+        
+        const targetMin = minFontSize * fontScale;
+        // If baseFontSize is specified, use that. If custom CSS size is found, use computedSize. Otherwise use maxFontSize.
+        const targetMax = (baseFontSize !== undefined ? baseFontSize : (hasCustomSize ? computedSize : maxFontSize)) * fontScale;
+
+        let low = Math.max(1, targetMin);
+        let high = Math.max(low, targetMax);
+        let optimal = low;
+
+        // Binary search for the largest size that fits
+        while (low <= high) {
+          const mid = Math.floor((low + high) / 2);
+          textRef.current.style.fontSize = `${mid}px`;
+          
+          if (textRef.current.scrollHeight <= containerHeight && textRef.current.scrollWidth <= containerWidth) {
+            optimal = mid;
+            low = mid + 1;
+          } else {
+            high = mid - 1;
+          }
+        }
+
+        setFontSize(optimal);
+      } else {
+        // Original logic for backwards compatibility
+        if (baseFontSize !== undefined) {
+          textRef.current.style.fontSize = `${baseFontSize}px`;
+        } else {
+          textRef.current.style.fontSize = '';
+        }
+        
+        const computedStyle = window.getComputedStyle(textRef.current);
+        const computedSize = parseFloat(computedStyle.fontSize);
+        const initialSize = baseFontSize ?? computedSize;
+
+        if (textRef.current.scrollHeight <= containerHeight && textRef.current.scrollWidth <= containerWidth) {
+          setFontSize(baseFontSize !== undefined ? initialSize : undefined);
+          return;
+        }
+
+        // If it overflows, start shrinking from the computed size
+        let currentSize = initialSize;
+
+        while (
+          currentSize > minFontSize &&
+          (textRef.current.scrollHeight > containerHeight || textRef.current.scrollWidth > containerWidth)
+        ) {
+          currentSize -= 1;
+          textRef.current.style.fontSize = `${currentSize}px`;
+        }
+
+        setFontSize(currentSize);
       }
-
-      // If it overflows, start shrinking from the computed size
-      let currentSize = initialSize;
-
-      while (
-        currentSize > minFontSize &&
-        (textRef.current.scrollHeight > containerHeight || textRef.current.scrollWidth > containerWidth)
-      ) {
-        currentSize -= 1;
-        textRef.current.style.fontSize = `${currentSize}px`;
-      }
-
-      setFontSize(currentSize);
     };
 
     resizeText();
@@ -85,7 +125,7 @@ const AutoResizeText: React.FC<AutoResizeTextProps> = ({
       observer.disconnect();
       window.removeEventListener('resize', resizeText);
     };
-  }, [cleanText, maxFontSize, minFontSize, fontScale, baseFontSize]);
+  }, [cleanText, maxFontSize, minFontSize, fontScale, baseFontSize, allowGrow]);
 
   return (
     <div ref={containerRef} className="w-full h-full flex items-center justify-center overflow-hidden">

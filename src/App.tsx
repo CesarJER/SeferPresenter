@@ -138,15 +138,18 @@ function App() {
     const rawIndex = Number.isFinite(state.currentSubslideIndex)
       ? Math.max(0, Math.floor(state.currentSubslideIndex))
       : 0;
-    const nextIndex = quizSubslides.length > 0
-      ? Math.min(rawIndex, quizSubslides.length - 1)
-      : rawIndex;
     const fallbackSelection = Object.values(state.presenterDemoSelection ?? {})[0] ?? null;
 
-    setQuizCurrentSubslideIndex(nextIndex);
+    setQuizCurrentSubslideIndex(rawIndex);
     quizTimer.setTimerState(state.timerState);
     setQuizPresenterDemoSelection(activeSlide ? state.presenterDemoSelection?.[activeSlide.id] ?? fallbackSelection : fallbackSelection);
-  }, [activeQuizData?.timerSeconds, activeSlide, quizSubslides.length, quizTimer.resetTimer, quizTimer.setTimerState]);
+  }, [activeQuizData?.timerSeconds, activeSlide, quizTimer.resetTimer, quizTimer.setTimerState]);
+
+  useEffect(() => {
+    if (isControlMode && quizSubslides[quizCurrentSubslideIndex]?.kind === 'pregunta' && quizTimer.timerState.status === 'idle') {
+      quizTimer.startTimer();
+    }
+  }, [isControlMode, quizSubslides, quizCurrentSubslideIndex, quizTimer.timerState.status, quizTimer.startTimer]);
 
   useEffect(() => {
     currentPresentationRef.current = currentPresentation;
@@ -243,7 +246,8 @@ function App() {
     lastActiveSlideIdRef.current = activeSlide?.id;
 
     if (isNewSlide && activeSlide?.id !== navigatedSlideIdRef.current) {
-      setQuizCurrentSubslideIndex(0);
+      // Intentionally NOT resetting quizCurrentSubslideIndex here. 
+      // handleSelectPresentationAndSlide already sets the correct initialIndex (0 for forward, N for backward).
       setQuizPresenterDemoSelection(null);
     }
     quizTimer.resetTimer((activeQuizData?.timerSeconds ?? 30) * 1000);

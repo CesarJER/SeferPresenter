@@ -11,13 +11,14 @@
  */
 
 import React from 'react';
-import { Play, Pause, RotateCcw, Volume2, VolumeX, CheckCircle, XCircle, Users } from 'lucide-react';
+import { Play, Pause, RotateCcw, Volume2, VolumeX, CheckCircle, XCircle, Users, Eraser } from 'lucide-react';
 import type { QuizData, QuizOptionId } from '../../types/presentation';
 import type { QuizSubslide, QuizTimerState } from '../../types/quiz';
 import { formatRemainingTime, calcRemainingMs, getDisplayOptions } from '../../utils/quizUtils';
 import { QuizSubslideNav } from './QuizSubslideNav';
 import { QuizTimerDisplay } from './QuizTimerDisplay';
 import { QuizResultsController } from './QuizResultsView';
+import type { QuizRangeStats } from '../../types/quiz';
 
 interface QuizControllerViewProps {
   slide: { id: string };
@@ -38,6 +39,11 @@ interface QuizControllerViewProps {
   onPlayMal: () => void;
   audioMuted?: boolean;
   onToggleMute?: () => void;
+  optionCounts: Record<QuizOptionId, number>;
+  onClearAnswers: () => void;
+  rangeStats: QuizRangeStats[];
+  totalSessions: number;
+  maxBaseCentipunts: number;
 }
 
 const OPTION_LETTERS = ['A', 'B', 'C', 'D'];
@@ -61,6 +67,11 @@ export const QuizControllerView: React.FC<QuizControllerViewProps> = ({
   onPlayMal,
   audioMuted = false,
   onToggleMute,
+  optionCounts,
+  onClearAnswers,
+  rangeStats,
+  totalSessions,
+  maxBaseCentipunts,
 }) => {
   const displayOptions = getDisplayOptions(quizData, slide.id);
   const remaining = calcRemainingMs(timerState);
@@ -70,6 +81,8 @@ export const QuizControllerView: React.FC<QuizControllerViewProps> = ({
   const isPaused = status === 'paused';
   const isIdle = status === 'idle';
   const isResults = subslides[currentSubslideIndex]?.kind === 'results';
+  const isLectura = subslides[currentSubslideIndex]?.kind === 'lectura';
+  const isPregunta = subslides[currentSubslideIndex]?.kind === 'pregunta';
 
   return (
     <div className="flex flex-col gap-3 rounded-xl border border-violet-900/60 bg-gray-950/60 p-3 shadow-xl">
@@ -92,18 +105,21 @@ export const QuizControllerView: React.FC<QuizControllerViewProps> = ({
       />
 
       {/* Question preview */}
-      <div className="rounded-lg border border-gray-800 bg-gray-900/50 px-2.5 py-2">
-        <p className="text-[11px] text-white/70 line-clamp-2">{quizData.question}</p>
-      </div>
+      {!isResults && (
+        <div className="rounded-lg border border-gray-800 bg-gray-900/50 px-2.5 py-2">
+          <p className="text-[11px] text-white/70 line-clamp-2">{quizData.question}</p>
+        </div>
+      )}
 
       {/* Timer section */}
-      <div className="flex items-center gap-3">
-        {/* Timer ring */}
-        <QuizTimerDisplay timerState={timerState} size={56} strokeWidth={5} />
+      {!isResults && (
+        <div className="flex items-center gap-3">
+          {/* Timer ring */}
+          {isPregunta && <QuizTimerDisplay timerState={timerState} size={56} strokeWidth={5} />}
 
         {/* Timer controls */}
         <div className="flex flex-1 flex-wrap gap-1.5">
-          {isIdle && (
+          {isIdle && isPregunta && (
             <button
               type="button"
               onClick={onStartTimer}
@@ -112,7 +128,7 @@ export const QuizControllerView: React.FC<QuizControllerViewProps> = ({
               <Play size={11} fill="currentColor" /> Iniciar
             </button>
           )}
-          {isRunning && (
+          {isRunning && isPregunta && (
             <button
               type="button"
               onClick={onPauseTimer}
@@ -121,7 +137,7 @@ export const QuizControllerView: React.FC<QuizControllerViewProps> = ({
               <Pause size={11} /> Pausar
             </button>
           )}
-          {isPaused && (
+          {isPaused && isPregunta && (
             <button
               type="button"
               onClick={onResumeTimer}
@@ -130,13 +146,23 @@ export const QuizControllerView: React.FC<QuizControllerViewProps> = ({
               <Play size={11} fill="currentColor" /> Reanudar
             </button>
           )}
-          {!isIdle && (
+          {!isIdle && isPregunta && (
             <button
               type="button"
               onClick={onResetTimer}
               className="flex items-center gap-1.5 rounded-lg border border-gray-700 bg-gray-900/50 px-3 py-1.5 text-[11px] font-bold text-gray-400 hover:text-white transition-colors"
             >
-              <RotateCcw size={11} /> Reset
+              <RotateCcw size={11} /> Reset Timer
+            </button>
+          )}
+          {!isIdle && (
+            <button
+              type="button"
+              onClick={onClearAnswers}
+              className="flex items-center gap-1.5 rounded-lg border border-red-900/60 bg-red-950/40 px-3 py-1.5 text-[11px] font-bold text-red-400 hover:bg-red-900/50 transition-colors"
+              title="Borrar respuestas de la audiencia"
+            >
+              <Eraser size={11} /> Borrar Resp.
             </button>
           )}
           {!isExpired && !isIdle && (
@@ -148,9 +174,11 @@ export const QuizControllerView: React.FC<QuizControllerViewProps> = ({
               Revelar →
             </button>
           )}
-          <div className="text-[11px] text-gray-500 self-center ml-auto">
-            {isExpired ? '¡Tiempo!' : isIdle ? `${quizData.timerSeconds}s` : formatRemainingTime(remaining)}
-          </div>
+          {isPregunta && (
+            <div className="text-[11px] text-gray-500 self-center ml-auto">
+              {isExpired ? '¡Tiempo!' : isIdle ? `${quizData.timerSeconds}s` : formatRemainingTime(remaining)}
+            </div>
+          )}
         </div>
 
         {/* Mute toggle */}
@@ -165,10 +193,12 @@ export const QuizControllerView: React.FC<QuizControllerViewProps> = ({
           </button>
         )}
       </div>
+      )}
 
       {/* Options — always shows correct answers */}
-      <div className="flex flex-col gap-1.5">
-        <p className="text-[9px] font-black uppercase tracking-wider text-gray-500">Opciones (respuesta correcta visible)</p>
+      {!isResults && (
+        <div className="flex flex-col gap-1.5">
+          <p className="text-[9px] font-black uppercase tracking-wider text-gray-500">Opciones (respuesta correcta visible)</p>
         {displayOptions.map((opt, idx) => {
           const letter = OPTION_LETTERS[idx] ?? opt.id;
 
@@ -183,17 +213,25 @@ export const QuizControllerView: React.FC<QuizControllerViewProps> = ({
               <span className={`shrink-0 flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-black ${opt.isCorrect ? 'bg-emerald-500 text-black' : 'bg-white/10 text-white/40'}`}>
                 {letter}
               </span>
-              <span className={`flex-1 text-[11px] ${opt.isCorrect ? 'text-emerald-200' : 'text-gray-400'}`}>
-                {opt.text}
-              </span>
-              {opt.isCorrect && <CheckCircle size={11} className="text-emerald-500 shrink-0" />}
+              <div className="flex-1 flex items-center justify-between min-w-0">
+                <span className={`truncate text-[11px] ${opt.isCorrect ? 'text-emerald-200' : 'text-gray-400'}`}>
+                  {opt.text}
+                </span>
+                <div className="flex flex-col items-center shrink-0 ml-2 min-w-[20px]">
+                  {opt.isCorrect && <CheckCircle size={11} className="text-emerald-500 mb-0.5" />}
+                  <span className={`text-[9px] font-bold ${optionCounts[opt.id] > 0 ? 'text-white' : 'text-gray-600'}`}>
+                    {optionCounts[opt.id] ?? 0}
+                  </span>
+                </div>
+              </div>
             </div>
           );
         })}
       </div>
+      )}
 
       {/* Demo selection — only after timer expires */}
-      {isExpired && (
+      {!isResults && isExpired && (
         <div className="rounded-lg border border-gray-800 bg-gray-900/40 p-2">
           <p className="text-[9px] font-black uppercase tracking-wider text-gray-500 mb-1.5">Demo / Corrección pública</p>
           <div className="flex flex-wrap gap-1">
@@ -257,8 +295,9 @@ export const QuizControllerView: React.FC<QuizControllerViewProps> = ({
         <div className="mt-2 border-t border-gray-800 pt-3">
           <QuizResultsController
             profiles={quizData.resultProfiles ?? []}
-            rangeStats={[]}
-            totalSessions={0}
+            rangeStats={rangeStats}
+            totalSessions={totalSessions}
+            maxBaseCentipunts={maxBaseCentipunts}
           />
         </div>
       )}

@@ -15,20 +15,13 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { QuizData, QuizOptionId, QuizResultProfile } from '../types/presentation';
+import type { QuizOptionId, QuizResultProfile } from '../types/presentation';
 import type {
   QuizAudienceAnswer,
   QuizAudienceSession,
   QuizRangeStats,
 } from '../types/quiz';
 import { makeEmptyAudienceAnswer } from '../types/quiz';
-import {
-  calcMaxBaseCentipunts,
-  calcResultRanges,
-  calcTotalScore,
-  scoreAnswer,
-  selectResultProfile,
-} from '../utils/quizUtils';
 
 // ── Session ID ────────────────────────────────────────────────────────────────
 
@@ -52,9 +45,24 @@ interface QuizAnswerMessage {
   answer: QuizAudienceAnswer;
 }
 
+interface QuizClearMessage {
+  type: 'QUIZ_CLEAR_ANSWERS';
+  slideId: string;
+}
+
+interface QuizFinalScoreMessage {
+  type: 'QUIZ_FINAL_SCORE';
+  sessionId: string;
+  rank: number;
+}
+
+type QuizMessage = QuizAnswerMessage | QuizClearMessage | QuizFinalScoreMessage;
+
 // ── Audience-side hook ────────────────────────────────────────────────────────
 
 export interface UseAudienceAnswersReturn {
+  /** All draft answers keyed by slideId */
+  getAnswers: () => Record<string, QuizAudienceAnswer>;
   /** Current draft answer for the given slide */
   getAnswer: (slideId: string) => QuizAudienceAnswer;
   /** Toggle a radio option selection */
@@ -71,6 +79,8 @@ export interface UseAudienceAnswersReturn {
   submitAll: (slideId: string) => void;
   /** Clear answer for a slide (for retry/reset) */
   clearAnswer: (slideId: string) => void;
+  /** Send final calculated rank to controller */
+  sendFinalScore: (rank: number) => void;
 }
 
 export function useAudienceAnswers(): UseAudienceAnswersReturn {
@@ -95,6 +105,51 @@ export function useAudienceAnswers(): UseAudienceAnswersReturn {
       // Storage quota exceeded — silently ignore
     }
   }, [answers]);
+
+  // Listen for CLEAR commands from controller
+  useEffect(() => {
+    const processClear = (slideId: string) => {
+      setAnswers(prev => {
+        const current = prev[slideId];
+        if (!current) return prev;
+        
+        return {
+          ...prev,
+          [slideId]: {
+            ...current,
+            submitted: false,
+            submittedAt: undefined
+          }
+        };
+      });
+    };
+
+    const handleChannelMessage = (event: MessageEvent) => {
+      const data = event.data as QuizMessage;
+      if (data?.type === 'QUIZ_CLEAR_ANSWERS') {
+        processClear(data.slideId);
+      }
+    };
+
+    channel.addEventListener('message', handleChannelMessage);
+
+    const eventSource = new EventSource('/api/quiz-events');
+    eventSource.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data?.type === 'QUIZ_CLEAR_ANSWERS') {
+          processClear(data.slideId);
+        }
+      } catch {}
+    };
+
+    return () => {
+      channel.removeEventListener('message', handleChannelMessage);
+      eventSource.close();
+    };
+  }, [channel]);
+
+  const getAnswers = useCallback(() => answers, [answers]);
 
   const getAnswer = useCallback((slideId: string): QuizAudienceAnswer => {
     return answers[slideId] ?? makeEmptyAudienceAnswer(slideId);
@@ -188,7 +243,17 @@ export function useAudienceAnswers(): UseAudienceAnswersReturn {
     });
   }, []);
 
+  const sendFinalScore = useCallback((rank: number) => {
+    const msg: QuizFinalScoreMessage = {
+      type: 'QUIZ_FINAL_SCORE',
+      sessionId,
+      rank,
+    };
+    channel.postMessage(msg);
+  }, [channel, sessionId]);
+
   return {
+    getAnswers,
     getAnswer,
     selectRadioOption,
     toggleCheckboxOption,
@@ -197,6 +262,7 @@ export function useAudienceAnswers(): UseAudienceAnswersReturn {
     submitAnswer,
     submitAll,
     clearAnswer,
+    sendFinalScore,
   };
 }
 
@@ -212,35 +278,43 @@ export interface UseControllerAnswersReturn {
   /** Clear all received answers (between quiz rounds) */
   clearAll: () => void;
   /**
-   * Calculate range stats for results slide.
-   * Returns how many sessions are in each result profile rank.
+   * Calculate range stats for results slide using reported ranks.
    */
-  calcRangeStats: (quizSlides: { slideId: string; data: QuizData }[], profiles: QuizResultProfile[]) => QuizRangeStats[];
+  calcRangeStats: (profiles: QuizResultProfile[]) => QuizRangeStats[];
+  /** Clear answers for a specific slide across all audiences */
+  clearSlideAnswers: (slideId: string) => void;
 }
 
 export function useControllerAnswers(): UseControllerAnswersReturn {
   const channel = useMemo(() => new BroadcastChannel('sefer-quiz'), []);
   const [sessions, setSessions] = useState<Record<string, QuizAudienceSession>>({});
+  const [ranks, setRanks] = useState<Record<string, number>>({});
 
   // Listen for incoming answers from audience
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
-      const data = event.data;
-      if (!data || data.type !== 'QUIZ_ANSWER') return;
+      const data = event.data as QuizMessage;
+      if (!data) return;
 
-      const { sessionId, slideId, answer } = data as QuizAnswerMessage;
-      if (!sessionId || !slideId || !answer) return;
+      if (data.type === 'QUIZ_ANSWER') {
+        const { sessionId, slideId, answer } = data;
+        if (!sessionId || !slideId || !answer) return;
 
-      setSessions(prev => {
-        const existing = prev[sessionId] ?? { sessionId, answers: {} };
-        return {
-          ...prev,
-          [sessionId]: {
-            ...existing,
-            answers: { ...existing.answers, [slideId]: answer },
-          },
-        };
-      });
+        setSessions(prev => {
+          const existing = prev[sessionId] ?? { sessionId, answers: {} };
+          return {
+            ...prev,
+            [sessionId]: {
+              ...existing,
+              answers: { ...existing.answers, [slideId]: answer },
+            },
+          };
+        });
+      } else if (data.type === 'QUIZ_FINAL_SCORE') {
+        const { sessionId, rank } = data;
+        if (!sessionId || rank == null) return;
+        setRanks(prev => ({ ...prev, [sessionId]: rank }));
+      }
     };
 
     channel.addEventListener('message', handleMessage);
@@ -250,7 +324,7 @@ export function useControllerAnswers(): UseControllerAnswersReturn {
     eventSource.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-        if (data?.type === 'QUIZ_ANSWER') {
+        if (data?.type === 'QUIZ_ANSWER' || data?.type === 'QUIZ_FINAL_SCORE') {
           handleMessage({ data } as MessageEvent);
         }
       } catch {
@@ -272,41 +346,56 @@ export function useControllerAnswers(): UseControllerAnswersReturn {
     return Object.values(sessions).filter(s => s.answers[slideId]?.submitted).length;
   }, [sessions]);
 
-  const clearAll = useCallback(() => setSessions({}), []);
+  const clearAll = useCallback(() => {
+    setSessions({});
+    setRanks({});
+  }, []);
+
+  const clearSlideAnswers = useCallback((slideId: string) => {
+    // Send clear message locally via BroadcastChannel
+    const msg: QuizClearMessage = { type: 'QUIZ_CLEAR_ANSWERS', slideId };
+    channel.postMessage(msg);
+
+    // Also send to server via SSE endpoint for cross-device sync (smartphones)
+    fetch('/api/quiz-answer', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(msg),
+    }).catch(() => {});
+
+    // Also clear locally in sessions
+    setSessions(prev => {
+      const next = { ...prev };
+      for (const sid of Object.keys(next)) {
+        if (next[sid].answers[slideId]) {
+          const updatedAnswers = { ...next[sid].answers };
+          delete updatedAnswers[slideId];
+          next[sid] = { ...next[sid], answers: updatedAnswers };
+        }
+      }
+      return next;
+    });
+  }, [channel]);
 
   const calcRangeStats = useCallback((
-    quizSlides: { slideId: string; data: QuizData }[],
     profiles: QuizResultProfile[],
   ): QuizRangeStats[] => {
-    const maxBase = calcMaxBaseCentipunts(quizSlides.map(q => q.data));
-    const ranges = calcResultRanges(profiles, maxBase);
-
     const stats: Record<number, QuizRangeStats> = {};
     for (const profile of profiles) {
       stats[profile.rank] = { rank: profile.rank, title: profile.title, count: 0, sessionIds: [] };
     }
 
-    for (const [sid, session] of Object.entries(sessions)) {
-      const scores = quizSlides.map(({ slideId, data }) => {
-        const answer = session.answers[slideId];
-        if (!answer) return null;
-        return scoreAnswer(data, answer);
-      }).filter((s): s is NonNullable<typeof s> => s !== null);
-
-      if (scores.length === 0) continue;
-
-      const total = calcTotalScore(scores);
-      const profile = selectResultProfile(total.totalCentipunts, ranges, profiles);
-      if (profile && stats[profile.rank]) {
-        stats[profile.rank].count++;
-        stats[profile.rank].sessionIds.push(sid);
+    for (const [sid, rank] of Object.entries(ranks)) {
+      if (stats[rank]) {
+        stats[rank].count++;
+        stats[rank].sessionIds.push(sid);
       }
     }
 
     return Object.values(stats).sort((a, b) => a.rank - b.rank);
-  }, [sessions]);
+  }, [ranks]);
 
-  return { sessions, getSessionAnswer, getSubmittedCount, clearAll, calcRangeStats };
+  return { sessions, getSessionAnswer, getSubmittedCount, clearAll, calcRangeStats, clearSlideAnswers };
 }
 
 // Re-export helpers for use alongside the hooks
