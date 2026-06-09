@@ -11,9 +11,9 @@
 import React, { useEffect } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { CheckCircle, XCircle, Send, RotateCcw } from 'lucide-react';
-import type { QuizData, QuizOptionId } from '../../types/presentation';
+import type { QuizData, QuizOptionId, QuizResultProfile } from '../../types/presentation';
 import type { QuizAudienceAnswer, QuizSubslide, QuizTimerState, QuizQuestionScore, QuizTotalScore } from '../../types/quiz';
-import { formatCentipunts, getDisplayOptions, scoreAnswer } from '../../utils/quizUtils';
+import { formatCentipunts, getDisplayOptions, scoreAnswer, calcResultRanges, selectResultProfile } from '../../utils/quizUtils';
 import { getMetadata, resolveBookName } from '../../utils/metadataCache';
 import type { AppMetadata } from '../../utils/metadataCache';
 import { QuizResultsDiploma } from './QuizResultsView';
@@ -37,6 +37,7 @@ interface QuizAudienceViewProps {
   allScores?: Record<string, QuizQuestionScore>;
   onSaveScore?: (score: QuizQuestionScore) => void;
   onSendFinalScore?: (rank: number) => void;
+  maxBaseCentipunts?: number;
 }
 
 const OPTION_LETTERS = ['A', 'B', 'C', 'D'];
@@ -58,6 +59,7 @@ export const QuizAudienceView: React.FC<QuizAudienceViewProps> = ({
   allScores,
   onSaveScore,
   onSendFinalScore,
+  maxBaseCentipunts,
 }) => {
   const currentSubslide = subslides[currentSubslideIndex];
   const displayOptions = getDisplayOptions(quizData, slide.id);
@@ -98,6 +100,7 @@ export const QuizAudienceView: React.FC<QuizAudienceViewProps> = ({
 
   // Aggregate total score when on 'results' slide
   const [totalScore, setTotalScore] = React.useState<QuizTotalScore | null>(null);
+  const [profile, setProfile] = React.useState<QuizResultProfile | null>(null);
 
   useEffect(() => {
     if (isResults && allScores && quizData.resultProfiles) {
@@ -110,15 +113,21 @@ export const QuizAudienceView: React.FC<QuizAudienceViewProps> = ({
       }
       const aggregated: QuizTotalScore = {
         totalCentipunts,
-        maxBaseCentipunts: 0, // Audience doesn't compute this
+        maxBaseCentipunts: maxBaseCentipunts ?? 0,
         questions,
       };
       setTotalScore(aggregated);
 
       // We just send the points to the controller, the controller figures out the rank
       onSendFinalScore?.(totalCentipunts);
+
+      if (maxBaseCentipunts && maxBaseCentipunts > 0) {
+        const ranges = calcResultRanges(quizData.resultProfiles, maxBaseCentipunts);
+        const p = selectResultProfile(totalCentipunts, ranges, quizData.resultProfiles);
+        setProfile(p);
+      }
     }
-  }, [isResults, allScores, quizData, onSendFinalScore]);
+  }, [isResults, allScores, quizData, onSendFinalScore, maxBaseCentipunts]);
 
   return (
     <div className="flex h-full w-full flex-col gap-3 overflow-auto px-4 py-4 pointer-events-auto">
@@ -369,7 +378,7 @@ export const QuizAudienceView: React.FC<QuizAudienceViewProps> = ({
       {/* Results phase */}
       {isResults && totalScore && (
         <QuizResultsDiploma
-          profile={null}
+          profile={profile}
           totalScore={totalScore}
         />
       )}

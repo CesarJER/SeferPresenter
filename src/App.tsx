@@ -118,6 +118,14 @@ function App() {
     timerStatus: quizTimer.timerState.status,
     isQuestionSubslide: quizSubslides[quizCurrentSubslideIndex]?.kind === 'pregunta',
   });
+  const maxBaseCentipunts = useMemo(() => {
+    if (!currentPresentation) return 0;
+    const allQuizData = currentPresentation.slides
+      .filter(s => s.type === 'quiz' && s.quizData)
+      .map(s => s.quizData!);
+    return calcMaxBaseCentipunts(allQuizData);
+  }, [currentPresentation]);
+
   const activeQuizState = useMemo<QuizSyncState | null>(() => {
     if (!activeQuizData || !activeSlide) return null;
     return {
@@ -126,8 +134,9 @@ function App() {
       presenterDemoSelection: {
         [activeSlide.id]: quizPresenterDemoSelection,
       },
+      maxBaseCentipunts,
     };
-  }, [activeQuizData, activeSlide, quizCurrentSubslideIndex, quizTimer.timerState, quizPresenterDemoSelection]);
+  }, [activeQuizData, activeSlide, quizCurrentSubslideIndex, quizTimer.timerState, quizPresenterDemoSelection, maxBaseCentipunts]);
 
   const applyRemoteQuizState = useCallback((state: QuizSyncState | null) => {
     if (!state) {
@@ -648,6 +657,7 @@ function App() {
         quizSubslides={quizSubslides}
         quizCurrentSubslideIndex={quizCurrentSubslideIndex}
         quizTimerState={quizTimer.timerState}
+        quizMaxBaseCentipunts={activeQuizState?.maxBaseCentipunts}
       />
     );
   }

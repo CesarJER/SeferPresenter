@@ -156,4 +156,6 @@ export interface QuizSyncState {
   timerState: QuizTimerState;
   /** Presenter demo selection (for public correction display) */
   presenterDemoSelection: Record<string, QuizOptionId | null>;
+  /** Maximum base score for the entire quiz */
+  maxBaseCentipunts?: number;
 }

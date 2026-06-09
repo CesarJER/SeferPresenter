@@ -284,6 +284,13 @@ export function useAudienceAnswers(): UseAudienceAnswersReturn {
       totalCentipunts,
     };
     channel.postMessage(msg);
+
+    // Also send via SSE endpoint for cross-device sync
+    fetch('/api/quiz-answer', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(msg),
+    }).catch(() => {});
   }, [channel, sessionId]);
 
   const getScores = useCallback(() => scores, [scores]);
@@ -309,6 +316,7 @@ export function useAudienceAnswers(): UseAudienceAnswersReturn {
 }
 
 // ── Controller-side hook ──────────────────────────────────────────────────────
+import { calcResultRanges } from '../utils/quizUtils';
 
 export interface UseControllerAnswersReturn {
   /** All received sessions keyed by sessionId */
@@ -431,29 +439,14 @@ export function useControllerAnswers(): UseControllerAnswersReturn {
     if (profiles.length === 0) return [];
     
     // Sort profiles to calculate ranges manually
-    const sorted = [...profiles].sort((a, b) => a.rank - b.rank);
-    const count = sorted.length;
-    const rangeSize = Math.floor(maxBaseCentipunts / count);
+    const ranges = calcResultRanges(profiles, maxBaseCentipunts);
     
     // Evaluate ranks based on total score
     for (const [sid, totalPts] of Object.entries(sessionTotalScores)) {
-      // Find the appropriate rank
-      let assignedRank = sorted[0].rank; // default
-      for (let i = 0; i < sorted.length; i++) {
-        const rank = sorted[i].rank;
-        const reverseIdx = count - 1 - i;
-        const min = reverseIdx === 0 ? 0 : reverseIdx * rangeSize;
-        const max = reverseIdx === count - 1 ? Infinity : (reverseIdx + 1) * rangeSize - 1;
-        
-        if (totalPts >= min && totalPts <= max) {
-          assignedRank = rank;
-          break;
-        }
-      }
-
-      if (stats[assignedRank]) {
-        stats[assignedRank].count++;
-        stats[assignedRank].sessionIds.push(sid);
+      const match = ranges.find(r => totalPts >= r.minCentipunts && totalPts <= r.maxCentipunts);
+      if (match && stats[match.rank]) {
+        stats[match.rank].count++;
+        stats[match.rank].sessionIds.push(sid);
       }
     }
 

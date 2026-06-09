@@ -43,10 +43,10 @@ export const QuizResultsController: React.FC<QuizResultsControllerProps> = ({
         <table className="w-full text-left border-collapse">
           <thead>
             <tr className="border-b border-gray-800 text-[9px] uppercase tracking-wider text-gray-500">
-              <th className="px-2 py-1.5 text-center w-12">Rango</th>
               <th className="px-2 py-1.5 text-center w-14">Pts</th>
-              <th className="px-2 py-1.5 w-full">Perfil</th>
-              <th className="px-2 py-1.5 text-right w-12">Nº</th>
+              <th className="px-2 py-1.5 w-1/2">Perfil</th>
+              <th className="px-2 py-1.5 w-1/2">Cita</th>
+              <th className="px-2 py-1.5 text-right w-16 whitespace-nowrap"># (%)</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-800">
@@ -73,11 +73,10 @@ export const QuizResultsController: React.FC<QuizResultsControllerProps> = ({
                 }
               }
 
+              const percentage = totalSessions > 0 ? Math.round((count / totalSessions) * 100) : 0;
+
               return (
                 <tr key={profile.rank} className="group hover:bg-gray-800/30 transition-colors">
-                  <td className="px-2 py-2 text-center align-top">
-                    <span className="text-[10px] font-black text-violet-400">R{profile.rank}</span>
-                  </td>
                   <td className="px-2 py-2 text-center align-top text-[10px] font-bold text-gray-400">
                     {ptsText}
                   </td>
@@ -85,8 +84,12 @@ export const QuizResultsController: React.FC<QuizResultsControllerProps> = ({
                     <p className="text-xs font-bold text-white leading-tight">{profile.title}</p>
                     <p className="text-[10px] text-gray-500 leading-snug mt-0.5 max-w-[200px]">{profile.description}</p>
                   </td>
-                  <td className="px-2 py-2 text-right align-top">
+                  <td className="px-2 py-2 align-top text-xs text-yellow-200 italic">
+                    {profile.giftText || '-'}
+                  </td>
+                  <td className="px-2 py-2 text-right align-top whitespace-nowrap">
                     <span className="text-sm font-black text-white">{count}</span>
+                    <span className="text-[10px] text-gray-500 ml-1">({percentage}%)</span>
                   </td>
                 </tr>
               );

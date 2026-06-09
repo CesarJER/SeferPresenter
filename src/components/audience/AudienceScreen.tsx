@@ -17,6 +17,7 @@ interface AudienceScreenProps {
   quizSubslides?: QuizSubslide[];
   quizCurrentSubslideIndex?: number;
   quizTimerState?: QuizTimerState;
+  quizMaxBaseCentipunts?: number;
 }
 
 const AudienceScreen = ({
@@ -30,6 +31,7 @@ const AudienceScreen = ({
   quizSubslides = [],
   quizCurrentSubslideIndex = 0,
   quizTimerState,
+  quizMaxBaseCentipunts,
 }: AudienceScreenProps) => {
   const audienceAnswers = useAudienceAnswers();
 
@@ -64,6 +66,7 @@ const AudienceScreen = ({
           allScores={audienceAnswers.getScores()}
           onSaveScore={(score) => audienceAnswers.saveScore(slide.id, score)}
           onSendFinalScore={audienceAnswers.sendFinalScore}
+          maxBaseCentipunts={quizMaxBaseCentipunts}
         />
       </div>
     );
