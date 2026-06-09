@@ -250,9 +250,14 @@ function App() {
         if (answerIndex >= 0) setQuizCurrentSubslideIndex(answerIndex);
         break;
       }
-      case 'QUIZ_SELECT_SUBSLIDE':
+      case 'QUIZ_SELECT_SUBSLIDE': {
+        const subslides = activeQuizData ? generateQuizSubslides(activeQuizData) : [];
+        if (subslides[payload.index]?.kind === 'respuesta') {
+          quizTimer.completeTimer();
+        }
         setQuizCurrentSubslideIndex(payload.index);
         break;
+      }
       case 'QUIZ_DEMO_SELECT':
         setQuizPresenterDemoSelection(payload.optionId as QuizOptionId | null);
         if (payload.optionId) {
@@ -517,6 +522,8 @@ function App() {
       if (isControlMode) {
         emitCommand({ command: 'QUIZ_SELECT_SUBSLIDE', index: idx });
       } else {
+        const subslides = activeQuizData ? generateQuizSubslides(activeQuizData) : [];
+        if (subslides[idx]?.kind === 'respuesta') quizTimer.completeTimer();
         setQuizCurrentSubslideIndex(idx);
       }
     },
@@ -760,7 +767,14 @@ function App() {
           quizCurrentSubslideIndex={quizCurrentSubslideIndex}
           quizTimerState={quizTimer.timerState}
           quizPresenterDemoSelection={quizPresenterDemoSelection}
-          onQuizSubslideSelect={(idx) => isControlMode ? emitCommand({ command: 'QUIZ_SELECT_SUBSLIDE', index: idx }) : setQuizCurrentSubslideIndex(idx)}
+          onQuizSubslideSelect={(idx) => {
+            if (isControlMode) emitCommand({ command: 'QUIZ_SELECT_SUBSLIDE', index: idx });
+            else {
+              const subslides = activeQuizData ? generateQuizSubslides(activeQuizData) : [];
+              if (subslides[idx]?.kind === 'respuesta') quizTimer.completeTimer();
+              setQuizCurrentSubslideIndex(idx);
+            }
+          }}
           onQuizStartTimer={() => isControlMode ? emitCommand({ command: 'QUIZ_START_TIMER' }) : quizTimer.startTimer()}
           onQuizPauseTimer={() => isControlMode ? emitCommand({ command: 'QUIZ_PAUSE_TIMER' }) : quizTimer.pauseTimer()}
           onQuizResumeTimer={() => isControlMode ? emitCommand({ command: 'QUIZ_RESUME_TIMER' }) : quizTimer.resumeTimer()}

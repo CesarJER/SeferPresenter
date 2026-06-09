@@ -44,6 +44,7 @@ interface QuizControllerViewProps {
   rangeStats: QuizRangeStats[];
   totalSessions: number;
   maxBaseCentipunts: number;
+  renderMode?: 'top' | 'bottom' | 'both';
 }
 
 const OPTION_LETTERS = ['A', 'B', 'C', 'D'];
@@ -72,6 +73,7 @@ export const QuizControllerView: React.FC<QuizControllerViewProps> = ({
   rangeStats,
   totalSessions,
   maxBaseCentipunts,
+  renderMode = 'both',
 }) => {
   const displayOptions = getDisplayOptions(quizData, slide.id);
   const remaining = calcRemainingMs(timerState);
@@ -84,34 +86,38 @@ export const QuizControllerView: React.FC<QuizControllerViewProps> = ({
   const isPregunta = subslides[currentSubslideIndex]?.kind === 'pregunta';
 
   return (
-    <div className="flex flex-col gap-3 rounded-xl border border-violet-900/60 bg-gray-950/60 p-3 shadow-xl">
+    <div className={`flex flex-col gap-3 ${renderMode !== 'bottom' ? 'rounded-xl border border-violet-900/60 bg-gray-950/60 p-3 shadow-xl' : 'mt-3'}`}>
 
       {/* Header */}
-      <div className="flex items-center gap-2 border-b border-gray-800 pb-2">
+      {(renderMode === 'both' || renderMode === 'top') && (
+        <div className="flex items-center gap-2 border-b border-gray-800 pb-2">
         <span className="text-[10px] font-black uppercase tracking-widest text-violet-400">Quiz</span>
         <div className="ml-auto flex items-center gap-1.5 text-[10px] text-gray-500">
           <Users size={10} />
           <span>{submittedCount} respuestas</span>
         </div>
       </div>
+      )}
 
       {/* Subnav */}
+      {(renderMode === 'both' || renderMode === 'top') && (
       <QuizSubslideNav
         subslides={subslides}
         currentIndex={currentSubslideIndex}
         onSelect={onSubslideSelect}
         isInteractive={true}
       />
+      )}
 
       {/* Question preview */}
-      {!isResults && (
+      {(renderMode === 'both' || renderMode === 'top') && !isResults && (
         <div className="rounded-lg border border-gray-800 bg-gray-900/50 px-2.5 py-2">
           <p className="text-[11px] text-white/70 line-clamp-2">{quizData.question}</p>
         </div>
       )}
 
       {/* Timer section */}
-      {!isResults && (
+      {(renderMode === 'both' || renderMode === 'top') && !isResults && (
         <div className="flex items-center gap-3">
           {/* Timer ring */}
           {isPregunta && <QuizTimerDisplay timerState={timerState} size={56} strokeWidth={5} />}
@@ -191,11 +197,11 @@ export const QuizControllerView: React.FC<QuizControllerViewProps> = ({
             {audioMuted ? <VolumeX size={13} /> : <Volume2 size={13} />}
           </button>
         )}
-      </div>
+        </div>
       )}
 
       {/* Options — always shows correct answers */}
-      {!isResults && (
+      {(renderMode === 'both' || renderMode === 'bottom') && !isResults && (
         <div className="flex flex-col gap-1.5">
           <p className="text-[9px] font-black uppercase tracking-wider text-gray-500">Opciones (respuesta correcta visible)</p>
         {displayOptions.map((opt, idx) => {
@@ -230,7 +236,7 @@ export const QuizControllerView: React.FC<QuizControllerViewProps> = ({
       )}
 
       {/* Demo selection — only after timer expires */}
-      {!isResults && isExpired && (
+      {(renderMode === 'both' || renderMode === 'top') && !isResults && isExpired && (
         <div className="rounded-lg border border-gray-800 bg-gray-900/40 p-2">
           <p className="text-[9px] font-black uppercase tracking-wider text-gray-500 mb-1.5">Demo / Corrección pública</p>
           <div className="flex flex-wrap gap-1">
@@ -278,7 +284,7 @@ export const QuizControllerView: React.FC<QuizControllerViewProps> = ({
       )}
 
       {/* Cita reference */}
-      {!isResults && (quizData.citaRef || quizData.citaReviewRef) && (
+      {(renderMode === 'both' || renderMode === 'bottom') && !isResults && (quizData.citaRef || quizData.citaReviewRef) && (
         <div className="rounded-lg border border-yellow-900/40 bg-yellow-950/20 px-2.5 py-2">
           <p className="text-[9px] font-black uppercase tracking-wider text-yellow-600 mb-0.5">
             {quizData.citaRef ? 'CITA: (evaluable)' : 'CITA!: (revisión)'}
@@ -290,7 +296,7 @@ export const QuizControllerView: React.FC<QuizControllerViewProps> = ({
       )}
 
       {/* Results View */}
-      {isResults && (
+      {(renderMode === 'both' || renderMode === 'bottom') && isResults && (
         <div className="mt-2 border-t border-gray-800 pt-3">
           <QuizResultsController
             profiles={quizData.resultProfiles ?? []}

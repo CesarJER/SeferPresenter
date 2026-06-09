@@ -1727,6 +1727,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                         rangeStats={controllerAnswers.calcRangeStats(activeSlide.quizData.resultProfiles || [], maxBaseCentipunts)}
                         totalSessions={Object.keys(controllerAnswers.sessions).length}
                         maxBaseCentipunts={maxBaseCentipunts}
+                        renderMode="top"
                       />
                       );
                     })()}
@@ -1746,7 +1747,54 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
             appMode={appMode}
             scriptureState={scriptureState}
             quizSubslide={activeSlide?.type === 'quiz' ? quizSubslides[quizCurrentSubslideIndex] : undefined}
-          />
+          >
+            {activeSlide?.type === 'quiz' && activeSlide.quizData && quizTimerState && (() => {
+              const allQuizData = currentPresentation?.slides
+                .filter(s => s.type === 'quiz' && s.quizData)
+                .map(s => s.quizData!) || [];
+              const maxBaseCentipunts = calcMaxBaseCentipunts(allQuizData);
+              const optionCounts: Record<string, number> = {};
+              for (const opt of activeSlide.quizData.options) {
+                optionCounts[opt.id] = 0;
+              }
+              for (const session of Object.values(controllerAnswers.sessions)) {
+                const answer = session.answers[activeSlide.id];
+                if (answer?.submitted) {
+                  for (const optId of answer.selectedOptionIds) {
+                    if (optionCounts[optId] !== undefined) {
+                      optionCounts[optId]++;
+                    }
+                  }
+                }
+              }
+              return (
+              <QuizControllerView
+                slide={activeSlide}
+                quizData={activeSlide.quizData}
+                subslides={quizSubslides}
+                currentSubslideIndex={quizCurrentSubslideIndex}
+                onSubslideSelect={onQuizSubslideSelect}
+                timerState={quizTimerState}
+                onStartTimer={onQuizStartTimer}
+                onPauseTimer={onQuizPauseTimer}
+                onResumeTimer={onQuizResumeTimer}
+                onResetTimer={onQuizResetTimer}
+                onComplete={onQuizComplete}
+                presenterDemoSelection={quizPresenterDemoSelection}
+                onDemoSelect={onQuizDemoSelect}
+                submittedCount={controllerAnswers.getSubmittedCount(activeSlide.id)}
+                onPlayApplause={onQuizPlayApplause}
+                onPlayMal={onQuizPlayMal}
+                optionCounts={optionCounts}
+                onClearAnswers={() => controllerAnswers.clearSlideAnswers(activeSlide.id)}
+                rangeStats={controllerAnswers.calcRangeStats(activeSlide.quizData.resultProfiles || [], maxBaseCentipunts)}
+                totalSessions={Object.keys(controllerAnswers.sessions).length}
+                maxBaseCentipunts={maxBaseCentipunts}
+                renderMode="bottom"
+              />
+              );
+            })()}
+          </SlideVisualizer>
 
           {/* ── Main Area ───────────────────────────────── */}
           <div id="section-main-area" className="flex-1 overflow-y-auto p-3 md:p-4">

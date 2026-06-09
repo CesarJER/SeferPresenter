@@ -10,6 +10,7 @@ interface SlideVisualizerProps {
   appMode: AppMode;
   scriptureState: ScriptureNavState | null;
   quizSubslide?: QuizSubslide;
+  children?: React.ReactNode;
 }
 
 const containsHebrew = (text: string): boolean => {
@@ -21,6 +22,7 @@ const SlideVisualizer: React.FC<SlideVisualizerProps> = ({
   appMode,
   scriptureState,
   quizSubslide,
+  children,
 }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [quizVerseLines, setQuizVerseLines] = useState<string[]>([]);
@@ -66,6 +68,8 @@ const SlideVisualizer: React.FC<SlideVisualizerProps> = ({
   let lines: string[] = [];
   let labelText = '';
 
+  let hideTextBlocks = false;
+
   if (appMode === 'scripture' && scriptureState) {
     lines = [
       scriptureState.verseNikud || '',
@@ -73,15 +77,20 @@ const SlideVisualizer: React.FC<SlideVisualizerProps> = ({
       scriptureState.translation || '',
     ];
     labelText = `${scriptureState.bookAbbrevEs || scriptureState.bookEs} ${scriptureState.chapter}:${scriptureState.verse}`;
-  } else if (slide?.type === 'quiz' && quizSubslide?.kind === 'cita-verse') {
-    lines = quizVerseLines;
-    labelText = quizSubslide.label || '';
+  } else if (slide?.type === 'quiz') {
+    if (quizSubslide?.kind === 'cita-verse') {
+      lines = quizVerseLines;
+      labelText = quizSubslide.label || '';
+    } else {
+      hideTextBlocks = true;
+      labelText = slide.label || '';
+    }
   } else if (slide) {
     lines = slide.lines || [];
     labelText = slide.label || '';
   }
 
-  const hasContent = lines.length > 0 && lines.some(l => l && l.trim() !== '' && l.trim() !== '-');
+  const hasContent = (lines.length > 0 && lines.some(l => l && l.trim() !== '' && l.trim() !== '-')) || !!children;
 
   if (!hasContent) {
     return (
@@ -130,41 +139,44 @@ const SlideVisualizer: React.FC<SlideVisualizerProps> = ({
       {/* Main View Area */}
       {!isCollapsed && (
         <div className="p-2.5 md:p-3">
-          {isTrilingual ? (
-            <div className="rounded-lg bg-gray-900/60 border border-gray-800/60 p-2.5 space-y-2">
-              {/* Line 0 (Hebrew/Greek) */}
-              <div
-                dir={textDir}
-                className={`text-sm md:text-base leading-relaxed text-[#f3c96a] font-bold ${textAlignment}`}
-                style={{ fontFamily: isRtl ? "'Frank Ruhl Libre', 'SBL Hebrew', serif" : 'inherit' }}
-                dangerouslySetInnerHTML={{ __html: safeLine0 }}
-              />
+          {!hideTextBlocks && (
+            isTrilingual ? (
+              <div className="rounded-lg bg-gray-900/60 border border-gray-800/60 p-2.5 space-y-2">
+                {/* Line 0 (Hebrew/Greek) */}
+                <div
+                  dir={textDir}
+                  className={`text-sm md:text-base leading-relaxed text-[#f3c96a] font-bold ${textAlignment}`}
+                  style={{ fontFamily: isRtl ? "'Frank Ruhl Libre', 'SBL Hebrew', serif" : 'inherit' }}
+                  dangerouslySetInnerHTML={{ __html: safeLine0 }}
+                />
 
-              {/* Transliteration & Translation */}
-              <div className="flex flex-col gap-1 mt-1.5 pt-1.5 border-t border-gray-800/60 text-xs">
-                {line1 && line1 !== '-' && (
-                  <p className="text-sky-300 leading-relaxed">
-                    {line1}
-                  </p>
-                )}
-                {line2 && line2 !== '-' && (
-                  <p className="text-gray-300 leading-relaxed">
-                    {line2}
-                  </p>
-                )}
+                {/* Transliteration & Translation */}
+                <div className="flex flex-col gap-1 mt-1.5 pt-1.5 border-t border-gray-800/60 text-xs">
+                  {line1 && line1 !== '-' && (
+                    <p className="text-sky-300 leading-relaxed">
+                      {line1}
+                    </p>
+                  )}
+                  {line2 && line2 !== '-' && (
+                    <p className="text-gray-300 leading-relaxed">
+                      {line2}
+                    </p>
+                  )}
+                </div>
               </div>
-            </div>
-          ) : (
-            /* Monolingual View - Shows only line 0 */
-            <div className="rounded-lg bg-gray-900/60 border border-gray-800/60 p-2.5">
-              <div
-                dir={textDir}
-                className={`text-sm md:text-base leading-relaxed text-white font-bold ${textAlignment}`}
-                style={{ fontFamily: isRtl ? "'Frank Ruhl Libre', 'SBL Hebrew', serif" : 'inherit' }}
-                dangerouslySetInnerHTML={{ __html: safeLine0 }}
-              />
-            </div>
+            ) : (
+              /* Monolingual View - Shows only line 0 */
+              <div className="rounded-lg bg-gray-900/60 border border-gray-800/60 p-2.5">
+                <div
+                  dir={textDir}
+                  className={`text-sm md:text-base leading-relaxed text-white font-bold ${textAlignment}`}
+                  style={{ fontFamily: isRtl ? "'Frank Ruhl Libre', 'SBL Hebrew', serif" : 'inherit' }}
+                  dangerouslySetInnerHTML={{ __html: safeLine0 }}
+                />
+              </div>
+            )
           )}
+          {children}
         </div>
       )}
     </div>
