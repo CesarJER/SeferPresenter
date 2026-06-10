@@ -85,13 +85,13 @@ const arePresentationsEqual = (left: Presentation | null, right: Presentation | 
       leftSlide.label === rightSlide.label &&
       leftSlide.background === rightSlide.background &&
       leftSlide.type === rightSlide.type &&
-      leftSlide.videoSrc === rightSlide.videoSrc &&
-      leftSlide.videoVolume === rightSlide.videoVolume &&
-      leftSlide.videoSpeed === rightSlide.videoSpeed &&
-      leftSlide.videoLoop === rightSlide.videoLoop &&
-      leftSlide.videoPresenterNav === rightSlide.videoPresenterNav &&
-      leftSlide.videoStart === rightSlide.videoStart &&
-      leftSlide.videoEnd === rightSlide.videoEnd &&
+      leftSlide.mediaSrc === rightSlide.mediaSrc &&
+      leftSlide.mediaVolume === rightSlide.mediaVolume &&
+      leftSlide.mediaSpeed === rightSlide.mediaSpeed &&
+      leftSlide.mediaLoop === rightSlide.mediaLoop &&
+      leftSlide.mediaPresenterNav === rightSlide.mediaPresenterNav &&
+      leftSlide.mediaStart === rightSlide.mediaStart &&
+      leftSlide.mediaEnd === rightSlide.mediaEnd &&
       leftSlide.scriptureBook === rightSlide.scriptureBook &&
       leftSlide.scriptureChapter === rightSlide.scriptureChapter &&
       leftSlide.scriptureVerseStart === rightSlide.scriptureVerseStart &&
@@ -113,7 +113,7 @@ const areVideoStatesEqual = (left: VideoState | null, right: VideoState | null) 
     left.volume === right.volume &&
     left.speed === right.speed &&
     left.loop === right.loop &&
-    left.videoSrc === right.videoSrc &&
+    left.mediaSrc === right.mediaSrc &&
     left.startTime === right.startTime &&
     left.endTime === right.endTime &&
     left.lastUpdatedBy === right.lastUpdatedBy &&

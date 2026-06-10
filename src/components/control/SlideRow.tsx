@@ -8,14 +8,16 @@ import { ScriptureRangeEditor } from './ScriptureRangeEditor';
 import { QuizSlideEditor } from '../quiz/QuizSlideEditor';
 
 type PresentationMode = 'standard' | 'trilingual';
-type SlideType = 'text' | 'video' | 'image' | 'tanaj' | 'sefer' | 'quiz';
+type SlideType = 'text' | 'media' | 'tanaj' | 'sefer' | 'quiz';
 
 type VideoParamUpdate = {
-  videoSrc?: string;
+  mediaSrc?: string;
+  mediaFit?: 'cover' | 'contain' | 'fill';
   volume?: number;
   speed?: number;
   loop?: boolean;
   presenterNav?: boolean;
+  mediaShowBg?: boolean;
   startTime?: number;
   endTime?: number;
 };
@@ -116,15 +118,15 @@ export const SlideRow: React.FC<SlideRowProps> = ({
   const isImage = slide.lines[0]?.trim() === '[IMAGE]';
   const hasRangeChildren = isScriptureRangeRoot(slide) && getScriptureRangeEndIndex(idx) > idx;
 
-  const videoOptions = backgrounds
-    .filter(bgPath => bgPath.match(/\.(mp4|webm)$/i))
+  const mediaOptions = backgrounds
+    .filter(bgPath => bgPath.match(/\.(mp4|webm|jpg|jpeg|png|gif|webp)$/i))
     .map(bgPath => ({
       label: bgPath.split('/').pop() || bgPath,
       value: bgPath,
     }));
 
-  const maxDuration = slide.videoSrc && videoDurations[slide.videoSrc]
-    ? videoDurations[slide.videoSrc]
+  const maxDuration = slide.mediaSrc && videoDurations[slide.mediaSrc]
+    ? videoDurations[slide.mediaSrc]
     : (currentSlideIndex === idx && videoState?.duration ? videoState.duration : undefined);
 
   return (                              <tr key={slide.id} className={`transition-colors hover:bg-gray-800/10 ${isScriptureGroupChild ? 'bg-gray-950/15' : ''}`}>
@@ -201,143 +203,169 @@ export const SlideRow: React.FC<SlideRowProps> = ({
                                       }}
                                       onCommit={(payload) => handleUpdateScriptureSlide(idx, payload)}
                                     />
-                                  ) : slide.type === 'video' ? (
+                                  ) : slide.type === 'media' ? (
                                     /* Video Config Panel */
                                     <div className="bg-gray-950/40 border border-gray-800/80 rounded-lg p-3 space-y-3 shadow-md w-full">
                                       <div className="flex items-center gap-2 border-b border-gray-850 pb-1.5 mb-1.5">
                                         <Video size={13} className="text-yellow-500 animate-pulse" />
-                                        <span className="text-[10px] font-bold text-gray-405 uppercase tracking-wider">Configuración de Diapositiva de Video</span>
+                                        <span className="text-[10px] font-bold text-gray-405 uppercase tracking-wider">Configuración Multimedia</span>
                                       </div>
 
-                                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                        {/* Video Source */}
-                                        <div className="space-y-1">
-                                          <label className="text-[9px] font-black text-gray-500 uppercase tracking-wide">Ruta del Video</label>
-                                          <CustomSearchSelect
-                                            value={slide.videoSrc || ''}
-                                            onChange={val => handleUpdateVideoParams(idx, { videoSrc: val })}
-                                            options={videoOptions}
-                                            placeholder="Seleccionar video..."
-                                            dropdownWidthClass="w-[260px] -left-5"
-                                            openDirection="down"
-                                          />
-                                        </div>
-
-                                        {/* Volume */}
-                                        <div className="space-y-1">
-                                          <div className="flex items-center justify-between">
-                                            <label className="text-[9px] font-black text-gray-500 uppercase tracking-wide">Volumen</label>
-                                            <span className="text-[10px] font-bold text-yellow-500">{Math.round((slide.videoVolume ?? 0.8) * 100)}%</span>
-                                          </div>
-                                          <div className="flex items-center gap-2">
-                                            <input
-                                              type="range"
-                                              min="0"
-                                              max="1"
-                                              step="0.05"
-                                              value={slide.videoVolume ?? 0.8}
-                                              onChange={e => handleUpdateVideoParams(idx, { volume: parseFloat(e.target.value) })}
-                                              className="flex-1 accent-yellow-500 h-1.5 bg-gray-800 rounded-lg appearance-none cursor-pointer"
-                                            />
-                                          </div>
-                                        </div>
-                                      </div>
-
-                                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1 border-t border-gray-850/40">
-                                        {/* Speed */}
-                                        <div className="space-y-1">
-                                          <label className="text-[9px] font-black text-gray-500 uppercase tracking-wide block mb-1">Velocidad</label>
-                                          <div className="flex items-center gap-1 rounded bg-gray-955 p-0.5 w-fit border border-gray-800">
-                                            {[0.5, 1.0, 1.25, 1.5, 2.0].map(speedVal => {
-                                              const isActive = (slide.videoSpeed ?? 1.0) === speedVal;
-                                              return (
-                                                <button
-                                                  key={speedVal}
-                                                  type="button"
-                                                  onClick={() => handleUpdateVideoParams(idx, { speed: speedVal })}
-                                                  className={`text-[9px] font-bold px-2 py-0.5 rounded transition-all cursor-pointer ${isActive ? 'bg-yellow-600 text-white font-black' : 'text-gray-400 hover:text-gray-200'}`}
+                                      {(() => {
+                                        const isImageMediaConfig = slide.mediaSrc && /\.(jpg|jpeg|png|gif|webp|svg|avif)$/i.test(slide.mediaSrc);
+                                        return (
+                                          <>
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                              <div className="space-y-1">
+                                                <label className="text-[9px] font-black text-gray-500 uppercase tracking-wide">Ruta del Archivo</label>
+                                                <CustomSearchSelect
+                                                  value={slide.mediaSrc || ''}
+                                                  onChange={val => handleUpdateVideoParams(idx, { mediaSrc: val })}
+                                                  options={mediaOptions}
+                                                  placeholder="Seleccionar archivo..."
+                                                  dropdownWidthClass="w-[260px] -left-5"
+                                                  openDirection="down"
+                                                />
+                                              </div>
+                                              <div className="space-y-1">
+                                                <label className="text-[9px] font-black text-gray-500 uppercase tracking-wide">Ajuste (Fit)</label>
+                                                <select
+                                                  value={slide.mediaFit || 'cover'}
+                                                  onChange={e => handleUpdateVideoParams(idx, { mediaFit: e.target.value as any })}
+                                                  className="w-full bg-gray-900 border border-gray-700 rounded p-1 text-xs text-gray-200 outline-none focus:border-yellow-500"
                                                 >
-                                                  {speedVal}x
-                                                </button>
-                                              );
-                                            })}
-                                          </div>
-                                        </div>
+                                                  <option value="cover">Cover (Recortar)</option>
+                                                  <option value="contain">Contain (Barras)</option>
+                                                  <option value="fill">Fill (Estirar)</option>
+                                                </select>
+                                              </div>
 
-                                        {/* Loop checkbox */}
-                                        <div>
-                                          <label className="text-[9px] font-black text-gray-500 uppercase tracking-wide block mb-1.5">
-                                            Reproducción
-                                          </label>
+                                              {/* Opciones generales para Image y Video */}
+                                              <div className="flex flex-wrap items-center gap-6 py-2">
+                                                <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer text-gray-300 hover:text-white select-none">
+                                                  <input
+                                                    type="checkbox"
+                                                    checked={slide.mediaPresenterNav !== false}
+                                                    onChange={e => handleUpdateVideoParams(idx, { presenterNav: e.target.checked })}
+                                                    className="accent-yellow-500 h-4 w-4 rounded border-gray-700 bg-gray-900 cursor-pointer"
+                                                  />
+                                                  <span>Mostrar Nav</span>
+                                                </label>
+                                                <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer text-gray-300 hover:text-white select-none" title="Si está activo, el fondo global se renderizará detrás de esta imagen/video. Ideal para modo Ajuste 'Contain'.">
+                                                  <input
+                                                    type="checkbox"
+                                                    checked={slide.mediaShowBg === true}
+                                                    onChange={e => handleUpdateVideoParams(idx, { mediaShowBg: e.target.checked })}
+                                                    className="accent-yellow-500 h-4 w-4 rounded border-gray-700 bg-gray-900 cursor-pointer"
+                                                  />
+                                                  <span>Fondo Visible</span>
+                                                </label>
+                                              </div>
 
-                                          <div className="flex items-center gap-4">
-                                            <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer text-gray-300 hover:text-white select-none">
-                                              <input
-                                                type="checkbox"
-                                                checked={slide.videoLoop !== false}
-                                                onChange={e => handleUpdateVideoParams(idx, { loop: e.target.checked })}
-                                                className="accent-yellow-500 h-4 w-4 rounded border-gray-700 bg-gray-900 cursor-pointer"
-                                              />
-                                              <span>Bucle</span>
-                                            </label>
-
-                                            {/* Presenter nav checkbox */}
-                                            <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer text-gray-300 hover:text-white select-none">
-                                              <input
-                                                type="checkbox"
-                                                checked={slide.videoPresenterNav !== false}
-                                                onChange={e => handleUpdateVideoParams(idx, { presenterNav: e.target.checked })}
-                                                className="accent-yellow-500 h-4 w-4 rounded border-gray-700 bg-gray-900 cursor-pointer"
-                                              />
-                                              <span>Nav</span>
-                                            </label>
-                                          </div>
-                                        </div>
-
-                                        {/* Start / End Times */}
-                                        <div className="space-y-1">
-                                          <label className="text-[9px] font-black text-gray-500 uppercase tracking-wide block">Intervalo (segundos)</label>
-                                          <div className="flex items-center gap-2">
-                                            <div className="flex-1 flex items-center gap-1.5 bg-gray-955 rounded px-2 py-1 border border-gray-800">
-                                              <span className="text-[8px] font-bold text-gray-550">INICIO</span>
-                                              <input
-                                                type="number"
-                                                min="0"
-                                                max={maxDuration}
-                                                placeholder="0"
-                                                value={slide.videoStart !== undefined ? slide.videoStart : ''}
-                                                onChange={e => {
-                                                  let val = e.target.value !== '' ? parseFloat(e.target.value) : undefined;
-                                                  if (val !== undefined && maxDuration && val > maxDuration) {
-                                                    val = maxDuration;
-                                                  }
-                                                  handleUpdateVideoParams(idx, { startTime: val });
-                                                }}
-                                                className="w-full bg-transparent text-xs text-white focus:outline-none font-bold"
-                                              />
+                                              {!isImageMediaConfig && (
+                                                <div className="space-y-1">
+                                                  <div className="flex items-center justify-between">
+                                                    <label className="text-[9px] font-black text-gray-500 uppercase tracking-wide">Volumen</label>
+                                                    <span className="text-[10px] font-bold text-yellow-500">{Math.round((slide.mediaVolume ?? 0.8) * 100)}%</span>
+                                                  </div>
+                                                  <div className="flex items-center gap-2">
+                                                    <input
+                                                      type="range"
+                                                      min="0"
+                                                      max="1"
+                                                      step="0.05"
+                                                      value={slide.mediaVolume ?? 0.8}
+                                                      onChange={e => handleUpdateVideoParams(idx, { volume: parseFloat(e.target.value) })}
+                                                      className="flex-1 accent-yellow-500 h-1.5 bg-gray-800 rounded-lg appearance-none cursor-pointer"
+                                                    />
+                                                  </div>
+                                                </div>
+                                              )}
                                             </div>
-                                            <div className="flex-1 flex items-center gap-1.5 bg-gray-955 rounded px-2 py-1 border border-gray-800">
-                                              <span className="text-[8px] font-bold text-gray-550">FINAL</span>
-                                              <input
-                                                type="number"
-                                                min="0"
-                                                max={maxDuration}
-                                                placeholder="Fin"
-                                                value={slide.videoEnd !== undefined ? slide.videoEnd : ''}
-                                                onChange={e => {
-                                                  let val = e.target.value !== '' ? parseFloat(e.target.value) : undefined;
-                                                  if (val !== undefined && maxDuration && val > maxDuration) {
-                                                    val = maxDuration;
-                                                  }
-                                                  handleUpdateVideoParams(idx, { endTime: val });
-                                                }}
-                                                className="w-full bg-transparent text-xs text-white focus:outline-none font-bold"
-                                              />
-                                            </div>
-                                          </div>
-                                        </div>
+                                            
+                                            {!isImageMediaConfig && (
+                                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1 border-t border-gray-850/40">
+                                                <div className="space-y-1">
+                                                  <label className="text-[9px] font-black text-gray-500 uppercase tracking-wide block mb-1">Velocidad</label>
+                                                  <div className="flex items-center gap-1 rounded bg-gray-955 p-0.5 w-fit border border-gray-800">
+                                                    {[0.5, 1.0, 1.25, 1.5, 2.0].map(speedVal => {
+                                                      const isActive = (slide.mediaSpeed ?? 1.0) === speedVal;
+                                                      return (
+                                                        <button
+                                                          key={speedVal}
+                                                          type="button"
+                                                          onClick={() => handleUpdateVideoParams(idx, { speed: speedVal })}
+                                                          className={`text-[9px] font-bold px-2 py-0.5 rounded transition-all cursor-pointer ${isActive ? 'bg-yellow-600 text-white font-black' : 'text-gray-400 hover:text-gray-200'}`}
+                                                        >
+                                                          {speedVal}x
+                                                        </button>
+                                                      );
+                                                    })}
+                                                  </div>
+                                                </div>
+
+                                                <div>
+                                                  <label className="text-[9px] font-black text-gray-500 uppercase tracking-wide block mb-1.5">Reproducción</label>
+                                                  <div className="flex items-center gap-4">
+                                                    <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer text-gray-300 hover:text-white select-none">
+                                                      <input
+                                                        type="checkbox"
+                                                        checked={slide.mediaLoop !== false}
+                                                        onChange={e => handleUpdateVideoParams(idx, { loop: e.target.checked })}
+                                                        className="accent-yellow-500 h-4 w-4 rounded border-gray-700 bg-gray-900 cursor-pointer"
+                                                      />
+                                                      <span>Bucle</span>
+                                                    </label>
+                                                  </div>
+                                                </div>
+
+                                                <div className="space-y-1">
+                                                  <label className="text-[9px] font-black text-gray-500 uppercase tracking-wide block">Intervalo (segundos)</label>
+                                                  <div className="flex items-center gap-2">
+                                                    <div className="flex-1 flex items-center gap-1.5 bg-gray-955 rounded px-2 py-1 border border-gray-800">
+                                                      <span className="text-[8px] font-bold text-gray-550">INICIO</span>
+                                                      <input
+                                                        type="number"
+                                                        min="0"
+                                                        max={maxDuration}
+                                                        placeholder="0"
+                                                        value={slide.mediaStart !== undefined ? slide.mediaStart : ''}
+                                                        onChange={e => {
+                                                          let val = e.target.value !== '' ? parseFloat(e.target.value) : undefined;
+                                                          if (val !== undefined && maxDuration && val > maxDuration) {
+                                                            val = maxDuration;
+                                                          }
+                                                          handleUpdateVideoParams(idx, { startTime: val });
+                                                        }}
+                                                        className="w-full bg-transparent text-xs text-white focus:outline-none font-bold"
+                                                      />
+                                                    </div>
+                                                    <div className="flex-1 flex items-center gap-1.5 bg-gray-955 rounded px-2 py-1 border border-gray-800">
+                                                      <span className="text-[8px] font-bold text-gray-550">FINAL</span>
+                                                      <input
+                                                        type="number"
+                                                        min="0"
+                                                        max={maxDuration}
+                                                        placeholder="Fin"
+                                                        value={slide.mediaEnd !== undefined ? slide.mediaEnd : ''}
+                                                        onChange={e => {
+                                                          let val = e.target.value !== '' ? parseFloat(e.target.value) : undefined;
+                                                          if (val !== undefined && maxDuration && val > maxDuration) {
+                                                            val = maxDuration;
+                                                          }
+                                                          handleUpdateVideoParams(idx, { endTime: val });
+                                                        }}
+                                                        className="w-full bg-transparent text-xs text-white focus:outline-none font-bold"
+                                                      />
+                                                    </div>
+                                                  </div>
+                                                </div>
+                                              </div>
+                                            )}
+                                          </>
+                                        );
+                                      })()}
                                       </div>
-                                    </div>
                                   ) : isImage ? (
                                     /* Pure Image Slide Banner */
                                     <div className="flex items-center gap-3 bg-blue-950/10 border border-blue-900/20 rounded-lg p-3.5 shadow-sm w-full">
@@ -355,7 +383,7 @@ export const SlideRow: React.FC<SlideRowProps> = ({
                                       <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer text-gray-300 hover:text-white select-none pt-1">
                                         <input
                                           type="checkbox"
-                                          checked={slide.videoPresenterNav !== false}
+                                          checked={slide.mediaPresenterNav !== false}
                                           onChange={e => handleUpdateImagePresenterNav(idx, e.target.checked)}
                                           className="accent-yellow-500 h-4 w-4 rounded border-gray-700 bg-gray-900 cursor-pointer"
                                         />
@@ -556,7 +584,7 @@ export const SlideRow: React.FC<SlideRowProps> = ({
                                           <button
                                             type="button"
                                             onClick={() => handleChangeSlideType(idx, 'text')}
-                                            className={`transition-colors cursor-pointer p-0.5 ${!isImage && slide.type !== 'video' && slide.type !== 'tanaj' && slide.type !== 'sefer' && slide.type !== 'quiz'
+                                            className={`transition-colors cursor-pointer p-0.5 ${!isImage && slide.type !== 'media' && slide.type !== 'tanaj' && slide.type !== 'sefer' && slide.type !== 'quiz'
                                               ? 'text-yellow-500 font-bold'
                                               : 'text-gray-500 hover:text-gray-350'
                                               }`}
@@ -566,26 +594,16 @@ export const SlideRow: React.FC<SlideRowProps> = ({
                                           </button>
                                           <button
                                             type="button"
-                                            onClick={() => handleChangeSlideType(idx, 'video')}
-                                            className={`transition-colors cursor-pointer p-0.5 ${slide.type === 'video'
+                                            onClick={() => handleChangeSlideType(idx, 'media')}
+                                            className={`transition-colors cursor-pointer p-0.5 ${slide.type === 'media'
                                               ? 'text-yellow-500 font-bold'
                                               : 'text-gray-500 hover:text-gray-350'
                                               }`}
-                                            title="Tipo: Video"
+                                            title="Tipo: Multimedia (Video/Imagen)"
                                           >
                                             <Video size={12} />
                                           </button>
-                                          <button
-                                            type="button"
-                                            onClick={() => handleChangeSlideType(idx, 'image')}
-                                            className={`transition-colors cursor-pointer p-0.5 ${isImage
-                                              ? 'text-yellow-500 font-bold'
-                                              : 'text-gray-500 hover:text-gray-350'
-                                              }`}
-                                            title="Tipo: Imagen Pura"
-                                          >
-                                            <ImageIcon size={12} />
-                                          </button>
+{/* Imagen pura unificada en media */}
                                         </div>
 
                                         {/* Segunda línea */}

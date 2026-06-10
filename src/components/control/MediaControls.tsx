@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import type { Slide, VideoState } from '../../types/presentation';
+import { isImageMedia } from '../../utils/mediaUtils';
 
-interface VideoControlsProps {
+interface MediaControlsProps {
   activeSlide: Slide;
   videoState: VideoState | null;
   onVideoStateChange: (state: VideoState | null) => void;
@@ -14,7 +15,7 @@ const formatTime = (secs: number | undefined) => {
   return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
 };
 
-export const VideoControls: React.FC<VideoControlsProps> = ({
+export const MediaControls: React.FC<MediaControlsProps> = ({
   activeSlide,
   videoState,
   onVideoStateChange
@@ -27,12 +28,12 @@ export const VideoControls: React.FC<VideoControlsProps> = ({
       if (videoState) {
         setLocalTime(videoState.currentTime);
       } else {
-        setLocalTime(activeSlide?.videoStart ?? 0);
+        setLocalTime(activeSlide?.mediaStart ?? 0);
       }
     }
-  }, [videoState, videoState?.currentTime, activeSlide?.id, activeSlide?.videoStart, isScrubbing]);
+  }, [videoState, videoState?.currentTime, activeSlide?.id, activeSlide?.mediaStart, isScrubbing]);
 
-  if (activeSlide?.type !== 'video') return null;
+  if (activeSlide?.type !== 'media' || isImageMedia(activeSlide.mediaSrc)) return null;
 
   return (
     <div id="section-video-control" className="rounded-md border border-yellow-800/25 bg-yellow-950/10 p-2.5 space-y-2">
@@ -42,7 +43,7 @@ export const VideoControls: React.FC<VideoControlsProps> = ({
           <span className="text-[10px] font-black text-yellow-500 uppercase tracking-wider">Video</span>
         </div>
         <span className="text-[10px] font-black text-gray-400 truncate">
-          {activeSlide.videoSrc?.split('/').pop() || 'Video'}
+          {activeSlide.mediaSrc?.split('/').pop() || 'Video'}
         </span>
       </div>
 
@@ -53,11 +54,11 @@ export const VideoControls: React.FC<VideoControlsProps> = ({
             onVideoStateChange({
               isPlaying: !videoState?.isPlaying,
               currentTime: videoState?.currentTime ?? 0,
-              duration: videoState?.duration ?? activeSlide.videoEnd ?? 0,
+              duration: videoState?.duration ?? activeSlide.mediaEnd ?? 0,
               volume: videoState?.volume ?? 0.8,
               speed: videoState?.speed ?? 1.0,
               loop: videoState?.loop ?? true,
-              videoSrc: activeSlide.videoSrc || null,
+              mediaSrc: activeSlide.mediaSrc || null,
               lastUpdatedBy: 'controller',
               timestamp: Date.now()
             });
@@ -84,11 +85,11 @@ export const VideoControls: React.FC<VideoControlsProps> = ({
               onVideoStateChange({
                 isPlaying: videoState?.isPlaying ?? false,
                 currentTime: videoState?.currentTime ?? 0,
-                duration: videoState?.duration ?? activeSlide.videoEnd ?? 0,
+                duration: videoState?.duration ?? activeSlide.mediaEnd ?? 0,
                 volume: parseFloat(e.target.value),
                 speed: videoState?.speed ?? 1.0,
                 loop: videoState?.loop ?? true,
-                videoSrc: activeSlide.videoSrc || null,
+                mediaSrc: activeSlide.mediaSrc || null,
                 lastUpdatedBy: 'controller',
                 timestamp: Date.now()
               });
@@ -106,11 +107,11 @@ export const VideoControls: React.FC<VideoControlsProps> = ({
                 onVideoStateChange({
                   isPlaying: videoState?.isPlaying ?? false,
                   currentTime: videoState?.currentTime ?? 0,
-                  duration: videoState?.duration ?? activeSlide.videoEnd ?? 0,
+                  duration: videoState?.duration ?? activeSlide.mediaEnd ?? 0,
                   volume: videoState?.volume ?? 0.8,
                   speed: speedVal,
                   loop: videoState?.loop ?? true,
-                  videoSrc: activeSlide.videoSrc || null,
+                  mediaSrc: activeSlide.mediaSrc || null,
                   lastUpdatedBy: 'controller',
                   timestamp: Date.now()
                 });
@@ -128,11 +129,11 @@ export const VideoControls: React.FC<VideoControlsProps> = ({
             onVideoStateChange({
               isPlaying: videoState?.isPlaying ?? false,
               currentTime: videoState?.currentTime ?? 0,
-              duration: videoState?.duration ?? activeSlide.videoEnd ?? 0,
+              duration: videoState?.duration ?? activeSlide.mediaEnd ?? 0,
               volume: videoState?.volume ?? 0.8,
               speed: videoState?.speed ?? 1.0,
               loop: !(videoState?.loop ?? true),
-              videoSrc: activeSlide.videoSrc || null,
+              mediaSrc: activeSlide.mediaSrc || null,
               lastUpdatedBy: 'controller',
               timestamp: Date.now()
             });
@@ -152,7 +153,7 @@ export const VideoControls: React.FC<VideoControlsProps> = ({
           <input
             type="range"
             min="0"
-            max={videoState?.duration || activeSlide.videoEnd || 100}
+            max={videoState?.duration || activeSlide.mediaEnd || 100}
             step="0.1"
             value={localTime}
             onMouseDown={() => setIsScrubbing(true)}
@@ -165,11 +166,11 @@ export const VideoControls: React.FC<VideoControlsProps> = ({
               onVideoStateChange({
                 isPlaying: videoState?.isPlaying ?? false,
                 currentTime: val,
-                duration: videoState?.duration ?? activeSlide.videoEnd ?? 0,
+                duration: videoState?.duration ?? activeSlide.mediaEnd ?? 0,
                 volume: videoState?.volume ?? 0.8,
                 speed: videoState?.speed ?? 1.0,
                 loop: videoState?.loop ?? true,
-                videoSrc: activeSlide.videoSrc || null,
+                mediaSrc: activeSlide.mediaSrc || null,
                 lastUpdatedBy: 'controller',
                 timestamp: Date.now()
               });
@@ -177,7 +178,7 @@ export const VideoControls: React.FC<VideoControlsProps> = ({
             className="control-range-slim min-w-0 flex-1"
           />
           <span className="font-mono text-gray-400 text-[10px] shrink-0">
-            {formatTime(videoState?.duration || activeSlide.videoEnd || 0)}
+            {formatTime(videoState?.duration || activeSlide.mediaEnd || 0)}
           </span>
         </div>
       </div>

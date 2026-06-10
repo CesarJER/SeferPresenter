@@ -151,7 +151,7 @@ Inspect first:
 - `src/components/control/PresentationList.tsx`
 - `src/components/control/BackgroundSelector.tsx`
 - `src/components/control/AudioPanel.tsx`
-- `src/components/control/VideoControls.tsx`
+- `src/components/control/MediaControls.tsx`
 - `src/components/control/SeferControlPanel.tsx`
 
 Rules:

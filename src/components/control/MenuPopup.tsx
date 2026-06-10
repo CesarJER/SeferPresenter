@@ -2,14 +2,14 @@ import React, { useCallback, useEffect, useState, useRef } from 'react';
 import type { Presentation, QuizData, Slide, VideoState, AppMode, ScriptureNavState } from '../../types/presentation';
 import type { SeferReaderState } from '../../hooks/useSeferReader';
 import { transliterateText } from '../../utils/transliterate';
-import { parseVideoSlideString } from '../../utils/videoUtils';
+import { parseMediaSlideString, serializeMediaToText } from '../../utils/mediaUtils';
 import { materializeScriptureSlides, parseScriptureTag, scriptureSlideToTag } from '../../utils/scriptureLookup';
 import { ArrowUp, Pencil, Maximize2, Minimize2, Music, ArrowUpDown } from 'lucide-react';
 import SeferControlPanel from './SeferControlPanel';
 import SeferControlPanelMini from './SeferControlPanelMini';
+import { MediaControls } from './MediaControls';
 import SlideVisualizer from '../shared/SlideVisualizer';
 import { BackgroundSelector } from './BackgroundSelector';
-import { VideoControls } from './VideoControls';
 import { AudioPanel } from './AudioPanel';
 import { PresentationList } from './PresentationList';
 import { PresentationEditor } from './PresentationEditor';
@@ -217,8 +217,8 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
   useEffect(() => {
     const videoPaths = new Set<string>();
     slides.forEach(slide => {
-      if (slide.type === 'video' && slide.videoSrc) {
-        videoPaths.add(slide.videoSrc);
+      if (slide.type === 'media' && slide.mediaSrc) {
+        videoPaths.add(slide.mediaSrc);
       }
     });
     backgrounds.forEach(bg => {
@@ -474,10 +474,9 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
 
     if (isTableMode) {
       const newSlides = slides.map(slide => {
-        const fallbackVal = '-';
         if (newMode === 'trilingual') {
-          const l1 = slide.lines[1] !== undefined && slide.lines[1] !== '' ? slide.lines[1] : fallbackVal;
-          const l2 = slide.lines[2] !== undefined && slide.lines[2] !== '' ? slide.lines[2] : fallbackVal;
+          const l1 = slide.lines[1] !== undefined && slide.lines[1] !== '' ? slide.lines[1] : '-';
+          const l2 = slide.lines[2] !== undefined && slide.lines[2] !== '' ? slide.lines[2] : '-';
           return {
             ...slide,
             lines: [slide.lines[0] || '', l1, l2]
@@ -485,7 +484,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
         } else {
           return {
             ...slide,
-            lines: [slide.lines[0] || '', fallbackVal, fallbackVal]
+            lines: [slide.lines[0] || '', '-', '-']
           };
         }
       });
@@ -494,13 +493,12 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
       const parsed = await buildSlidesForSave();
       if (newMode === 'trilingual') {
         const mapped = parsed.slides.map(slide => {
-          const fallbackVal = '-';
           if (slide.type === 'tanaj' || slide.type === 'sefer' || slide.scriptureBook) {
             return slide;
           }
           return {
             ...slide,
-            lines: [slide.lines[0] || '', slide.lines[1] || fallbackVal, slide.lines[2] || fallbackVal]
+            lines: [slide.lines[0] || '', slide.lines[1] || '-', slide.lines[2] || '-']
           };
         });
         setSlides(mapped);
@@ -509,10 +507,9 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
         setTraText(getTrilingualTextFromSlides(mapped, 2));
       } else {
         const mapped = parsed.slides.map(slide => {
-          const fallbackVal = '-';
           return {
             ...slide,
-            lines: [scriptureSlideToTag(slide) || slide.lines[0] || '', fallbackVal, fallbackVal]
+            lines: [scriptureSlideToTag(slide) || slide.lines[0] || '', '-', '-']
           };
         });
         setSlides(mapped);
@@ -526,22 +523,21 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
     const newId = `slide-${slides.length}-${Date.now()}-${randomSuffix}`;
     const newLabel = (slides.length).toString();
     const newSlide: Slide = { id: newId, label: newLabel, lines: [] };
-    const fallbackVal = '-';
-    newSlide.lines = ['', fallbackVal, fallbackVal];
+    newSlide.lines = ['', '-', '-'];
     setSlides([...slides, newSlide]);
   };
 
-  const handleAddImageSlide = () => {
+  // @ts-ignore
+  const _handleAddImageSlide = () => {
     const randomSuffix = Math.random().toString(36).substring(2, 9);
     const newId = `slide-img-${slides.length}-${Date.now()}-${randomSuffix}`;
     const newLabel = (slides.length).toString();
     const newSlide: Slide = { id: newId, label: newLabel, lines: [] };
-    const fallbackVal = '-';
-    newSlide.lines = ['[IMAGE]', fallbackVal, fallbackVal];
+    newSlide.lines = ['[IMAGE]', '-', '-'];
     setSlides([...slides, newSlide]);
   };
 
-  const handleAddVideoSlide = () => {
+  const handleAddMediaSlide = () => {
     const randomSuffix = Math.random().toString(36).substring(2, 9);
     const newId = `slide-video-${slides.length}-${Date.now()}-${randomSuffix}`;
     const newLabel = (slides.length).toString();
@@ -549,15 +545,14 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
       id: newId,
       label: newLabel,
       lines: [],
-      type: 'video' as const,
-      videoSrc: '',
-      videoVolume: 0.8,
-      videoSpeed: 1.0,
-      videoLoop: true,
-      videoPresenterNav: true
+      type: 'media' as const,
+      mediaSrc: '',
+      mediaVolume: 0.8,
+      mediaSpeed: 1.0,
+      mediaLoop: true,
+      mediaPresenterNav: true
     };
-    const fallbackVal = '-';
-    newSlide.lines = ['[VIDEO - "" - 0.8 - 1.0 - 1 - 1]', fallbackVal, fallbackVal];
+    newSlide.lines = ['[VIDEO - "" - 0.8 - 1.0 - 1 - 1]', '-', '-'];
 
     setSlides([...slides, newSlide]);
   };
@@ -578,20 +573,19 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
     setSlides([...slides, newSlide]);
   };
 
-  const handleChangeSlideType = (idx: number, newType: 'text' | 'video' | 'image' | 'tanaj' | 'sefer' | 'quiz') => {
+  const handleChangeSlideType = (idx: number, newType: Slide['type']) => {
     const updated = [...slides];
     const slide = { ...updated[idx] };
-    const fallbackVal = '-';
 
     if (newType === 'text') {
       delete slide.type;
       delete slide.quizData;
-      delete slide.videoSrc;
-      delete slide.videoVolume;
-      delete slide.videoSpeed;
-      delete slide.videoStart;
-      delete slide.videoEnd;
-      delete slide.videoPresenterNav;
+      delete slide.mediaSrc;
+      delete slide.mediaVolume;
+      delete slide.mediaSpeed;
+      delete slide.mediaStart;
+      delete slide.mediaEnd;
+      delete slide.mediaPresenterNav;
       delete slide.scriptureBook;
       delete slide.scriptureChapter;
       delete slide.scriptureVerseStart;
@@ -604,70 +598,43 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
       const cleanLines = slide.lines.map(cleanLine);
       slide.lines = [
         cleanLines[0] || '',
-        cleanLines[1] !== undefined ? cleanLines[1] : fallbackVal,
-        cleanLines[2] !== undefined ? cleanLines[2] : fallbackVal
+        cleanLines[1] !== undefined ? cleanLines[1] : '-',
+        cleanLines[2] !== undefined ? cleanLines[2] : '-'
       ];
-    } else if (newType === 'image') {
-      delete slide.type;
+    } else if (newType === 'media') {
+      slide.type = 'media';
       delete slide.quizData;
-      delete slide.videoSrc;
-      delete slide.videoVolume;
-      delete slide.videoSpeed;
-      delete slide.videoStart;
-      delete slide.videoEnd;
-      delete slide.videoPresenterNav;
+      slide.mediaSrc = slide.mediaSrc || '';
+      slide.mediaFit = slide.mediaFit ?? 'cover';
+      slide.mediaPresenterNav = slide.mediaPresenterNav ?? true;
+      slide.mediaShowBg = slide.mediaShowBg ?? true;
+      slide.mediaLoop = slide.mediaLoop ?? true;
+      slide.mediaVolume = slide.mediaVolume ?? 0.8;
+      slide.mediaSpeed = slide.mediaSpeed ?? 1.0;
+      slide.mediaStart = slide.mediaStart ?? undefined;
+      slide.mediaEnd = slide.mediaEnd ?? undefined;
+
       delete slide.scriptureBook;
       delete slide.scriptureChapter;
       delete slide.scriptureVerseStart;
       delete slide.scriptureVerseEnd;
 
-      slide.lines = ['[IMAGE]', fallbackVal, fallbackVal];
-    } else if (newType === 'video') {
-      slide.type = 'video';
-      delete slide.quizData;
-      slide.videoSrc = slide.videoSrc || '';
-      slide.videoVolume = slide.videoVolume ?? 0.8;
-      slide.videoSpeed = slide.videoSpeed ?? 1.0;
-      slide.videoLoop = slide.videoLoop ?? true;
-      slide.videoPresenterNav = slide.videoPresenterNav ?? true;
-      delete slide.scriptureBook;
-      delete slide.scriptureChapter;
-      delete slide.scriptureVerseStart;
-      delete slide.scriptureVerseEnd;
-
-      const startStr = slide.videoStart !== undefined ? slide.videoStart : '';
-      const endStr = slide.videoEnd !== undefined ? slide.videoEnd : '';
-      const loopStr = slide.videoLoop !== false ? '1' : '0';
-      const presenterNavStr = slide.videoPresenterNav !== false ? '1' : '0';
-      const parts = [
-        'VIDEO',
-        `"${slide.videoSrc}"`,
-        slide.videoVolume.toString(),
-        slide.videoSpeed.toString(),
-        loopStr,
-        presenterNavStr,
-        startStr.toString(),
-        endStr.toString()
-      ];
-      while (parts.length > 6 && parts[parts.length - 1] === '') {
-        parts.pop();
-      }
-      slide.lines = [`[${parts.join(' - ')}]`, fallbackVal, fallbackVal];
+      slide.lines = [serializeMediaToText(slide)];
     } else if (newType === 'quiz') {
       const quizData = slide.quizData ?? makeDefaultQuizData();
       slide.type = 'quiz';
       slide.quizData = quizData;
-      delete slide.videoSrc;
-      delete slide.videoVolume;
-      delete slide.videoSpeed;
-      delete slide.videoStart;
-      delete slide.videoEnd;
-      delete slide.videoPresenterNav;
+      delete slide.mediaSrc;
+      delete slide.mediaVolume;
+      delete slide.mediaSpeed;
+      delete slide.mediaStart;
+      delete slide.mediaEnd;
+      delete slide.mediaPresenterNav;
       delete slide.scriptureBook;
       delete slide.scriptureChapter;
       delete slide.scriptureVerseStart;
       delete slide.scriptureVerseEnd;
-      slide.lines = [serializeQuizToText(quizData), fallbackVal, fallbackVal];
+      slide.lines = [serializeQuizToText(quizData), '-', '-'];
     } else if (newType === 'tanaj' || newType === 'sefer') {
       slide.type = newType;
       delete slide.quizData;
@@ -679,30 +646,28 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
 
   const handleUpdateVideoParams = (
     idx: number,
-    params: { videoSrc?: string; volume?: number; speed?: number; loop?: boolean; presenterNav?: boolean; startTime?: number; endTime?: number }
+    params: { mediaSrc?: string; volume?: number; speed?: number; loop?: boolean; presenterNav?: boolean; startTime?: number; endTime?: number }
   ) => {
     const updated = [...slides];
     const slide = { ...updated[idx] };
-    const fallbackVal = '-';
+    if (slide.type === 'media') {
+      if ('mediaSrc' in params) slide.mediaSrc = params.mediaSrc;
+      if ('volume' in params) slide.mediaVolume = params.volume;
+      if ('speed' in params) slide.mediaSpeed = params.speed;
+      if ('loop' in params) slide.mediaLoop = params.loop;
+      if ('presenterNav' in params) slide.mediaPresenterNav = params.presenterNav;
+      if ('startTime' in params) slide.mediaStart = params.startTime;
+      if ('endTime' in params) slide.mediaEnd = params.endTime;
 
-    if (slide.type === 'video') {
-      if ('videoSrc' in params) slide.videoSrc = params.videoSrc;
-      if ('volume' in params) slide.videoVolume = params.volume;
-      if ('speed' in params) slide.videoSpeed = params.speed;
-      if ('loop' in params) slide.videoLoop = params.loop;
-      if ('presenterNav' in params) slide.videoPresenterNav = params.presenterNav;
-      if ('startTime' in params) slide.videoStart = params.startTime;
-      if ('endTime' in params) slide.videoEnd = params.endTime;
-
-      const startVal = slide.videoStart !== undefined && !isNaN(slide.videoStart) ? slide.videoStart : '';
-      const endVal = slide.videoEnd !== undefined && !isNaN(slide.videoEnd) ? slide.videoEnd : '';
-      const loopStr = slide.videoLoop !== false ? '1' : '0';
-      const presenterNavStr = slide.videoPresenterNav !== false ? '1' : '0';
+      const startVal = slide.mediaStart !== undefined && !isNaN(slide.mediaStart) ? slide.mediaStart : '';
+      const endVal = slide.mediaEnd !== undefined && !isNaN(slide.mediaEnd) ? slide.mediaEnd : '';
+      const loopStr = slide.mediaLoop !== false ? '1' : '0';
+      const presenterNavStr = slide.mediaPresenterNav !== false ? '1' : '0';
       const parts = [
         'VIDEO',
-        `"${slide.videoSrc || ''}"`,
-        (slide.videoVolume ?? 0.8).toString(),
-        (slide.videoSpeed ?? 1.0).toString(),
+        `"${slide.mediaSrc || ''}"`,
+        (slide.mediaVolume ?? 0.8).toString(),
+        (slide.mediaSpeed ?? 1.0).toString(),
         loopStr,
         presenterNavStr,
         startVal.toString(),
@@ -711,7 +676,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
       while (parts.length > 6 && parts[parts.length - 1] === '') {
         parts.pop();
       }
-      slide.lines = [`[${parts.join(' - ')}]`, fallbackVal, fallbackVal];
+      slide.lines = [`[${parts.join(' - ')}]`, '-', '-'];
     }
 
     updated[idx] = slide;
@@ -722,7 +687,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
     const updated = [...slides];
     const slide = { ...updated[idx] };
     if (slide.lines[0]?.trim() === '[IMAGE]') {
-      slide.videoPresenterNav = visible;
+      slide.mediaPresenterNav = visible;
       updated[idx] = slide;
       setSlides(updated);
     }
@@ -931,7 +896,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
           autoId++;
         }
 
-        const videoData = parseVideoSlideString(content);
+        const videoData = parseMediaSlideString(content);
         const randomSuffix = Math.random().toString(36).substring(2, 9);
         const resultProfiles = parseResultProfiles(content);
         if (resultProfiles.length > 0) {
@@ -973,13 +938,13 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
             id: `slide-${idx}-${Date.now()}-${randomSuffix}`,
             label,
             lines: [content.trim(), '-', '-'],
-            type: 'video' as const,
-            videoSrc: videoData.videoSrc,
-            videoVolume: videoData.volume,
-            videoSpeed: videoData.speed,
-            videoLoop: videoData.loop,
-            videoStart: videoData.startTime,
-            videoEnd: videoData.endTime
+            type: 'media' as const,
+            mediaSrc: videoData.mediaSrc,
+            mediaVolume: videoData.volume,
+            mediaSpeed: videoData.speed,
+            mediaLoop: videoData.loop,
+            mediaStart: videoData.startTime,
+            mediaEnd: videoData.endTime
           };
         }
 
@@ -1038,7 +1003,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
           autoId++;
         }
 
-        const videoData = parseVideoSlideString(contentHeb) || parseVideoSlideString(row.transliteration) || parseVideoSlideString(row.translation);
+        const videoData = parseMediaSlideString(contentHeb) || parseMediaSlideString(row.transliteration) || parseMediaSlideString(row.translation);
         const randomSuffix = Math.random().toString(36).substring(2, 9);
         const resultProfiles = parseResultProfiles(contentHeb);
         if (resultProfiles.length > 0) {
@@ -1080,13 +1045,13 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
             id: `slide-${idx}-${Date.now()}-${randomSuffix}`,
             label,
             lines: [contentHeb.trim(), row.transliteration.trim() || '-', row.translation.trim() || '-'],
-            type: 'video' as const,
-            videoSrc: videoData.videoSrc,
-            videoVolume: videoData.volume,
-            videoSpeed: videoData.speed,
-            videoLoop: videoData.loop,
-            videoStart: videoData.startTime,
-            videoEnd: videoData.endTime
+            type: 'media' as const,
+            mediaSrc: videoData.mediaSrc,
+            mediaVolume: videoData.volume,
+            mediaSpeed: videoData.speed,
+            mediaLoop: videoData.loop,
+            mediaStart: videoData.startTime,
+            mediaEnd: videoData.endTime
           };
         }
 
@@ -1114,18 +1079,19 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
         ? 'trilingual'
         : mode;
       const normalizedSlides = slides.map(slide => {
-        const fallbackVal = '-';
-        const firstLine = slide.type === 'quiz' && slide.quizData
-          ? slide.quizData.isResultsSlide && slide.quizData.resultProfiles
-            ? serializeResultProfiles(slide.quizData.resultProfiles)
-            : serializeQuizToText(slide.quizData)
-          : slide.lines[0] || '';
+        const firstLine = slide.type === 'media'
+          ? serializeMediaToText(slide)
+          : slide.type === 'quiz' && slide.quizData
+            ? slide.quizData.isResultsSlide && slide.quizData.resultProfiles
+              ? serializeResultProfiles(slide.quizData.resultProfiles)
+              : serializeQuizToText(slide.quizData)
+            : slide.lines[0] || '';
         return {
           ...slide,
           lines: [
             firstLine,
-            slide.lines[1] !== undefined && slide.lines[1] !== '' ? slide.lines[1] : fallbackVal,
-            slide.lines[2] !== undefined && slide.lines[2] !== '' ? slide.lines[2] : fallbackVal
+            slide.lines[1] !== undefined && slide.lines[1] !== '' ? slide.lines[1] : '-',
+            slide.lines[2] !== undefined && slide.lines[2] !== '' ? slide.lines[2] : '-'
           ]
         };
       });
@@ -1214,19 +1180,19 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
           continue;
         }
 
-        const videoData = parseVideoSlideString(content);
+        const videoData = parseMediaSlideString(content);
         if (videoData) {
           parsed.push({
             id: `slide-${idx}-${Date.now()}-${randomSuffix}`,
             label,
             lines: [content.trim(), '-', '-'],
-            type: 'video' as const,
-            videoSrc: videoData.videoSrc,
-            videoVolume: videoData.volume,
-            videoSpeed: videoData.speed,
-            videoLoop: videoData.loop,
-            videoStart: videoData.startTime,
-            videoEnd: videoData.endTime
+            type: 'media' as const,
+            mediaSrc: videoData.mediaSrc,
+            mediaVolume: videoData.volume,
+            mediaSpeed: videoData.speed,
+            mediaLoop: videoData.loop,
+            mediaStart: videoData.startTime,
+            mediaEnd: videoData.endTime
           });
           continue;
         }
@@ -1328,19 +1294,19 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
         continue;
       }
 
-      const videoData = parseVideoSlideString(contentHeb) || parseVideoSlideString(row.transliteration) || parseVideoSlideString(row.translation);
+      const videoData = parseMediaSlideString(contentHeb) || parseMediaSlideString(row.transliteration) || parseMediaSlideString(row.translation);
       if (videoData) {
         parsed.push({
           id: `slide-${idx}`,
           label,
           lines: [contentHeb.trim(), row.transliteration.trim() || '-', row.translation.trim() || '-'],
-          type: 'video' as const,
-          videoSrc: videoData.videoSrc,
-          videoVolume: videoData.volume,
-          videoSpeed: videoData.speed,
-          videoLoop: videoData.loop,
-          videoStart: videoData.startTime,
-          videoEnd: videoData.endTime
+          type: 'media' as const,
+          mediaSrc: videoData.mediaSrc,
+          mediaVolume: videoData.volume,
+          mediaSpeed: videoData.speed,
+          mediaLoop: videoData.loop,
+          mediaStart: videoData.startTime,
+          mediaEnd: videoData.endTime
         });
         continue;
       }
@@ -1681,7 +1647,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                     )}
 
                     {/* ── Video Player Controller ───────────────────────────────── */}
-                    <VideoControls
+                    <MediaControls
                       activeSlide={activeSlide!}
                       videoState={videoState}
                       onVideoStateChange={onVideoStateChange}
@@ -1869,9 +1835,9 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                 handleMoveDown={handleMoveDown}
                 handleDeleteSlide={handleDeleteSlide}
                 handleChangeSlideType={handleChangeSlideType}
-                handleAddImageSlide={handleAddImageSlide}
+                
                 handleAddSlide={handleAddSlide}
-                handleAddVideoSlide={handleAddVideoSlide}
+                handleAddMediaSlide={handleAddMediaSlide}
                 handleAddQuizSlide={handleAddQuizSlide}
                 handleTransliterate={handleTransliterate}
               />            )}

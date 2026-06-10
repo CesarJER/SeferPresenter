@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
+import { isImageMedia } from '../../utils/mediaUtils';
 import type { Slide, VideoState } from '../../types/presentation';
 import type { QuizOptionId, QuizSubslide, QuizTimerState } from '../../types/quiz';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -70,10 +71,10 @@ const PresenterScreen: React.FC<PresenterScreenProps> = ({
     // Apply Play/Pause
     if (videoState.isPlaying && videoElement.paused) {
       // Check if we are at the end (natural end or custom end)
-      const endTime = slide?.videoEnd;
+      const endTime = slide?.mediaEnd;
       const isAtEnd = videoElement.ended || (endTime !== undefined && videoElement.currentTime >= endTime);
       if (isAtEnd) {
-        videoElement.currentTime = slide?.videoStart ?? 0;
+        videoElement.currentTime = slide?.mediaStart ?? 0;
       }
       videoElement.play().catch(err => console.error("Error auto-playing projection video:", err));
     } else if (!videoState.isPlaying && !videoElement.paused) {
@@ -82,16 +83,16 @@ const PresenterScreen: React.FC<PresenterScreenProps> = ({
   }, [videoState, slide, videoElement]);
 
   // 2. Slide change listener: Setup dedicated slide video when slide transitions
-  const videoSrc = slide?.type === 'video' ? slide.videoSrc : null;
+  const mediaSrc = slide?.type === 'media' ? slide.mediaSrc : null;
   useEffect(() => {
-    if (!videoElement || !slide || slide.type !== 'video' || !videoSrc) return;
+    if (!videoElement || !slide || slide.type !== 'media' || !mediaSrc) return;
 
     // Refresh media and apply default slide settings
     videoElement.load();
-    const defaultVol = slide.videoVolume ?? 0.8;
-    const defaultSpeed = slide.videoSpeed ?? 1.0;
-    const defaultStart = slide.videoStart ?? 0;
-    const defaultLoop = slide.videoLoop !== false;
+    const defaultVol = slide.mediaVolume ?? 0.8;
+    const defaultSpeed = slide.mediaSpeed ?? 1.0;
+    const defaultStart = slide.mediaStart ?? 0;
+    const defaultLoop = slide.mediaLoop !== false;
 
     videoElement.volume = defaultVol;
     videoElement.playbackRate = defaultSpeed;
@@ -106,28 +107,28 @@ const PresenterScreen: React.FC<PresenterScreenProps> = ({
       volume: defaultVol,
       speed: defaultSpeed,
       loop: defaultLoop,
-      videoSrc: videoSrc,
-      startTime: slide.videoStart,
-      endTime: slide.videoEnd,
+      mediaSrc: mediaSrc,
+      startTime: slide.mediaStart,
+      endTime: slide.mediaEnd,
       lastUpdatedBy: 'projection',
       timestamp: Date.now()
     });
   }, [
     onVideoStateChange,
     slide,
-    videoSrc,
+    mediaSrc,
     slide?.id,
-    slide?.videoEnd,
-    slide?.videoLoop,
-    slide?.videoSpeed,
-    slide?.videoStart,
-    slide?.videoVolume,
+    slide?.mediaEnd,
+    slide?.mediaLoop,
+    slide?.mediaSpeed,
+    slide?.mediaStart,
+    slide?.mediaVolume,
     videoElement,
   ]);
 
   // 3. Playback timeupdate & loadedmetadata event listeners for bidirectional telemetry
   useEffect(() => {
-    if (!videoElement || !slide || slide.type !== 'video') return;
+    if (!videoElement || !slide || slide.type !== 'media') return;
 
     let intervalId: ReturnType<typeof setInterval> | null = null;
 
@@ -140,9 +141,9 @@ const PresenterScreen: React.FC<PresenterScreenProps> = ({
           volume: videoElement.volume,
           speed: videoElement.playbackRate,
           loop: videoElement.loop,
-          videoSrc: slide.videoSrc || null,
-          startTime: slide.videoStart,
-          endTime: slide.videoEnd,
+          mediaSrc: slide.mediaSrc || null,
+          startTime: slide.mediaStart,
+          endTime: slide.mediaEnd,
           lastUpdatedBy: 'projection',
           timestamp: Date.now()
         });
@@ -158,8 +159,8 @@ const PresenterScreen: React.FC<PresenterScreenProps> = ({
       intervalId = setInterval(() => {
         if (!videoElement) return;
 
-        const startTime = slide.videoStart ?? 0;
-        const endTime = slide.videoEnd;
+        const startTime = slide.mediaStart ?? 0;
+        const endTime = slide.mediaEnd;
 
         // Loop boundaries check
         if (endTime !== undefined && videoElement.currentTime >= endTime) {
@@ -221,7 +222,7 @@ const PresenterScreen: React.FC<PresenterScreenProps> = ({
         videoElement.removeEventListener('durationchange', handleDurationChange);
       }
     };
-  }, [slide, videoSrc, slide?.id, slide?.videoSrc, slide?.videoStart, slide?.videoEnd, videoElement]);
+  }, [slide, mediaSrc, slide?.id, slide?.mediaSrc, slide?.mediaStart, slide?.mediaEnd, videoElement]);
 
   const isVideoBg = /\.(mp4|webm)$/i.test(background);
   const isFallback1x = slide?.lines.length === 3 && slide.lines[1] === '-' && slide.lines[2] === '-';
@@ -232,49 +233,63 @@ const PresenterScreen: React.FC<PresenterScreenProps> = ({
 
   // Hiding overlays based on special image slide content ([IMAGE]) or dedicated video slides
   const isImageSlide = slide?.lines[0]?.trim() === '[IMAGE]';
-  const isVideoSlide = slide?.type === 'video';
+  const isVideoSlide = slide?.type === 'media';
   const isQuizSlide = slide?.type === 'quiz' && !!slide.quizData;
   const isPhotoSlide = isImageSlide;
-  const presenterNavVisible = !(isVideoSlide || isPhotoSlide) || slide?.videoPresenterNav !== false;
+  const presenterNavVisible = !(isVideoSlide || isPhotoSlide) || slide?.mediaPresenterNav !== false;
   const isResultsSlide = isQuizSlide && quizSubslides?.[quizCurrentSubslideIndex]?.kind === 'results';
   const hideLyricsOverlay = isPhotoSlide || isVideoSlide || isQuizSlide;
+  
 
   return (
     <div className="relative h-full w-full overflow-hidden bg-slate-950 text-white">
       <AnimatePresence mode="wait">
         <motion.div
-          key={(slide?.type === 'video' ? slide.videoSrc : background) || 'empty-background'}
+          key={(slide?.type === 'media' ? slide.mediaSrc : background) || 'empty-background'}
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.8 }}
           className="absolute inset-0"
         >
-          {slide?.type === 'video' && slide.videoSrc ? (
-            /* Dedicated Slide Video Player */
-            <video
-              ref={setVideoElement}
-              src={slide.videoSrc}
-              autoPlay
-              loop={slide.videoLoop !== false}
-              playsInline
-              className="h-full w-full object-cover"
-            />
-          ) : background ? (
-            isVideoBg ? (
-              <video
-                src={background}
-                autoPlay
-                loop
-                muted
-                playsInline
-                className="h-full w-full object-cover"
+          {/* 1. Fondo base (sólo se dibuja si no es imagen pura/media, o si mediaShowBg es true) */}
+          {((slide?.type !== 'media' && slide?.lines[0]?.trim() !== '[IMAGE]') || slide?.mediaShowBg === true) && (
+            background ? (
+              isVideoBg ? (
+                <video
+                  src={background}
+                  autoPlay
+                  loop
+                  muted
+                  playsInline
+                  className="absolute inset-0 h-full w-full object-cover"
+                />
+              ) : (
+                <img src={background} alt="" className="absolute inset-0 h-full w-full object-cover" />
+              )
+            ) : (
+              <div className="absolute inset-0 h-full w-full bg-[radial-gradient(circle_at_30%_20%,#29415f,#09111f_55%,#020617)]" />
+            )
+          )}
+
+          {/* 2. Capa Multimedia encima (Imagen o Video de la diapositiva) */}
+          {slide?.type === 'media' && slide.mediaSrc && (
+            isImageMedia(slide.mediaSrc) ? (
+              <img
+                src={slide.mediaSrc}
+                className={`absolute inset-0 h-full w-full object-${slide.mediaFit || 'cover'} z-10`}
+                alt="Slide Media"
               />
             ) : (
-              <img src={background} alt="" className="h-full w-full object-cover" />
+              <video
+                ref={setVideoElement}
+                src={slide.mediaSrc}
+                autoPlay
+                loop={slide.mediaLoop !== false}
+                playsInline
+                className={`absolute inset-0 h-full w-full object-${slide.mediaFit || 'cover'} z-10`}
+              />
             )
-          ) : (
-            <div className="h-full w-full bg-[radial-gradient(circle_at_30%_20%,#29415f,#09111f_55%,#020617)]" />
           )}
         </motion.div>
       </AnimatePresence>

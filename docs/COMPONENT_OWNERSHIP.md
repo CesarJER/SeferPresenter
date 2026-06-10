@@ -12,7 +12,7 @@ Control-only:
 - `src/components/control/PresentationList.tsx`: presentation list management.
 - `src/components/control/BackgroundSelector.tsx`: background override and lock controls.
 - `src/components/control/AudioPanel.tsx`: audio track/sync controls.
-- `src/components/control/VideoControls.tsx`: video playback controls.
+- `src/components/control/MediaControls.tsx`: video playback controls.
 - `src/components/control/SeferControlPanel.tsx` and `SeferControlPanelMini.tsx`: sacred-text controls.
 
 Presenter-only:

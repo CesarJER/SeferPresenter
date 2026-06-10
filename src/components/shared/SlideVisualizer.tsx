@@ -4,6 +4,7 @@ import type { Slide, ScriptureNavState, AppMode } from '../../types/presentation
 import type { QuizSubslide } from '../../types/quiz';
 import { sanitizeSlideHtml } from '../../utils/hebrewText';
 import { findScriptureRange } from '../../utils/scriptureLookup';
+import { isImageMedia } from '../../utils/mediaUtils';
 
 interface SlideVisualizerProps {
   slide: Slide | null;
@@ -138,7 +139,15 @@ const SlideVisualizer: React.FC<SlideVisualizerProps> = ({
 
       {/* Main View Area */}
       {!isCollapsed && (
-        <div className="p-2.5 md:p-3">
+        <div className="p-2.5 md:p-3 relative overflow-hidden min-h-[60px]">
+          {slide?.type === 'media' && slide.mediaSrc && isImageMedia(slide.mediaSrc) && (
+            <img src={slide.mediaSrc} className={`absolute inset-0 w-full h-full object-${slide.mediaFit || 'cover'} opacity-30 z-0`} alt="" />
+          )}
+          {slide?.type === 'media' && slide.mediaSrc && !isImageMedia(slide.mediaSrc) && (
+            <video src={slide.mediaSrc} muted className={`absolute inset-0 w-full h-full object-${slide.mediaFit || 'cover'} opacity-30 z-0`} />
+          )}
+          
+          <div className="relative z-10">
           {!hideTextBlocks && (
             isTrilingual ? (
               <div className="rounded-lg bg-gray-900/60 border border-gray-800/60 p-2.5 space-y-2">
@@ -177,6 +186,7 @@ const SlideVisualizer: React.FC<SlideVisualizerProps> = ({
             )
           )}
           {children}
+          </div>
         </div>
       )}
     </div>

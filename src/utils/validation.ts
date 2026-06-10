@@ -29,7 +29,7 @@ const isBooleanOrUndefined = (value: unknown): value is boolean | undefined =>
 const isStringRecordOrUndefined = (value: unknown): value is Record<string, string> | undefined =>
   value === undefined || (isRecord(value) && Object.values(value).every((entry) => typeof entry === 'string'));
 
-const slideTypes = new Set(['text', 'video', 'tanaj', 'sefer', 'quiz']);
+const slideTypes = new Set(['text', 'media', 'tanaj', 'sefer', 'quiz']);
 const quizOptionIds = new Set(['A', 'B', 'C', 'D']);
 const presentationModes = new Set(['standard', 'trilingual']);
 const appModes = new Set(['slides', 'scripture', 'seferManual']);
@@ -97,13 +97,15 @@ const validateSlideValue = (value: unknown, path: string): ValidationResult<Slid
   if (value.type !== undefined && (typeof value.type !== 'string' || !slideTypes.has(value.type))) {
     errors.push(`${path}.type no es valido.`);
   }
-  if (!isStringOrUndefined(value.videoSrc)) errors.push(`${path}.videoSrc debe ser texto.`);
-  if (value.videoVolume !== undefined && !isFiniteNumber(value.videoVolume)) errors.push(`${path}.videoVolume debe ser numero.`);
-  if (value.videoSpeed !== undefined && !isFiniteNumber(value.videoSpeed)) errors.push(`${path}.videoSpeed debe ser numero.`);
-  if (!isBooleanOrUndefined(value.videoLoop)) errors.push(`${path}.videoLoop debe ser booleano.`);
-  if (!isBooleanOrUndefined(value.videoPresenterNav)) errors.push(`${path}.videoPresenterNav debe ser booleano.`);
-  if (value.videoStart !== undefined && !isFiniteNumber(value.videoStart)) errors.push(`${path}.videoStart debe ser numero.`);
-  if (value.videoEnd !== undefined && !isFiniteNumber(value.videoEnd)) errors.push(`${path}.videoEnd debe ser numero.`);
+  if (!isStringOrUndefined(value.mediaSrc)) errors.push(`${path}.mediaSrc debe ser texto.`);
+  if (!isStringOrUndefined(value.mediaFit)) errors.push(`${path}.mediaFit debe ser texto.`);
+  if (value.mediaVolume !== undefined && !isFiniteNumber(value.mediaVolume)) errors.push(`${path}.mediaVolume debe ser numero.`);
+  if (value.mediaSpeed !== undefined && !isFiniteNumber(value.mediaSpeed)) errors.push(`${path}.mediaSpeed debe ser numero.`);
+  if (!isBooleanOrUndefined(value.mediaLoop)) errors.push(`${path}.mediaLoop debe ser booleano.`);
+  if (!isBooleanOrUndefined(value.mediaPresenterNav)) errors.push(`${path}.mediaPresenterNav debe ser booleano.`);
+  if (!isBooleanOrUndefined(value.mediaShowBg)) errors.push(`${path}.mediaShowBg debe ser booleano.`);
+  if (value.mediaStart !== undefined && !isFiniteNumber(value.mediaStart)) errors.push(`${path}.mediaStart debe ser numero.`);
+  if (value.mediaEnd !== undefined && !isFiniteNumber(value.mediaEnd)) errors.push(`${path}.mediaEnd debe ser numero.`);
   if (!isStringOrUndefined(value.scriptureBook)) errors.push(`${path}.scriptureBook debe ser texto.`);
   if (!isStringOrUndefined(value.scriptureChapter)) errors.push(`${path}.scriptureChapter debe ser texto.`);
   if (!isStringOrUndefined(value.scriptureVerseStart)) errors.push(`${path}.scriptureVerseStart debe ser texto.`);
@@ -267,7 +269,8 @@ const validateVideoState = (value: unknown, path: string): ValidationResult<Vide
   if (!isFiniteNumber(value.duration)) errors.push(`${path}.duration debe ser numero.`);
   if (!isFiniteNumber(value.volume)) errors.push(`${path}.volume debe ser numero.`);
   if (!isFiniteNumber(value.speed)) errors.push(`${path}.speed debe ser numero.`);
-  if (value.videoSrc !== null && typeof value.videoSrc !== 'string') errors.push(`${path}.videoSrc debe ser texto o null.`);
+  if (value.mediaSrc !== null && typeof value.mediaSrc !== 'string' && value.mediaSrc !== undefined) errors.push(`${path}.mediaSrc debe ser texto o null.`);
+  if (value.videoSrc !== null && typeof value.videoSrc !== 'string' && value.videoSrc !== undefined) errors.push(`${path}.videoSrc debe ser texto o null.`);
   if (value.lastUpdatedBy !== 'controller' && value.lastUpdatedBy !== 'projection') errors.push(`${path}.lastUpdatedBy no es valido.`);
   if (!isFiniteNumber(value.timestamp)) errors.push(`${path}.timestamp debe ser numero.`);
   if (!isBooleanOrUndefined(value.loop)) errors.push(`${path}.loop debe ser booleano.`);

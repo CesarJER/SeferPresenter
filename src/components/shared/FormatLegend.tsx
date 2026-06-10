@@ -10,13 +10,12 @@ export const FormatLegend: React.FC = () => (
       <ul className="list-disc pl-4 space-y-1.5 text-gray-400">
         <li><strong>Separador de Diapositivas:</strong> Separa las diapositivas con una línea en blanco doble (presiona Enter dos veces).</li>
         <li><strong>Etiquetas / Títulos:</strong> Escribe <code>#Nombre</code> al inicio de una diapositiva para etiquetarla (ej: <code>#Coro</code>). Para el título de la canción, escribe <code>&gt; Título</code> al inicio.</li>
-        <li><strong>Diapositiva de Imagen Pura:</strong> Escribe <code>[IMAGE]</code> para ocultar la caja de texto y mostrar la imagen/video a pantalla completa.</li>
-        <li><strong>Diapositiva de Video:</strong> Usa el formato:
+        <li><strong>Diapositiva de Medios (Video/Imagen):</strong> Usa el formato:
           <div className="mt-1.5 p-2 bg-gray-955/90 rounded border border-gray-800 text-[11.5px] font-mono text-yellow-500 overflow-x-auto whitespace-pre">
-            [VIDEO - "ruta_video" - volumen - velocidad - bucle - inicio - fin]
+            [MEDIA - ruta - fit - nav - showBg - loop - vol - speed - start - end]
           </div>
           <p className="mt-1 text-[10px] text-gray-500 leading-normal">
-            Ejemplo: <code>[VIDEO - "/backgrounds/Jerusalem/Jerusalem-Video.mp4" - 0.8 - 1.0 - 1 - 0 - 30]</code> (bucle: 1=sí, 0=no; volumen: 0 a 1; velocidad: 0.5 a 2.0; inicio/fin en segundos).
+            Ejemplo: <code>[MEDIA - "/videos/Adoradle.mp4"]</code> (Casi todos los parámetros son opcionales y tienen valores por defecto. loop: 1=sí, 0=no; vol: 0 a 1; speed: 0.5 a 2.0; start/end en seg; fit: cover, contain; showBg: 0=no, 1=sí).
           </p>
         </li>
       </ul>

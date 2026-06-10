@@ -25,7 +25,7 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
 - `PresentationList` - `src/components/control/PresentationList.tsx`: presentation list actions.
 - `BackgroundSelector` - `src/components/control/BackgroundSelector.tsx`: background controls.
 - `AudioPanel` - `src/components/control/AudioPanel.tsx`: audio controls.
-- `VideoControls` - `src/components/control/VideoControls.tsx`: video controls.
+- `MediaControls` - `src/components/control/MediaControls.tsx`: video controls.
 - `SeferControlPanel` - `src/components/control/SeferControlPanel.tsx`: full Sefer control panel.
 - `SeferControlPanelMini` - `src/components/control/SeferControlPanelMini.tsx`: compact scripture controls.
 - `PresenterScreen` - `src/components/presenter/PresenterScreen.tsx`: projected slide/video/quiz rendering.
@@ -73,6 +73,6 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
 - `generateQuizSubslides` - `src/utils/quizUtils.ts`: quiz phase/subslide expansion.
 - `parseQuizBlock` / `serializeQuizToText` - `src/utils/quizUtils.ts`: quick-edit quiz text conversion.
 - `scoreAnswer` / `calcResultRanges` - `src/utils/quizUtils.ts`: quiz scoring and result ranges.
-- `parseVideoSlideString` - `src/utils/videoUtils.ts`: video slide parsing.
+- `parseMediaSlideString` - `src/utils/mediaUtils.ts`: media slide parsing.
 - `transliterateText` - `src/utils/transliterate.ts`: transliteration helper.
 - `sanitizeHtml` / `sanitizeSlideHtml` / niqqud helpers - `src/utils/hebrewText.ts`: slide HTML sanitizing and Hebrew text cleanup.

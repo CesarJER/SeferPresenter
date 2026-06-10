@@ -7,7 +7,7 @@ import { SlideRow } from './SlideRow';
 
 type EditorMode = 'list' | 'edit';
 type PresentationMode = 'standard' | 'trilingual';
-type SlideType = 'text' | 'video' | 'image' | 'tanaj' | 'sefer' | 'quiz';
+type SlideType = 'text' | 'media' | 'tanaj' | 'sefer' | 'quiz';
 type ScriptureSlideUpdate = {
   scriptureBook: string;
   scriptureChapter: string;
@@ -17,7 +17,8 @@ type ScriptureSlideUpdate = {
 };
 
 type VideoParamUpdate = {
-  videoSrc?: string;
+  mediaSrc?: string;
+  mediaFit?: 'cover' | 'contain' | 'fill';
   volume?: number;
   speed?: number;
   loop?: boolean;
@@ -77,9 +78,8 @@ interface PresentationEditorProps {
   handleMoveDown: (idx: number) => void;
   handleDeleteSlide: (idx: number) => void;
   handleChangeSlideType: (idx: number, newType: SlideType) => void;
-  handleAddImageSlide: () => void;
   handleAddSlide: () => void;
-  handleAddVideoSlide: () => void;
+  handleAddMediaSlide: () => void;
   handleAddQuizSlide: () => void;
   handleTransliterate: () => void;
 }
@@ -135,9 +135,8 @@ export const PresentationEditor: React.FC<PresentationEditorProps> = ({
   handleMoveDown,
   handleDeleteSlide,
   handleChangeSlideType,
-  handleAddImageSlide,
   handleAddSlide,
-  handleAddVideoSlide,
+  handleAddMediaSlide,
   handleAddQuizSlide,
   handleTransliterate,
 }) => (              <div id="section-presentation-editor">
@@ -359,7 +358,7 @@ export const PresentationEditor: React.FC<PresentationEditorProps> = ({
                       {/* Left: + Image Shortcut */}
                       <button
                         type="button"
-                        onClick={handleAddImageSlide}
+                        onClick={handleAddMediaSlide}
                         className="flex items-center gap-1 text-gray-500 hover:text-white transition-colors cursor-pointer pr-2 border-r border-gray-800"
                         title="Añadir Diapositiva de Imagen Pura (+ 🖼️)"
                       >
@@ -380,7 +379,7 @@ export const PresentationEditor: React.FC<PresentationEditorProps> = ({
                       {/* Right: + Video Shortcut */}
                       <button
                         type="button"
-                        onClick={handleAddVideoSlide}
+                        onClick={handleAddMediaSlide}
                         className="flex items-center gap-1 text-gray-500 hover:text-white transition-colors cursor-pointer pl-2 border-l border-gray-800"
                         title="Añadir Diapositiva de Video (+ 🎥)"
                       >
