@@ -31,3 +31,4 @@ launcher
 *.njsproj
 *.sln
 *.sw?
+.agents

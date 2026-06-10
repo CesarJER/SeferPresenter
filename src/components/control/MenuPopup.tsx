@@ -1716,6 +1716,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
             appMode={appMode}
             scriptureState={scriptureState}
             quizSubslide={activeSlide?.type === 'quiz' ? quizSubslides[quizCurrentSubslideIndex] : undefined}
+            videoState={videoState}
           >
             {activeSlide?.type === 'quiz' && activeSlide.quizData && quizTimerState && (() => {
               const allQuizData = currentPresentation?.slides

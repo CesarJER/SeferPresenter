@@ -472,6 +472,7 @@ export const SlideRow: React.FC<SlideRowProps> = ({
                                       {/* Slide Content with AutoResizeText */}
                                       <div className="absolute inset-0 p-1 flex items-center justify-center">
                                         {(() => {
+                                          if (slide.type === 'media' || isImage || slide.lines[0]?.trim() === '[MEDIA]') return null;
                                           const isFb = slide.lines.length === 3 &&
                                             (slide.lines[1] === '-' || slide.lines[1] === '>-' || slide.lines[1] === '') &&
                                             (slide.lines[2] === '-' || slide.lines[2] === '>-' || slide.lines[2] === '');
