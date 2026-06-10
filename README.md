@@ -82,6 +82,16 @@ La aplicacion se organiza por consumidor:
 - `src/utils/`: normalizacion, parsing, lookup biblico, metadata y utilidades puras.
 - `server/`: backend local Node.
 
+## Documentacion para agentes AI
+
+- `AGENTS.md`: guia rapida que debe leerse primero al iniciar trabajo automatizado.
+- `docs/AI_PROJECT_MAP.md`: mapa rapido del codigo y rutas de cambio comunes.
+- `docs/COMPONENT_OWNERSHIP.md`: ownership de componentes y categorias de estado.
+- `docs/CHANGE_GUIDE.md`: checklists para cambios futuros.
+- `docs/SYNC_ARCHITECTURE.md`: arquitectura actual de sincronizacion y direccion backend-ready.
+- `docs/SYMBOL_INDEX.md`: indice de simbolos y archivos importantes.
+- `docs/ai-navigation.md`: vista condensada de navegacion para lectura rapida.
+
 ## Sincronizacion
 
 La sincronizacion usa `BroadcastChannel` para pestanas locales y SSE/API para red local.
