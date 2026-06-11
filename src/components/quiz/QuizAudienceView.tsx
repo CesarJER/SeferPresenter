@@ -13,7 +13,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { CheckCircle, XCircle, Send, RotateCcw } from 'lucide-react';
 import type { QuizData, QuizOptionId, QuizResultProfile } from '../../types/presentation';
 import type { QuizAudienceAnswer, QuizSubslide, QuizTimerState, QuizQuestionScore, QuizTotalScore } from '../../types/quiz';
-import { formatCentipunts, getDisplayOptions, scoreAnswer, calcResultRanges, selectResultProfile } from '../../utils/quizUtils';
+import { formatCentipunts, getDisplayOptions, scoreAnswer, calcResultRanges, selectResultProfile, calcRemainingMs, formatRemainingTime } from '../../utils/quizUtils';
 import { getMetadata, resolveBookName } from '../../utils/metadataCache';
 import type { AppMetadata } from '../../utils/metadataCache';
 import { QuizResultsDiploma } from './QuizResultsView';
@@ -72,6 +72,21 @@ export const QuizAudienceView: React.FC<QuizAudienceViewProps> = ({
 
   const isTimerRunning = timerState.status === 'running';
   const isDisabled = answer.submitted || !isTimerRunning;
+
+  // Local timer recalculation
+  const [localRemainingMs, setLocalRemainingMs] = React.useState<number>(calcRemainingMs(timerState));
+
+  useEffect(() => {
+    if (!isPregunta || !isTimerRunning) {
+      setLocalRemainingMs(calcRemainingMs(timerState));
+      return;
+    }
+
+    const interval = setInterval(() => {
+      setLocalRemainingMs(calcRemainingMs(timerState));
+    }, 100);
+    return () => clearInterval(interval);
+  }, [isPregunta, isTimerRunning, timerState]);
 
   // Auto-submit on timer expire
   useEffect(() => {
@@ -154,6 +169,22 @@ export const QuizAudienceView: React.FC<QuizAudienceViewProps> = ({
             animate={{ opacity: 1, y: 0 }}
             className="flex flex-col gap-3"
           >
+            {/* Local Timer Display */}
+            {isPregunta && (
+              <div className="flex justify-center mb-2">
+                <div className={`flex items-baseline px-4 py-1.5 rounded-full text-sm sm:text-base font-mono font-black tracking-widest border-2 transition-all duration-300 shadow-lg ${localRemainingMs <= 5000 && isTimerRunning
+                  ? 'bg-red-900/40 text-red-400 border-red-500/60 shadow-red-500/20 animate-pulse scale-[1.02]'
+                  : isTimerRunning
+                    ? 'bg-yellow-900/30 text-yellow-300 border-yellow-500/50 shadow-yellow-500/10'
+                    : 'bg-gray-900 text-gray border-gray-700'
+                  }`}>
+                  <span className="text-[10px] sm:text-xs uppercase opacity-80 mr-2 font-sans tracking-widest font-bold">Tiempo:</span>
+                  {formatRemainingTime(localRemainingMs)}
+                  <span className="text-[10px] sm:text-xs opacity-80 ml-1 font-sans font-bold">s</span>
+                </div>
+              </div>
+            )}
+
             {/* Question text */}
             <p className="text-white font-bold text-base leading-snug">
               {quizData.question}

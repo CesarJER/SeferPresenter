@@ -247,16 +247,14 @@ const SeferControlPanel: React.FC<SeferControlPanelProps> = ({
             />
 
             {/* Transliteration & Translation in compact format */}
-            <div className="flex flex-col gap-1.5 mt-2 pt-2 border-t border-gray-700/60 text-xs">
+            <div className="flex flex-col gap-1 mt-1.5 pt-1.5 border-t border-gray-800/60 text-xs">
               {currentVerse.transliteration && (
-                <p className="text-sky-355 leading-relaxed">
-                  <span className="text-sky-400 font-bold mr-1"></span>
+                <p className="text-sky-300 leading-relaxed">
                   {currentVerse.transliteration}
                 </p>
               )}
               {currentVerse.translation && (
                 <p className="text-gray-300 leading-relaxed">
-                  <span className="text-green-455 font-bold mr-1"></span>
                   {currentVerse.translation}
                 </p>
               )}

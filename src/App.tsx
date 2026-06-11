@@ -695,7 +695,7 @@ function App() {
 
   if (isAudioEditorMode) {
     return (
-      <div className="w-screen h-screen bg-gray-900 overflow-hidden">
+      <div className="w-dvw h-dvh bg-gray-900 overflow-hidden">
         <AudioSyncEditor
           isOpen={true}
           onClose={() => window.close()}
@@ -726,7 +726,7 @@ function App() {
 
   if (isControlMode) {
     return (
-      <div id="section-app-control-mode" className="w-full h-screen bg-gray-900 overflow-hidden">
+      <div id="section-app-control-mode" className="w-full h-dvh bg-gray-900 overflow-hidden">
         <MenuPopup
           presentations={presentations}
           backgrounds={backgrounds}
@@ -838,7 +838,7 @@ function App() {
 
   // Presenter (big screen) mode
   return (
-    <div className="w-full h-screen overflow-hidden bg-black relative">
+    <div className="w-full h-dvh overflow-hidden bg-black relative">
       {quizScriptureState ? (
         <div id="section-app-scripture-reader-view" className="w-full h-full overflow-hidden">
           <SeferReaderScreen

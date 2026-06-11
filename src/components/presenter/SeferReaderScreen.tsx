@@ -291,7 +291,7 @@ export const SeferReaderScreen: React.FC<SeferReaderScreenProps> = ({
 
   if (isLoading || Object.keys(metadata).length === 0 || data.length === 0) {
     return (
-      <div className="h-screen flex items-center justify-center text-2xl font-hebrew bg-[#fef3c7] text-amber-900">
+      <div className="h-dvh flex items-center justify-center text-2xl font-hebrew bg-[#fef3c7] text-amber-900">
         Cargando...
       </div>
     );
@@ -300,7 +300,7 @@ export const SeferReaderScreen: React.FC<SeferReaderScreenProps> = ({
   const bookDir = data[0]?.DIR?.toLowerCase() || 'rtl';
 
   return (
-    <main className="h-screen flex flex-col md:flex-row bg-[#fef3c7] font-hebrew overflow-hidden">
+    <main className="h-dvh flex flex-col md:flex-row bg-[#fef3c7] font-hebrew overflow-hidden">
       <VerseSidebar
         combinedText={combinedText}
         combinedTextBaseSize={combinedTextBaseSize}
@@ -322,7 +322,7 @@ export const SeferReaderScreen: React.FC<SeferReaderScreenProps> = ({
               <button
                 type="button"
                 onClick={onLogoClick}
-                className="flex h-8 w-8 items-center justify-center rounded border border-amber-900/20 bg-[#fef3c7] hover:bg-amber-100"
+                className="flex h-8 w-8 items-center justify-center rounded border border-amber-900/20 bg-[#fef3c7] hover:bg-amber-100 pointer-events-auto"
                 title="Abrir menú"
               >
                 <img src="/logo.svg" alt="Abrir menú" className="h-6 w-6" />

@@ -112,9 +112,9 @@ export const QuizControllerView: React.FC<QuizControllerViewProps> = ({
       )}
 
       {/* Question preview */}
-      {(renderMode === 'both' || renderMode === 'top') && !isResults && (
+      {(renderMode === 'both' || renderMode === 'bottom') && !isResults && (
         <div className="rounded-lg border border-gray-800 bg-gray-900/50 px-2.5 py-2">
-          <p className="text-[11px] text-white/70 line-clamp-2">{quizData.question}</p>
+          <p className="text-[11px] text-white/70 leading-snug">{quizData.question}</p>
         </div>
       )}
 
@@ -242,8 +242,8 @@ export const QuizControllerView: React.FC<QuizControllerViewProps> = ({
               <span className={`shrink-0 flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-black ${opt.isCorrect ? 'bg-emerald-500 text-black' : 'bg-white/10 text-white/40'}`}>
                 {letter}
               </span>
-              <div className="flex-1 flex items-center justify-between min-w-0">
-                <span className={`truncate text-[11px] ${opt.isCorrect ? 'text-emerald-200' : 'text-gray-400'}`}>
+              <div className="flex-1 flex items-center justify-between min-w-0 py-0.5">
+                <span className={`text-[11px] leading-snug pr-2 ${opt.isCorrect ? 'text-emerald-200' : 'text-gray-400'}`}>
                   {opt.text}
                 </span>
                 <div className="flex flex-col items-center shrink-0 ml-2 min-w-[20px]">

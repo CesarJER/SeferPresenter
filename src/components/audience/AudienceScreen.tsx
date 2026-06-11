@@ -44,16 +44,27 @@ const AudienceScreen = ({
       .catch((err) => console.error('Audience service worker registration failed', err));
   }, []);
 
-  const ignorePresenterControl = useCallback(() => {}, []);
+  const handleFullscreen = useCallback(() => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(err => {
+        console.warn(`Error attempting to enable fullscreen: ${err.message}`);
+      });
+    } else {
+      document.exitFullscreen().catch(err => {
+        console.warn(`Error attempting to disable fullscreen: ${err.message}`);
+      });
+    }
+  }, []);
+
   const ignoreVideoState = useCallback(() => {}, []);
 
   if (isCitaVerse && scriptureState) {
     return (
-      <div className="pointer-events-none h-screen w-screen select-none overflow-hidden bg-black">
+      <div className="pointer-events-none h-dvh w-dvw select-none overflow-hidden bg-black">
         <SeferReaderScreen
           scriptureState={scriptureState}
-          onVerseSelected={ignorePresenterControl}
-          onLogoClick={ignorePresenterControl}
+          onVerseSelected={() => {}}
+          onLogoClick={handleFullscreen}
         />
       </div>
     );
@@ -62,7 +73,7 @@ const AudienceScreen = ({
   if (slide?.type === 'quiz' && slide.quizData && quizTimerState && !isCitaVerse) {
     const answer = audienceAnswers.getAnswer(slide.id);
     return (
-      <div className="h-screen w-screen overflow-hidden bg-black">
+      <div className="h-dvh w-dvw overflow-hidden bg-black">
         <QuizAudienceView
           slide={slide}
           quizData={slide.quizData}
@@ -88,24 +99,24 @@ const AudienceScreen = ({
 
   if ((appMode === 'seferManual' || (appMode === 'scripture' && scriptureState?.scriptureKind !== 'tanaj')) && scriptureState) {
     return (
-      <div className="pointer-events-none h-screen w-screen select-none overflow-hidden bg-black">
+      <div className="pointer-events-none h-dvh w-dvw select-none overflow-hidden bg-black">
         <SeferReaderScreen
           scriptureState={scriptureState}
-          onVerseSelected={ignorePresenterControl}
-          onLogoClick={ignorePresenterControl}
+          onVerseSelected={() => {}}
+          onLogoClick={handleFullscreen}
         />
       </div>
     );
   }
 
   return (
-    <div className="pointer-events-none h-screen w-screen select-none overflow-hidden bg-black">
+    <div className="pointer-events-none h-dvh w-dvw select-none overflow-hidden bg-black">
       <PresenterScreen
         background={background}
         slide={slide}
         presentationTitle={presentationTitle}
         fontScale={fontScale}
-        onLogoClick={ignorePresenterControl}
+        onLogoClick={handleFullscreen}
         videoState={videoState}
         onVideoStateChange={ignoreVideoState}
         quizSubslides={quizSubslides}

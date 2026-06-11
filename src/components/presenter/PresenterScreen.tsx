@@ -390,7 +390,7 @@ const PresenterScreen: React.FC<PresenterScreenProps> = ({
             </main>
 
             <footer
-              className={`group/nav grid h-[7vh] min-h-14 max-h-20 w-full grid-cols-[1.25fr_0.5fr_auto] gap-2 text-center font-bold transition-opacity duration-200 ${presenterNavVisible ? 'opacity-100' : 'opacity-0 hover:opacity-100'}`}
+              className={`group/nav grid h-[7vh] min-h-14 max-h-20 w-full grid-cols-[1.25fr_0.5fr_clamp(3.5rem,7vh,5rem)] gap-2 text-center font-bold transition-opacity duration-200 ${presenterNavVisible ? 'opacity-100' : 'opacity-0 hover:opacity-100'}`}
             >
               <div className="glass-panel-nav flex min-w-0 items-center justify-center px-3 text-[clamp(0.72rem,1vw,1.18rem)] sm:px-4">
                 {titleText}
@@ -409,10 +409,10 @@ const PresenterScreen: React.FC<PresenterScreenProps> = ({
               </AnimatePresence>
               <button
                 onClick={onLogoClick}
-                className="glass-panel-button flex aspect-square h-full min-w-0 cursor-pointer items-center justify-center p-2"
+                className="glass-panel-button flex aspect-square h-full min-w-0 cursor-pointer items-center justify-center p-2 pointer-events-auto"
                 title="Abrir Menú"
               >
-                <img src="/logo.svg" alt="La operador" className="object-contain h-full w-auto" />
+                <img src="/logo.svg" alt="La operador" className="object-contain h-full w-full max-h-full max-w-full" />
               </button>
             </footer>
           </div>

@@ -444,7 +444,7 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="w-full h-screen bg-gray-900 text-white flex flex-col overflow-hidden">
+    <div className="w-full h-dvh bg-gray-900 text-white flex flex-col overflow-hidden">
       
       {/* Header */}
       <div className="flex items-center justify-between border-b border-gray-800 bg-gray-950 px-6 py-4 shrink-0 shadow-md">
