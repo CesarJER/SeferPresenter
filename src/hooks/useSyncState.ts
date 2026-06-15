@@ -18,6 +18,7 @@ interface SyncStateOptions {
   scriptureState?: ScriptureNavState | null;
   audioState?: AudioState;
   quizState?: QuizSyncState | null;
+  stepIndex?: number;
 }
 
 interface UseSyncStateProps {
@@ -28,6 +29,7 @@ interface UseSyncStateProps {
   // Refs to current state (to read inside message handlers without stale closures)
   currentPresentationRef: React.MutableRefObject<Presentation | null>;
   currentSlideIndexRef: React.MutableRefObject<number>;
+  currentStepIndexRef: React.MutableRefObject<number>;
   backgroundLockRef: React.MutableRefObject<boolean>;
   lockedBackgroundValueRef: React.MutableRefObject<string | null>;
   userSelectedBackgroundRef: React.MutableRefObject<string | null>;
@@ -39,6 +41,7 @@ interface UseSyncStateProps {
   // State setters
   setCurrentPresentation: (p: Presentation | null) => void;
   setCurrentSlideIndex: (idx: number) => void;
+  setCurrentStepIndex: (idx: number) => void;
   setBackgroundLock: (locked: boolean) => void;
   setLockedBackgroundValue: (bg: string | null) => void;
   setUserSelectedBackground: (bg: string | null) => void;
@@ -148,11 +151,11 @@ const areScriptureStatesEqual = (left: ScriptureNavState | null, right: Scriptur
 export function useSyncState(props: UseSyncStateProps) {
   const {
     isControlMode, isPresenterMode, onRemoteCommand, clientIdRef,
-    currentPresentationRef, currentSlideIndexRef, backgroundLockRef,
+    currentPresentationRef, currentSlideIndexRef, currentStepIndexRef, backgroundLockRef,
     lockedBackgroundValueRef, userSelectedBackgroundRef, videoStateRef,
     audioStateRef, appModeRef, scriptureStateRef,
     quizStateRef,
-    setCurrentPresentation, setCurrentSlideIndex, setBackgroundLock,
+    setCurrentPresentation, setCurrentSlideIndex, setCurrentStepIndex, setBackgroundLock,
     setLockedBackgroundValue, setUserSelectedBackground, setVideoState,
     setAppMode, setScriptureState, setAudioState, setAudioSyncMaps,
     setQuizState,
@@ -185,6 +188,7 @@ export function useSyncState(props: UseSyncStateProps) {
     const {
       presentation, slideIndex, bgLock, lockedBg, userSelectedBg,
       videoState, appMode, scriptureState, audioState, quizState,
+      stepIndex,
     } = opts;
 
     const activeVideoState = videoState !== undefined ? videoState : videoStateRef.current;
@@ -192,6 +196,7 @@ export function useSyncState(props: UseSyncStateProps) {
     const activeScriptureState = scriptureState !== undefined ? scriptureState : scriptureStateRef.current;
     const activeAudioState = audioState !== undefined ? audioState : audioStateRef.current;
     const activeQuizState = quizState !== undefined ? quizState : quizStateRef?.current ?? null;
+    const activeStepIndex = stepIndex !== undefined ? stepIndex : currentStepIndexRef.current;
 
     // Update local refs immediately (avoid stale reads before React re-renders)
     if (videoState !== undefined) videoStateRef.current = activeVideoState;
@@ -214,6 +219,7 @@ export function useSyncState(props: UseSyncStateProps) {
       scriptureState: activeScriptureState,
       audioState: activeAudioState,
       quizState: activeQuizState,
+      stepIndex: activeStepIndex,
     });
 
     channel.postMessage(payload);
@@ -223,7 +229,7 @@ export function useSyncState(props: UseSyncStateProps) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     }).catch(err => console.error('Error syncing state to network', err));
-  }, [channel, isControlMode, persistState, videoStateRef, appModeRef, scriptureStateRef, audioStateRef, quizStateRef, clientIdRef]);
+  }, [channel, isControlMode, persistState, videoStateRef, appModeRef, scriptureStateRef, audioStateRef, quizStateRef, currentStepIndexRef, clientIdRef]);
 
   const emitCommand = useCallback((payload: RemoteCommandPayload) => {
     const message = makeSyncMessage({
@@ -398,6 +404,9 @@ export function useSyncState(props: UseSyncStateProps) {
       quizStateRef.current = incomingQuizState;
       setQuizState(incomingQuizState);
     }
+    if (safeData.stepIndex !== undefined && currentStepIndexRef.current !== safeData.stepIndex) {
+      setCurrentStepIndex(safeData.stepIndex as number);
+    }
 
     if (persist && safeData.slideIndex !== undefined) {
       persistState(
@@ -408,10 +417,10 @@ export function useSyncState(props: UseSyncStateProps) {
       );
     }
   }, [
-    currentPresentationRef, currentSlideIndexRef, backgroundLockRef,
+    currentPresentationRef, currentSlideIndexRef, currentStepIndexRef, backgroundLockRef,
     lockedBackgroundValueRef, userSelectedBackgroundRef, videoStateRef,
     appModeRef, scriptureStateRef,
-    setCurrentPresentation, setCurrentSlideIndex, setBackgroundLock,
+    setCurrentPresentation, setCurrentSlideIndex, setCurrentStepIndex, setBackgroundLock,
     setLockedBackgroundValue, setUserSelectedBackground,
     setAppMode, setScriptureState, applyAudioTelemetry, persistState,
     quizStateRef, setQuizState, setVideoState,

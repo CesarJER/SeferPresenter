@@ -32,6 +32,8 @@ import { useQuizTimer } from './hooks/useQuizTimer';
 import { validateAudioSyncMaps, validatePresentationList } from './utils/validation';
 import { makeSyncMessage } from './utils/syncProtocol';
 import { generateQuizSubslides, calcMaxBaseCentipunts } from './utils/quizUtils';
+import { generatePresentationSteps } from './utils/navigationUtils';
+import type { PresentationStep } from './types/presentation';
 
 function App() {
   const routeName = window.location.pathname.split('/').filter(Boolean)[0] || 'presenter';
@@ -79,6 +81,13 @@ function App() {
   const navigatedSlideIdRef = useRef<string | undefined>(undefined);
   const lastActiveSlideIdRef = useRef<string | undefined>(undefined);
 
+  const steps = useMemo(() => {
+    return currentPresentation ? generatePresentationSteps(currentPresentation) : [];
+  }, [currentPresentation]);
+
+  const [currentStepIndex, setCurrentStepIndex] = useState<number>(0);
+  const currentStepIndexRef = useRef(currentStepIndex);
+
   const activeSlide = currentPresentation && currentSlideIndex >= 0 ? currentPresentation.slides[currentSlideIndex] : null;
   const activeQuizData = activeSlide?.type === 'quiz' ? activeSlide.quizData : undefined;
   const quizSubslides = useMemo(
@@ -110,6 +119,59 @@ function App() {
       scriptureKind: 'sefer',
     };
   }, [isQuizCitaVerse, activeQuizSubslide]);
+
+  const getFirstStepIndexForSlide = useCallback((slideIdx: number, stepList: PresentationStep[]) => {
+    return stepList.findIndex(s => s.slideIndex === slideIdx);
+  }, []);
+
+  const applyStepIndex = useCallback((idx: number) => {
+    if (idx < 0 || idx >= steps.length) return;
+    setCurrentStepIndex(idx);
+
+    const step = steps[idx];
+    if (step.slideIndex !== currentSlideIndexRef.current) {
+      setCurrentSlideIndex(step.slideIndex);
+    }
+
+    if (step.type === 'normal') {
+      setAppMode('slides');
+      setVideoState(null);
+    } else if (step.type === 'quiz') {
+      setAppMode('slides');
+      setVideoState(null);
+      setQuizCurrentSubslideIndex(step.subslideIndex);
+      const slide = currentPresentationRef.current?.slides[step.slideIndex];
+      const subslides = slide?.quizData ? generateQuizSubslides(slide.quizData) : [];
+      if (subslides[step.subslideIndex]?.kind === 'respuesta') {
+        quizTimer.completeTimer();
+      }
+    } else if (step.type === 'scripture') {
+      setAppMode('scripture');
+      const slide = currentPresentationRef.current?.slides[step.slideIndex];
+      if (slide) {
+        setScriptureState({
+          bookEs: step.book,
+          bookHeb: '',
+          bookAbbrevEs: step.book,
+          chapter: step.chapter,
+          verseStart: slide.scriptureVerseStart || step.verse,
+          verse: step.verse,
+          verseEnd: slide.scriptureVerseEnd,
+          verseNikud: '',
+          transliteration: '',
+          translation: '',
+          verseIdx: Number(step.verse) - 1,
+          totalVerses: 100, // hydrated by SeferReaderScreen
+          scriptureKind: slide.type === 'tanaj' ? 'tanaj' : 'sefer',
+        });
+      }
+    }
+  }, [steps, quizTimer]);
+
+  const applyStepIndexRef = useRef(applyStepIndex);
+  useEffect(() => {
+    applyStepIndexRef.current = applyStepIndex;
+  }, [applyStepIndex]);
 
   const makeInitialQuizState = useCallback((slide: Slide | null, direction: 'forward' | 'backward' = 'forward'): QuizSyncState | null => {
     const quizData = slide?.type === 'quiz' ? slide.quizData : undefined;
@@ -187,6 +249,7 @@ function App() {
   useEffect(() => {
     currentPresentationRef.current = currentPresentation;
     currentSlideIndexRef.current = currentSlideIndex;
+    currentStepIndexRef.current = currentStepIndex;
     backgroundLockRef.current = backgroundLock;
     lockedBackgroundValueRef.current = lockedBackgroundValue;
     userSelectedBackgroundRef.current = userSelectedBackground;
@@ -195,7 +258,7 @@ function App() {
     appModeRef.current = appMode;
     scriptureStateRef.current = scriptureState;
     quizStateRef.current = activeQuizState;
-  }, [currentPresentation, currentSlideIndex, backgroundLock, lockedBackgroundValue, userSelectedBackground, videoState, audioState, appMode, scriptureState, activeQuizState]);
+  }, [currentPresentation, currentSlideIndex, currentStepIndex, backgroundLock, lockedBackgroundValue, userSelectedBackground, videoState, audioState, appMode, scriptureState, activeQuizState]);
 
 
 
@@ -238,6 +301,9 @@ function App() {
 
   const handleRemoteCommand = useCallback((payload: RemoteCommandPayload) => {
     switch (payload.command) {
+      case 'SELECT_STEP':
+        applyStepIndexRef.current?.(payload.stepIndex);
+        break;
       case 'SELECT_PRESENTATION_AND_SLIDE':
         handleSelectPresentationAndSlideRef.current?.(payload.presentation, payload.slideIndex, payload.direction, payload.targetVerse);
         break;
@@ -328,10 +394,10 @@ function App() {
 
   const { channel, syncState, emitCommand, emitAudioTelemetry, emitVideoTelemetry, emitDisplayTelemetry } = useSyncState({
     isControlMode, isPresenterMode, onRemoteCommand: handleRemoteCommand, clientIdRef,
-    currentPresentationRef, currentSlideIndexRef, backgroundLockRef,
+    currentPresentationRef, currentSlideIndexRef, currentStepIndexRef, backgroundLockRef,
     lockedBackgroundValueRef, userSelectedBackgroundRef, videoStateRef,
     audioStateRef, appModeRef, scriptureStateRef, quizStateRef,
-    setCurrentPresentation, setCurrentSlideIndex, setBackgroundLock,
+    setCurrentPresentation, setCurrentSlideIndex, setCurrentStepIndex, setBackgroundLock,
     setLockedBackgroundValue, setUserSelectedBackground, setVideoState,
     setAppMode, setScriptureState, setAudioState, setAudioSyncMaps,
     setQuizState: applyRemoteQuizState,
@@ -426,6 +492,21 @@ function App() {
     setCurrentSlideIndex(idx);
     setVideoState(null);
 
+    const stepList = normalizedPresentation ? generatePresentationSteps(normalizedPresentation) : [];
+    let stepIdx = 0;
+    if (idx >= 0 && stepList.length > 0) {
+      if (targetVerse) {
+        const found = stepList.findIndex(s => s.slideIndex === idx && s.type === 'scripture' && s.verse === targetVerse);
+        stepIdx = found >= 0 ? found : getFirstStepIndexForSlide(idx, stepList);
+      } else if (direction === 'backward') {
+        const foundLast = [...stepList].reverse().findIndex(s => s.slideIndex === idx);
+        stepIdx = foundLast >= 0 ? stepList.length - 1 - foundLast : getFirstStepIndexForSlide(idx, stepList);
+      } else {
+        stepIdx = getFirstStepIndexForSlide(idx, stepList);
+      }
+    }
+    setCurrentStepIndex(stepIdx >= 0 ? stepIdx : 0);
+
     const slide = normalizedPresentation && idx >= 0 ? normalizedPresentation.slides[idx] : null;
     const bgVal = slide?.background ?? '';
     const isIgnored = bgVal === 'Ignorar' || bgVal === 'No cambiar';
@@ -452,6 +533,7 @@ function App() {
         lockedBg: lockedBackgroundValueRef.current, userSelectedBg: userSelectedBackgroundRef.current,
         videoState: null, appMode: nextAppMode, scriptureState: scriptureSlideState ?? scriptureStateRef.current,
         quizState: nextQuizState,
+        stepIndex: stepIdx >= 0 ? stepIdx : 0,
       });
     } else {
       setUserSelectedBackground(null);
@@ -460,9 +542,10 @@ function App() {
         lockedBg: lockedBackgroundValueRef.current, userSelectedBg: null,
         videoState: null, appMode: nextAppMode, scriptureState: scriptureSlideState ?? scriptureStateRef.current,
         quizState: nextQuizState,
+        stepIndex: stepIdx >= 0 ? stepIdx : 0,
       });
     }
-  }, [syncState, buildScriptureSlideState, makeInitialQuizState, quizTimer.resetTimer, backgroundLockRef, lockedBackgroundValueRef, userSelectedBackgroundRef, scriptureStateRef]);
+  }, [syncState, buildScriptureSlideState, makeInitialQuizState, quizTimer.resetTimer, backgroundLockRef, lockedBackgroundValueRef, userSelectedBackgroundRef, scriptureStateRef, getFirstStepIndexForSlide]);
   handleSelectPresentationAndSlideRef.current = handleSelectPresentationAndSlide;
 
   const savePresentations = async (updated: Presentation[]) => {
@@ -538,15 +621,18 @@ function App() {
   });
 
   useKeyboardNavigation({
-    isControlMode, currentPresentation, currentSlideIndex, appModeRef, scriptureStateRef,
-    currentPresentationRef, currentSlideIndexRef,
-    handleSelectPresentationAndSlide: (p, idx, direction) => {
+    isControlMode,
+    steps,
+    currentStepIndex,
+    onStepIndexChange: (idx) => {
       if (isControlMode) {
-        emitCommand({ command: 'SELECT_PRESENTATION_AND_SLIDE', presentation: p, slideIndex: idx, direction });
+        emitCommand({ command: 'SELECT_STEP', stepIndex: idx });
       } else {
-        handleSelectPresentationAndSlide(p, idx, direction);
+        applyStepIndex(idx);
       }
     },
+    appModeRef,
+    scriptureStateRef,
     handleScriptureEscape: () => {
       if (isControlMode) {
         emitCommand({ command: 'SCRIPTURE_ESCAPE' });
@@ -562,17 +648,6 @@ function App() {
       }
     },
     enabled: !isAudienceMode,
-    quizCurrentSubslideIndex,
-    quizSubslideCount: quizSubslides.length,
-    onQuizSubslideSelect: (idx) => {
-      if (isControlMode) {
-        emitCommand({ command: 'QUIZ_SELECT_SUBSLIDE', index: idx });
-      } else {
-        const subslides = activeQuizData ? generateQuizSubslides(activeQuizData) : [];
-        if (subslides[idx]?.kind === 'respuesta') quizTimer.completeTimer();
-        setQuizCurrentSubslideIndex(idx);
-      }
-    },
   });
 
   useAudioPlayback({

@@ -1,41 +1,29 @@
 import { useEffect } from 'react';
-import type { AppMode, Presentation, ScriptureNavState } from '../types/presentation';
+import type { AppMode, PresentationStep, ScriptureNavState } from '../types/presentation';
 
 interface UseKeyboardNavigationProps {
   isControlMode: boolean;
   enabled?: boolean;
-  currentPresentation: Presentation | null;
-  currentSlideIndex: number;
+  steps: PresentationStep[];
+  currentStepIndex: number;
+  onStepIndexChange: (idx: number) => void;
   appModeRef: React.MutableRefObject<AppMode>;
   scriptureStateRef: React.MutableRefObject<ScriptureNavState | null>;
-  currentPresentationRef: React.MutableRefObject<Presentation | null>;
-  currentSlideIndexRef: React.MutableRefObject<number>;
-  handleSelectPresentationAndSlide: (
-    p: Presentation | null,
-    idx: number,
-    direction?: 'forward' | 'backward'
-  ) => void;
   handleScriptureEscape: () => void;
   handleScriptureArrowNav: (direction: 'next' | 'previous') => void;
-  quizCurrentSubslideIndex?: number;
-  quizSubslideCount?: number;
-  onQuizSubslideSelect?: (idx: number) => void;
 }
 
 export function useKeyboardNavigation(props: UseKeyboardNavigationProps) {
   const {
     isControlMode,
     enabled = true,
-    currentPresentation,
-    currentSlideIndex,
+    steps,
+    currentStepIndex,
+    onStepIndexChange,
     appModeRef,
     scriptureStateRef,
-    handleSelectPresentationAndSlide,
     handleScriptureEscape,
     handleScriptureArrowNav,
-    quizCurrentSubslideIndex = 0,
-    quizSubslideCount = 0,
-    onQuizSubslideSelect,
   } = props;
 
   useEffect(() => {
@@ -46,59 +34,52 @@ export function useKeyboardNavigation(props: UseKeyboardNavigationProps) {
       const targetTag = (e.target as HTMLElement).tagName.toUpperCase();
       if (targetTag === 'INPUT' || targetTag === 'TEXTAREA' || targetTag === 'SELECT') return;
 
-      if (appModeRef.current === 'scripture' || appModeRef.current === 'seferManual') {
-        if (e.key === 'Escape') {
+      // Escape key exits scripture/manual mode
+      if (e.key === 'Escape') {
+        if (appModeRef.current === 'scripture' || appModeRef.current === 'seferManual') {
           e.preventDefault();
           handleScriptureEscape();
           return;
         }
+      }
 
+      // If in manual scripture browsing mode (no presentation steps), navigate the database
+      if (appModeRef.current === 'seferManual') {
         if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
-          // If in control mode, SeferControlPanel handles navigation locally
+          // In control mode, SeferControlPanel's own listeners handle keypresses locally
           if (isControlMode) return;
 
           e.preventDefault();
-          const currentScripture = scriptureStateRef.current;
-          if (!currentScripture) return;
-
           handleScriptureArrowNav(e.key === 'ArrowRight' ? 'next' : 'previous');
           return;
         }
       }
 
-      if (!currentPresentation || currentPresentation.slides.length === 0) return;
-      const currentSlide = currentPresentation.slides[currentSlideIndex];
-      const isQuizSlide = currentSlide?.type === 'quiz' && !!currentSlide.quizData && quizSubslideCount > 0;
+      // Otherwise, we are in standard presentation mode: navigate through the flat step index
+      if (steps.length === 0) return;
 
       if (e.key === 'ArrowRight') {
         e.preventDefault();
-        if (isQuizSlide && onQuizSubslideSelect && quizCurrentSubslideIndex < quizSubslideCount - 1) {
-          onQuizSubslideSelect(quizCurrentSubslideIndex + 1);
-          return;
+        const nextIdx = Math.min(currentStepIndex + 1, steps.length - 1);
+        if (nextIdx !== currentStepIndex) {
+          onStepIndexChange(nextIdx);
         }
-        const nextIdx = Math.min(currentSlideIndex + 1, currentPresentation.slides.length - 1);
-        handleSelectPresentationAndSlide(currentPresentation, nextIdx, 'forward');
       } else if (e.key === 'ArrowLeft') {
         e.preventDefault();
-        if (isQuizSlide && onQuizSubslideSelect && quizCurrentSubslideIndex > 0) {
-          onQuizSubslideSelect(quizCurrentSubslideIndex - 1);
-          return;
+        const prevIdx = Math.max(currentStepIndex - 1, 0);
+        if (prevIdx !== currentStepIndex) {
+          onStepIndexChange(prevIdx);
         }
-        const prevIdx = Math.max(currentSlideIndex - 1, 0);
-        handleSelectPresentationAndSlide(currentPresentation, prevIdx, 'backward');
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [
-    currentPresentation,
     enabled,
-    currentSlideIndex,
-    quizCurrentSubslideIndex,
-    quizSubslideCount,
-    onQuizSubslideSelect,
-    handleSelectPresentationAndSlide,
+    steps,
+    currentStepIndex,
+    onStepIndexChange,
     handleScriptureEscape,
     handleScriptureArrowNav,
     isControlMode,

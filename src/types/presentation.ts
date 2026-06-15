@@ -137,3 +137,8 @@ export interface ScriptureNavState {
 }
 
 export type AppMode = 'slides' | 'scripture' | 'seferManual';
+
+export type PresentationStep =
+  | { type: 'normal'; slideIndex: number }
+  | { type: 'quiz'; slideIndex: number; subslideIndex: number }
+  | { type: 'scripture'; slideIndex: number; book: string; chapter: string; verse: string };

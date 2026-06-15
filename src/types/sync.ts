@@ -30,9 +30,11 @@ export interface SyncStatePayload {
   scriptureState: ScriptureNavState | null;
   audioState: AudioState;
   quizState?: QuizSyncState | null;
+  stepIndex?: number;
 }
 
 export type RemoteCommandPayload =
+  | { command: 'SELECT_STEP'; stepIndex: number }
   | { command: 'SELECT_PRESENTATION_AND_SLIDE'; presentation: Presentation | null; slideIndex: number; direction?: 'forward' | 'backward'; targetVerse?: string }
   | { command: 'TOGGLE_APP_MODE'; mode: AppMode }
   | { command: 'TOGGLE_BG_LOCK'; locked: boolean }

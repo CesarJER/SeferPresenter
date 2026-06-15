@@ -413,6 +413,13 @@ export const validateRemoteStatePayload = (value: unknown): ValidationResult<Par
       errors.push('remote.origin no es valido.');
     }
   }
+  if (value.stepIndex !== undefined) {
+    if (isFiniteNumber(value.stepIndex)) {
+      next.stepIndex = value.stepIndex;
+    } else {
+      errors.push('remote.stepIndex debe ser numero.');
+    }
+  }
 
   return errors.length > 0 ? fail(errors) : ok(next);
 };
