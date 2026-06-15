@@ -8,7 +8,7 @@ direction. It avoids claims beyond what the current code shows.
 The app uses two sync paths:
 
 - Local tabs: `BroadcastChannel('sefer-presenter')` in `src/hooks/useSyncState.ts`.
-- LAN/backend-ready mode: HTTP POST endpoints and SSE in `server/local-server.mjs`.
+- LAN/backend-ready mode: WebSocket at `/ws` is preferred for sending `SYNC_STATE` and `REMOTE_COMMAND` when the connection is open, falling back to HTTP POST endpoints (which broadcast updates via Server-Sent Events (SSE) in `server/local-server.mjs`).
 - Server audio timeline: WebSocket at `/ws`, attached by `server/ws-server.mjs`.
 
 Presenter is the practical source of truth for projected state. Control usually
@@ -36,8 +36,8 @@ validates incoming remote state and sync messages before they are applied.
 ## WebSocket Audio Timeline
 
 Fase 2 adds a backend-owned audio timeline over `ws://localhost:<port>/ws`.
-This channel does not replace SSE and does not own `currentState` in
-`server/local-server.mjs`.
+The React client connects to this channel, receives `AUDIO_TIMELINE_STATE` updates, and dispatches actions via `AUDIO_TIMELINE_ACTION`.
+This channel synchronizes timeline state while maintaining compatibility with existing SSE event streams.
 
 `server/timelineManager.mjs` owns only the audio timeline fields:
 
@@ -134,6 +134,10 @@ Synchronization protocol:
 - Emit from control: `src/App.tsx` prop wiring.
 - Apply in presenter: `App.handleRemoteCommand`.
 - Broadcast/apply/persist: `src/hooks/useSyncState.ts`.
+- Manage WebSocket connection: [useWebSocket.ts](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useWebSocket.ts).
+- Synchronize server clock offset and RTT: [useServerClock.ts](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useServerClock.ts).
+- Track and dispatch audio timeline actions: [useAudioTimeline.ts](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useAudioTimeline.ts).
+- Apply timeline changes to presenter's audio element: [useAudioTimelineApplicator.ts](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useAudioTimelineApplicator.ts).
 - Mirror over network: `server/local-server.mjs`.
 - Add backend-owned audio timeline behavior: `server/timelineManager.mjs` and `server/ws-server.mjs`.
 

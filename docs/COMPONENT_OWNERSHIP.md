@@ -36,12 +36,16 @@ Shared:
 
 Hooks:
 
-- `src/hooks/useSyncState.ts`: BroadcastChannel/SSE/API synchronization.
-- `src/hooks/useScriptureNavigation.ts`: slide/scripture/manual Sefer mode transitions.
-- `src/hooks/useSeferReader.ts`: book/chapter/verse reader state and loading.
-- `src/hooks/useBackgroundResolver.ts`: active background and lock/override behavior.
-- `src/hooks/useAudioPlayback.ts`: hidden presenter audio element and audio sync.
-- `src/hooks/useQuizTimer.ts`, `useQuizAnswers.ts`, `useQuizAudio.ts`: quiz runtime behavior.
+- [useSyncState.ts](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useSyncState.ts): BroadcastChannel/SSE/API synchronization.
+- [useWebSocket.ts](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useWebSocket.ts): standalone WebSocket connection management.
+- [useServerClock.ts](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useServerClock.ts): WebSocket server clock offset and RTT estimation.
+- [useAudioTimeline.ts](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useAudioTimeline.ts): local audio timeline tracking, status estimation, action dispatching over WebSocket.
+- [useAudioTimelineApplicator.ts](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useAudioTimelineApplicator.ts): applying timeline changes (source, status, volume, rate) to presenter's audio element.
+- [useScriptureNavigation.ts](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useScriptureNavigation.ts): slide/scripture/manual Sefer mode transitions.
+- [useSeferReader.ts](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useSeferReader.ts): book/chapter/verse reader state and loading.
+- [useBackgroundResolver.ts](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useBackgroundResolver.ts): active background and lock/override behavior.
+- [useAudioPlayback.ts](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useAudioPlayback.ts): hidden presenter audio element and audio sync.
+- [useQuizTimer.ts](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useQuizTimer.ts), [useQuizAnswers.ts](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useQuizAnswers.ts), [useQuizAudio.ts](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useQuizAudio.ts): quiz runtime behavior.
 
 Library/sync/validation:
 

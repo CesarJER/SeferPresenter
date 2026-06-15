@@ -16,9 +16,11 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
 
 ## Hooks
 
-- `useSyncState` - `src/hooks/useSyncState.ts`: BroadcastChannel, SSE/API sync, local persistence, remote state application.
-- `useWebSocket` - `src/hooks/useWebSocket.ts`: standalone WebSocket connection helper with safe JSON send, typed receive callback, status, cleanup, and exponential reconnect.
-- `useServerClock` - `src/hooks/useServerClock.ts`: WebSocket server clock offset and RTT estimation from `SERVER_TIME_PING` / `SERVER_TIME_PONG`.
+- [useSyncState](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useSyncState.ts) - `src/hooks/useSyncState.ts`: BroadcastChannel, SSE/API sync, local persistence, remote state application, calling `onAudioTimelineState` and exposing `wsStatus`.
+- [useWebSocket](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useWebSocket.ts) - `src/hooks/useWebSocket.ts`: standalone WebSocket connection helper with safe JSON send, typed receive callback, status, cleanup, and exponential reconnect.
+- [useServerClock](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useServerClock.ts) - `src/hooks/useServerClock.ts`: WebSocket server clock offset and RTT estimation from `SERVER_TIME_PING` / `SERVER_TIME_PONG`.
+- [useAudioTimeline](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useAudioTimeline.ts) - `src/hooks/useAudioTimeline.ts`: local audio timeline tracking, status estimation, action dispatching over WebSocket.
+- [useAudioTimelineApplicator](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useAudioTimelineApplicator.ts) - `src/hooks/useAudioTimelineApplicator.ts`: applies audio timeline changes (source, status, volume, rate) to the presenter's HTML audio element.
 - `useBackgroundResolver` - `src/hooks/useBackgroundResolver.ts`: active background, lock, and override behavior.
 - `useUrlSync` - `src/hooks/useUrlSync.ts`: presenter URL/hash synchronization.
 - `useKeyboardNavigation` - `src/hooks/useKeyboardNavigation.ts`: keyboard navigation for slides and scripture.
