@@ -300,6 +300,11 @@ export const SeferReaderScreen: React.FC<SeferReaderScreenProps> = ({
     ? formatReferenceNav(currentSelectedVerse.bookHeb || scriptureState.bookHeb, true)
     : '';
 
+  const activeHebrewFontSize = useMemo(() => {
+    const baseSize = scriptureState.hebrewFontSize ?? 42;
+    return isVerticalLayout ? Math.max(18, Math.round(baseSize * 0.65)) : baseSize;
+  }, [scriptureState.hebrewFontSize, isVerticalLayout]);
+
   if (isLoading || Object.keys(metadata).length === 0 || data.length === 0) {
     return (
       <div className="h-dvh flex items-center justify-center text-2xl font-hebrew bg-[#fef3c7] text-amber-900">
@@ -309,11 +314,6 @@ export const SeferReaderScreen: React.FC<SeferReaderScreenProps> = ({
   }
 
   const bookDir = data[0]?.DIR?.toLowerCase() || 'rtl';
-
-  const activeHebrewFontSize = useMemo(() => {
-    const baseSize = scriptureState.hebrewFontSize ?? 42;
-    return isVerticalLayout ? Math.max(18, Math.round(baseSize * 0.65)) : baseSize;
-  }, [scriptureState.hebrewFontSize, isVerticalLayout]);
 
   return (
     <main className="h-dvh flex flex-col md:flex-row bg-[#fef3c7] font-hebrew overflow-hidden">
