@@ -269,6 +269,7 @@ const handleApi = async (req, res, url) => {
     try {
       const body = await readBody(req)
       const parsed = JSON.parse(body)
+      console.log(`[SERVER DBG - STATE] clientId=${parsed.clientId} origin=${parsed.origin} slideIndex=${parsed.slideIndex} appMode=${parsed.appMode} scriptureBook=${parsed.scriptureState?.bookAbbrevEs || parsed.scriptureState?.bookEs || ''}`);
       currentState = parsed
       broadcast(JSON.stringify(parsed))
       sendJson(res, 200, { success: true })

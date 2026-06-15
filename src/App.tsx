@@ -498,8 +498,17 @@ function App() {
     const nextIndex = existing >= 0
       ? Math.min(currentSlideIndexRef.current, normalizedPresentation.slides.length - 1)
       : normalizedPresentation.slides.length > 0 ? 0 : -1;
-    handleSelectPresentationAndSlide(normalizedPresentation, nextIndex);
-  }, [presentations, handleSelectPresentationAndSlide]);
+    if (isControlMode) {
+      emitCommand({
+        command: 'SELECT_PRESENTATION_AND_SLIDE',
+        presentation: normalizedPresentation,
+        slideIndex: nextIndex,
+        direction: 'forward'
+      });
+    } else {
+      handleSelectPresentationAndSlide(normalizedPresentation, nextIndex);
+    }
+  }, [presentations, handleSelectPresentationAndSlide, isControlMode, emitCommand]);
   handleSaveRef.current = handleSave;
 
   const handleResetState = useCallback(() => {
@@ -538,7 +547,20 @@ function App() {
         handleSelectPresentationAndSlide(p, idx, direction);
       }
     },
-    handleScriptureEscape, handleScriptureArrowNav,
+    handleScriptureEscape: () => {
+      if (isControlMode) {
+        emitCommand({ command: 'SCRIPTURE_ESCAPE' });
+      } else {
+        handleScriptureEscape();
+      }
+    },
+    handleScriptureArrowNav: (direction) => {
+      if (isControlMode) {
+        emitCommand({ command: 'SCRIPTURE_ARROW_NAV', direction: direction === 'next' ? 'down' : 'up' });
+      } else {
+        handleScriptureArrowNav(direction);
+      }
+    },
     enabled: !isAudienceMode,
     quizCurrentSubslideIndex,
     quizSubslideCount: quizSubslides.length,
@@ -784,7 +806,7 @@ function App() {
           scriptureState={scriptureState}
           onUpdateScriptureFontSizes={(sizes) => isControlMode ? emitCommand({ command: 'UPDATE_FONT_SIZES', hebrewFontSize: sizes.hebrewFontSize, combinedTextBaseSize: sizes.combinedTextBaseSize }) : handleUpdateScriptureFontSizes(sizes)}
           onToggleAppMode={(mode) => isControlMode ? emitCommand({ command: 'TOGGLE_APP_MODE', mode }) : handleToggleAppMode(mode)}
-          onProjectScripture={(state, command) => isControlMode ? emitCommand({ command: 'SCRIPTURE_PROJECT', state, navCommand: command as any }) : handleProjectScripture(state, command as any)}
+          onProjectScripture={(state, command) => isControlMode ? emitCommand({ command: 'SCRIPTURE_PROJECT', state, navCommand: 'navigate' }) : handleProjectScripture(state, command as any)}
           onAddScriptureSlide={(state, kind) => isControlMode ? emitCommand({ command: 'SCRIPTURE_ADD_SLIDE', state, kind }) : handleAddScriptureSlide(state, kind)}
           onBoundaryReached={(dir) => isControlMode ? emitCommand({ command: 'SCRIPTURE_BOUNDARY', direction: dir }) : handleScriptureBoundary(dir)}
           quizSubslides={quizSubslides}

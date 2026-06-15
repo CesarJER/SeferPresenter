@@ -159,6 +159,7 @@ export function useSyncState(props: UseSyncStateProps) {
   } = props;
 
   const channel = useMemo(() => new BroadcastChannel('sefer-presenter'), []);
+  const processedMessageIdsRef = useRef<Set<string>>(new Set());
 
   // ── Persist to localStorage ───────────────────────────────────────
   const persistState = useCallback((
@@ -447,6 +448,15 @@ export function useSyncState(props: UseSyncStateProps) {
 
       const data = validation.value;
 
+      if (data.messageId) {
+        if (processedMessageIdsRef.current.has(data.messageId)) return;
+        processedMessageIdsRef.current.add(data.messageId);
+        if (processedMessageIdsRef.current.size > 100) {
+          const first = processedMessageIdsRef.current.values().next().value;
+          if (first) processedMessageIdsRef.current.delete(first);
+        }
+      }
+
       if (data.type === 'AUDIO_SYNC_MAPS_UPDATE') {
         setAudioSyncMapsRef.current(data.maps as AudioSyncMap[]);
         return;
@@ -525,6 +535,15 @@ export function useSyncState(props: UseSyncStateProps) {
           }
 
           const safeData = validation.value;
+
+          if (safeData.messageId) {
+            if (processedMessageIdsRef.current.has(safeData.messageId)) return;
+            processedMessageIdsRef.current.add(safeData.messageId);
+            if (processedMessageIdsRef.current.size > 100) {
+              const first = processedMessageIdsRef.current.values().next().value;
+              if (first) processedMessageIdsRef.current.delete(first);
+            }
+          }
 
           if (safeData.type === 'AUDIO_TELEMETRY') {
             applyAudioTelemetryRef.current(safeData.audioState as AudioState);

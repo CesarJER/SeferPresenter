@@ -389,18 +389,6 @@ export function useScriptureNavigation(props: UseScriptureNavigationProps) {
         }
 
         setScriptureState(hydratedState);
-        if (isControlMode) {
-          syncState({
-            presentation: currentPresentationRef.current,
-            slideIndex: currentSlideIndexRef.current,
-            bgLock: backgroundLockRef.current,
-            lockedBg: lockedBackgroundValueRef.current,
-            userSelectedBg: userSelectedBackgroundRef.current,
-            videoState: videoStateRef.current,
-            appMode: 'scripture',
-            scriptureState: hydratedState,
-          });
-        }
       })
       .catch((err) => console.error('Error hydrating scripture verse', err));
 

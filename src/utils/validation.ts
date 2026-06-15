@@ -423,6 +423,7 @@ export const validateSyncMessage = (value: unknown): ValidationResult<BroadcastM
   const baseErrors: string[] = [];
   if (value.protocolVersion !== undefined && value.protocolVersion !== 1) baseErrors.push('protocolVersion no soportado.');
   if (value.timestamp !== undefined && !isFiniteNumber(value.timestamp)) baseErrors.push('timestamp debe ser numero.');
+  if (value.messageId !== undefined && typeof value.messageId !== 'string') baseErrors.push('messageId debe ser texto.');
 
   if (value.type === 'REQUEST_STATE') {
     if (value.clientId !== undefined && typeof value.clientId !== 'string') baseErrors.push('clientId debe ser texto.');

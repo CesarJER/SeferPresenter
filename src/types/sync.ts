@@ -8,6 +8,7 @@ export const SYNC_PROTOCOL_VERSION = 1;
 export interface SyncProtocolMeta {
   protocolVersion?: typeof SYNC_PROTOCOL_VERSION;
   timestamp?: number;
+  messageId?: string;
 }
 
 export interface DisplayTelemetryState {
