@@ -95,14 +95,20 @@
   background-size: 20px 100%;
 }
 
-/* Ocultar scrollbar normalmente, mostrarlo al hacer hover */
 .scrollable-container {
   scrollbar-width: none;
   /* Firefox */
   -ms-overflow-style: none;
   /* IE and Edge */
-  padding-top: 10rem;
-  padding-bottom: 40rem;
+  padding-top: 2rem;
+  padding-bottom: 15rem;
+}
+
+@media (min-width: 768px) {
+  .scrollable-container {
+    padding-top: 4rem;
+    padding-bottom: 25rem;
+  }
 }
 
 .scrollable-container::-webkit-scrollbar {

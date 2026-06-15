@@ -178,25 +178,22 @@ export const SeferReaderScreen: React.FC<SeferReaderScreenProps> = ({
 
   useEffect(() => {
     const targetIdx = selectedVerseIdx ?? lastSelectedIdx.current;
-    const isOpening = prevSelectedIdxRef.current === null && selectedVerseIdx !== null;
-    const isClosing = prevSelectedIdxRef.current !== null && selectedVerseIdx === null;
-
-    if (isClosing) {
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          if (targetIdx !== null) scrollToTarget(targetIdx);
-        });
-      });
-    } else if (!isOpening) {
-      requestAnimationFrame(() => {
-        if (targetIdx !== null) scrollToTarget(targetIdx);
-      });
+    
+    let timer: NodeJS.Timeout | undefined;
+    if (targetIdx !== null) {
+      timer = setTimeout(() => {
+        scrollToTarget(targetIdx);
+      }, 80);
     }
 
     prevSelectedIdxRef.current = selectedVerseIdx;
     if (selectedVerseIdx !== null) {
       lastSelectedIdx.current = selectedVerseIdx;
     }
+
+    return () => {
+      if (timer) clearTimeout(timer);
+    };
   }, [scrollToTarget, selectedVerseIdx]);
 
   // Group verses for SeferFlowView
@@ -355,7 +352,7 @@ export const SeferReaderScreen: React.FC<SeferReaderScreenProps> = ({
             <div className="w-8" />
           )}
         </div>
-        <div className="flex-1 overflow-y-auto flex flex-col justify-start p-8 pb-24 scrollable-container touch-pan-y">
+        <div className="flex-1 overflow-y-auto flex flex-col justify-start px-4 md:px-8 scrollable-container touch-pan-y">
           <SeferFlowView
             groupedVerses={groupedVerses}
             selectedVerseIdx={selectedVerseIdx}
