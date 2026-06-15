@@ -7,11 +7,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const rootDir = path.resolve(__dirname, '..')
 const publicDir = path.join(rootDir, 'public')
 const port = Number(process.env.SEFER_PORT || 8787)
-const serveStatic = process.argv.includes('--static')
 const staticArgIndex = process.argv.indexOf('--static')
-const staticDir = serveStatic
-  ? path.resolve(rootDir, process.argv[staticArgIndex + 1] || 'dist')
-  : null
+const staticDir = path.resolve(rootDir, staticArgIndex >= 0 ? process.argv[staticArgIndex + 1] || 'dist' : 'dist')
 
 let currentState = {
   presentation: null,
@@ -269,6 +266,15 @@ const handleApi = async (req, res, url) => {
     try {
       const body = await readBody(req)
       const parsed = JSON.parse(body)
+      if (
+        parsed === null ||
+        typeof parsed !== 'object' ||
+        typeof parsed.clientId !== 'string' ||
+        typeof parsed.slideIndex !== 'number'
+      ) {
+        sendJson(res, 400, { error: 'Invalid state payload: missing or invalid clientId or slideIndex' })
+        return true
+      }
       console.log(`[SERVER DBG - STATE] clientId=${parsed.clientId} origin=${parsed.origin} slideIndex=${parsed.slideIndex} appMode=${parsed.appMode} scriptureBook=${parsed.scriptureState?.bookAbbrevEs || parsed.scriptureState?.bookEs || ''}`);
       currentState = parsed
       broadcast(JSON.stringify(parsed))
@@ -428,9 +434,17 @@ const handleStatic = (req, res, url) => {
     return true
   }
 
-  const indexPath = path.join(staticDir, 'index.html')
-  if (fs.existsSync(indexPath)) {
-    serveFile(res, indexPath)
+  const htmlFile = cleanPath.startsWith('/audience')
+    ? 'audience.html'
+    : cleanPath.startsWith('/control')
+      ? 'control.html'
+      : cleanPath.startsWith('/audio-editor')
+        ? 'audio-editor.html'
+        : 'presenter.html'
+
+  const htmlPath = path.join(staticDir, htmlFile)
+  if (fs.existsSync(htmlPath)) {
+    serveFile(res, htmlPath)
     return true
   }
 
@@ -450,7 +464,7 @@ const server = http.createServer(async (req, res) => {
 
   if (handleStatic(req, res, url)) return
 
-  sendJson(res, 404, { error: serveStatic ? 'Static file not found' : 'Backend API is running' })
+  sendJson(res, 404, { error: 'Static file not found' })
 })
 
 server.listen(port, () => {

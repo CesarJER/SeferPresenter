@@ -527,7 +527,8 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
     setSlides([...slides, newSlide]);
   };
 
-  // @ts-ignore
+  /*
+  // @ts-expect-error - Keep for future image slide functionality
   const _handleAddImageSlide = () => {
     const randomSuffix = Math.random().toString(36).substring(2, 9);
     const newId = `slide-img-${slides.length}-${Date.now()}-${randomSuffix}`;
@@ -536,6 +537,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
     newSlide.lines = ['[IMAGE]', '-', '-'];
     setSlides([...slides, newSlide]);
   };
+  */
 
   const handleAddMediaSlide = () => {
     const randomSuffix = Math.random().toString(36).substring(2, 9);

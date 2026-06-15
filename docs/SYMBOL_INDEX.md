@@ -2,6 +2,18 @@
 
 Navigation-critical symbols and files. This is not an exhaustive API index.
 
+## Entry Points
+
+- `presenter.html` - Vite build entry for presenter mode; loads `src/main.tsx`.
+- `audience.html` - Vite build entry for audience mode; loads `src/main-audience.tsx`.
+- `control.html` - Vite build entry for control mode; loads `src/main-control.tsx`.
+- `audio-editor.html` - Vite build entry for audio editor mode; loads `src/main-audio-editor.tsx`.
+- `src/main.tsx` - current React root for presenter/default shell.
+- `src/main-audio-editor.tsx` - standalone audio editor root; loads and saves `/api/audio-sync` without presenter sync wiring.
+- `src/main-audience.tsx` - placeholder mode-specific root for audience mode in the MPA split.
+- `src/main-control.tsx` - standalone React root for control mode; orchestrates control state and sync wiring without presenter/media elements.
+- `vite.config.ts` - Vite multi-entry input configuration.
+
 ## Hooks
 
 - `useSyncState` - `src/hooks/useSyncState.ts`: BroadcastChannel, SSE/API sync, local persistence, remote state application.

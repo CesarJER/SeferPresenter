@@ -40,7 +40,7 @@ const AudienceScreen = ({
   useEffect(() => {
     if (!('serviceWorker' in navigator)) return;
     navigator.serviceWorker
-      .register('/audience-sw.js')
+      .register('/audience-sw.js', { scope: '/audience' })
       .catch((err) => console.error('Audience service worker registration failed', err));
   }, []);
 

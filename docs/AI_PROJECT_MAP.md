@@ -6,11 +6,19 @@ Fast map for agents. Use real paths only; this repo does not currently have
 
 ## Main Entry Points
 
-- `src/main.tsx`: React root and global CSS import.
+- `presenter.html`: presenter HTML entry used by Vite multi-entry builds; loads `src/main.tsx`.
+- `audience.html`: audience HTML entry used by Vite multi-entry builds; loads `src/main-audience.tsx`.
+- `control.html`: control HTML entry used by Vite multi-entry builds; loads `src/main-control.tsx`.
+- `audio-editor.html`: audio editor HTML entry used by Vite multi-entry builds; loads `src/main-audio-editor.tsx`.
+- `index.html`: development/default shell that still loads `src/main.tsx`.
+- `src/main.tsx`: current presenter React root and global CSS import.
+- `src/main-audio-editor.tsx`: standalone audio editor React root; loads presentations, audio files, and audio sync maps from local APIs.
+- `src/main-audience.tsx`: placeholder mode-specific React entry for the MPA split.
+- `src/main-control.tsx`: standalone control React root; loads the control panel tree without presenter dependencies.
 - `src/App.tsx`: route detection, top-level state, synchronization wiring, command dispatch, mode rendering.
 - `README.md`: human overview, routes, scripts, backend endpoints, verification.
 - `server/local-server.mjs`: local backend, static serving, SSE, persistence endpoints, auth gate.
-- `vite.config.ts`: Vite config and development proxy.
+- `vite.config.ts`: Vite config, development proxy, and multi-entry build inputs.
 
 ## Folder Responsibilities
 

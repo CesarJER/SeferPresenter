@@ -169,7 +169,9 @@ export function useAudienceAnswers(): UseAudienceAnswersReturn {
         if (data?.type === 'QUIZ_CLEAR_ANSWERS') {
           processClear(data.slideId);
         }
-      } catch {}
+      } catch {
+        // intentional no-op
+      }
     };
 
     return () => {

@@ -231,7 +231,7 @@ export const SlideRow: React.FC<SlideRowProps> = ({
                                                 <label className="text-[9px] font-black text-gray-500 uppercase tracking-wide">Ajuste (Fit)</label>
                                                 <select
                                                   value={slide.mediaFit || 'cover'}
-                                                  onChange={e => handleUpdateVideoParams(idx, { mediaFit: e.target.value as any })}
+                                                  onChange={e => handleUpdateVideoParams(idx, { mediaFit: e.target.value as 'cover' | 'contain' | 'fill' })}
                                                   className="w-full bg-gray-900 border border-gray-700 rounded p-1 text-xs text-gray-200 outline-none focus:border-yellow-500"
                                                 >
                                                   <option value="cover">Cover (Recortar)</option>

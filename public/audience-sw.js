@@ -1,12 +1,17 @@
 const CACHE_NAME = 'sefer-audience-v1';
 const CORE_ASSETS = [
-  '/audience',
+  '/audience.html',
   '/metadata.json',
   '/audience-cache-assets.txt'
 ];
 
 const isSameOrigin = (request) => new URL(request.url).origin === self.location.origin;
-const isAudienceShell = (url) => url.pathname === '/audience';
+const isAudienceHtml = (url) => url.pathname === '/audience.html';
+const isAudienceShell = (url) => {
+  const isAudiencePath = url.pathname === '/audience' || url.pathname.startsWith('/audience/');
+  const isAsset = url.pathname.includes('.') || url.pathname.startsWith('/assets/') || url.pathname.startsWith('/books/');
+  return isAudiencePath && !isAsset;
+};
 const isAppAsset = (url) => url.pathname.startsWith('/assets/');
 const isScriptureTsv = (url) => url.pathname.startsWith('/books/') && url.pathname.endsWith('.tsv');
 const isMetadata = (url) => url.pathname === '/metadata.json';
@@ -50,6 +55,7 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
   const cacheable =
     isAudienceShell(url) ||
+    isAudienceHtml(url) ||
     isAppAsset(url) ||
     isScriptureTsv(url) ||
     isMetadata(url);
@@ -58,9 +64,10 @@ self.addEventListener('fetch', (event) => {
 
   event.respondWith(
     caches.open(CACHE_NAME).then(async (cache) => {
-      const cached = await cache.match(request);
+      const cacheKey = isAudienceShell(url) ? '/audience.html' : request;
+      const cached = await cache.match(cacheKey);
       const fetchAndCache = fetch(request).then((response) => {
-        if (response.ok) cache.put(request, response.clone());
+        if (response.ok) cache.put(cacheKey, response.clone());
         return response;
       });
       return cached || fetchAndCache;

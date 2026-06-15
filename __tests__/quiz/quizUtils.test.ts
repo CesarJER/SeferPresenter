@@ -191,6 +191,7 @@ CITA: Dn 1:1-3`);
 
     expect(getStableOptionOrder(data.options, 'slide-1')).toEqual(getStableOptionOrder(data.options, 'slide-1'));
     expect(generateQuizSubslides(data).map(subslide => subslide.kind)).toEqual([
+      'lectura',
       'pregunta',
       'cita-verse',
       'cita-verse',

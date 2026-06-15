@@ -2,7 +2,7 @@
   "name": "SeferPresenter Audiencia",
   "short_name": "Sefer Audiencia",
   "start_url": "/audience",
-  "scope": "/",
+  "scope": "/audience",
   "display": "standalone",
   "background_color": "#07111f",
   "theme_color": "#07111f",

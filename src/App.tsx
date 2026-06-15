@@ -898,7 +898,7 @@ function App() {
           scriptureState={scriptureState}
           onUpdateScriptureFontSizes={(sizes) => isControlMode ? emitCommand({ command: 'UPDATE_FONT_SIZES', hebrewFontSize: sizes.hebrewFontSize, combinedTextBaseSize: sizes.combinedTextBaseSize }) : handleUpdateScriptureFontSizes(sizes)}
           onToggleAppMode={(mode) => isControlMode ? emitCommand({ command: 'TOGGLE_APP_MODE', mode }) : handleToggleAppMode(mode)}
-          onProjectScripture={(state, command) => isControlMode ? emitCommand({ command: 'SCRIPTURE_PROJECT', state, navCommand: 'navigate' }) : handleProjectScripture(state, command as any)}
+          onProjectScripture={(state, command) => isControlMode ? emitCommand({ command: 'SCRIPTURE_PROJECT', state, navCommand: 'navigate' }) : handleProjectScripture(state, command as ScriptureNavState['command'])}
           onAddScriptureSlide={(state, kind) => isControlMode ? emitCommand({ command: 'SCRIPTURE_ADD_SLIDE', state, kind }) : handleAddScriptureSlide(state, kind)}
           onBoundaryReached={(dir) => isControlMode ? emitCommand({ command: 'SCRIPTURE_BOUNDARY', direction: dir }) : handleScriptureBoundary(dir)}
           quizSubslides={quizSubslides}
