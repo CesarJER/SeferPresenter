@@ -113,6 +113,7 @@ export interface VideoState {
   endTime?: number;
   lastUpdatedBy: 'controller' | 'projection';
   timestamp: number;
+  seekId?: number;
 }
 
 export interface ScriptureNavState {

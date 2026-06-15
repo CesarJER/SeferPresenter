@@ -276,6 +276,7 @@ const validateVideoState = (value: unknown, path: string): ValidationResult<Vide
   if (!isBooleanOrUndefined(value.loop)) errors.push(`${path}.loop debe ser booleano.`);
   if (value.startTime !== undefined && !isFiniteNumber(value.startTime)) errors.push(`${path}.startTime debe ser numero.`);
   if (value.endTime !== undefined && !isFiniteNumber(value.endTime)) errors.push(`${path}.endTime debe ser numero.`);
+  if (value.seekId !== undefined && !isFiniteNumber(value.seekId)) errors.push(`${path}.seekId debe ser numero.`);
 
   return errors.length > 0 ? fail(errors) : ok(value as unknown as VideoState);
 };

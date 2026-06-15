@@ -44,6 +44,8 @@ const PresenterScreen: React.FC<PresenterScreenProps> = ({
     onVideoStateChangeRef.current = onVideoStateChange;
   }, [onVideoStateChange]);
 
+  const lastSeekIdRef = useRef<number | undefined>(undefined);
+
   // 1. Symmetrical network synchronization: Listen to controller state updates
   useEffect(() => {
     if (!videoElement || !videoState || videoState.lastUpdatedBy !== 'controller') return;
@@ -63,9 +65,12 @@ const PresenterScreen: React.FC<PresenterScreenProps> = ({
       videoElement.loop = videoState.loop;
     }
 
-    // Apply Scrubbing Time (allow a tiny deviation buffer)
-    if (Math.abs(videoElement.currentTime - videoState.currentTime) > 0.6) {
-      videoElement.currentTime = videoState.currentTime;
+    // Apply Scrubbing Time (ONLY if controller explicitly requested a seek via seekId)
+    if (videoState.seekId !== undefined && videoState.seekId !== lastSeekIdRef.current) {
+      if (Math.abs(videoElement.currentTime - videoState.currentTime) > 0.6) {
+        videoElement.currentTime = videoState.currentTime;
+      }
+      lastSeekIdRef.current = videoState.seekId;
     }
 
     // Apply Play/Pause
@@ -80,10 +85,12 @@ const PresenterScreen: React.FC<PresenterScreenProps> = ({
     } else if (!videoState.isPlaying && !videoElement.paused) {
       videoElement.pause();
     }
-  }, [videoState, slide, videoElement]);
+  }, [videoState, slide?.mediaStart, slide?.mediaEnd, videoElement]);
 
   // 2. Slide change listener: Setup dedicated slide video when slide transitions
   const mediaSrc = slide?.type === 'media' ? slide.mediaSrc : null;
+  
+  // 2A. Initialization: Load video and set start time (only when slide or media source changes)
   useEffect(() => {
     if (!videoElement || !slide || slide.type !== 'media' || !mediaSrc) return;
 
@@ -100,30 +107,44 @@ const PresenterScreen: React.FC<PresenterScreenProps> = ({
     videoElement.loop = defaultLoop;
 
     // Broadcast the initial video stats immediately
-    onVideoStateChange({
-      isPlaying: false,
-      currentTime: defaultStart,
-      duration: Number.isFinite(videoElement.duration) ? videoElement.duration : 0,
-      volume: defaultVol,
-      speed: defaultSpeed,
-      loop: defaultLoop,
-      mediaSrc: mediaSrc,
-      startTime: slide.mediaStart,
-      endTime: slide.mediaEnd,
-      lastUpdatedBy: 'projection',
-      timestamp: Date.now()
-    });
+    if (onVideoStateChangeRef.current) {
+      onVideoStateChangeRef.current({
+        isPlaying: false,
+        currentTime: defaultStart,
+        duration: Number.isFinite(videoElement.duration) ? videoElement.duration : 0,
+        volume: defaultVol,
+        speed: defaultSpeed,
+        loop: defaultLoop,
+        mediaSrc: mediaSrc,
+        startTime: slide.mediaStart,
+        endTime: slide.mediaEnd,
+        lastUpdatedBy: 'projection',
+        timestamp: Date.now()
+      });
+    }
   }, [
-    onVideoStateChange,
-    slide,
-    mediaSrc,
-    slide?.id,
-    slide?.mediaEnd,
-    slide?.mediaLoop,
-    slide?.mediaSpeed,
-    slide?.mediaStart,
-    slide?.mediaVolume,
     videoElement,
+    slide?.id,
+    mediaSrc,
+  ]);
+
+  // 2B. Live parameter updates: Apply volume, speed, loop without resetting time
+  useEffect(() => {
+    if (!videoElement || !slide || slide.type !== 'media' || !mediaSrc) return;
+
+    const vol = slide.mediaVolume ?? 0.8;
+    const speed = slide.mediaSpeed ?? 1.0;
+    const loop = slide.mediaLoop !== false;
+
+    if (videoElement.volume !== vol) videoElement.volume = vol;
+    if (videoElement.playbackRate !== speed) videoElement.playbackRate = speed;
+    if (videoElement.loop !== loop) videoElement.loop = loop;
+  }, [
+    videoElement,
+    mediaSrc,
+    slide?.mediaVolume,
+    slide?.mediaSpeed,
+    slide?.mediaLoop,
   ]);
 
   // 3. Playback timeupdate & loadedmetadata event listeners for bidirectional telemetry

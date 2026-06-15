@@ -60,7 +60,8 @@ export const MediaControls: React.FC<MediaControlsProps> = ({
               loop: videoState?.loop ?? true,
               mediaSrc: activeSlide.mediaSrc || null,
               lastUpdatedBy: 'controller',
-              timestamp: Date.now()
+              timestamp: Date.now(),
+              seekId: videoState?.seekId
             });
           }}
           className="control-icon-btn h-8 w-8 rounded-full bg-yellow-600 text-white shadow-md hover:bg-yellow-500"
@@ -91,7 +92,8 @@ export const MediaControls: React.FC<MediaControlsProps> = ({
                 loop: videoState?.loop ?? true,
                 mediaSrc: activeSlide.mediaSrc || null,
                 lastUpdatedBy: 'controller',
-                timestamp: Date.now()
+                timestamp: Date.now(),
+                seekId: videoState?.seekId
               });
             }}
             className="control-range w-16"
@@ -113,7 +115,8 @@ export const MediaControls: React.FC<MediaControlsProps> = ({
                   loop: videoState?.loop ?? true,
                   mediaSrc: activeSlide.mediaSrc || null,
                   lastUpdatedBy: 'controller',
-                  timestamp: Date.now()
+                  timestamp: Date.now(),
+                  seekId: videoState?.seekId
                 });
               }}
               className={`rounded px-1.5 py-1 text-[9px] font-black ${((videoState?.speed ?? 1) === speedVal) ? 'bg-yellow-600 text-white' : 'text-gray-400 hover:text-gray-200'} cursor-pointer`}
@@ -135,7 +138,8 @@ export const MediaControls: React.FC<MediaControlsProps> = ({
               loop: !(videoState?.loop ?? true),
               mediaSrc: activeSlide.mediaSrc || null,
               lastUpdatedBy: 'controller',
-              timestamp: Date.now()
+              timestamp: Date.now(),
+              seekId: videoState?.seekId
             });
           }}
           className={`cursor-pointer rounded border px-2 py-1 text-[10px] font-black ${(videoState?.loop ?? true)
@@ -172,7 +176,8 @@ export const MediaControls: React.FC<MediaControlsProps> = ({
                 loop: videoState?.loop ?? true,
                 mediaSrc: activeSlide.mediaSrc || null,
                 lastUpdatedBy: 'controller',
-                timestamp: Date.now()
+                timestamp: Date.now(),
+                seekId: (videoState?.seekId ?? 0) + 1
               });
             }}
             className="control-range-slim min-w-0 flex-1"
