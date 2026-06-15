@@ -59,13 +59,20 @@ export const VerseSidebar = ({
       />
 
       {navLabel && (
-        <div className="absolute left-0 right-0 top-0 z-[55] border-b border-amber-900/20 bg-[#f7e7b6]/95 px-4 py-2 text-5xl text-center font-bold text-amber-950 shadow-sm">
-          {navLabel}
+        <div className="flex-none h-16 border-b border-amber-900/20 bg-[#f7e7b6]/95 px-4 py-2 shadow-sm">
+          <AutoResizeText
+            text={navLabel}
+            allowGrow={true}
+            maxFontSize={48}
+            minFontSize={12}
+            className="whitespace-nowrap font-bold text-amber-950 text-center"
+            html={false}
+          />
         </div>
       )}
 
-      <div className="flex flex-col text-center h-full">
-        <div className={`flex-1 flex items-center justify-center overflow-hidden m-3 ${navLabel ? 'mt-14' : ''}`}>
+      <div className="flex-grow flex flex-col text-center overflow-hidden min-h-0">
+        <div className="flex-1 flex items-center justify-center overflow-hidden p-3">
           <AutoResizeText
             text={combinedText}
             baseFontSize={combinedTextBaseSize}

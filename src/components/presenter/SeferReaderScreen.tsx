@@ -7,6 +7,7 @@ import { SeferFlowView } from './SeferFlowView';
 import { VerseSidebar } from './VerseSidebar';
 import { useResizablePanel } from '../../hooks/useResizablePanel';
 import { numberToHebrewNumeral, numberToGreekNumeral } from '../../hooks/scriptureNumerals';
+import AutoResizeText from '../shared/AutoResizeText';
 
 interface SeferReaderScreenProps {
   scriptureState: ScriptureNavState;
@@ -161,7 +162,17 @@ export const SeferReaderScreen: React.FC<SeferReaderScreenProps> = ({
       ) {
         targetElement = targetElement.firstElementChild as HTMLElement;
       }
-      targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      const scrollContainer = document.querySelector('.scrollable-container');
+      if (scrollContainer) {
+        const containerRect = scrollContainer.getBoundingClientRect();
+        const targetRect = targetElement.getBoundingClientRect();
+        const targetTop = scrollContainer.scrollTop + (targetRect.top - containerRect.top) - (containerRect.height / 2) + (targetRect.height / 2);
+        
+        scrollContainer.scrollTo({
+          top: targetTop,
+          behavior: 'smooth'
+        });
+      }
     }
   }, []);
 
@@ -285,7 +296,7 @@ export const SeferReaderScreen: React.FC<SeferReaderScreenProps> = ({
   const spanishNavLabel = currentSelectedVerse
     ? formatReferenceNav(currentSelectedVerse.bookEs || scriptureState.bookEs || scriptureState.bookAbbrevEs)
     : '';
-  const hebrewNavLabel = currentSelectedVerse
+  const originalNavLabel = currentSelectedVerse
     ? formatReferenceNav(currentSelectedVerse.bookHeb || scriptureState.bookHeb, true)
     : '';
 
@@ -313,24 +324,33 @@ export const SeferReaderScreen: React.FC<SeferReaderScreenProps> = ({
         navLabel={spanishNavLabel}
       />
 
-      <div className="relative flex-1 flex flex-col overflow-hidden">
-        <div className="absolute left-0 right-0 top-0 z-40 border-b border-amber-900/20 bg-[#f7e7b6]/95 px-4 py-2 text-5xl font-bold text-amber-950 shadow-sm">
-          <div className="flex items-center justify-between gap-3">
-            <span></span>
-            <span className="text-center" dir={bookDir} >{hebrewNavLabel}</span>
-            {onLogoClick && (
-              <button
-                type="button"
-                onClick={onLogoClick}
-                className="flex h-8 w-8 items-center justify-center rounded border border-amber-900/20 bg-[#fef3c7] hover:bg-amber-100 pointer-events-auto"
-                title="Abrir menú"
-              >
-                <img src="/logo.svg" alt="Abrir menú" className="h-6 w-6" />
-              </button>
-            )}
+      <div className="flex-1 flex flex-col overflow-hidden min-w-0">
+        <div className="flex-none h-16 border-b border-amber-900/20 bg-[#f7e7b6]/95 px-4 py-2 shadow-sm flex items-center justify-between gap-3">
+          <div className="w-8" />
+          <div className="flex-1 h-full min-w-0">
+            <AutoResizeText
+              text={originalNavLabel}
+              allowGrow={true}
+              maxFontSize={48}
+              minFontSize={12}
+              className="whitespace-nowrap font-bold text-amber-950 text-center"
+              html={false}
+            />
           </div>
+          {onLogoClick ? (
+            <button
+              type="button"
+              onClick={onLogoClick}
+              className="flex h-8 w-8 flex-none items-center justify-center rounded border border-amber-900/20 bg-[#fef3c7] hover:bg-amber-100 pointer-events-auto"
+              title="Abrir menú"
+            >
+              <img src="/logo.svg" alt="Abrir menú" className="h-6 w-6" />
+            </button>
+          ) : (
+            <div className="w-8" />
+          )}
         </div>
-        <div className="flex-1 overflow-y-auto flex flex-col justify-start p-8 pt-20 pb-24 scrollable-container touch-pan-y">
+        <div className="flex-1 overflow-y-auto flex flex-col justify-start p-8 pb-24 scrollable-container touch-pan-y">
           <SeferFlowView
             groupedVerses={groupedVerses}
             selectedVerseIdx={selectedVerseIdx}
