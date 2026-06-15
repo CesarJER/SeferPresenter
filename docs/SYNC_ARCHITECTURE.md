@@ -53,6 +53,11 @@ This channel does not replace SSE and does not own `currentState` in
 - `AUDIO_TIMELINE_ACTION` from presenter/control clients.
 - `AUDIO_TIMELINE_STATE` broadcasts back to presenter/control clients.
 
+`src/hooks/useServerClock.ts` sends `SERVER_TIME_PING` when the WebSocket is
+open and estimates client-to-server clock offset plus RTT from
+`SERVER_TIME_PONG`. Audio timeline clients should use `serverNow()` from this
+hook when they need backend-owned timeline time.
+
 Audience WebSocket clients receive `WELCOME` but do not receive the private
 audio timeline. Existing SSE endpoints remain active for state, audience,
 quiz, and telemetry flows.
