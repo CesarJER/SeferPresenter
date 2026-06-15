@@ -3,6 +3,7 @@ import http from 'node:http'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createWsServer } from './ws-server.mjs'
+import { isAuthRequired, hasValidBasicAuth } from './authUtils.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const rootDir = path.resolve(__dirname, '..')
@@ -221,24 +222,11 @@ const deriveAudienceState = (state) => {
   }
 }
 
-const isAuthRequired = () => process.env.SEFER_REQUIRE_AUTH === 'true'
-
 const isProtectedPath = (url, method) => {
   if (!isAuthRequired()) return false
   if (url.pathname === '/control' || url.pathname === '/audio-editor') return true
   if (url.pathname.startsWith('/api/') && method !== 'GET') return true
   return false
-}
-
-const hasValidBasicAuth = (req) => {
-  const expectedPassword = process.env.SEFER_CONTROL_PASSWORD
-  if (!expectedPassword) return false
-  const header = req.headers.authorization || ''
-  if (!header.startsWith('Basic ')) return false
-  const decoded = Buffer.from(header.slice('Basic '.length), 'base64').toString('utf-8')
-  const separatorIndex = decoded.indexOf(':')
-  const password = separatorIndex >= 0 ? decoded.slice(separatorIndex + 1) : decoded
-  return password === expectedPassword
 }
 
 const requireAuth = (req, res, url) => {
@@ -542,13 +530,36 @@ const server = http.createServer(async (req, res) => {
   sendJson(res, 404, { error: 'Static file not found' })
 })
 
+const handleWsMessageFromClient = (msg) => {
+  if (msg.type === 'SYNC_STATE') {
+    currentState = msg
+    broadcast(JSON.stringify(msg))
+  } else if (msg.type === 'REMOTE_COMMAND') {
+    broadcast(JSON.stringify(msg))
+  } else if (msg.type === 'AUDIO_TELEMETRY') {
+    currentState = { ...currentState, audioState: msg.audioState }
+    broadcast(JSON.stringify(msg))
+  } else if (msg.type === 'VIDEO_TELEMETRY') {
+    currentState = { ...currentState, videoState: msg.videoState }
+    broadcast(JSON.stringify(msg))
+  } else if (msg.type === 'DISPLAY_TELEMETRY') {
+    currentState = {
+      ...currentState,
+      backgroundLock: msg.backgroundLock,
+      lockedBackgroundValue: msg.lockedBackgroundValue,
+      userSelectedBackground: msg.userSelectedBackground,
+    }
+    broadcast(JSON.stringify(msg))
+  }
+}
+
 const sseHeartbeat = setInterval(heartbeatSseClients, sseHeartbeatMs)
 sseHeartbeat.unref?.()
 server.on('close', () => clearInterval(sseHeartbeat))
 
 server.listen(port, () => {
   const staticLabel = staticDir ? `, serving ${path.relative(rootDir, staticDir)}` : ''
-  createWsServer(server)
+  createWsServer(server, handleWsMessageFromClient)
   console.log(`SeferPresenter local backend listening on http://localhost:${port}${staticLabel}`)
   console.log(`SeferPresenter WebSocket disponible en ws://localhost:${port}/ws`)
 })

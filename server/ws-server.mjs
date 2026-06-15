@@ -1,13 +1,14 @@
 import { randomUUID } from 'node:crypto'
 import { WebSocket, WebSocketServer } from 'ws'
 import { applyAction, getTimeline } from './timelineManager.mjs'
+import { isAuthRequired, hasValidBasicAuth } from './authUtils.mjs'
 
 const wsClients = new Map()
 const roles = new Set(['presenter', 'control', 'audience', 'unknown'])
 
 const makeRole = (value) => roles.has(value) ? value : 'unknown'
 
-const createWsServer = (httpServer) => {
+const createWsServer = (httpServer, onFallbackMessage) => {
   const wss = new WebSocketServer({ server: httpServer, path: '/ws' })
 
   const broadcast = (message, filter) => {
@@ -29,6 +30,17 @@ const createWsServer = (httpServer) => {
   wss.on('connection', (ws, req) => {
     const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`)
     const role = makeRole(url.searchParams.get('role') || 'unknown')
+
+    if (role !== 'audience' && isAuthRequired() && !hasValidBasicAuth(req)) {
+      ws.send(JSON.stringify({
+        type: 'ERROR',
+        code: 'UNAUTHORIZED',
+        message: 'Authentication required'
+      }))
+      ws.close(4001, 'Unauthorized')
+      return
+    }
+
     const clientId = url.searchParams.get('clientId') || randomUUID()
     wsClients.set(ws, { role, clientId })
 
@@ -54,6 +66,11 @@ const createWsServer = (httpServer) => {
         return
       }
 
+      const meta = wsClients.get(ws)
+      if (meta?.role === 'audience' && msg.type !== 'SERVER_TIME_PING') {
+        return
+      }
+
       switch (msg.type) {
         case 'SERVER_TIME_PING':
           ws.send(JSON.stringify({
@@ -64,7 +81,6 @@ const createWsServer = (httpServer) => {
           break
 
         case 'AUDIO_TIMELINE_ACTION': {
-          const meta = wsClients.get(ws)
           if (meta?.role === 'audience') break
           const timeline = applyAction(msg.action)
           broadcastExcludeAudience({
@@ -73,6 +89,17 @@ const createWsServer = (httpServer) => {
           })
           break
         }
+
+        case 'SYNC_STATE':
+        case 'REMOTE_COMMAND':
+        case 'AUDIO_TELEMETRY':
+        case 'VIDEO_TELEMETRY':
+        case 'DISPLAY_TELEMETRY':
+          if (meta?.role === 'audience') break
+          if (onFallbackMessage) {
+            onFallbackMessage(msg)
+          }
+          break
 
         default:
           break
