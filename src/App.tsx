@@ -245,7 +245,7 @@ function App() {
         handleToggleAppModeRef.current?.(payload.mode);
         break;
       case 'TOGGLE_BG_LOCK':
-        handleToggleBackgroundLockRef.current?.(!backgroundLockRef.current);
+        handleToggleBackgroundLockRef.current?.(payload.locked);
         break;
       case 'SELECT_BG_OVERRIDE':
         if (payload.bg !== null) {
@@ -734,7 +734,7 @@ function App() {
           currentSlideIndex={currentSlideIndex}
           activeBackground={activeBackground}
           backgroundLock={backgroundLock}
-          onToggleBackgroundLock={(locked) => isControlMode ? emitCommand({ command: 'TOGGLE_BG_LOCK' }) : handleToggleBackgroundLock(locked)}
+          onToggleBackgroundLock={(locked) => isControlMode ? emitCommand({ command: 'TOGGLE_BG_LOCK', locked }) : handleToggleBackgroundLock(locked)}
           onSelectBackgroundOverride={(bg) => isControlMode ? emitCommand({ command: 'SELECT_BG_OVERRIDE', bg }) : handleSelectBackgroundOverride(bg)}
           onSave={handleSave}
           onResetState={() => isControlMode ? emitCommand({ command: 'RESET_STATE' }) : handleResetState()}

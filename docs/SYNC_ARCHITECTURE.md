@@ -17,7 +17,7 @@ state or telemetry.
 Main message types live in `src/types/sync.ts`:
 
 - `SYNC_STATE`: full state needed to initialize or resynchronize clients.
-- `REMOTE_COMMAND`: operator intent sent from control to presenter.
+- `REMOTE_COMMAND`: operator intent sent from control to presenter (commands should send explicit desired state, not simple toggles, to avoid split-brain).
 - `AUDIO_TELEMETRY`: lightweight audio playback updates.
 - `VIDEO_TELEMETRY`: lightweight video playback updates.
 - `DISPLAY_TELEMETRY`: background lock/override updates.

@@ -34,7 +34,7 @@ export interface SyncStatePayload {
 export type RemoteCommandPayload =
   | { command: 'SELECT_PRESENTATION_AND_SLIDE'; presentation: Presentation | null; slideIndex: number; direction?: 'forward' | 'backward'; targetVerse?: string }
   | { command: 'TOGGLE_APP_MODE'; mode: AppMode }
-  | { command: 'TOGGLE_BG_LOCK'; }
+  | { command: 'TOGGLE_BG_LOCK'; locked: boolean }
   | { command: 'SELECT_BG_OVERRIDE'; bg: string | null }
   | { command: 'QUIZ_START_TIMER' }
   | { command: 'QUIZ_PAUSE_TIMER' }

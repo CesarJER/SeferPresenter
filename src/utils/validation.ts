@@ -487,6 +487,9 @@ export const validateSyncMessage = (value: unknown): ValidationResult<BroadcastM
         case 'TOGGLE_APP_MODE':
           if (!appModes.has(payload.mode as string)) baseErrors.push(`Modo invalido: ${payload.mode}`);
           break;
+        case 'TOGGLE_BG_LOCK':
+          if (typeof payload.locked !== 'boolean') baseErrors.push('locked debe ser booleano');
+          break;
         case 'SELECT_BG_OVERRIDE':
           if (payload.bg !== null && typeof payload.bg !== 'string') baseErrors.push('bg debe ser texto o null');
           break;
