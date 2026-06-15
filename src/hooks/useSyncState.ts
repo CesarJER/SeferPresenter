@@ -176,7 +176,17 @@ export function useSyncState(props: UseSyncStateProps) {
   const onAudioTimelineStateRef = useRef(onAudioTimelineState);
   useEffect(() => { onAudioTimelineStateRef.current = onAudioTimelineState; }, [onAudioTimelineState]);
 
+  const wsMessageSubscribersRef = useRef<Set<(type: string, payload: Record<string, unknown>) => void>>(new Set());
+  const subscribeToWsMessage = useCallback((handler: (type: string, payload: Record<string, unknown>) => void) => {
+    wsMessageSubscribersRef.current.add(handler);
+    return () => {
+      wsMessageSubscribersRef.current.delete(handler);
+    };
+  }, []);
+
   const handleWsMessage = useCallback((type: string, payload: Record<string, unknown>) => {
+    wsMessageSubscribersRef.current.forEach(handler => handler(type, payload));
+    
     if (type === 'WELCOME') {
       wsSendRef.current('SERVER_TIME_PING', { clientSentAtMs: Date.now() });
       return;
@@ -634,5 +644,5 @@ export function useSyncState(props: UseSyncStateProps) {
     clientIdRef, isPresenterMode
   ]);
 
-  return { channel, syncState, emitCommand, persistState, emitAudioTelemetry, emitVideoTelemetry, emitDisplayTelemetry, wsStatus };
+  return { channel, syncState, emitCommand, persistState, emitAudioTelemetry, emitVideoTelemetry, emitDisplayTelemetry, wsStatus, wsSend, subscribeToWsMessage };
 }

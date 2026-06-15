@@ -4,7 +4,7 @@ import SeferReaderScreen from './components/presenter/SeferReaderScreen';
 import defaultPresentations from '../presentations.json';
 import { Music } from 'lucide-react';
 
-import type { AudioState, AudioSyncMap } from './types/audio';
+import type { AudioState, AudioSyncMap, AudioTimelineState } from './types/audio';
 import { DEFAULT_AUDIO_STATE } from './types/audio';
 import type { AppMode, Presentation, ScriptureNavState, Slide, VideoState, QuizData } from './types/presentation';
 import type { QuizOptionId, QuizSyncState } from './types/quiz';
@@ -21,6 +21,9 @@ import { useBackgroundResolver } from './hooks/useBackgroundResolver';
 import { useUrlSync } from './hooks/useUrlSync';
 import { useKeyboardNavigation } from './hooks/useKeyboardNavigation';
 import { useAudioPlayback } from './hooks/useAudioPlayback';
+import { useServerClock } from './hooks/useServerClock';
+import { useAudioTimeline } from './hooks/useAudioTimeline';
+import { useAudioTimelineApplicator } from './hooks/useAudioTimelineApplicator';
 import { useScriptureNavigation } from './hooks/useScriptureNavigation';
 import { useQuizAudio } from './hooks/useQuizAudio';
 import type { SeferReaderState } from './hooks/useSeferReader';
@@ -51,6 +54,7 @@ function App() {
   const [videoState, setVideoState] = useState<VideoState | null>(null);
 
   const [audioState, setAudioState] = useState<AudioState>(DEFAULT_AUDIO_STATE);
+  const [audioTimeline, setAudioTimeline] = useState<AudioTimelineState | null>(null);
   const [audioSyncMaps, setAudioSyncMaps] = useState<AudioSyncMap[]>([]);
 
   const [appMode, setAppMode] = useState<AppMode>('slides');
@@ -390,7 +394,7 @@ function App() {
     }
   }, [quizTimer, activeQuizData, quizAudio]);
 
-  const { syncState, emitCommand, emitAudioTelemetry, emitVideoTelemetry, emitDisplayTelemetry } = useSyncState({
+  const { syncState, emitCommand, emitAudioTelemetry, emitVideoTelemetry, emitDisplayTelemetry, wsStatus, wsSend, subscribeToWsMessage } = useSyncState({
     isControlMode, isPresenterMode, onRemoteCommand: handleRemoteCommand, clientIdRef,
     currentPresentationRef, currentSlideIndexRef, currentStepIndexRef, backgroundLockRef,
     lockedBackgroundValueRef, userSelectedBackgroundRef, videoStateRef,
@@ -399,7 +403,12 @@ function App() {
     setLockedBackgroundValue, setUserSelectedBackground, setVideoState,
     setAppMode, setScriptureState, setAudioState, setAudioSyncMaps,
     setQuizState: applyRemoteQuizState,
+    onAudioTimelineState: setAudioTimeline,
   });
+
+  const { serverNow } = useServerClock(wsSend, wsStatus, subscribeToWsMessage);
+  useAudioTimeline(audioTimeline, serverNow, wsSend);
+  useAudioTimelineApplicator(audioRef, audioTimeline, serverNow);
 
   useEffect(() => {
     if (!isPresenterMode) return;
