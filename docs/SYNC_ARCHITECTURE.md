@@ -14,6 +14,11 @@ Presenter is the practical source of truth for projected state. Control usually
 emits a `REMOTE_COMMAND`; presenter applies that command and then broadcasts
 state or telemetry.
 
+The local backend keeps SSE connections alive with `data: heartbeat\n\n` every
+30 seconds on `/api/state-events`, `/api/audience/events`, and
+`/api/quiz-events`. Closed or errored SSE responses are removed from the server
+client sets, and failed SSE writes are dropped from future broadcasts.
+
 Main message types live in `src/types/sync.ts`:
 
 - `SYNC_STATE`: full state needed to initialize or resynchronize clients.
@@ -55,6 +60,11 @@ Backend-owned or backend-mirrored pieces:
 - `/api/audio-sync`
 - `/api/quiz-answer` and `/api/quiz-events`
 - `/api/audience/state` and `/api/audience/events`
+
+Telemetry POST endpoints validate the existing message shape before broadcast:
+`AUDIO_TELEMETRY` requires `audioState`, `VIDEO_TELEMETRY` requires
+`videoState` or `null`, and `DISPLAY_TELEMETRY` requires the display background
+fields with their basic types.
 
 Do not assume persistent cloud identity, auth, or multi-room semantics unless
 the code/task explicitly introduces them.

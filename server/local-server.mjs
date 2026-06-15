@@ -9,6 +9,7 @@ const publicDir = path.join(rootDir, 'public')
 const port = Number(process.env.SEFER_PORT || 8787)
 const staticArgIndex = process.argv.indexOf('--static')
 const staticDir = path.resolve(rootDir, staticArgIndex >= 0 ? process.argv[staticArgIndex + 1] || 'dist' : 'dist')
+const sseHeartbeatMs = 30_000
 
 let currentState = {
   presentation: null,
@@ -66,6 +67,58 @@ const sendJson = (res, status, payload) => {
   res.end(JSON.stringify(payload))
 }
 
+const registerSseClient = (clientSet, res) => {
+  clientSet.add(res)
+  const cleanup = () => {
+    clientSet.delete(res)
+  }
+  res.on('close', cleanup)
+  res.on('error', cleanup)
+}
+
+const writeSse = (clientSet, client, body) => {
+  if (client.destroyed || client.writableEnded) {
+    clientSet.delete(client)
+    return
+  }
+
+  try {
+    client.write(`data: ${body}\n\n`, (err) => {
+      if (err) clientSet.delete(client)
+    })
+  } catch {
+    clientSet.delete(client)
+  }
+}
+
+const writeSseSet = (clientSet, body) => {
+  for (const client of clientSet) {
+    writeSse(clientSet, client, body)
+  }
+}
+
+const isObjectRecord = (value) => value !== null && typeof value === 'object' && !Array.isArray(value)
+
+const hasStringOrObjectPayload = (value) => typeof value === 'string' || isObjectRecord(value)
+
+const validateTelemetry = (telemetry, expectedType, hasTelemetryPayload) => {
+  if (!isObjectRecord(telemetry)) {
+    return `${expectedType} payload must be an object`
+  }
+  if (telemetry.type !== expectedType) {
+    return `${expectedType} payload must include type="${expectedType}"`
+  }
+  if ('payload' in telemetry && !hasStringOrObjectPayload(telemetry.payload)) {
+    return `${expectedType} payload must be a string or object when provided`
+  }
+  if (!hasTelemetryPayload(telemetry)) {
+    return `${expectedType} payload has invalid telemetry data`
+  }
+  return null
+}
+
+const isNullableString = (value) => value === null || typeof value === 'string'
+
 const readBody = (req, maxBytes = 5 * 1024 * 1024) =>
   new Promise((resolve, reject) => {
     let body = ''
@@ -112,19 +165,19 @@ const walkAssets = (directories, matcher) => {
 }
 
 const broadcast = (body) => {
-  for (const client of clients) {
-    client.write(`data: ${body}\n\n`)
-  }
+  writeSseSet(clients, body)
   const audienceBody = JSON.stringify(deriveAudienceState(currentState))
-  for (const client of audienceClients) {
-    client.write(`data: ${audienceBody}\n\n`)
-  }
+  writeSseSet(audienceClients, audienceBody)
 }
 
 const broadcastQuizAnswer = (body) => {
-  for (const client of quizClients) {
-    client.write(`data: ${body}\n\n`)
-  }
+  writeSseSet(quizClients, body)
+}
+
+const heartbeatSseClients = () => {
+  writeSseSet(clients, 'heartbeat')
+  writeSseSet(audienceClients, 'heartbeat')
+  writeSseSet(quizClients, 'heartbeat')
 }
 
 const isVideoAsset = (value) => /\.(mp4|webm)$/i.test(value || '')
@@ -205,11 +258,8 @@ const handleApi = async (req, res, url) => {
       'Cache-Control': 'no-cache',
       Connection: 'keep-alive',
     })
-    res.write(`data: ${JSON.stringify(currentState)}\n\n`)
-    clients.add(res)
-    req.on('close', () => {
-      clients.delete(res)
-    })
+    registerSseClient(clients, res)
+    writeSse(clients, res, JSON.stringify(currentState))
     return true
   }
 
@@ -229,11 +279,8 @@ const handleApi = async (req, res, url) => {
       'Cache-Control': 'no-cache',
       Connection: 'keep-alive',
     })
-    res.write(`data: ${JSON.stringify(deriveAudienceState(currentState))}\n\n`)
-    audienceClients.add(res)
-    req.on('close', () => {
-      audienceClients.delete(res)
-    })
+    registerSseClient(audienceClients, res)
+    writeSse(audienceClients, res, JSON.stringify(deriveAudienceState(currentState)))
     return true
   }
 
@@ -243,10 +290,7 @@ const handleApi = async (req, res, url) => {
       'Cache-Control': 'no-cache',
       Connection: 'keep-alive',
     })
-    quizClients.add(res)
-    req.on('close', () => {
-      quizClients.delete(res)
-    })
+    registerSseClient(quizClients, res)
     return true
   }
 
@@ -302,6 +346,15 @@ const handleApi = async (req, res, url) => {
     try {
       const body = await readBody(req)
       const telemetry = JSON.parse(body)
+      const error = validateTelemetry(
+        telemetry,
+        'AUDIO_TELEMETRY',
+        (value) => isObjectRecord(value.audioState)
+      )
+      if (error) {
+        sendJson(res, 400, { error })
+        return true
+      }
       currentState = { ...currentState, audioState: telemetry.audioState }
       broadcast(JSON.stringify(telemetry))
       sendJson(res, 200, { success: true })
@@ -315,6 +368,15 @@ const handleApi = async (req, res, url) => {
     try {
       const body = await readBody(req)
       const telemetry = JSON.parse(body)
+      const error = validateTelemetry(
+        telemetry,
+        'VIDEO_TELEMETRY',
+        (value) => value.videoState === null || isObjectRecord(value.videoState)
+      )
+      if (error) {
+        sendJson(res, 400, { error })
+        return true
+      }
       currentState = { ...currentState, videoState: telemetry.videoState }
       broadcast(JSON.stringify(telemetry))
       sendJson(res, 200, { success: true })
@@ -328,6 +390,18 @@ const handleApi = async (req, res, url) => {
     try {
       const body = await readBody(req)
       const telemetry = JSON.parse(body)
+      const error = validateTelemetry(
+        telemetry,
+        'DISPLAY_TELEMETRY',
+        (value) =>
+          typeof value.backgroundLock === 'boolean' &&
+          isNullableString(value.lockedBackgroundValue) &&
+          isNullableString(value.userSelectedBackground)
+      )
+      if (error) {
+        sendJson(res, 400, { error })
+        return true
+      }
       currentState = {
         ...currentState,
         backgroundLock: telemetry.backgroundLock,
@@ -466,6 +540,10 @@ const server = http.createServer(async (req, res) => {
 
   sendJson(res, 404, { error: 'Static file not found' })
 })
+
+const sseHeartbeat = setInterval(heartbeatSseClients, sseHeartbeatMs)
+sseHeartbeat.unref?.()
+server.on('close', () => clearInterval(sseHeartbeat))
 
 server.listen(port, () => {
   const staticLabel = staticDir ? `, serving ${path.relative(rootDir, staticDir)}` : ''

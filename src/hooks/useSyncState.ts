@@ -533,6 +533,7 @@ export function useSyncState(props: UseSyncStateProps) {
 
     eventSource.onmessage = (event) => {
       try {
+        if (event.data === 'heartbeat') return;
         const data = JSON.parse(event.data);
         if (!data || data.clientId === clientIdRef.current) return;
 

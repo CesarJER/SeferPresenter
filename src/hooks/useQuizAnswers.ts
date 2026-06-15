@@ -165,6 +165,7 @@ export function useAudienceAnswers(): UseAudienceAnswersReturn {
     const eventSource = new EventSource('/api/quiz-events');
     eventSource.onmessage = (event) => {
       try {
+        if (event.data === 'heartbeat') return;
         const data = JSON.parse(event.data);
         if (data?.type === 'QUIZ_CLEAR_ANSWERS') {
           processClear(data.slideId);
@@ -375,6 +376,7 @@ export function useControllerAnswers(): UseControllerAnswersReturn {
     const eventSource = new EventSource('/api/quiz-events');
     eventSource.onmessage = (event) => {
       try {
+        if (event.data === 'heartbeat') return;
         const data = JSON.parse(event.data);
         if (data?.type === 'QUIZ_ANSWER' || data?.type === 'QUIZ_FINAL_SCORE') {
           handleMessage({ data } as MessageEvent);
