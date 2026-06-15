@@ -17,6 +17,7 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
 ## Hooks
 
 - `useSyncState` - `src/hooks/useSyncState.ts`: BroadcastChannel, SSE/API sync, local persistence, remote state application.
+- `useWebSocket` - `src/hooks/useWebSocket.ts`: standalone WebSocket connection helper with safe JSON send, typed receive callback, status, cleanup, and exponential reconnect.
 - `useBackgroundResolver` - `src/hooks/useBackgroundResolver.ts`: active background, lock, and override behavior.
 - `useUrlSync` - `src/hooks/useUrlSync.ts`: presenter URL/hash synchronization.
 - `useKeyboardNavigation` - `src/hooks/useKeyboardNavigation.ts`: keyboard navigation for slides and scripture.
