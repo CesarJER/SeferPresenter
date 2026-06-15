@@ -44,6 +44,11 @@ El backend local vive en `server/local-server.mjs`. Mantiene inicialmente la mis
 - `GET /api/audience/events`
 - `GET /api/audience-cache-assets`
 
+El backend tambien adjunta WebSocket en `ws://localhost:8787/ws`. En Fase 2
+ese canal solo es propietario de la timeline de audio del servidor:
+`WELCOME`, `SERVER_TIME_PING/PONG`, `AUDIO_TIMELINE_ACTION` y
+`AUDIO_TIMELINE_STATE`. SSE y los endpoints HTTP existentes siguen activos.
+
 En desarrollo, `npm run dev` arranca el backend local y Vite juntos. Vite proxya `/api` a `http://localhost:8787`. Si arrancas solo `npm run dev:frontend`, debes tener `npm run dev:backend` abierto en otra terminal. Para pruebas locales estables, ejecuta `npm run build` y despues `npm run start:local`.
 
 ## Seguridad por fases
@@ -94,7 +99,8 @@ La aplicacion se organiza por consumidor:
 
 ## Sincronizacion
 
-La sincronizacion usa `BroadcastChannel` para pestanas locales y SSE/API para red local.
+La sincronizacion usa `BroadcastChannel` para pestanas locales, SSE/API para red
+local y WebSocket para la timeline de audio backend-owned.
 
 Canales principales:
 
@@ -102,6 +108,7 @@ Canales principales:
 - `AUDIO_TELEMETRY`: estado ligero de reproduccion de audio.
 - `VIDEO_TELEMETRY`: estado ligero de reproduccion de video.
 - `DISPLAY_TELEMETRY`: cambios de fondo, override y candado.
+- `AUDIO_TIMELINE_STATE`: estado de timeline de audio emitido por `/ws` para presenter/control.
 
 La audiencia muestra la misma imagen viva del presenter, sin controles de navegacion ni apertura del panel de control.
 

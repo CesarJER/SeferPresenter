@@ -51,6 +51,8 @@ Library/sync/validation:
 - `src/utils/syncProtocol.ts`: sync message construction.
 - `src/utils/quizUtils.ts`: quiz parsing/scoring/subslides.
 - `src/utils/scriptureLookup.ts`, `scriptureParser.ts`, `metadataCache.ts`: sacred text data.
+- `server/timelineManager.mjs`: backend-owned audio timeline state; keep separate from presenter `currentState`.
+- `server/ws-server.mjs`: WebSocket transport for the backend-owned audio timeline.
 
 ## State Categories
 
@@ -64,6 +66,7 @@ Sync-ready state:
 - `SyncStatePayload`, `RemoteCommandPayload`, media/display telemetry in `src/types/sync.ts`.
 - Managed by `src/hooks/useSyncState.ts`.
 - Includes current presentation, slide index, background lock/override, media state, app mode, scripture state, and quiz sync state.
+- `AudioTimelineState` is backend-owned in `server/timelineManager.mjs`; do not merge it into `App.tsx` state just to expose `/ws`.
 
 Control UI state:
 

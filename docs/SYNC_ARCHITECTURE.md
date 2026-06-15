@@ -9,6 +9,7 @@ The app uses two sync paths:
 
 - Local tabs: `BroadcastChannel('sefer-presenter')` in `src/hooks/useSyncState.ts`.
 - LAN/backend-ready mode: HTTP POST endpoints and SSE in `server/local-server.mjs`.
+- Server audio timeline: WebSocket at `/ws`, attached by `server/ws-server.mjs`.
 
 Presenter is the practical source of truth for projected state. Control usually
 emits a `REMOTE_COMMAND`; presenter applies that command and then broadcasts
@@ -31,6 +32,30 @@ Main message types live in `src/types/sync.ts`:
 
 `src/utils/syncProtocol.ts` builds protocol messages. `src/utils/validation.ts`
 validates incoming remote state and sync messages before they are applied.
+
+## WebSocket Audio Timeline
+
+Fase 2 adds a backend-owned audio timeline over `ws://localhost:<port>/ws`.
+This channel does not replace SSE and does not own `currentState` in
+`server/local-server.mjs`.
+
+`server/timelineManager.mjs` owns only the audio timeline fields:
+
+- `timelineId`, `version`, `presentationId`, `audioSrc`, and `syncMapId`.
+- Playback state: `status`, `basePositionSec`, `baseServerTimeMs`,
+  `playbackRate`, and `volume`.
+- Sync metadata: `syncMode`, cue indexes, and `updatedBy`.
+
+`server/ws-server.mjs` handles:
+
+- `WELCOME` on connection, including `clientId`, role, and server time.
+- `SERVER_TIME_PING` / `SERVER_TIME_PONG` for clock estimation.
+- `AUDIO_TIMELINE_ACTION` from presenter/control clients.
+- `AUDIO_TIMELINE_STATE` broadcasts back to presenter/control clients.
+
+Audience WebSocket clients receive `WELCOME` but do not receive the private
+audio timeline. Existing SSE endpoints remain active for state, audience,
+quiz, and telemetry flows.
 
 ## Local-Only Today
 
@@ -60,6 +85,7 @@ Backend-owned or backend-mirrored pieces:
 - `/api/audio-sync`
 - `/api/quiz-answer` and `/api/quiz-events`
 - `/api/audience/state` and `/api/audience/events`
+- `/ws` for backend-owned audio timeline messages only
 
 Telemetry POST endpoints validate the existing message shape before broadcast:
 `AUDIO_TELEMETRY` requires `audioState`, `VIDEO_TELEMETRY` requires
@@ -90,9 +116,11 @@ Controller UI state:
 Synchronization protocol:
 
 - Typed state and commands in `src/types/sync.ts`.
+- Audio timeline contracts in `src/types/audio.ts` and `src/types/sync.ts`.
 - Message construction in `src/utils/syncProtocol.ts`.
 - Validation in `src/utils/validation.ts`.
 - Application/broadcast in `src/hooks/useSyncState.ts`.
+  WebSocket timeline state is owned separately by `server/timelineManager.mjs`.
 
 ## Where To Modify Sync Code
 
@@ -102,6 +130,7 @@ Synchronization protocol:
 - Apply in presenter: `App.handleRemoteCommand`.
 - Broadcast/apply/persist: `src/hooks/useSyncState.ts`.
 - Mirror over network: `server/local-server.mjs`.
+- Add backend-owned audio timeline behavior: `server/timelineManager.mjs` and `server/ws-server.mjs`.
 
 ## What Not To Do
 

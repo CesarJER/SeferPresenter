@@ -57,6 +57,8 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
 - `RemoteCommandPayload` / `SyncStatePayload` - `src/types/sync.ts`: sync contracts.
 - `makeSyncMessage` - `src/utils/syncProtocol.ts`: message envelope creation.
 - `server/local-server.mjs`: SSE/API mirroring for state, commands, media telemetry, quiz events, assets, persistence.
+- `server/ws-server.mjs`: WebSocket `/ws` server for F2 audio timeline messages.
+- `server/timelineManager.mjs`: backend-owned audio timeline state and action reducer.
 
 ## Validation Modules
 
@@ -67,9 +69,9 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
 ## Types
 
 - `Presentation`, `Slide`, `VideoState`, `ScriptureNavState`, `AppMode` - `src/types/presentation.ts`.
-- `AudioState`, `AudioSyncMap`, `AudioSyncCue`, `AudioSyncMode` - `src/types/audio.ts`.
+- `AudioState`, `AudioSyncMap`, `AudioSyncCue`, `AudioSyncMode`, `AudioTimelineState`, `AudioTimelineAction` - `src/types/audio.ts`.
 - `QuizTimerState`, `QuizSubslide`, `QuizAudienceAnswer`, `QuizSyncState` - `src/types/quiz.ts`.
-- `BroadcastMessage`, `DisplayTelemetryState` - `src/types/sync.ts`.
+- `BroadcastMessage`, `DisplayTelemetryState`, `AudiencePublicState` - `src/types/sync.ts`.
 
 ## Data/Content Modules
 

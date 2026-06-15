@@ -46,6 +46,7 @@ Use these checklists before implementing future tasks.
 - Handle commands in `App.handleRemoteCommand`.
 - Apply/broadcast through `src/hooks/useSyncState.ts`.
 - Mirror backend endpoints/SSE in `server/local-server.mjs` only when needed.
+- For backend-owned audio timeline behavior, update `server/timelineManager.mjs` and `server/ws-server.mjs` without mixing it into `currentState`.
 - Do not broadcast high-frequency timer/media ticks through full `SYNC_STATE`.
 
 ## When Editing Validation/Import/Export

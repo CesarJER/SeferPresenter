@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import http from 'node:http'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { createWsServer } from './ws-server.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const rootDir = path.resolve(__dirname, '..')
@@ -547,5 +548,7 @@ server.on('close', () => clearInterval(sseHeartbeat))
 
 server.listen(port, () => {
   const staticLabel = staticDir ? `, serving ${path.relative(rootDir, staticDir)}` : ''
+  createWsServer(server)
   console.log(`SeferPresenter local backend listening on http://localhost:${port}${staticLabel}`)
+  console.log(`SeferPresenter WebSocket disponible en ws://localhost:${port}/ws`)
 })

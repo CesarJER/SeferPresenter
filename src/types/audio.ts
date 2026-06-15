@@ -8,6 +8,33 @@
 /** Synchronization mode between audio playback and slide navigation */
 export type AudioSyncMode = 'none' | 'unilateral' | 'bilateral';
 
+export interface AudioTimelineState {
+  timelineId: string;
+  version: number;
+  presentationId: string | null;
+  audioSrc: string | null;
+  syncMapId: string | null;
+  status: 'idle' | 'loading' | 'playing' | 'paused' | 'ended';
+  basePositionSec: number;
+  baseServerTimeMs: number;
+  playbackRate: number;
+  volume: number;
+  syncMode: AudioSyncMode;
+  activeCueIndex: number | null;
+  nextCueIndex: number | null;
+  updatedBy: 'control' | 'presenter' | 'server';
+}
+
+export type AudioTimelineAction =
+  | { type: 'SET_TRACK'; presentationId: string; audioSrc: string; syncMapId?: string }
+  | { type: 'PLAY'; positionSec?: number }
+  | { type: 'PAUSE' }
+  | { type: 'SEEK'; positionSec: number }
+  | { type: 'SET_RATE'; rate: number }
+  | { type: 'SET_VOLUME'; volume: number }
+  | { type: 'SET_SYNC_MODE'; mode: AudioSyncMode }
+  | { type: 'STOP' };
+
 /** A single time→slide mapping entry within a sync map */
 export interface AudioSyncCue {
   /** Seconds into the audio track where this cue fires */

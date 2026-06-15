@@ -1,4 +1,4 @@
-import type { AudioState } from './audio';
+import type { AudioState, AudioTimelineAction, AudioTimelineState } from './audio';
 import type { AppMode, Presentation, ScriptureNavState, VideoState } from './presentation';
 import type { QuizSyncState } from './quiz';
 import type { SeferReaderState } from '../hooks/useSeferReader';
@@ -15,6 +15,28 @@ export interface DisplayTelemetryState {
   backgroundLock: boolean;
   lockedBackgroundValue: string | null;
   userSelectedBackground: string | null;
+}
+
+export interface AudiencePublicState {
+  mode: AppMode;
+  presentationTitle: string;
+  slide: {
+    id: string;
+    label: string;
+    lines: string[];
+    type: 'media' | 'scripture' | 'text';
+  } | null;
+  scripture: {
+    reference: string;
+    verseNikud: string;
+    transliteration: string;
+    translation: string;
+  } | null;
+  background: {
+    kind: 'image' | 'color';
+    value: string;
+  };
+  updatedAt: number;
 }
 
 export interface SyncStatePayload {
@@ -66,4 +88,12 @@ export type BroadcastMessage =
   | ({ type: 'DISPLAY_TELEMETRY'; clientId: string; origin: 'control' | 'presenter' } & DisplayTelemetryState & SyncProtocolMeta)
   | ({ type: 'AUDIO_SYNC_MAPS_UPDATE'; maps: unknown[] } & SyncProtocolMeta)
   | ({ type: 'REQUEST_STATE'; clientId?: string } & SyncProtocolMeta)
-  | ({ type: 'REMOTE_COMMAND'; clientId: string; payload: RemoteCommandPayload } & SyncProtocolMeta);
+  | ({ type: 'REMOTE_COMMAND'; clientId: string; payload: RemoteCommandPayload } & SyncProtocolMeta)
+  | ({ type: 'WELCOME'; clientId: string; serverTimeMs: number; role?: 'presenter' | 'control' | 'audience' | 'unknown' } & SyncProtocolMeta)
+  | ({ type: 'SERVER_TIME_PING'; clientSentAtMs: number } & SyncProtocolMeta)
+  | ({ type: 'SERVER_TIME_PONG'; clientSentAtMs: number; serverTimeMs: number } & SyncProtocolMeta)
+  | ({ type: 'AUDIO_TIMELINE_ACTION'; action: AudioTimelineAction } & SyncProtocolMeta)
+  | ({ type: 'AUDIO_TIMELINE_STATE'; timeline: AudioTimelineState } & SyncProtocolMeta)
+  | ({ type: 'AUDIO_PRESENTATION_CLOCK'; timelineId: string; estimatedPositionSec: number; serverTimeMs: number } & SyncProtocolMeta)
+  | ({ type: 'AUDIENCE_STATE_UPDATE'; state: AudiencePublicState } & SyncProtocolMeta)
+  | ({ type: 'ERROR'; code: string; message: string } & SyncProtocolMeta);

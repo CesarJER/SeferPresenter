@@ -17,7 +17,9 @@ Fast map for agents. Use real paths only; this repo does not currently have
 - `src/main-control.tsx`: standalone control React root; loads the control panel tree without presenter dependencies.
 - `src/App.tsx`: route detection, top-level state, synchronization wiring, command dispatch, mode rendering.
 - `README.md`: human overview, routes, scripts, backend endpoints, verification.
-- `server/local-server.mjs`: local backend, static serving, SSE, persistence endpoints, auth gate.
+- `server/local-server.mjs`: local backend, static serving, SSE, persistence endpoints, auth gate, and WebSocket attachment.
+- `server/ws-server.mjs`: WebSocket `/ws` server for backend-owned audio timeline messages.
+- `server/timelineManager.mjs`: isolated audio timeline state and action reducer.
 - `vite.config.ts`: Vite config, development proxy, and multi-entry build inputs.
 
 ## Folder Responsibilities
@@ -82,6 +84,7 @@ Start with:
 - `src/hooks/useSyncState.ts`
 - `src/App.tsx`
 - `server/local-server.mjs`
+- `server/ws-server.mjs` and `server/timelineManager.mjs` when changing backend-owned audio timeline behavior
 
 Prefer typed `REMOTE_COMMAND` messages for operator intent and lightweight telemetry for frequent media/display changes.
 

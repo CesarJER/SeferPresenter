@@ -1,4 +1,4 @@
-import type { AudioState, AudioSyncMap, AudioSyncMode } from '../types/audio';
+import type { AudioState, AudioSyncMap, AudioSyncMode, AudioTimelineAction, AudioTimelineState } from '../types/audio';
 import type { AppMode, Presentation, ScriptureNavState, Slide, VideoState } from '../types/presentation';
 import type { QuizSyncState } from '../types/quiz';
 import type { BroadcastMessage, DisplayTelemetryState, SyncStatePayload } from '../types/sync';
@@ -36,6 +36,9 @@ const appModes = new Set(['slides', 'scripture', 'seferManual']);
 const origins = new Set(['control', 'presenter']);
 const audioSyncModes = new Set<AudioSyncMode>(['none', 'unilateral', 'bilateral']);
 const audioChangeTypes = new Set(['track', 'volume', 'playState', 'seek', 'syncMode']);
+const wsRoles = new Set(['presenter', 'control', 'audience', 'unknown']);
+const audioTimelineStatuses = new Set<AudioTimelineState['status']>(['idle', 'loading', 'playing', 'paused', 'ended']);
+const audioTimelineUpdatedBy = new Set<AudioTimelineState['updatedBy']>(['control', 'presenter', 'server']);
 
 // ── Quiz validators ──────────────────────────────────────────────────────────
 
@@ -301,6 +304,87 @@ const validateAudioState = (value: unknown, path: string): ValidationResult<Audi
   return errors.length > 0 ? fail(errors) : ok(value as unknown as AudioState);
 };
 
+const validateAudioTimelineAction = (value: unknown, path: string): ValidationResult<AudioTimelineAction> => {
+  if (!isRecord(value) || typeof value.type !== 'string') return fail([`${path} debe incluir type.`]);
+
+  const errors: string[] = [];
+  switch (value.type) {
+    case 'SET_TRACK':
+      if (typeof value.presentationId !== 'string') errors.push(`${path}.presentationId debe ser texto.`);
+      if (typeof value.audioSrc !== 'string') errors.push(`${path}.audioSrc debe ser texto.`);
+      if (!isStringOrUndefined(value.syncMapId)) errors.push(`${path}.syncMapId debe ser texto.`);
+      break;
+    case 'PLAY':
+      if (value.positionSec !== undefined && !isFiniteNumber(value.positionSec)) errors.push(`${path}.positionSec debe ser numero.`);
+      break;
+    case 'PAUSE':
+    case 'STOP':
+      break;
+    case 'SEEK':
+      if (!isFiniteNumber(value.positionSec)) errors.push(`${path}.positionSec debe ser numero.`);
+      break;
+    case 'SET_RATE':
+      if (!isFiniteNumber(value.rate)) errors.push(`${path}.rate debe ser numero.`);
+      break;
+    case 'SET_VOLUME':
+      if (!isFiniteNumber(value.volume)) errors.push(`${path}.volume debe ser numero.`);
+      break;
+    case 'SET_SYNC_MODE':
+      if (typeof value.mode !== 'string' || !audioSyncModes.has(value.mode as AudioSyncMode)) errors.push(`${path}.mode no es valido.`);
+      break;
+    default:
+      errors.push(`${path}.type no es valido.`);
+      break;
+  }
+
+  return errors.length > 0 ? fail(errors) : ok(value as unknown as AudioTimelineAction);
+};
+
+const validateNullableNumber = (value: unknown, path: string, errors: string[]) => {
+  if (value !== null && !isFiniteNumber(value)) errors.push(`${path} debe ser numero o null.`);
+};
+
+const validateAudioTimelineState = (value: unknown, path: string): ValidationResult<AudioTimelineState> => {
+  if (!isRecord(value)) return fail([`${path} debe ser un objeto.`]);
+
+  const errors: string[] = [];
+  if (typeof value.timelineId !== 'string') errors.push(`${path}.timelineId debe ser texto.`);
+  if (!isFiniteNumber(value.version)) errors.push(`${path}.version debe ser numero.`);
+  if (value.presentationId !== null && typeof value.presentationId !== 'string') errors.push(`${path}.presentationId debe ser texto o null.`);
+  if (value.audioSrc !== null && typeof value.audioSrc !== 'string') errors.push(`${path}.audioSrc debe ser texto o null.`);
+  if (value.syncMapId !== null && typeof value.syncMapId !== 'string') errors.push(`${path}.syncMapId debe ser texto o null.`);
+  if (typeof value.status !== 'string' || !audioTimelineStatuses.has(value.status as AudioTimelineState['status'])) errors.push(`${path}.status no es valido.`);
+  if (!isFiniteNumber(value.basePositionSec)) errors.push(`${path}.basePositionSec debe ser numero.`);
+  if (!isFiniteNumber(value.baseServerTimeMs)) errors.push(`${path}.baseServerTimeMs debe ser numero.`);
+  if (!isFiniteNumber(value.playbackRate)) errors.push(`${path}.playbackRate debe ser numero.`);
+  if (!isFiniteNumber(value.volume)) errors.push(`${path}.volume debe ser numero.`);
+  if (typeof value.syncMode !== 'string' || !audioSyncModes.has(value.syncMode as AudioSyncMode)) errors.push(`${path}.syncMode no es valido.`);
+  validateNullableNumber(value.activeCueIndex, `${path}.activeCueIndex`, errors);
+  validateNullableNumber(value.nextCueIndex, `${path}.nextCueIndex`, errors);
+  if (typeof value.updatedBy !== 'string' || !audioTimelineUpdatedBy.has(value.updatedBy as AudioTimelineState['updatedBy'])) errors.push(`${path}.updatedBy no es valido.`);
+
+  return errors.length > 0 ? fail(errors) : ok(value as unknown as AudioTimelineState);
+};
+
+const validateAudiencePublicState = (value: unknown, path: string): ValidationResult<unknown> => {
+  if (!isRecord(value)) return fail([`${path} debe ser un objeto.`]);
+
+  const errors: string[] = [];
+  if (typeof value.mode !== 'string' || !appModes.has(value.mode)) errors.push(`${path}.mode no es valido.`);
+  if (typeof value.presentationTitle !== 'string') errors.push(`${path}.presentationTitle debe ser texto.`);
+  if (value.slide !== null && !isRecord(value.slide)) errors.push(`${path}.slide debe ser objeto o null.`);
+  if (value.scripture !== null && !isRecord(value.scripture)) errors.push(`${path}.scripture debe ser objeto o null.`);
+  if (!isRecord(value.background)) {
+    errors.push(`${path}.background debe ser un objeto.`);
+  } else {
+    if (value.background.kind !== 'image' && value.background.kind !== 'color') errors.push(`${path}.background.kind no es valido.`);
+    if (typeof value.background.value !== 'string') errors.push(`${path}.background.value debe ser texto.`);
+  }
+  if (!isFiniteNumber(value.updatedAt)) errors.push(`${path}.updatedAt debe ser numero.`);
+
+  return errors.length > 0 ? fail(errors) : ok(value);
+};
+
 const validateScriptureState = (value: unknown, path: string): ValidationResult<ScriptureNavState | null> => {
   if (value === null) return ok(null);
   if (!isRecord(value)) return fail([`${path} debe ser objeto o null.`]);
@@ -431,6 +515,58 @@ export const validateSyncMessage = (value: unknown): ValidationResult<BroadcastM
   if (value.protocolVersion !== undefined && value.protocolVersion !== 1) baseErrors.push('protocolVersion no soportado.');
   if (value.timestamp !== undefined && !isFiniteNumber(value.timestamp)) baseErrors.push('timestamp debe ser numero.');
   if (value.messageId !== undefined && typeof value.messageId !== 'string') baseErrors.push('messageId debe ser texto.');
+
+  if (value.type === 'WELCOME') {
+    if (typeof value.clientId !== 'string') baseErrors.push('clientId debe ser texto.');
+    if (!isFiniteNumber(value.serverTimeMs)) baseErrors.push('serverTimeMs debe ser numero.');
+    if (value.role !== undefined && (typeof value.role !== 'string' || !wsRoles.has(value.role))) baseErrors.push('role no es valido.');
+    return baseErrors.length > 0 ? fail(baseErrors) : ok(value as unknown as BroadcastMessage);
+  }
+
+  if (value.type === 'SERVER_TIME_PING') {
+    if (!isFiniteNumber(value.clientSentAtMs)) baseErrors.push('clientSentAtMs debe ser numero.');
+    return baseErrors.length > 0 ? fail(baseErrors) : ok(value as unknown as BroadcastMessage);
+  }
+
+  if (value.type === 'SERVER_TIME_PONG') {
+    if (!isFiniteNumber(value.clientSentAtMs)) baseErrors.push('clientSentAtMs debe ser numero.');
+    if (!isFiniteNumber(value.serverTimeMs)) baseErrors.push('serverTimeMs debe ser numero.');
+    return baseErrors.length > 0 ? fail(baseErrors) : ok(value as unknown as BroadcastMessage);
+  }
+
+  if (value.type === 'AUDIO_TIMELINE_ACTION') {
+    const action = validateAudioTimelineAction(value.action, 'action');
+    return baseErrors.length || !action.ok
+      ? fail([...baseErrors, ...action.errors])
+      : ok({ ...value, action: action.value } as unknown as BroadcastMessage);
+  }
+
+  if (value.type === 'AUDIO_TIMELINE_STATE') {
+    const timeline = validateAudioTimelineState(value.timeline, 'timeline');
+    return baseErrors.length || !timeline.ok
+      ? fail([...baseErrors, ...timeline.errors])
+      : ok({ ...value, timeline: timeline.value } as unknown as BroadcastMessage);
+  }
+
+  if (value.type === 'AUDIO_PRESENTATION_CLOCK') {
+    if (typeof value.timelineId !== 'string') baseErrors.push('timelineId debe ser texto.');
+    if (!isFiniteNumber(value.estimatedPositionSec)) baseErrors.push('estimatedPositionSec debe ser numero.');
+    if (!isFiniteNumber(value.serverTimeMs)) baseErrors.push('serverTimeMs debe ser numero.');
+    return baseErrors.length > 0 ? fail(baseErrors) : ok(value as unknown as BroadcastMessage);
+  }
+
+  if (value.type === 'AUDIENCE_STATE_UPDATE') {
+    const state = validateAudiencePublicState(value.state, 'state');
+    return baseErrors.length || !state.ok
+      ? fail([...baseErrors, ...state.errors])
+      : ok(value as unknown as BroadcastMessage);
+  }
+
+  if (value.type === 'ERROR') {
+    if (typeof value.code !== 'string') baseErrors.push('code debe ser texto.');
+    if (typeof value.message !== 'string') baseErrors.push('message debe ser texto.');
+    return baseErrors.length > 0 ? fail(baseErrors) : ok(value as unknown as BroadcastMessage);
+  }
 
   if (value.type === 'REQUEST_STATE') {
     if (value.clientId !== undefined && typeof value.clientId !== 'string') baseErrors.push('clientId debe ser texto.');
