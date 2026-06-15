@@ -42,6 +42,8 @@ export const SeferReaderScreen: React.FC<SeferReaderScreenProps> = ({
       .catch((e) => console.error('SeferReaderScreen: error loading metadata', e));
   }, []);
 
+  const currentLoadedBookRef = useRef<string | null>(null);
+
   // Fetch and load book data when scriptureState.bookEs or bookAbbrevEs changes
   useEffect(() => {
     if (Object.keys(metadata).length === 0) return;
@@ -49,14 +51,17 @@ export const SeferReaderScreen: React.FC<SeferReaderScreenProps> = ({
     const targetBook = resolveBookName(scriptureState.bookEs || scriptureState.bookAbbrevEs, metadata);
     if (!targetBook) return;
 
+    if (currentLoadedBookRef.current === targetBook && data.length > 0) return;
+
     setIsLoading(true);
     loadBookData(targetBook, parseVerses)
       .then((parsed) => {
         setData(parsed);
+        currentLoadedBookRef.current = targetBook;
       })
       .catch((e) => console.error('SeferReaderScreen: error loading book', e))
       .finally(() => setIsLoading(false));
-  }, [metadata, scriptureState.bookEs, scriptureState.bookAbbrevEs]);
+  }, [metadata, scriptureState.bookEs, scriptureState.bookAbbrevEs, data.length]);
 
   const hasVerseRange = !!scriptureState.verseEnd;
 

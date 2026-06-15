@@ -161,6 +161,36 @@ function ControlApp() {
 
   const activeBackground = getActiveBackground();
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // If we are in scripture mode or seferManual, SeferControlPanel(Mini) handles arrow keys
+      if (appModeRef.current === 'scripture' || appModeRef.current === 'seferManual') return;
+      
+      const targetTag = (e.target as HTMLElement).tagName.toUpperCase();
+      if (targetTag === 'INPUT' || targetTag === 'TEXTAREA' || targetTag === 'SELECT') return;
+
+      if (e.key === 'ArrowRight') {
+        const p = currentPresentationRef.current;
+        if (!p) return;
+        e.preventDefault();
+        const nextIdx = Math.min(currentSlideIndexRef.current + 1, p.slides.length - 1);
+        if (nextIdx > currentSlideIndexRef.current) {
+          emitCommand({ command: 'SELECT_PRESENTATION_AND_SLIDE', presentation: p, slideIndex: nextIdx, direction: 'forward' });
+        }
+      } else if (e.key === 'ArrowLeft') {
+        const p = currentPresentationRef.current;
+        if (!p) return;
+        e.preventDefault();
+        const prevIdx = Math.max(currentSlideIndexRef.current - 1, 0);
+        if (prevIdx < currentSlideIndexRef.current) {
+          emitCommand({ command: 'SELECT_PRESENTATION_AND_SLIDE', presentation: p, slideIndex: prevIdx, direction: 'backward' });
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [emitCommand]);
+
   const savePresentations = async (updated: Presentation[]) => {
     const normalized = updated.map(normalizePresentation);
     const validation = validatePresentationList(normalized);
