@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
-import type { AudioState, AudioSyncMap } from '../types/audio';
+import type { AudioState, AudioSyncMap, AudioTimelineState } from '../types/audio';
 import type { AppMode, Presentation, ScriptureNavState, VideoState } from '../types/presentation';
 import type { QuizSyncState } from '../types/quiz';
 import type { RemoteCommandPayload, DisplayTelemetryState } from '../types/sync';
 import { normalizePresentation } from '../utils/normalizePresentation';
 import { makeSyncMessage } from '../utils/syncProtocol';
 import { validateRemoteStatePayload, validateSyncMessage } from '../utils/validation';
+import { useWebSocket } from './useWebSocket';
 
 interface SyncStateOptions {
   presentation: Presentation | null;
@@ -51,6 +52,7 @@ interface UseSyncStateProps {
   setAudioState: (state: AudioState) => void;
   setAudioSyncMaps: (maps: AudioSyncMap[]) => void;
   setQuizState?: (state: QuizSyncState | null) => void;
+  onAudioTimelineState?: (state: AudioTimelineState) => void;
 }
 
 const areStringArraysEqual = (left: string[] = [], right: string[] = []) =>
@@ -158,11 +160,43 @@ export function useSyncState(props: UseSyncStateProps) {
     setCurrentPresentation, setCurrentSlideIndex, setCurrentStepIndex, setBackgroundLock,
     setLockedBackgroundValue, setUserSelectedBackground, setVideoState,
     setAppMode, setScriptureState, setAudioState, setAudioSyncMaps,
-    setQuizState,
+    setQuizState, onAudioTimelineState,
   } = props;
 
   const channel = useMemo(() => new BroadcastChannel('sefer-presenter'), []);
   const processedMessageIdsRef = useRef<Set<string>>(new Set());
+
+  const wsUrl = useMemo(() => {
+    if (typeof window === 'undefined') return null;
+    const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const role = isControlMode ? 'control' : isPresenterMode ? 'presenter' : 'audience';
+    return `${proto}//${window.location.host}/ws?role=${role}&clientId=${clientIdRef.current}`;
+  }, [isControlMode, isPresenterMode, clientIdRef]);
+
+  const onAudioTimelineStateRef = useRef(onAudioTimelineState);
+  useEffect(() => { onAudioTimelineStateRef.current = onAudioTimelineState; }, [onAudioTimelineState]);
+
+  const handleWsMessage = useCallback((type: string, payload: Record<string, unknown>) => {
+    if (type === 'WELCOME') {
+      wsSendRef.current('SERVER_TIME_PING', { clientSentAtMs: Date.now() });
+      return;
+    }
+    if (type === 'AUDIO_TIMELINE_STATE') {
+      const validation = validateSyncMessage(payload);
+      if (!validation.ok || !validation.value) return;
+      const msg = validation.value;
+      if (msg.type === 'AUDIO_TIMELINE_STATE') {
+        onAudioTimelineStateRef.current?.(msg.timeline as AudioTimelineState);
+      }
+      return;
+    }
+  }, []);
+
+  const { status: wsStatus, sendMessage: wsSend } = useWebSocket(wsUrl, {
+    onMessage: handleWsMessage,
+  });
+  const wsSendRef = useRef(wsSend);
+  useEffect(() => { wsSendRef.current = wsSend; }, [wsSend]);
 
   // ── Persist to localStorage ───────────────────────────────────────
   const persistState = useCallback((
@@ -224,12 +258,16 @@ export function useSyncState(props: UseSyncStateProps) {
 
     channel.postMessage(payload);
 
-    fetch('/api/state', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    }).catch(err => console.error('Error syncing state to network', err));
-  }, [channel, isControlMode, persistState, videoStateRef, appModeRef, scriptureStateRef, audioStateRef, quizStateRef, currentStepIndexRef, clientIdRef]);
+    if (wsStatus === 'open') {
+      wsSendRef.current(payload.type, payload as unknown as Record<string, unknown>);
+    } else {
+      fetch('/api/state', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      }).catch(err => console.error('Error syncing state to network', err));
+    }
+  }, [channel, isControlMode, persistState, videoStateRef, appModeRef, scriptureStateRef, audioStateRef, quizStateRef, currentStepIndexRef, clientIdRef, wsStatus]);
 
   const emitCommand = useCallback((payload: RemoteCommandPayload) => {
     const message = makeSyncMessage({
@@ -238,12 +276,16 @@ export function useSyncState(props: UseSyncStateProps) {
       payload,
     });
     channel.postMessage(message);
-    fetch('/api/command', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(message)
-    }).catch(err => console.error('Error syncing command to network', err));
-  }, [channel, clientIdRef]);
+    if (wsStatus === 'open') {
+      wsSendRef.current(message.type, message as unknown as Record<string, unknown>);
+    } else {
+      fetch('/api/command', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(message)
+      }).catch(err => console.error('Error syncing command to network', err));
+    }
+  }, [channel, clientIdRef, wsStatus]);
 
   const applyAudioTelemetry = useCallback((incomingAudioState: AudioState) => {
     const currentAudioState = audioStateRef.current;
@@ -592,5 +634,5 @@ export function useSyncState(props: UseSyncStateProps) {
     clientIdRef, isPresenterMode
   ]);
 
-  return { channel, syncState, emitCommand, persistState, emitAudioTelemetry, emitVideoTelemetry, emitDisplayTelemetry };
+  return { channel, syncState, emitCommand, persistState, emitAudioTelemetry, emitVideoTelemetry, emitDisplayTelemetry, wsStatus };
 }
