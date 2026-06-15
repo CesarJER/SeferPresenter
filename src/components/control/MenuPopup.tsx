@@ -646,37 +646,22 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
 
   const handleUpdateVideoParams = (
     idx: number,
-    params: { mediaSrc?: string; volume?: number; speed?: number; loop?: boolean; presenterNav?: boolean; startTime?: number; endTime?: number }
+    params: { mediaSrc?: string; mediaFit?: 'cover' | 'contain' | 'fill'; volume?: number; speed?: number; loop?: boolean; presenterNav?: boolean; mediaShowBg?: boolean; startTime?: number; endTime?: number }
   ) => {
     const updated = [...slides];
     const slide = { ...updated[idx] };
     if (slide.type === 'media') {
       if ('mediaSrc' in params) slide.mediaSrc = params.mediaSrc;
+      if ('mediaFit' in params) slide.mediaFit = params.mediaFit;
       if ('volume' in params) slide.mediaVolume = params.volume;
       if ('speed' in params) slide.mediaSpeed = params.speed;
       if ('loop' in params) slide.mediaLoop = params.loop;
       if ('presenterNav' in params) slide.mediaPresenterNav = params.presenterNav;
+      if ('mediaShowBg' in params) slide.mediaShowBg = params.mediaShowBg;
       if ('startTime' in params) slide.mediaStart = params.startTime;
       if ('endTime' in params) slide.mediaEnd = params.endTime;
 
-      const startVal = slide.mediaStart !== undefined && !isNaN(slide.mediaStart) ? slide.mediaStart : '';
-      const endVal = slide.mediaEnd !== undefined && !isNaN(slide.mediaEnd) ? slide.mediaEnd : '';
-      const loopStr = slide.mediaLoop !== false ? '1' : '0';
-      const presenterNavStr = slide.mediaPresenterNav !== false ? '1' : '0';
-      const parts = [
-        'VIDEO',
-        `"${slide.mediaSrc || ''}"`,
-        (slide.mediaVolume ?? 0.8).toString(),
-        (slide.mediaSpeed ?? 1.0).toString(),
-        loopStr,
-        presenterNavStr,
-        startVal.toString(),
-        endVal.toString()
-      ];
-      while (parts.length > 6 && parts[parts.length - 1] === '') {
-        parts.pop();
-      }
-      slide.lines = [`[${parts.join(' - ')}]`, '-', '-'];
+      slide.lines = [serializeMediaToText(slide), '-', '-'];
     }
 
     updated[idx] = slide;

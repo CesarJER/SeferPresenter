@@ -23,6 +23,7 @@ type VideoParamUpdate = {
   speed?: number;
   loop?: boolean;
   presenterNav?: boolean;
+  mediaShowBg?: boolean;
   startTime?: number;
   endTime?: number;
 };
