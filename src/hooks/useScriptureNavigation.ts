@@ -1,5 +1,5 @@
 import { useCallback, useRef, useEffect } from 'react';
-import type { AppMode, Presentation, ScriptureNavState, SeferOnlineRefPayload, Slide, VideoState } from '../types/presentation';
+import type { AppMode, Presentation, ScriptureNavState, SeferOnlineRefPayload, Slide, VideoState, PresentationStep } from '../types/presentation';
 import type { SeferReaderState } from './useSeferReader';
 import { getScriptureChapterVerses } from '../utils/scriptureLookup';
 import type { AudioState } from '../types/audio';
@@ -26,9 +26,13 @@ interface UseScriptureNavigationProps {
     appMode?: AppMode;
     scriptureState?: ScriptureNavState | null;
     audioState?: AudioState;
+    stepIndex?: number;
   }) => void;
   handleSelectPresentationAndSlide: (p: Presentation | null, idx: number, direction?: 'forward' | 'backward', targetVerse?: string) => void;
   handleSave: (presentation: Presentation) => void;
+  steps: PresentationStep[];
+  currentStepIndex: number;
+  setCurrentStepIndex: (idx: number) => void;
   slideScriptureStateBeforeManualRef: React.MutableRefObject<ScriptureNavState | null>;
 }
 
@@ -48,6 +52,9 @@ export function useScriptureNavigation(props: UseScriptureNavigationProps) {
     syncState,
     handleSelectPresentationAndSlide,
     handleSave,
+    steps,
+    currentStepIndex,
+    setCurrentStepIndex,
     slideScriptureStateBeforeManualRef,
   } = props;
 
@@ -213,6 +220,27 @@ export function useScriptureNavigation(props: UseScriptureNavigationProps) {
       combinedTextBaseSize: previous?.combinedTextBaseSize ?? 50,
     };
 
+    const normalizeBook = (b?: string) => b ? b.toLowerCase().replace(/\s+/g, '') : '';
+    const targetBookNorm = normalizeBook(navState.bookEs || navState.bookAbbrevEs);
+
+    let matchingStepIndex: number | undefined;
+    if (steps && steps.length > 0 && targetBookNorm) {
+      const foundIdx = steps.findIndex(
+        (s) =>
+          s.slideIndex === currentSlideIndexRef.current &&
+          s.type === 'scripture' &&
+          normalizeBook(s.book) === targetBookNorm &&
+          s.chapter === navState.chapter &&
+          s.verse === navState.verse
+      );
+      if (foundIdx >= 0) {
+        matchingStepIndex = foundIdx;
+        if (foundIdx !== currentStepIndex) {
+          setCurrentStepIndex(foundIdx);
+        }
+      }
+    }
+
     if (JSON.stringify(previous) === JSON.stringify(navState)) return;
 
     const nextMode: AppMode = appModeRef.current === 'seferManual' ? 'seferManual' : 'scripture';
@@ -226,8 +254,9 @@ export function useScriptureNavigation(props: UseScriptureNavigationProps) {
       videoState: videoStateRef.current,
       appMode: nextMode,
       scriptureState: navState,
+      stepIndex: appModeRef.current !== 'seferManual' ? matchingStepIndex : undefined,
     });
-  }, [syncState, currentPresentationRef, currentSlideIndexRef, backgroundLockRef, lockedBackgroundValueRef, userSelectedBackgroundRef, videoStateRef, appModeRef, setScriptureState, scriptureStateRef]);
+  }, [syncState, currentPresentationRef, currentSlideIndexRef, backgroundLockRef, lockedBackgroundValueRef, userSelectedBackgroundRef, videoStateRef, appModeRef, setScriptureState, scriptureStateRef, steps, currentStepIndex, setCurrentStepIndex]);
 
   const handleAddScriptureSlide = useCallback((state: SeferReaderState, kind: 'sefer' | 'tanaj' = 'sefer') => {
     const presentation = currentPresentationRef.current;

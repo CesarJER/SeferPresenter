@@ -337,7 +337,15 @@ function App() {
         quizTimer.completeTimer();
         const subslides = activeQuizData ? generateQuizSubslides(activeQuizData) : [];
         const answerIndex = subslides.findIndex(s => s.kind === 'respuesta');
-        if (answerIndex >= 0) setQuizCurrentSubslideIndex(answerIndex);
+        if (answerIndex >= 0) {
+          setQuizCurrentSubslideIndex(answerIndex);
+          const foundIdx = steps.findIndex(
+            (s) => s.slideIndex === currentSlideIndexRef.current && s.type === 'quiz' && s.subslideIndex === answerIndex
+          );
+          if (foundIdx >= 0) {
+            setCurrentStepIndex(foundIdx);
+          }
+        }
         break;
       }
       case 'QUIZ_SELECT_SUBSLIDE': {
@@ -346,6 +354,12 @@ function App() {
           quizTimer.completeTimer();
         }
         setQuizCurrentSubslideIndex(payload.index);
+        const foundIdx = steps.findIndex(
+          (s) => s.slideIndex === currentSlideIndexRef.current && s.type === 'quiz' && s.subslideIndex === payload.index
+        );
+        if (foundIdx >= 0) {
+          setCurrentStepIndex(foundIdx);
+        }
         break;
       }
       case 'QUIZ_DEMO_SELECT':
@@ -476,6 +490,9 @@ function App() {
     setAppMode, setScriptureState, syncState, 
     handleSelectPresentationAndSlide: (p: Presentation | null, idx: number, direction?: 'forward' | 'backward', targetVerse?: string) => handleSelectPresentationAndSlideRef.current?.(p, idx, direction, targetVerse),
     handleSave: (p: Presentation) => handleSaveRef.current?.(p), 
+    steps,
+    currentStepIndex,
+    setCurrentStepIndex,
     slideScriptureStateBeforeManualRef
   });
 
@@ -889,11 +906,19 @@ function App() {
           quizTimerState={quizTimer.timerState}
           quizPresenterDemoSelection={quizPresenterDemoSelection}
           onQuizSubslideSelect={(idx) => {
-            if (isControlMode) emitCommand({ command: 'QUIZ_SELECT_SUBSLIDE', index: idx });
-            else {
-              const subslides = activeQuizData ? generateQuizSubslides(activeQuizData) : [];
-              if (subslides[idx]?.kind === 'respuesta') quizTimer.completeTimer();
-              setQuizCurrentSubslideIndex(idx);
+            const foundIdx = steps.findIndex(
+              (s) => s.slideIndex === currentSlideIndex && s.type === 'quiz' && s.subslideIndex === idx
+            );
+            if (foundIdx >= 0) {
+              if (isControlMode) emitCommand({ command: 'SELECT_STEP', stepIndex: foundIdx });
+              else applyStepIndex(foundIdx);
+            } else {
+              if (isControlMode) emitCommand({ command: 'QUIZ_SELECT_SUBSLIDE', index: idx });
+              else {
+                const subslides = activeQuizData ? generateQuizSubslides(activeQuizData) : [];
+                if (subslides[idx]?.kind === 'respuesta') quizTimer.completeTimer();
+                setQuizCurrentSubslideIndex(idx);
+              }
             }
           }}
           onQuizStartTimer={() => isControlMode ? emitCommand({ command: 'QUIZ_START_TIMER' }) : quizTimer.startTimer()}
@@ -901,10 +926,20 @@ function App() {
           onQuizResumeTimer={() => isControlMode ? emitCommand({ command: 'QUIZ_RESUME_TIMER' }) : quizTimer.resumeTimer()}
           onQuizResetTimer={() => isControlMode ? emitCommand({ command: 'QUIZ_RESET_TIMER' }) : quizTimer.resetTimer((activeQuizData?.timerSeconds ?? 30) * 1000)}
           onQuizComplete={() => {
+            const answerIndex = quizSubslides.findIndex(subslide => subslide.kind === 'respuesta');
+            if (answerIndex >= 0) {
+              const foundIdx = steps.findIndex(
+                (s) => s.slideIndex === currentSlideIndex && s.type === 'quiz' && s.subslideIndex === answerIndex
+              );
+              if (foundIdx >= 0) {
+                if (isControlMode) emitCommand({ command: 'SELECT_STEP', stepIndex: foundIdx });
+                else applyStepIndex(foundIdx);
+                return;
+              }
+            }
             if (isControlMode) emitCommand({ command: 'QUIZ_COMPLETE' });
             else {
               quizTimer.completeTimer();
-              const answerIndex = quizSubslides.findIndex(subslide => subslide.kind === 'respuesta');
               if (answerIndex >= 0) setQuizCurrentSubslideIndex(answerIndex);
             }
           }}

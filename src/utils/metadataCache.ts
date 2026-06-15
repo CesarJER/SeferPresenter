@@ -30,7 +30,18 @@ export const getMetadata = async (): Promise<AppMetadata> => {
 export const resolveBookName = (bookToken: string, metadata: AppMetadata): string | null => {
   if (!bookToken) return null;
   if (metadata[bookToken]) return bookToken;
-  return Object.keys(metadata).find((bookName) => metadata[bookName].bookAbbrevEs === bookToken) ?? null;
+
+  const normalize = (str: string) => str.toLowerCase().replace(/\s+/g, '');
+  const normalizedToken = normalize(bookToken);
+
+  const matchedKey = Object.keys(metadata).find(
+    (bookName) => normalize(bookName) === normalizedToken
+  );
+  if (matchedKey) return matchedKey;
+
+  return Object.keys(metadata).find(
+    (bookName) => normalize(metadata[bookName].bookAbbrevEs) === normalizedToken
+  ) ?? null;
 };
 
 export const loadBookData = async <T>(
