@@ -1,7 +1,7 @@
 import React from 'react';
 import { Play, Pause, Music, Volume2, ArrowUp, ArrowUpDown, Settings } from 'lucide-react';
 import type { Presentation } from '../../types/presentation';
-import type { AudioState, AudioSyncMap } from '../../types/audio';
+import type { AudioState, AudioSyncMap, AudioTimelineAction } from '../../types/audio';
 
 interface AudioPanelProps {
   audioState: AudioState;
@@ -12,6 +12,8 @@ interface AudioPanelProps {
   currentPresentation: Presentation | null;
   onSelectPresentation: (p: Presentation) => void;
   handleOpenAudioEditor: () => void;
+  dispatchAction?: (action: AudioTimelineAction) => void;
+  estimatedPositionSec?: number;
 }
 
 const formatTime = (secs: number | undefined) => {
@@ -30,7 +32,18 @@ export const AudioPanel: React.FC<AudioPanelProps> = ({
   currentPresentation,
   onSelectPresentation,
   handleOpenAudioEditor,
+  dispatchAction,
+  estimatedPositionSec,
 }) => {
+  const [dragPosition, setDragPosition] = React.useState<number | null>(null);
+
+  React.useEffect(() => {
+    setDragPosition(null);
+  }, [audioState.audioSrc]);
+
+  const currentPosition = dragPosition !== null
+    ? dragPosition
+    : (estimatedPositionSec !== undefined && estimatedPositionSec !== null ? estimatedPositionSec : audioState.currentTime);
   const matchedSyncMap = audioState.audioSrc
     ? audioSyncMaps.find(m => m.audioSrc === audioState.audioSrc)
     : undefined;
@@ -38,39 +51,60 @@ export const AudioPanel: React.FC<AudioPanelProps> = ({
   const handleSelectAudioTrack = (src: string) => {
     const newMatchedMap = src ? audioSyncMaps.find(m => m.audioSrc === src) : undefined;
 
-    onAudioStateChange({
-      ...audioState,
-      audioSrc: src || null,
-      currentTime: 0,
-      duration: 0,
-      isPlaying: false,
-      activeSyncMapId: newMatchedMap ? newMatchedMap.id : null,
-      syncMode: newMatchedMap ? (newMatchedMap.defaultSyncMode || 'none') : 'none',
-      volume: newMatchedMap && newMatchedMap.defaultVolume !== undefined ? newMatchedMap.defaultVolume : audioState.volume,
-      lastUpdatedBy: 'controller',
-      changeType: 'track',
-      timestamp: Date.now()
-    });
+    if (dispatchAction) {
+      const presentationId = newMatchedMap?.presentationId || currentPresentation?.id || '';
+      const audioSrc = src;
+      const syncMapId = newMatchedMap?.id;
+      dispatchAction({
+        type: 'SET_TRACK',
+        presentationId,
+        audioSrc,
+        syncMapId,
+      });
+    } else {
+      onAudioStateChange({
+        ...audioState,
+        audioSrc: src || null,
+        currentTime: 0,
+        duration: 0,
+        isPlaying: false,
+        activeSyncMapId: newMatchedMap ? newMatchedMap.id : null,
+        syncMode: newMatchedMap ? (newMatchedMap.defaultSyncMode || 'none') : 'none',
+        volume: newMatchedMap && newMatchedMap.defaultVolume !== undefined ? newMatchedMap.defaultVolume : audioState.volume,
+        lastUpdatedBy: 'controller',
+        changeType: 'track',
+        timestamp: Date.now()
+      });
+    }
   };
 
   const togglePlayback = () => {
-    onAudioStateChange({
-      ...audioState,
-      isPlaying: !audioState.isPlaying,
-      lastUpdatedBy: 'controller',
-      changeType: 'playState',
-      timestamp: Date.now(),
-    });
+    if (dispatchAction) {
+      dispatchAction({ type: audioState.isPlaying ? 'PAUSE' : 'PLAY' });
+    } else {
+      onAudioStateChange({
+        ...audioState,
+        isPlaying: !audioState.isPlaying,
+        lastUpdatedBy: 'controller',
+        changeType: 'playState',
+        timestamp: Date.now(),
+      });
+    }
   };
 
   const toggleMute = () => {
-    onAudioStateChange({
-      ...audioState,
-      volume: audioState.volume > 0 ? 0 : 0.7,
-      lastUpdatedBy: 'controller',
-      changeType: 'volume',
-      timestamp: Date.now(),
-    });
+    if (dispatchAction) {
+      const nextVolume = audioState.volume > 0 ? 0 : 0.7;
+      dispatchAction({ type: 'SET_VOLUME', volume: nextVolume });
+    } else {
+      onAudioStateChange({
+        ...audioState,
+        volume: audioState.volume > 0 ? 0 : 0.7,
+        lastUpdatedBy: 'controller',
+        changeType: 'volume',
+        timestamp: Date.now(),
+      });
+    }
   };
 
   return (
@@ -106,15 +140,28 @@ export const AudioPanel: React.FC<AudioPanelProps> = ({
                 if (linkedPres) {
                   onSelectPresentation(linkedPres);
                 }
-                onAudioStateChange({
-                  ...audioState,
-                  activeSyncMapId: matchedSyncMap.id,
-                  syncMode: matchedSyncMap.defaultSyncMode || 'unilateral',
-                  volume: matchedSyncMap.defaultVolume !== undefined ? matchedSyncMap.defaultVolume : audioState.volume,
-                  lastUpdatedBy: 'controller',
-                  changeType: 'syncMode',
-                  timestamp: Date.now(),
-                });
+                if (dispatchAction) {
+                  dispatchAction({
+                    type: 'SET_SYNC_MODE',
+                    mode: matchedSyncMap.defaultSyncMode || 'unilateral',
+                  });
+                  if (matchedSyncMap.defaultVolume !== undefined) {
+                    dispatchAction({
+                      type: 'SET_VOLUME',
+                      volume: matchedSyncMap.defaultVolume,
+                    });
+                  }
+                } else {
+                  onAudioStateChange({
+                    ...audioState,
+                    activeSyncMapId: matchedSyncMap.id,
+                    syncMode: matchedSyncMap.defaultSyncMode || 'unilateral',
+                    volume: matchedSyncMap.defaultVolume !== undefined ? matchedSyncMap.defaultVolume : audioState.volume,
+                    lastUpdatedBy: 'controller',
+                    changeType: 'syncMode',
+                    timestamp: Date.now(),
+                  });
+                }
               }}
               className={`audio-panel-btn border border-sky-600 bg-sky-700 hover:bg-sky-650 ${
                 audioState.syncMode === 'none' || currentPresentation?.id !== matchedSyncMap.presentationId
@@ -169,13 +216,18 @@ export const AudioPanel: React.FC<AudioPanelProps> = ({
             step="0.05"
             value={audioState.volume}
             onChange={(e) => {
-              onAudioStateChange({
-                ...audioState,
-                volume: parseFloat(e.target.value),
-                lastUpdatedBy: 'controller',
-                changeType: 'volume',
-                timestamp: Date.now(),
-              });
+              const val = parseFloat(e.target.value);
+              if (dispatchAction) {
+                dispatchAction({ type: 'SET_VOLUME', volume: val });
+              } else {
+                onAudioStateChange({
+                  ...audioState,
+                  volume: val,
+                  lastUpdatedBy: 'controller',
+                  changeType: 'volume',
+                  timestamp: Date.now(),
+                });
+              }
             }}
             disabled={!audioState.audioSrc}
             className="control-range-slim w-16"
@@ -185,22 +237,44 @@ export const AudioPanel: React.FC<AudioPanelProps> = ({
 
       {/* Center: Scrubber ProgressBar */}
       <div className="flex-1 flex items-center gap-2.5 w-full min-w-0">
-        <span className="font-mono text-gray-400 text-[11px] shrink-0">{formatTime(audioState.currentTime)}</span>
+        <span className="font-mono text-gray-400 text-[11px] shrink-0">{formatTime(currentPosition)}</span>
         <input
           type="range"
           min="0"
           max={audioState.duration || 100}
           step="0.1"
-          value={audioState.currentTime}
+          value={currentPosition}
           onChange={(e) => {
             const val = parseFloat(e.target.value);
-            onAudioStateChange({
-              ...audioState,
-              currentTime: val,
-              lastUpdatedBy: 'controller',
-              changeType: 'seek',
-              timestamp: Date.now(),
-            });
+            if (dispatchAction) {
+              setDragPosition(val);
+            } else {
+              onAudioStateChange({
+                ...audioState,
+                currentTime: val,
+                lastUpdatedBy: 'controller',
+                changeType: 'seek',
+                timestamp: Date.now(),
+              });
+            }
+          }}
+          onMouseUp={() => {
+            if (dispatchAction && dragPosition !== null) {
+              dispatchAction({ type: 'SEEK', positionSec: dragPosition });
+              setDragPosition(null);
+            }
+          }}
+          onTouchEnd={() => {
+            if (dispatchAction && dragPosition !== null) {
+              dispatchAction({ type: 'SEEK', positionSec: dragPosition });
+              setDragPosition(null);
+            }
+          }}
+          onKeyUp={() => {
+            if (dispatchAction && dragPosition !== null) {
+              dispatchAction({ type: 'SEEK', positionSec: dragPosition });
+              setDragPosition(null);
+            }
           }}
           disabled={!audioState.audioSrc}
           className="control-range-slim min-w-0 flex-1"
@@ -237,13 +311,17 @@ export const AudioPanel: React.FC<AudioPanelProps> = ({
             <button
               type="button"
               onClick={() => {
-                onAudioStateChange({
-                  ...audioState,
-                  syncMode: 'none',
-                  lastUpdatedBy: 'controller',
-                  changeType: 'syncMode',
-                  timestamp: Date.now(),
-                });
+                if (dispatchAction) {
+                  dispatchAction({ type: 'SET_SYNC_MODE', mode: 'none' });
+                } else {
+                  onAudioStateChange({
+                    ...audioState,
+                    syncMode: 'none',
+                    lastUpdatedBy: 'controller',
+                    changeType: 'syncMode',
+                    timestamp: Date.now(),
+                  });
+                }
               }}
               disabled={!audioState.audioSrc}
               className={`audio-sync-btn ${
@@ -259,13 +337,17 @@ export const AudioPanel: React.FC<AudioPanelProps> = ({
             <button
               type="button"
               onClick={() => {
-                onAudioStateChange({
-                  ...audioState,
-                  syncMode: 'unilateral',
-                  lastUpdatedBy: 'controller',
-                  changeType: 'syncMode',
-                  timestamp: Date.now(),
-                });
+                if (dispatchAction) {
+                  dispatchAction({ type: 'SET_SYNC_MODE', mode: 'unilateral' });
+                } else {
+                  onAudioStateChange({
+                    ...audioState,
+                    syncMode: 'unilateral',
+                    lastUpdatedBy: 'controller',
+                    changeType: 'syncMode',
+                    timestamp: Date.now(),
+                  });
+                }
               }}
               disabled={!audioState.audioSrc}
               className={`audio-sync-btn ${
@@ -281,13 +363,17 @@ export const AudioPanel: React.FC<AudioPanelProps> = ({
             <button
               type="button"
               onClick={() => {
-                onAudioStateChange({
-                  ...audioState,
-                  syncMode: 'bilateral',
-                  lastUpdatedBy: 'controller',
-                  changeType: 'syncMode',
-                  timestamp: Date.now(),
-                });
+                if (dispatchAction) {
+                  dispatchAction({ type: 'SET_SYNC_MODE', mode: 'bilateral' });
+                } else {
+                  onAudioStateChange({
+                    ...audioState,
+                    syncMode: 'bilateral',
+                    lastUpdatedBy: 'controller',
+                    changeType: 'syncMode',
+                    timestamp: Date.now(),
+                  });
+                }
               }}
               disabled={!audioState.audioSrc}
               className={`audio-sync-btn ${
