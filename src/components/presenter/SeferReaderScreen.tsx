@@ -310,6 +310,11 @@ export const SeferReaderScreen: React.FC<SeferReaderScreenProps> = ({
 
   const bookDir = data[0]?.DIR?.toLowerCase() || 'rtl';
 
+  const activeHebrewFontSize = useMemo(() => {
+    const baseSize = scriptureState.hebrewFontSize ?? 42;
+    return isVerticalLayout ? Math.max(18, Math.round(baseSize * 0.65)) : baseSize;
+  }, [scriptureState.hebrewFontSize, isVerticalLayout]);
+
   return (
     <main className="h-dvh flex flex-col md:flex-row bg-[#fef3c7] font-hebrew overflow-hidden">
       <VerseSidebar
@@ -325,13 +330,13 @@ export const SeferReaderScreen: React.FC<SeferReaderScreenProps> = ({
       />
 
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
-        <div className="flex-none h-16 border-b border-amber-900/20 bg-[#f7e7b6]/95 px-4 py-2 shadow-sm flex items-center justify-between gap-3">
+        <div className="flex-none h-12 md:h-16 border-b border-amber-900/20 bg-[#f7e7b6]/95 px-4 py-2 shadow-sm flex items-center justify-between gap-3">
           <div className="w-8" />
           <div className="flex-1 h-full min-w-0">
             <AutoResizeText
               text={originalNavLabel}
               allowGrow={true}
-              maxFontSize={48}
+              maxFontSize={isVerticalLayout ? 28 : 48}
               minFontSize={12}
               className="whitespace-nowrap font-bold text-amber-950 text-center"
               html={false}
@@ -359,7 +364,7 @@ export const SeferReaderScreen: React.FC<SeferReaderScreenProps> = ({
             onVerseClick={handleVerseClick}
             onVerseTouchEnd={handleVerseTouchEnd}
             bookDir={bookDir}
-            hebrewFontSize={scriptureState.hebrewFontSize}
+            hebrewFontSize={activeHebrewFontSize}
           />
         </div>
       </div>

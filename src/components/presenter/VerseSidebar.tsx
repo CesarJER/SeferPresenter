@@ -59,11 +59,11 @@ export const VerseSidebar = ({
       />
 
       {navLabel && (
-        <div className="flex-none h-16 border-b border-amber-900/20 bg-[#f7e7b6]/95 px-4 py-2 shadow-sm">
+        <div className="flex-none h-12 md:h-16 border-b border-amber-900/20 bg-[#f7e7b6]/95 px-4 py-2 shadow-sm">
           <AutoResizeText
             text={navLabel}
             allowGrow={true}
-            maxFontSize={48}
+            maxFontSize={isVerticalLayout ? 28 : 48}
             minFontSize={12}
             className="whitespace-nowrap font-bold text-amber-950 text-center"
             html={false}
