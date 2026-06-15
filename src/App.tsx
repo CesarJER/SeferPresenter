@@ -1,12 +1,8 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import PresenterScreen from './components/presenter/PresenterScreen';
-import MenuPopup from './components/control/MenuPopup';
 import SeferReaderScreen from './components/presenter/SeferReaderScreen';
-import AudienceScreen from './components/audience/AudienceScreen';
 import defaultPresentations from '../presentations.json';
 import { Music } from 'lucide-react';
-
-import { AudioSyncEditor } from './components/AudioSyncEditor';
 
 import type { AudioState, AudioSyncMap } from './types/audio';
 import { DEFAULT_AUDIO_STATE } from './types/audio';
@@ -30,23 +26,20 @@ import { useQuizAudio } from './hooks/useQuizAudio';
 import type { SeferReaderState } from './hooks/useSeferReader';
 import { useQuizTimer } from './hooks/useQuizTimer';
 import { validateAudioSyncMaps, validatePresentationList } from './utils/validation';
-import { makeSyncMessage } from './utils/syncProtocol';
 import { generateQuizSubslides, calcMaxBaseCentipunts } from './utils/quizUtils';
 import { generatePresentationSteps } from './utils/navigationUtils';
 import type { PresentationStep } from './types/presentation';
 
 function App() {
-  const routeName = window.location.pathname.split('/').filter(Boolean)[0] || 'presenter';
-  const isControlMode = routeName === 'control';
-  const isAudioEditorMode = routeName === 'audio-editor';
-  const isAudienceMode = routeName === 'audience';
-  const isPresenterMode = !isControlMode && !isAudienceMode && !isAudioEditorMode;
+  const isControlMode = false;
+  const isAudioEditorMode = false;
+  const isAudienceMode = false;
+  const isPresenterMode = true;
   const storedPresenterState = loadStoredPresenterState();
 
   const [presentations, setPresentations] = useState<Presentation[]>([]);
   const [currentPresentation, setCurrentPresentation] = useState<Presentation | null>(storedPresenterState?.presentation ?? null);
   const [currentSlideIndex, setCurrentSlideIndex] = useState<number>(storedPresenterState?.slideIndex ?? -1);
-  const [backgrounds, setBackgrounds] = useState<string[]>([]);
 
   const [backgroundLock, setBackgroundLock] = useState<boolean>(() => {
     return localStorage.getItem('sefer-presenter-bg-lock') === 'true';
@@ -59,7 +52,6 @@ function App() {
 
   const [audioState, setAudioState] = useState<AudioState>(DEFAULT_AUDIO_STATE);
   const [audioSyncMaps, setAudioSyncMaps] = useState<AudioSyncMap[]>([]);
-  const [availableAudioFiles, setAvailableAudioFiles] = useState<string[]>([]);
 
   const [appMode, setAppMode] = useState<AppMode>('slides');
   const [scriptureState, setScriptureState] = useState<ScriptureNavState | null>(null);
@@ -263,10 +255,6 @@ function App() {
 
 
   useEffect(() => {
-    fetch('/api/backgrounds')
-      .then(res => res.json())
-      .then(data => setBackgrounds(data))
-      .catch(err => console.error("Error loading backgrounds", err));
     fetch('/api/presentations')
       .then(res => res.json())
       .then(data => {
@@ -282,10 +270,6 @@ function App() {
         console.error("Error loading presentations", err);
         setPresentations((defaultPresentations as Presentation[]).map(normalizePresentation));
       });
-    fetch('/api/audio')
-      .then(res => res.json())
-      .then(data => setAvailableAudioFiles(data))
-      .catch(err => console.error("Error loading audio files", err));
     fetch('/api/audio-sync')
       .then(res => res.json())
       .then(data => {
@@ -406,7 +390,7 @@ function App() {
     }
   }, [quizTimer, activeQuizData, quizAudio]);
 
-  const { channel, syncState, emitCommand, emitAudioTelemetry, emitVideoTelemetry, emitDisplayTelemetry } = useSyncState({
+  const { syncState, emitCommand, emitAudioTelemetry, emitVideoTelemetry, emitDisplayTelemetry } = useSyncState({
     isControlMode, isPresenterMode, onRemoteCommand: handleRemoteCommand, clientIdRef,
     currentPresentationRef, currentSlideIndexRef, currentStepIndexRef, backgroundLockRef,
     lockedBackgroundValueRef, userSelectedBackgroundRef, videoStateRef,
@@ -789,182 +773,7 @@ function App() {
   }, [buildScriptureSlideState, presentations, storedPresenterState, syncState]);
   handleToggleAppModeRef.current = handleToggleAppMode;
 
-  if (isAudienceMode) {
-    return (
-      <AudienceScreen
-        appMode={appMode}
-        background={activeBackground}
-        fontScale={currentPresentation?.fontScale ?? 1}
-        presentationTitle={currentPresentation?.title || ''}
-        scriptureState={quizScriptureState || scriptureState}
-        slide={activePresenterSlide}
-        videoState={videoState}
-        quizSubslides={quizSubslides}
-        quizCurrentSubslideIndex={quizCurrentSubslideIndex}
-        quizTimerState={quizTimer.timerState}
-        quizMaxBaseCentipunts={activeQuizState?.maxBaseCentipunts}
-      />
-    );
-  }
 
-  if (isAudioEditorMode) {
-    return (
-      <div className="w-dvw h-dvh bg-gray-900 overflow-hidden">
-        <AudioSyncEditor
-          isOpen={true}
-          onClose={() => window.close()}
-          presentations={presentations}
-          activePresentationId={currentPresentation?.id || null}
-          activeAudioSrc={audioState.audioSrc}
-          availableAudioFiles={availableAudioFiles}
-          audioSyncMaps={audioSyncMaps}
-          onAudioSyncMapsChange={(maps) => {
-            const validation = validateAudioSyncMaps(maps);
-            if (!validation.ok || !validation.value) {
-              console.error('Refusing to save invalid audio sync maps', validation.errors);
-              alert(`No se guardaron los mapas de audio porque contienen datos inv\u00e1lidos:\n${validation.errors.slice(0, 5).join('\n')}`);
-              return;
-            }
-            setAudioSyncMaps(validation.value);
-            fetch('/api/audio-sync', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(validation.value)
-            }).catch(err => console.error('Error saving audio sync maps', err));
-            channel.postMessage(makeSyncMessage({ type: 'AUDIO_SYNC_MAPS_UPDATE', maps: validation.value }));
-          }}
-        />
-      </div>
-    );
-  }
-
-  if (isControlMode) {
-    return (
-      <div id="section-app-control-mode" className="w-full h-dvh bg-gray-900 overflow-hidden">
-        <MenuPopup
-          presentations={presentations}
-          backgrounds={backgrounds}
-          currentPresentation={currentPresentation}
-          currentSlideIndex={currentSlideIndex}
-          activeBackground={activeBackground}
-          backgroundLock={backgroundLock}
-          onToggleBackgroundLock={(locked) => isControlMode ? emitCommand({ command: 'TOGGLE_BG_LOCK', locked }) : handleToggleBackgroundLock(locked)}
-          onSelectBackgroundOverride={(bg) => isControlMode ? emitCommand({ command: 'SELECT_BG_OVERRIDE', bg }) : handleSelectBackgroundOverride(bg)}
-          onSave={handleSave}
-          onResetState={() => isControlMode ? emitCommand({ command: 'RESET_STATE' }) : handleResetState()}
-          onSelectPresentation={(p, idx, targetVerse) => isControlMode ? emitCommand({ command: 'SELECT_PRESENTATION_AND_SLIDE', presentation: p, slideIndex: idx ?? 0, direction: 'forward', targetVerse }) : handleSelectPresentationAndSlide(p, idx ?? 0, 'forward', targetVerse)}
-          onSelectSlide={(idx) => isControlMode ? emitCommand({ command: 'SELECT_PRESENTATION_AND_SLIDE', presentation: currentPresentation, slideIndex: idx, direction: idx < currentSlideIndex ? 'backward' : 'forward' }) : handleSelectPresentationAndSlide(currentPresentation, idx, idx < currentSlideIndex ? 'backward' : 'forward')}
-          onImport={(imported) => {
-            savePresentations(imported);
-            if (imported.length > 0) {
-              if (isControlMode) emitCommand({ command: 'SELECT_PRESENTATION_AND_SLIDE', presentation: imported[0], slideIndex: imported[0].slides.length > 0 ? 0 : -1, direction: 'forward' });
-              else handleSelectPresentationAndSlide(imported[0], imported[0].slides.length > 0 ? 0 : -1);
-            } else {
-              if (isControlMode) emitCommand({ command: 'SELECT_PRESENTATION_AND_SLIDE', presentation: null, slideIndex: -1, direction: 'forward' });
-              else handleSelectPresentationAndSlide(null, -1);
-            }
-          }}
-          videoState={videoState}
-          onVideoStateChange={(s) => isControlMode ? emitCommand({ command: 'VIDEO_STATE_CHANGE', state: s }) : handleVideoStateChange(s)}
-          audioState={audioState}
-          audioSyncMaps={audioSyncMaps}
-          availableAudioFiles={availableAudioFiles}
-          onAudioStateChange={(state) => {
-            if (isControlMode) {
-              emitCommand({ command: 'AUDIO_STATE_CHANGE', state });
-            } else {
-              setAudioState(state);
-              syncState({
-                presentation: currentPresentation, slideIndex: currentSlideIndex, bgLock: backgroundLock,
-                lockedBg: lockedBackgroundValue, userSelectedBg: userSelectedBackground, audioState: state
-              });
-            }
-          }}
-          onAudioSyncMapsChange={(maps) => {
-            const validation = validateAudioSyncMaps(maps);
-            if (!validation.ok || !validation.value) {
-              console.error('Refusing to save invalid audio sync maps', validation.errors);
-              alert(`No se guardaron los mapas de audio porque contienen datos inv\u00e1lidos:\n${validation.errors.slice(0, 5).join('\n')}`);
-              return;
-            }
-            setAudioSyncMaps(validation.value);
-            fetch('/api/audio-sync', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(validation.value)
-            }).catch(err => console.error('Error saving audio sync maps', err));
-          }}
-          appMode={appMode}
-          scriptureState={scriptureState}
-          onUpdateScriptureFontSizes={(sizes) => isControlMode ? emitCommand({ command: 'UPDATE_FONT_SIZES', hebrewFontSize: sizes.hebrewFontSize, combinedTextBaseSize: sizes.combinedTextBaseSize }) : handleUpdateScriptureFontSizes(sizes)}
-          onToggleAppMode={(mode) => isControlMode ? emitCommand({ command: 'TOGGLE_APP_MODE', mode }) : handleToggleAppMode(mode)}
-          onProjectScripture={(state, command) => isControlMode ? emitCommand({ command: 'SCRIPTURE_PROJECT', state, navCommand: 'navigate' }) : handleProjectScripture(state, command as ScriptureNavState['command'])}
-          onAddScriptureSlide={(state, kind) => isControlMode ? emitCommand({ command: 'SCRIPTURE_ADD_SLIDE', state, kind }) : handleAddScriptureSlide(state, kind)}
-          onBoundaryReached={(dir) => isControlMode ? emitCommand({ command: 'SCRIPTURE_BOUNDARY', direction: dir }) : handleScriptureBoundary(dir)}
-          quizSubslides={quizSubslides}
-          quizCurrentSubslideIndex={quizCurrentSubslideIndex}
-          quizTimerState={quizTimer.timerState}
-          quizPresenterDemoSelection={quizPresenterDemoSelection}
-          onQuizSubslideSelect={(idx) => {
-            const foundIdx = steps.findIndex(
-              (s) => s.slideIndex === currentSlideIndex && s.type === 'quiz' && s.subslideIndex === idx
-            );
-            if (foundIdx >= 0) {
-              if (isControlMode) emitCommand({ command: 'SELECT_STEP', stepIndex: foundIdx });
-              else applyStepIndex(foundIdx);
-            } else {
-              if (isControlMode) emitCommand({ command: 'QUIZ_SELECT_SUBSLIDE', index: idx });
-              else {
-                const subslides = activeQuizData ? generateQuizSubslides(activeQuizData) : [];
-                if (subslides[idx]?.kind === 'respuesta') quizTimer.completeTimer();
-                setQuizCurrentSubslideIndex(idx);
-              }
-            }
-          }}
-          onQuizStartTimer={() => isControlMode ? emitCommand({ command: 'QUIZ_START_TIMER' }) : quizTimer.startTimer()}
-          onQuizPauseTimer={() => isControlMode ? emitCommand({ command: 'QUIZ_PAUSE_TIMER' }) : quizTimer.pauseTimer()}
-          onQuizResumeTimer={() => isControlMode ? emitCommand({ command: 'QUIZ_RESUME_TIMER' }) : quizTimer.resumeTimer()}
-          onQuizResetTimer={() => isControlMode ? emitCommand({ command: 'QUIZ_RESET_TIMER' }) : quizTimer.resetTimer((activeQuizData?.timerSeconds ?? 30) * 1000)}
-          onQuizComplete={() => {
-            const answerIndex = quizSubslides.findIndex(subslide => subslide.kind === 'respuesta');
-            if (answerIndex >= 0) {
-              const foundIdx = steps.findIndex(
-                (s) => s.slideIndex === currentSlideIndex && s.type === 'quiz' && s.subslideIndex === answerIndex
-              );
-              if (foundIdx >= 0) {
-                if (isControlMode) emitCommand({ command: 'SELECT_STEP', stepIndex: foundIdx });
-                else applyStepIndex(foundIdx);
-                return;
-              }
-            }
-            if (isControlMode) emitCommand({ command: 'QUIZ_COMPLETE' });
-            else {
-              quizTimer.completeTimer();
-              if (answerIndex >= 0) setQuizCurrentSubslideIndex(answerIndex);
-            }
-          }}
-          onQuizDemoSelect={(optionId) => {
-            if (isControlMode) emitCommand({ command: 'QUIZ_DEMO_SELECT', optionId });
-            else {
-              setQuizPresenterDemoSelection(optionId);
-              const selected = activeQuizData?.options.find(option => option.id === optionId);
-              if (selected?.isCorrect) quizAudio.playApplause();
-              if (selected && !selected.isCorrect) quizAudio.playMal();
-            }
-          }}
-          onQuizPlayApplause={() => isControlMode ? emitCommand({ command: 'QUIZ_PLAY_APPLAUSE' }) : quizAudio.playApplause()}
-          onQuizPlayMal={() => isControlMode ? emitCommand({ command: 'QUIZ_PLAY_MAL' }) : quizAudio.playMal()}
-          onQuizAdjustTimer={(seconds) => {
-            if (isControlMode) {
-              emitCommand({ command: 'QUIZ_ADJUST_TIMER', seconds });
-            } else {
-              quizTimer.adjustTimer(seconds);
-            }
-          }}
-        />
-      </div>
-    );
-  }
 
 
 
