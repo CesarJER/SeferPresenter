@@ -7,7 +7,7 @@ const orgWebsite = import.meta.env.VITE_ORGANIZATION_WEBSITE || "";
 
 const DataProtectionPage: React.FC = () => {
   return (
-    <div className="min-h-screen bg-gray-50 text-gray-800 p-6 sm:p-12 font-sans overflow-y-auto">
+    <div className="h-screen bg-gray-50 text-gray-800 p-6 sm:p-12 font-sans overflow-y-auto">
       <div className="max-w-4xl mx-auto bg-white p-8 rounded-xl shadow-md space-y-8">
         <header className="border-b pb-6">
           <h1 className="text-3xl font-bold text-gray-900">Política de Privacidad y Protección de Datos</h1>
