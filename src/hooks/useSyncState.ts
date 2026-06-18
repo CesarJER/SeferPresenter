@@ -69,6 +69,25 @@ const areRecordsEqual = (left?: Record<string, string>, right?: Record<string, s
 
 const areJsonEqual = (left: unknown, right: unknown) => JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
 
+const liveAudioWsOnlyTypes = new Set([
+  'LIVE_AUDIO_PARTICIPANT_STATUS',
+  'LIVE_AUDIO_GRANT_SPEAK',
+  'LIVE_AUDIO_REVOKE_SPEAK',
+  'LIVE_AUDIO_MUTE_PARTICIPANT',
+  'LIVE_AUDIO_MUTE_ALL',
+  'LIVE_AUDIO_KICK_PARTICIPANT',
+  'LIVE_AUDIO_CONTROL_PUBLIC_KEY',
+  'LIVE_AUDIO_CONTROL_JOIN_REQUEST',
+  'LIVE_AUDIO_CONTROL_AUTHORIZED',
+  'LIVE_AUDIO_CONTROL_AUTHORIZATION_STATE',
+  'LIVE_AUDIO_CONTROL_AUTHORIZATION_DECISION',
+  'CONTROL_KEY_ROTATED',
+  'PRIVATE_CONTROL_SIGNAL',
+]);
+
+const isLiveAudioWsOnlyType = (type: unknown): type is string =>
+  typeof type === 'string' && liveAudioWsOnlyTypes.has(type);
+
 const arePresentationsEqual = (left: Presentation | null, right: Presentation | null) => {
   if (left === right) return true;
   if (!left || !right) return false;
@@ -509,6 +528,8 @@ export function useSyncState(props: UseSyncStateProps) {
 
       const data = validation.value;
 
+      if (isLiveAudioWsOnlyType(data.type)) return;
+
       if (data.messageId) {
         if (processedMessageIdsRef.current.has(data.messageId)) return;
         processedMessageIdsRef.current.add(data.messageId);
@@ -597,6 +618,8 @@ export function useSyncState(props: UseSyncStateProps) {
           }
 
           const safeData = validation.value;
+
+          if (isLiveAudioWsOnlyType(safeData.type)) return;
 
           if (safeData.messageId) {
             if (processedMessageIdsRef.current.has(safeData.messageId)) return;

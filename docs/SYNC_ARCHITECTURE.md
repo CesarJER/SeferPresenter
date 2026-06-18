@@ -101,9 +101,21 @@ authorization.
 
 `server/ws-server.mjs` filters Live Audio messages by Control state:
 
+- Audience WebSocket clients may send only `SERVER_TIME_PING`, their own
+  `LIVE_AUDIO_PARTICIPANT_STATUS`, and `PRIVATE_CONTROL_SIGNAL`.
+- Audience `PRIVATE_CONTROL_SIGNAL` messages are accepted only when
+  `fromParticipantId` is a UUID v4 bound to the active WebSocket connection, the
+  ciphertext is base64 and at most 4096 bytes, the nonce decodes to 12 bytes,
+  and the participant stays under the server-side 5-per-minute rate limit.
+- Audience participant status is reduced to technical fields and routed only to
+  presenter and authorized Controls; audience clients do not receive a full
+  participant list.
 - `PENDING` Controls do not receive `PRIVATE_CONTROL_SIGNAL`.
 - `PENDING` Controls cannot send moderation messages such as grant, mute, or
   kick; the server returns an `ERROR`.
+- Authorized Controls can publish the current Control public key and can send
+  moderation actions by `participantId`; those actions update only memory state
+  and are routed to presenter/authorized Controls, not into `SYNC_STATE`.
 - `allowDelegatedModerators` is controlled by
   `SEFER_LIVE_AUDIO_ALLOW_DELEGATED_MODERATORS` and defaults to true. When false,
   only the principal Control may authorize pending Controls.
@@ -112,10 +124,16 @@ authorization.
   `CONTROL_KEY_ROTATED` with reason `NO_AUTHORIZED_CONTROLS`, clears the private
   session boundary, and restarts Control ownership with the oldest pending
   Control if one remains connected.
+- Audience disconnect keeps technical participant state in memory for
+  `SEFER_LIVE_AUDIO_REJOIN_GRACE_SECONDS` seconds, then removes the
+  `participantId`, speaker permission, mute state, and pending private-signal
+  rate window if the connection does not return.
 
 Live Audio messages must use a dedicated handler in future phases. They must not
 be folded into presentation `SYNC_STATE`, audio playback `AudioState`, or the
 backend-owned `AudioTimelineState`.
+`src/hooks/useSyncState.ts` treats Live Audio message types as WebSocket-only
+subscriber events and ignores them on BroadcastChannel/SSE paths.
 
 ### Build And Runtime Optionality
 
@@ -162,8 +180,9 @@ This channel synchronizes timeline state while maintaining compatibility with ex
 - `AUDIO_TIMELINE_ACTION` from presenter/control clients.
 - `AUDIO_TIMELINE_STATE` broadcasts back to presenter/control clients.
 - Live Audio Control authorization state, verification-code expiry, delegated
-  authorization, moderation filtering, private-signal routing, and principal
-  succession.
+  authorization, participant association, private-signal rate limiting,
+  moderation filtering, public-key routing, private-signal routing, and
+  principal succession.
 
 `src/hooks/useServerClock.ts` sends `SERVER_TIME_PING` when the WebSocket is
 open and estimates client-to-server clock offset plus RTT from

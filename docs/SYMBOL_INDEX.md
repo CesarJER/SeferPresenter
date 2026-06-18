@@ -87,8 +87,10 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
 - `src/hooks/useControlAuthorization.ts` - Fase 5.3 Control authorization
   lifecycle using existing WebSocket send/subscribe functions.
 - `server/ws-server.mjs` - WebSocket `/ws` server for audio timeline plus Fase
-  5.3 Control principal election, pending code TTL, authorization decisions,
-  private-signal routing, moderation filtering, and succession.
+  5.3-5.5 Control principal election, pending code TTL, authorization
+  decisions, ephemeral participant association, private-signal rate limiting,
+  public-key routing, private-signal routing, moderation filtering, cleanup
+  after audience rejoin grace, and succession.
 - `makeSyncMessage` - `src/utils/syncProtocol.ts`: message envelope creation.
 - `server/local-server.mjs`: SSE/API mirroring for state, commands, media telemetry, quiz events, assets, persistence.
 - `server/ws-server.mjs`: WebSocket `/ws` server for F2 audio timeline messages.
