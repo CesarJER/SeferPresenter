@@ -94,8 +94,8 @@ La aplicacion se organiza por consumidor:
 - `src/components/shared/`: componentes comunes.
 - `src/hooks/`: logica de sincronizacion, navegacion, fondos, audio, escritura y teclado.
 - `src/types/`: contratos compartidos de presentacion, audio, audiencia, sincronizacion y transliteracion.
-- `src/types/liveAudio.ts`: contratos opcionales de voz en vivo, separados del estado de presentacion y sin conexion LiveKit en esta fase.
-- `src/features/liveAudio/`: ubicacion reservada para la futura implementacion opcional LiveKit. Los hooks, UI, helpers criptograficos y cualquier import de `@livekit/client` deben vivir ahi, no en el core.
+- `src/types/liveAudio.ts`: contratos opcionales de voz en vivo, separados del estado de presentacion y sin conexion LiveKit runtime.
+- `src/features/liveAudio/`: implementacion opcional LiveKit. Los hooks, UI, helpers criptograficos y cualquier import del SDK cliente LiveKit (`livekit-client`) deben vivir ahi, no en el core.
 - `src/utils/`: normalizacion, parsing, lookup biblico, metadata y utilidades puras.
 - `server/`: backend local Node.
 
@@ -140,19 +140,20 @@ acciones de moderacion.
 
 ## Live Audio opcional
 
-Fase 5.1 solo define contratos y validacion. No instala ni conecta LiveKit.
+Live Audio mantiene el protocolo en el core y aisla el runtime LiveKit bajo
+`src/features/liveAudio/`.
 
 - `VITE_SEFER_LIVE_AUDIO_BUILD`: flag de build frontend. Cuando sea `false`, el
   bundle base no debe importar estaticamente `src/features/liveAudio/` ni incluir
-  `@livekit/client`.
+  el SDK cliente LiveKit.
 - `SEFER_LIVE_AUDIO_ENABLED`: flag backend/runtime. Cuando sea `false`, el
   servidor debe reportar voz en vivo desactivada y conservar los flujos actuales
   de presentacion, audience, control, media, quiz y textos.
 
-`@livekit/client` no debe importarse desde `src/App.tsx`,
-`src/hooks/useSyncState.ts`, `src/components/shared/` existente ni tipos
-compartidos. Si se anade en fases posteriores, debe quedar aislado dentro de
-`src/features/liveAudio/` o cargarse dinamicamente desde ese modulo.
+El paquete npm instalado para el SDK del navegador es `livekit-client`. No debe
+importarse desde `src/App.tsx`, `src/hooks/useSyncState.ts`,
+`src/components/shared/` existente ni tipos compartidos; debe quedar aislado
+dentro de `src/features/liveAudio/` o cargarse dinamicamente desde ese modulo.
 
 ### Backend LiveKit self-hosted
 

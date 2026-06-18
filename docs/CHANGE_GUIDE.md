@@ -61,12 +61,12 @@ Use these checklists before implementing future tasks.
 - Keep contracts in `src/types/liveAudio.ts`; only expose the family through
   `BroadcastMessage` in `src/types/sync.ts`.
 - Keep runtime implementation in `src/features/liveAudio/`. Hooks, Live Audio
-  UI, crypto helpers, and any `@livekit/client` imports belong there.
+  UI, crypto helpers, and any LiveKit browser SDK imports belong there.
   Fase 5.2 is a deliberate crypto-only exception: `src/hooks/usePrivateControlSignals.ts`
   and `src/utils/cryptoUtils.ts` may live in core because they use only Web
   Crypto and existing sync transport.
-- Do not install or import `@livekit/client` during contract-only phases.
-- Do not import `@livekit/client` from core, `src/App.tsx`,
+- Do not install or import the LiveKit browser SDK during contract-only phases.
+- Do not import the LiveKit browser SDK from core, `src/App.tsx`,
   `src/hooks/useSyncState.ts`, existing `src/components/shared/`, or shared
   `src/types/*`.
 - Treat `VITE_SEFER_LIVE_AUDIO_BUILD` as the frontend build/bundle flag and
@@ -100,7 +100,7 @@ Use these checklists before implementing future tasks.
   `docs/COMPONENT_OWNERSHIP.md`, `docs/SYMBOL_INDEX.md`, and `README.md` when
   Live Audio entry points, ownership, routing, or protocol shape changes.
 - Fase 5.1 verification checklist: `npx.cmd tsc --noEmit`, `npm.cmd run test`,
-  no `@livekit/client` imports outside `src/features/liveAudio/`, no changes to
+  no LiveKit browser SDK imports outside `src/features/liveAudio/`, no changes to
   `src/App.tsx`, `AudioState`, or `AudioTimelineState`, and docs explain
   `src/features/liveAudio/`, `VITE_SEFER_LIVE_AUDIO_BUILD`, and
   `SEFER_LIVE_AUDIO_ENABLED`.

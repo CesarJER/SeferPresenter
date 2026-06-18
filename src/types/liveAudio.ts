@@ -1,6 +1,13 @@
 export type LiveAudioAvailability = 'enabled' | 'disabled' | 'misconfigured' | 'unsupported';
 
 export type LiveAudioParticipantRole = 'audience' | 'control' | 'presenter';
+export type LiveAudioConnectionState =
+  | 'connected'
+  | 'connecting'
+  | 'reconnecting'
+  | 'disconnected'
+  | 'permissionDenied'
+  | 'unavailable';
 
 export type ControlPrincipalState = 'PRINCIPAL';
 export type ControlSecondaryState = 'PENDING' | 'AUTHORIZED';
@@ -127,6 +134,20 @@ export interface PrivateControlSignalMessage {
   ciphertext: string;
   nonce: string;
   createdAt?: number;
+}
+
+export interface LiveAudioStatusResponse {
+  enabled: boolean;
+  available?: boolean;
+  reason?: string;
+}
+
+export interface LiveAudioTokenResponse {
+  livekitUrl: string;
+  token: string;
+  expiresAt: number;
+  participantIdentity: string;
+  participantId: string;
 }
 
 export type LiveAudioBroadcastMessage =

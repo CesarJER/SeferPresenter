@@ -627,7 +627,7 @@ function App() {
     presentations, currentPresentation, currentSlideIndex, appMode, scriptureState,
     currentPresentationRef, currentSlideIndexRef, scriptureStateRef, slideScriptureStateBeforeManualRef,
     handleSelectPresentationAndSlide,
-    enabled: !isControlMode && !isAudioEditorMode && !isAudienceMode,
+    enabled: !isControlMode && !isAudioEditorMode && !isAudienceMode && window.location.pathname !== '/proteccion-datos',
     routeBase: '/presenter',
   });
 

@@ -33,13 +33,9 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
 - Quiz answer hooks - `src/hooks/useQuizAnswers.ts`: audience answer sessions and controller aggregation through `useAudienceAnswers` and `useControllerAnswers`.
 - `useQuizAudio` - `src/hooks/useQuizAudio.ts`: quiz feedback sounds.
 - `scriptureNumerals` helpers - `src/hooks/scriptureNumerals.ts`: scripture numeral utilities.
-- Proposed Live Audio hooks -
-  `src/features/liveAudio/hooks/useLiveAudioAvailability.ts`,
-  `src/features/liveAudio/hooks/useLiveAudio.ts`,
-  `src/features/liveAudio/hooks/usePrivateControlSignals.ts`,
-  `src/features/liveAudio/hooks/useControlAuthorization.ts`: future optional
-  LiveKit availability, connection lifecycle, encrypted private signal handling,
-  and Control authorization. These hooks are not connected in Fase 5.1.
+- [useLiveAudioAvailability](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/features/liveAudio/hooks/useLiveAudioAvailability.ts) - `src/features/liveAudio/hooks/useLiveAudioAvailability.ts`: optional LiveKit runtime availability check using `/api/livekit/status`, with module-level cache and no SDK import.
+- [useLiveAudio](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/features/liveAudio/hooks/useLiveAudio.ts) - `src/features/liveAudio/hooks/useLiveAudio.ts`: isolated LiveKit client lifecycle, token request, audio-only remote subscriptions, explicit remote playback start, manual microphone publish/unpublish, and cleanup.
+- [LiveAudioProvider](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/features/liveAudio/hooks/LiveAudioProvider.tsx) - `src/features/liveAudio/hooks/LiveAudioProvider.tsx`: optional context wrapper for sharing one Live Audio connection within a feature view.
 
 ## Components
 
@@ -78,9 +74,12 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
 - `LiveAudioBroadcastMessage` / `PrivateControlSignalMessage` -
   `src/types/liveAudio.ts`: optional Live Audio message family kept separate from
   `SyncStatePayload` and existing remote commands.
-- `src/features/liveAudio/` - future optional Live Audio runtime module. This is
-  the only place where `@livekit/client`, LiveKit track lifecycle, and heavy Live
-  Audio UI should live.
+- `src/features/liveAudio/` - optional Live Audio runtime module. This is the
+  only place where the LiveKit browser SDK, LiveKit track lifecycle, and heavy
+  Live Audio UI should live.
+- `src/features/liveAudio/index.ts` - optional public entry for Live Audio hooks
+  and provider; core routes should import it only through an optional/dynamic
+  path when `VITE_SEFER_LIVE_AUDIO_BUILD=true`.
 - `src/hooks/usePrivateControlSignals.ts` - Fase 5.2 crypto-only private
   moderation lifecycle using existing WebSocket send/subscribe functions and no
   LiveKit import.
@@ -96,7 +95,8 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
 - `server/ws-server.mjs`: WebSocket `/ws` server for F2 audio timeline messages.
 - `server/livekit-server.mjs`: optional Fase 5.4 LiveKit self-hosted status,
   token, refresh-token, and moderation endpoints with memory-only state and no
-  top-level SDK dependency.
+  top-level server SDK dependency. Tokens include ephemeral `participantId`
+  metadata and no alias.
 - `server/timelineManager.mjs`: backend-owned audio timeline state and action reducer.
 
 ## Validation Modules
@@ -120,7 +120,8 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
 - `AudioState`, `AudioSyncMap`, `AudioSyncCue`, `AudioSyncMode`, `AudioTimelineState`, `AudioTimelineAction` - `src/types/audio.ts`.
 - `QuizTimerState`, `QuizSubslide`, `QuizAudienceAnswer`, `QuizSyncState` - `src/types/quiz.ts`.
 - `BroadcastMessage`, `DisplayTelemetryState`, `AudiencePublicState` - `src/types/sync.ts`.
-- `LiveAudioAvailability`, `ControlPrincipalState`, `ControlSecondaryState`,
+- `LiveAudioAvailability`, `LiveAudioConnectionState`,
+  `LiveAudioTokenResponse`, `ControlPrincipalState`, `ControlSecondaryState`,
   `SpeakerState`, `LiveAudioParticipantStatusMessage`,
   `LiveAudioGrantSpeakMessage`, `LiveAudioRevokeSpeakMessage`,
   `LiveAudioMuteParticipantMessage`, `LiveAudioMuteAllMessage`,

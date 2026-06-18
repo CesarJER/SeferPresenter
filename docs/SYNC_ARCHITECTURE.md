@@ -45,7 +45,7 @@ backend.
 The shared core may know the lightweight protocol, but the runtime LiveKit
 implementation must live under `src/features/liveAudio/`. Core sync files,
 `src/App.tsx`, shared types, and existing shared components must not import
-`@livekit/client`.
+the LiveKit browser SDK.
 
 Live Audio message contracts live in `src/types/liveAudio.ts` and are included
 in `BroadcastMessage` as a separate family:
@@ -141,7 +141,7 @@ Live Audio has two separate switches:
 
 - `VITE_SEFER_LIVE_AUDIO_BUILD`: frontend build flag. When false, the base
   frontend should avoid static imports of `src/features/liveAudio/` and must not
-  include `@livekit/client` or heavy Live Audio UI in the main bundle.
+  include the LiveKit browser SDK or heavy Live Audio UI in the main bundle.
 - `SEFER_LIVE_AUDIO_ENABLED`: backend/runtime flag. When false, the backend
   should report Live Audio disabled and leave `/presenter`, `/control`,
   `/audience`, `/audio-editor`, media sync, quiz, and scripture flows working.
@@ -151,14 +151,25 @@ they are small protocol contracts and do not connect LiveKit. The optional
 runtime module owns LiveKit SDK imports, track lifecycle, microphone permission
 state, encrypted signal hooks, and Live Audio UI.
 
+Fase 5.6 adds the optional frontend runtime entry
+`src/features/liveAudio/index.ts`. `useLiveAudioAvailability.ts` checks
+`GET /api/livekit/status` without importing the SDK. `useLiveAudio.ts` imports
+the published LiveKit browser package (`livekit-client`) only inside the feature
+module, requests tokens from `/api/livekit/token`, connects with manual audio
+subscription, exposes remote audio tracks, and opens the microphone only when
+`publishMicrophone()` is called after an explicit user action. `startRemoteAudio()`
+is exposed so UI can keep remote playback behind a browser/user gesture.
+
 Fase 5.4 adds `server/livekit-server.mjs` for self-hosted LiveKit backend
 endpoints. It keeps participant, token, speaker, mute, and kick state in memory
 only. If `SEFER_LIVE_AUDIO_ENABLED=false` or any required `LIVEKIT_*` variable is
 missing, `/api/livekit/status` reports disabled or unavailable and the server
 still starts without importing or requiring a LiveKit SDK. Token generation uses
 minimum grants by role: audience can subscribe only, while control can publish
-audio. Mutating moderation endpoints require an authorized WebSocket Control
-session from `server/ws-server.mjs`; audience requests are rejected with 403.
+audio. Tokens include only ephemeral LiveKit identity and JSON metadata with the
+UUID `participantId`; no alias is included. Mutating moderation endpoints require
+an authorized WebSocket Control session from `server/ws-server.mjs`; audience
+requests are rejected with 403.
 
 ## WebSocket Audio Timeline
 
@@ -274,7 +285,7 @@ Synchronization protocol:
   message family through `src/types/sync.ts` without touching `SyncStatePayload`
   or `RemoteCommandPayload`.
 - Add optional LiveKit runtime behavior: use `src/features/liveAudio/` and keep
-  `@livekit/client` imports inside that module or dynamic imports owned by it.
+  LiveKit browser SDK imports inside that module or dynamic imports owned by it.
   The Fase 5.2 crypto-only hook is currently `src/hooks/usePrivateControlSignals.ts`
   because it depends only on Web Crypto and the existing sync transport.
 - Synchronize server clock offset and RTT: [useServerClock.ts](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useServerClock.ts).
@@ -296,6 +307,6 @@ Synchronization protocol:
 - Do not add consent fields or endpoints to Live Audio contracts; privacy notice
   UI remains local and must not create persisted acceptance records.
 - Do not add `/accept-consent`, `/consent`, `/alias`, or readable chat endpoints.
-- Do not statically import `@livekit/client` from core, `src/App.tsx`,
+- Do not statically import the LiveKit browser SDK from core, `src/App.tsx`,
   `src/hooks/useSyncState.ts`, existing `src/components/shared/`, or shared
   `src/types/*`.

@@ -72,7 +72,7 @@ Hooks:
   for the Fase 5.2 crypto-only `src/hooks/usePrivateControlSignals.ts` hook:
   `useLiveAudioAvailability.ts` should own optional module availability
   (`enabled`, `disabled`, `misconfigured`, `unsupported`) without importing
-  `@livekit/client`; `useLiveAudio.ts` or `LiveAudioProvider.tsx` should own
+  the LiveKit browser SDK; `useLiveAudio.ts` or `LiveAudioProvider.tsx` should own
   LiveKit connection and track lifecycle; `usePrivateControlSignals.ts` owns
   in-memory Web Crypto keys, `PRIVATE_CONTROL_SIGNAL`, key rotation, and
   secondary Control private-key transfer; `useControlAuthorization.ts` owns the
@@ -85,7 +85,7 @@ Library/sync/validation:
 - `src/types/liveAudio.ts`: optional Live Audio contracts and privacy-boundary
   message types. Do not add consent fields or mix these contracts into
   presentation `SYNC_STATE`. This file is shared core and must not import
-  `@livekit/client` or runtime LiveKit code.
+  the LiveKit browser SDK or runtime LiveKit code.
 - `src/utils/validation.ts`: runtime validation.
 - `src/utils/cryptoUtils.ts`: pure Web Crypto helpers for ECDH P-256,
   AES-GCM 256, base64 encoding, and nonce replay protection.
@@ -146,7 +146,7 @@ Live Audio state:
 - Control authorization state is server-owned in `server/ws-server.mjs` and
   reflected by `src/hooks/useControlAuthorization.ts`; do not persist Control
   codes, authorization decisions, aliases, keys, or private messages.
-- `@livekit/client` may only be imported inside `src/features/liveAudio/` or via
+- The LiveKit browser SDK may only be imported inside `src/features/liveAudio/` or via
   dynamic import from that module. Core files such as `src/App.tsx`,
   `src/hooks/useSyncState.ts`, existing `src/components/shared/`, and shared
   types must stay SDK-free.

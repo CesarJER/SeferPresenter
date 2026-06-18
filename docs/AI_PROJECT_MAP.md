@@ -35,7 +35,7 @@ Fast map for agents. Use real paths only; this repo does not currently have
 - `src/utils/`: validation, normalization, sync message construction, quiz parsing/scoring, scripture parsing/lookup, media helpers, and Web Crypto helpers.
 - `src/types/`: shared contracts for presentations, sync, audio, quiz, and transliteration.
 - `src/types/liveAudio.ts`: LiveKit-ready but optional Live Audio message contracts, kept separate from presentation sync state.
-- `src/features/liveAudio/`: future optional Live Audio runtime module. This is where LiveKit hooks, UI, crypto helpers, and any `@livekit/client` imports belong.
+- `src/features/liveAudio/`: optional Live Audio runtime module. This is where LiveKit hooks, UI, crypto helpers, and any LiveKit browser SDK imports belong.
 - `src/hooks/usePrivateControlSignals.ts`: Fase 5.2 crypto-only private moderation signaling hook. It owns in-memory Web Crypto keys and consumes the existing WebSocket send/subscribe functions without importing LiveKit.
 - `src/hooks/useControlAuthorization.ts`: Fase 5.3 Control principal/secondary authorization state derived from WebSocket messages.
 - `src/utils/cryptoUtils.ts`: pure Web Crypto helpers for ECDH P-256, AES-GCM 256, base64 encoding, and nonce replay rejection.
@@ -116,7 +116,7 @@ Start with:
 - `docs/SYNC_ARCHITECTURE.md`
 - `docs/COMPONENT_OWNERSHIP.md`
 
-Future implementation entry points should be focused hooks such as
+Runtime implementation entry points are focused hooks such as
 `src/features/liveAudio/hooks/useLiveAudioAvailability.ts`,
 `src/features/liveAudio/hooks/useLiveAudio.ts`,
 `src/features/liveAudio/hooks/usePrivateControlSignals.ts`, and
@@ -134,7 +134,7 @@ Build/runtime split:
 
 - `VITE_SEFER_LIVE_AUDIO_BUILD` is a frontend build flag. When false, the base
   bundle must not statically include the optional Live Audio implementation or
-  `@livekit/client`.
+  the LiveKit browser SDK.
 - `SEFER_LIVE_AUDIO_ENABLED` is a backend/runtime flag. When false, the server
   reports Live Audio disabled and existing presentation flows continue normally.
 

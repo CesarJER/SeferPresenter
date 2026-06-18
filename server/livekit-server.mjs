@@ -140,6 +140,7 @@ const issueToken = ({ role, roomSession, existingParticipant }) => {
   const payload = {
     iss: config.apiKey,
     sub: participantIdentity,
+    metadata: JSON.stringify({ participantId }),
     jti: randomUUID(),
     nbf: nowSeconds - 5,
     exp: Math.floor(expiresAt / 1000),
