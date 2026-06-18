@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import PresenterScreen from './components/presenter/PresenterScreen';
 import SeferReaderScreen from './components/presenter/SeferReaderScreen';
+import DataProtectionPage from './components/shared/DataProtectionPage';
 import defaultPresentations from '../presentations.json';
 import { Music } from 'lucide-react';
 
@@ -785,6 +786,11 @@ function App() {
 
 
 
+
+  // Ruta pública de privacidad
+  if (window.location.pathname === '/proteccion-datos') {
+    return <DataProtectionPage />;
+  }
 
   // Presenter (big screen) mode
   return (

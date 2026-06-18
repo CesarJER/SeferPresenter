@@ -1,4 +1,5 @@
 import type { AudioState, AudioTimelineAction, AudioTimelineState } from './audio';
+import type { LiveAudioBroadcastMessage } from './liveAudio';
 import type { AppMode, Presentation, ScriptureNavState, VideoState } from './presentation';
 import type { QuizSyncState } from './quiz';
 import type { SeferReaderState } from '../hooks/useSeferReader';
@@ -96,4 +97,5 @@ export type BroadcastMessage =
   | ({ type: 'AUDIO_TIMELINE_STATE'; timeline: AudioTimelineState } & SyncProtocolMeta)
   | ({ type: 'AUDIO_PRESENTATION_CLOCK'; timelineId: string; estimatedPositionSec: number; serverTimeMs: number } & SyncProtocolMeta)
   | ({ type: 'AUDIENCE_STATE_UPDATE'; state: AudiencePublicState } & SyncProtocolMeta)
+  | (LiveAudioBroadcastMessage & SyncProtocolMeta)
   | ({ type: 'ERROR'; code: string; message: string } & SyncProtocolMeta);
