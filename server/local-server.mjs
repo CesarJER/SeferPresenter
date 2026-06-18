@@ -2,7 +2,8 @@ import fs from 'node:fs'
 import http from 'node:http'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { createWsServer } from './ws-server.mjs'
+import { createLiveKitApi } from './livekit-server.mjs'
+import { createWsServer, getLiveAudioControlSnapshot, isLiveAudioControlAuthorized } from './ws-server.mjs'
 import { isAuthRequired, hasValidBasicAuth } from './authUtils.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -24,6 +25,7 @@ let currentState = {
 let clients = new Set()
 let audienceClients = new Set()
 let quizClients = new Set()
+let liveKitApi = null
 
 const contentTypes = {
   '.css': 'text/css; charset=utf-8',
@@ -241,6 +243,11 @@ const requireAuth = (req, res, url) => {
 }
 
 const handleApi = async (req, res, url) => {
+  if (url.pathname.startsWith('/api/livekit/')) {
+    const handled = await liveKitApi.handle({ req, res, url, readBody, sendJson })
+    if (handled) return true
+  }
+
   if (url.pathname === '/api/state-events' && req.method === 'GET') {
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
@@ -555,7 +562,15 @@ const handleWsMessageFromClient = (msg) => {
 
 const sseHeartbeat = setInterval(heartbeatSseClients, sseHeartbeatMs)
 sseHeartbeat.unref?.()
-server.on('close', () => clearInterval(sseHeartbeat))
+server.on('close', () => {
+  clearInterval(sseHeartbeat)
+  liveKitApi?.close()
+})
+
+liveKitApi = createLiveKitApi({
+  getLiveAudioControlSnapshot,
+  isLiveAudioControlAuthorized,
+})
 
 server.listen(port, () => {
   const staticLabel = staticDir ? `, serving ${path.relative(rootDir, staticDir)}` : ''

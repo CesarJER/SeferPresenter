@@ -133,6 +133,15 @@ they are small protocol contracts and do not connect LiveKit. The optional
 runtime module owns LiveKit SDK imports, track lifecycle, microphone permission
 state, encrypted signal hooks, and Live Audio UI.
 
+Fase 5.4 adds `server/livekit-server.mjs` for self-hosted LiveKit backend
+endpoints. It keeps participant, token, speaker, mute, and kick state in memory
+only. If `SEFER_LIVE_AUDIO_ENABLED=false` or any required `LIVEKIT_*` variable is
+missing, `/api/livekit/status` reports disabled or unavailable and the server
+still starts without importing or requiring a LiveKit SDK. Token generation uses
+minimum grants by role: audience can subscribe only, while control can publish
+audio. Mutating moderation endpoints require an authorized WebSocket Control
+session from `server/ws-server.mjs`; audience requests are rejected with 403.
+
 ## WebSocket Audio Timeline
 
 Fase 2 adds a backend-owned audio timeline over `ws://localhost:<port>/ws`.
@@ -194,6 +203,9 @@ Backend-owned or backend-mirrored pieces:
 - `/api/quiz-answer` and `/api/quiz-events`
 - `/api/audience/state` and `/api/audience/events`
 - `/ws` for backend-owned audio timeline messages only
+- `/api/livekit/status`, `/api/livekit/token`, `/api/livekit/refresh-token`,
+  and `/api/livekit/*` moderation endpoints for optional Live Audio state in
+  memory only
 
 Telemetry POST endpoints validate the existing message shape before broadcast:
 `AUDIO_TELEMETRY` requires `audioState`, `VIDEO_TELEMETRY` requires
@@ -251,6 +263,8 @@ Synchronization protocol:
 - Apply timeline changes to presenter's audio element: [useAudioTimelineApplicator.ts](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useAudioTimelineApplicator.ts).
 - Mirror over network: `server/local-server.mjs`.
 - Add backend-owned audio timeline behavior: `server/timelineManager.mjs` and `server/ws-server.mjs`.
+- Add optional LiveKit backend behavior: `server/livekit-server.mjs` and
+  registration in `server/local-server.mjs`.
 
 ## What Not To Do
 
@@ -262,6 +276,7 @@ Synchronization protocol:
 - Do not make server command handling mutate `currentState` unless that endpoint is intended to own state.
 - Do not add consent fields or endpoints to Live Audio contracts; privacy notice
   UI remains local and must not create persisted acceptance records.
+- Do not add `/accept-consent`, `/consent`, `/alias`, or readable chat endpoints.
 - Do not statically import `@livekit/client` from core, `src/App.tsx`,
   `src/hooks/useSyncState.ts`, existing `src/components/shared/`, or shared
   `src/types/*`.

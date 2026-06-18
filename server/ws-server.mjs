@@ -47,6 +47,33 @@ const canAuthorizeControls = (control) => {
   return allowDelegatedModerators() && control.controlState === 'AUTHORIZED'
 }
 
+const getLiveAudioControlState = (controlSessionId) => {
+  const control = liveAudioControls.get(controlSessionId)
+  if (!control) return null
+  return {
+    controlSessionId: control.controlSessionId,
+    clientId: control.clientId,
+    controlState: control.controlState,
+    connectedAt: control.connectedAt,
+    authorizedAt: control.authorizedAt,
+  }
+}
+
+const isLiveAudioControlAuthorized = (controlSessionId) =>
+  isControlAuthorized(liveAudioControls.get(controlSessionId))
+
+const getLiveAudioControlSnapshot = () => ({
+  principalControlSessionId: findPrincipalControl()?.controlSessionId || null,
+  controls: Array.from(liveAudioControls.values()).map((control) => ({
+    controlSessionId: control.controlSessionId,
+    clientId: control.clientId,
+    controlState: control.controlState,
+    connectedAt: control.connectedAt,
+    authorizedAt: control.authorizedAt,
+    codeExpiresAt: control.controlState === 'PENDING' ? control.codeExpiresAt : undefined,
+  })),
+})
+
 const createWsServer = (httpServer, onFallbackMessage) => {
   const wss = new WebSocketServer({ server: httpServer, path: '/ws' })
 
@@ -447,4 +474,9 @@ const createWsServer = (httpServer, onFallbackMessage) => {
   return wss
 }
 
-export { createWsServer }
+export {
+  createWsServer,
+  getLiveAudioControlState,
+  getLiveAudioControlSnapshot,
+  isLiveAudioControlAuthorized,
+}

@@ -19,6 +19,7 @@ Fast map for agents. Use real paths only; this repo does not currently have
 - `README.md`: human overview, routes, scripts, backend endpoints, verification.
 - `server/local-server.mjs`: local backend, static serving, SSE, persistence endpoints, auth gate, and WebSocket attachment.
 - `server/ws-server.mjs`: WebSocket `/ws` server for backend-owned audio timeline messages.
+- `server/livekit-server.mjs`: optional self-hosted LiveKit token and moderation endpoints with memory-only state.
 - `server/timelineManager.mjs`: isolated audio timeline state and action reducer.
 - `src/types/liveAudio.ts`: optional Live Audio protocol contracts and role state types; no LiveKit connection code.
 - `vite.config.ts`: Vite config, development proxy, and multi-entry build inputs.
@@ -110,6 +111,8 @@ Start with:
   authorization UI/lifecycle
 - `server/ws-server.mjs` for principal election, pending Control TTL,
   authorization, moderation filtering, private-signal routing, and succession
+- `server/livekit-server.mjs` and `server/local-server.mjs` for Fase 5.4
+  self-hosted token, status, refresh, and moderation endpoints
 - `docs/SYNC_ARCHITECTURE.md`
 - `docs/COMPONENT_OWNERSHIP.md`
 

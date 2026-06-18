@@ -92,6 +92,9 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
 - `makeSyncMessage` - `src/utils/syncProtocol.ts`: message envelope creation.
 - `server/local-server.mjs`: SSE/API mirroring for state, commands, media telemetry, quiz events, assets, persistence.
 - `server/ws-server.mjs`: WebSocket `/ws` server for F2 audio timeline messages.
+- `server/livekit-server.mjs`: optional Fase 5.4 LiveKit self-hosted status,
+  token, refresh-token, and moderation endpoints with memory-only state and no
+  top-level SDK dependency.
 - `server/timelineManager.mjs`: backend-owned audio timeline state and action reducer.
 
 ## Validation Modules

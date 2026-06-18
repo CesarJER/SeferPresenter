@@ -45,6 +45,14 @@ El backend local vive en `server/local-server.mjs`. Mantiene inicialmente la mis
 - `GET /api/audience/state`
 - `GET /api/audience/events`
 - `GET /api/audience-cache-assets`
+- `GET /api/livekit/status`
+- `POST /api/livekit/token`
+- `POST /api/livekit/refresh-token`
+- `POST /api/livekit/grant-speak`
+- `POST /api/livekit/revoke-speak`
+- `POST /api/livekit/mute-participant`
+- `POST /api/livekit/mute-all`
+- `POST /api/livekit/kick-participant`
 
 El backend tambien adjunta WebSocket en `ws://localhost:8787/ws`. En Fase 2
 ese canal solo es propietario de la timeline de audio del servidor:
@@ -145,6 +153,45 @@ Fase 5.1 solo define contratos y validacion. No instala ni conecta LiveKit.
 `src/hooks/useSyncState.ts`, `src/components/shared/` existente ni tipos
 compartidos. Si se anade en fases posteriores, debe quedar aislado dentro de
 `src/features/liveAudio/` o cargarse dinamicamente desde ese modulo.
+
+### Backend LiveKit self-hosted
+
+Fase 5.4 agrega endpoints backend para tokens y moderacion, con estado solo en
+memoria. Si `SEFER_LIVE_AUDIO_ENABLED=false` o faltan `LIVEKIT_URL`,
+`LIVEKIT_API_KEY` o `LIVEKIT_API_SECRET`, el servidor sigue arrancando y
+`GET /api/livekit/status` responde que Live Audio esta desactivado o no
+disponible. Las respuestas de estado no exponen secretos.
+
+Variables:
+
+```bash
+SEFER_LIVE_AUDIO_ENABLED=false
+SEFER_LIVE_AUDIO_PUBLIC_LISTEN=true
+SEFER_LIVE_AUDIO_TOKEN_TTL_MINUTES=30
+SEFER_LIVE_AUDIO_REJOIN_GRACE_SECONDS=60
+SEFER_LIVE_AUDIO_ALLOW_DELEGATED_MODERATORS=true
+SEFER_LIVE_AUDIO_CONTROL_CODE_TTL_SECONDS=90
+LIVEKIT_URL=
+LIVEKIT_API_KEY=
+LIVEKIT_API_SECRET=
+LIVEKIT_ROOM_NAME=sefer-live-audio
+```
+
+Endpoints:
+
+- `GET /api/livekit/status`: devuelve `{ enabled, available?, reason? }`.
+- `POST /api/livekit/token`: entrada `{ role, roomSession? }`; devuelve
+  `livekitUrl`, `token`, `expiresAt`, `participantIdentity` y `participantId`
+  efimero. `audience` recibe permiso de solo suscripcion; `control` recibe
+  permiso de publicar audio.
+- `POST /api/livekit/refresh-token`: renueva un token para un participante activo
+  en memoria.
+- `POST /api/livekit/grant-speak`, `revoke-speak`, `mute-participant`,
+  `mute-all`, `kick-participant`: requieren `role: "control"` y un
+  `controlSessionId` autorizado por WebSocket. `audience` recibe 403.
+
+No hay endpoints de consentimiento, alias legible ni chat legible. El backend no
+persiste claves, alias, tokens ni mensajes privados en archivos o base de datos.
 
 ## Legacy
 
