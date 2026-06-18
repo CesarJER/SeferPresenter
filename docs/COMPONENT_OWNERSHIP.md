@@ -14,6 +14,16 @@ Control-only:
 - `src/components/control/AudioPanel.tsx`: audio track/sync controls.
 - `src/components/control/MediaControls.tsx`: video playback controls.
 - `src/components/control/SeferControlPanel.tsx` and `SeferControlPanelMini.tsx`: sacred-text controls.
+- Proposed Live Audio controls: `LiveAudioControlPanel.tsx`,
+  `LiveAudioControlAuthorization.tsx`, `LiveAudioQueue.tsx`,
+  `LiveAudioSpeakers.tsx`, `LiveAudioParticipantRow.tsx`, and
+  `PrivateControlInbox.tsx` should live in
+  `src/features/liveAudio/components/control/` when implemented. Fase 5.3 keeps
+  the crypto-free `LiveAudioControlAuthorization.tsx` under
+  `src/components/control/` so `/control` can display principal, pending, and
+  authorization state without importing LiveKit. `MenuPopup.tsx` may coordinate
+  future panels/tabs through a lightweight optional slot or dynamic import, but
+  should not own moderation logic or encrypted message handling.
 
 Presenter-only:
 
@@ -25,6 +35,10 @@ Presenter-only:
 Audience:
 
 - `src/components/audience/AudienceScreen.tsx`: audience route selection between projection, Sefer reader, and quiz answer UI.
+- Proposed Live Audio audience UI should live in
+  `src/features/liveAudio/components/audience/`. It may request
+  listening/speaking after explicit user action, but audience mode remains
+  read-only for presentation controls.
 
 Shared:
 
@@ -33,6 +47,14 @@ Shared:
 - `src/components/shared/SlideVisualizer.tsx`
 - `src/components/shared/CustomSearchSelect.tsx`
 - `src/components/shared/FormatLegend.tsx`
+- Proposed Live Audio shared widgets such as `LiveAudioStatusBadge.tsx`,
+  `LiveAudioNotice.tsx`, `CollapsiblePrivacyNotice.tsx`,
+  `LiveAudioAliasInput.tsx`, and `ControlVerificationCode.tsx` belong under
+  `src/features/liveAudio/components/shared/` when implemented. Core legal
+  affordances such as `DataProtectionLink.tsx` and `DataProtectionPage.tsx` can
+  live outside the LiveKit module so `/proteccion-datos` remains available even
+  when `VITE_SEFER_LIVE_AUDIO_BUILD=false`. Privacy notice checkboxes must
+  remain local UI state and must not emit consent records.
 
 Hooks:
 
@@ -46,11 +68,27 @@ Hooks:
 - [useBackgroundResolver.ts](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useBackgroundResolver.ts): active background and lock/override behavior.
 - [useAudioPlayback.ts](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useAudioPlayback.ts): hidden presenter audio element and audio sync.
 - [useQuizTimer.ts](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useQuizTimer.ts), [useQuizAnswers.ts](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useQuizAnswers.ts), [useQuizAudio.ts](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useQuizAudio.ts): quiz runtime behavior.
+- Proposed Live Audio hooks live under `src/features/liveAudio/hooks/`, except
+  for the Fase 5.2 crypto-only `src/hooks/usePrivateControlSignals.ts` hook:
+  `useLiveAudioAvailability.ts` should own optional module availability
+  (`enabled`, `disabled`, `misconfigured`, `unsupported`) without importing
+  `@livekit/client`; `useLiveAudio.ts` or `LiveAudioProvider.tsx` should own
+  LiveKit connection and track lifecycle; `usePrivateControlSignals.ts` owns
+  in-memory Web Crypto keys, `PRIVATE_CONTROL_SIGNAL`, key rotation, and
+  secondary Control private-key transfer; `useControlAuthorization.ts` owns the
+  client reflection of server-owned principal, pending, delegated authorization,
+  and verification-code countdown state.
 
 Library/sync/validation:
 
 - `src/types/*`: contracts.
+- `src/types/liveAudio.ts`: optional Live Audio contracts and privacy-boundary
+  message types. Do not add consent fields or mix these contracts into
+  presentation `SYNC_STATE`. This file is shared core and must not import
+  `@livekit/client` or runtime LiveKit code.
 - `src/utils/validation.ts`: runtime validation.
+- `src/utils/cryptoUtils.ts`: pure Web Crypto helpers for ECDH P-256,
+  AES-GCM 256, base64 encoding, and nonce replay protection.
 - `src/utils/normalizePresentation.ts`: persistence/path normalization.
 - `src/utils/syncProtocol.ts`: sync message construction.
 - `src/utils/quizUtils.ts`: quiz parsing/scoring/subslides.
@@ -93,6 +131,25 @@ Transient state:
 
 - DOM media element refs, animation state, temporary loaded video durations, fullscreen state, local warnings.
 - Do not sync unless another mode/device genuinely needs it.
+
+Live Audio state:
+
+- `LiveAudioAvailability`, role states, participant status, and encrypted private
+  signal envelopes belong in `src/types/liveAudio.ts`.
+- LiveKit connection state, WebRTC tracks, microphone permission state,
+  temporary aliases, and privacy notice checkbox state are session/local state
+  owned by `src/features/liveAudio/`. Fase 5.2 generated E2E keys are owned by
+  `src/hooks/usePrivateControlSignals.ts` in memory only. Do not persist them in
+  presentation files, localStorage, or sessionStorage.
+- Live Audio must not modify `AudioState`, `AudioTimelineState`, or presenter
+  audio playback contracts.
+- Control authorization state is server-owned in `server/ws-server.mjs` and
+  reflected by `src/hooks/useControlAuthorization.ts`; do not persist Control
+  codes, authorization decisions, aliases, keys, or private messages.
+- `@livekit/client` may only be imported inside `src/features/liveAudio/` or via
+  dynamic import from that module. Core files such as `src/App.tsx`,
+  `src/hooks/useSyncState.ts`, existing `src/components/shared/`, and shared
+  types must stay SDK-free.
 
 ## Prop Rules
 

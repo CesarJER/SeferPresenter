@@ -41,6 +41,8 @@ Use these checklists before implementing future tasks.
 ## When Editing Sync Behavior
 
 - Update `src/types/sync.ts` first.
+- For optional Live Audio messages, update `src/types/liveAudio.ts` first and
+  add only the message-family union to `src/types/sync.ts`.
 - Update validation in `src/utils/validation.ts`.
 - Emit commands from control wiring in `src/App.tsx`.
 - Handle commands in `App.handleRemoteCommand`.
@@ -48,6 +50,60 @@ Use these checklists before implementing future tasks.
 - Mirror backend endpoints/SSE in `server/local-server.mjs` only when needed.
 - For backend-owned audio timeline behavior, update `server/timelineManager.mjs` and `server/ws-server.mjs` without mixing it into `currentState`.
 - Do not broadcast high-frequency timer/media ticks through full `SYNC_STATE`.
+- Do not mix Live Audio messages into `SyncStatePayload`,
+  `RemoteCommandPayload`, `AudioState`, or `AudioTimelineState`.
+
+## When Editing Live Audio
+
+- Keep the module optional. Disabled, misconfigured, unsupported, or absent
+  LiveKit must leave `/presenter`, `/control`, and `/audience` usable in
+  presentation-only mode.
+- Keep contracts in `src/types/liveAudio.ts`; only expose the family through
+  `BroadcastMessage` in `src/types/sync.ts`.
+- Keep runtime implementation in `src/features/liveAudio/`. Hooks, Live Audio
+  UI, crypto helpers, and any `@livekit/client` imports belong there.
+  Fase 5.2 is a deliberate crypto-only exception: `src/hooks/usePrivateControlSignals.ts`
+  and `src/utils/cryptoUtils.ts` may live in core because they use only Web
+  Crypto and existing sync transport.
+- Do not install or import `@livekit/client` during contract-only phases.
+- Do not import `@livekit/client` from core, `src/App.tsx`,
+  `src/hooks/useSyncState.ts`, existing `src/components/shared/`, or shared
+  `src/types/*`.
+- Treat `VITE_SEFER_LIVE_AUDIO_BUILD` as the frontend build/bundle flag and
+  `SEFER_LIVE_AUDIO_ENABLED` as the backend/runtime availability flag. A false
+  build flag should keep the base frontend free of static LiveKit SDK imports; a
+  false runtime flag should keep existing presentation flows working.
+- Validate `PRIVATE_CONTROL_SIGNAL` in `src/utils/validation.ts` for UUID v4
+  participant IDs, base64 technical fields, ciphertext size, and caller role.
+- Use Web Crypto only for private moderation cryptography: ECDH P-256,
+  `deriveKey` to AES-GCM 256, 12-byte random nonces, and base64 technical
+  fields. Track used nonces in memory and reject replay.
+- Keep Control principal/secondary authorization server-owned in
+  `server/ws-server.mjs`: first registered Control wins principal, later
+  Controls are pending with `NNN-NNN` codes, pending Controls cannot receive
+  private signals or send moderation actions, and principal succession promotes
+  the oldest authorized Control.
+- Keep Control authorization UI compact and separate from `MenuPopup.tsx`;
+  `src/hooks/useControlAuthorization.ts` should reflect WebSocket state and emit
+  approval/rejection decisions without persisting codes or messages.
+- Treat UUID format as a syntax check only. Backend runtime must verify the
+  participant is bound to an active WebSocket/session and authorized role.
+- Do not add `acceptedNotice`, `consentGiven`, `privacyAcceptedAt`, equivalents,
+  consent endpoints, or persisted privacy acknowledgement records.
+- Do not log aliases, private text, keys, ciphertext, or full private signal
+  payloads.
+- Do not use localStorage, sessionStorage, backend endpoints, or server state for
+  private keys.
+- Do not touch `src/App.tsx`, `AudioState`, or `AudioTimelineState` for
+  contract-only phases.
+- Update `docs/SYNC_ARCHITECTURE.md`, `docs/AI_PROJECT_MAP.md`,
+  `docs/COMPONENT_OWNERSHIP.md`, `docs/SYMBOL_INDEX.md`, and `README.md` when
+  Live Audio entry points, ownership, routing, or protocol shape changes.
+- Fase 5.1 verification checklist: `npx.cmd tsc --noEmit`, `npm.cmd run test`,
+  no `@livekit/client` imports outside `src/features/liveAudio/`, no changes to
+  `src/App.tsx`, `AudioState`, or `AudioTimelineState`, and docs explain
+  `src/features/liveAudio/`, `VITE_SEFER_LIVE_AUDIO_BUILD`, and
+  `SEFER_LIVE_AUDIO_ENABLED`.
 
 ## When Editing Validation/Import/Export
 
@@ -79,6 +135,11 @@ Use these checklists before implementing future tasks.
 
 - `src/types/*`: check `docs/SYMBOL_INDEX.md`, `docs/COMPONENT_OWNERSHIP.md`, and `docs/CHANGE_GUIDE.md`.
 - `src/hooks/useSyncState.ts`, `src/types/sync.ts`, `src/utils/syncProtocol.ts`, `server/local-server.mjs`: check `docs/SYNC_ARCHITECTURE.md`.
+- `src/types/liveAudio.ts`: check `docs/SYNC_ARCHITECTURE.md`,
+  `docs/SYMBOL_INDEX.md`, `docs/COMPONENT_OWNERSHIP.md`, `docs/CHANGE_GUIDE.md`,
+  and `README.md`.
+- `server/ws-server.mjs`: check `docs/SYNC_ARCHITECTURE.md`,
+  `docs/SYMBOL_INDEX.md`, and any manual WebSocket verification notes.
 - `src/components/control/*`, `src/components/presenter/*`, `src/components/audience/*`, `src/components/shared/*`: check `docs/COMPONENT_OWNERSHIP.md` and `docs/SYMBOL_INDEX.md`.
 - New hooks or utilities under `src/hooks/` or `src/utils/`: check `docs/SYMBOL_INDEX.md` and `docs/AI_PROJECT_MAP.md`.
 - New route, endpoint, mode, or common workflow: check `docs/AI_PROJECT_MAP.md`, `docs/SYNC_ARCHITECTURE.md`, and `README.md`.

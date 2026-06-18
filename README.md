@@ -8,6 +8,8 @@ SeferPresenter es una aplicacion React/Vite para proyectar presentaciones con so
 - **Control**: abre `/control`. Permite seleccionar presentaciones, editar slides, cambiar fondos, controlar audio/video y navegar textos.
 - **Editor de audio**: abre `/audio-editor`. Permite asociar pistas de audio a presentaciones y cues de diapositiva.
 - **Audiencia**: abre `/audience`. Muestra la misma proyeccion visual que presenter, en modo solo lectura y sincronizada.
+- **Proteccion de datos**: `/proteccion-datos` queda como ruta publica (accesible sin autenticacion) para el aviso de privacidad del futuro modulo de voz en vivo.
+- **Modo sin LiveKit**: la aplicacion conserva el uso solo presentacion. Si LiveKit esta desactivado, mal configurado o no soportado, `/presenter`, `/control`, `/audio-editor` y `/audience` deben seguir cargando sin requerir voz en vivo.
 
 ## Scripts
 
@@ -84,6 +86,8 @@ La aplicacion se organiza por consumidor:
 - `src/components/shared/`: componentes comunes.
 - `src/hooks/`: logica de sincronizacion, navegacion, fondos, audio, escritura y teclado.
 - `src/types/`: contratos compartidos de presentacion, audio, audiencia, sincronizacion y transliteracion.
+- `src/types/liveAudio.ts`: contratos opcionales de voz en vivo, separados del estado de presentacion y sin conexion LiveKit en esta fase.
+- `src/features/liveAudio/`: ubicacion reservada para la futura implementacion opcional LiveKit. Los hooks, UI, helpers criptograficos y cualquier import de `@livekit/client` deben vivir ahi, no en el core.
 - `src/utils/`: normalizacion, parsing, lookup biblico, metadata y utilidades puras.
 - `server/`: backend local Node.
 
@@ -109,8 +113,38 @@ Canales principales:
 - `VIDEO_TELEMETRY`: estado ligero de reproduccion de video.
 - `DISPLAY_TELEMETRY`: cambios de fondo, override y candado.
 - `AUDIO_TIMELINE_STATE`: estado de timeline de audio emitido por `/ws` para presenter/control.
+- Familia Live Audio: mensajes opcionales tipados para voz en vivo
+  (`LIVE_AUDIO_*`, `CONTROL_KEY_ROTATED`, `PRIVATE_CONTROL_SIGNAL`) separados de
+  `SYNC_STATE`, `AudioState` y `AudioTimelineState`.
 
 La audiencia muestra la misma imagen viva del presenter, sin controles de navegacion ni apertura del panel de control.
+
+`PRIVATE_CONTROL_SIGNAL` es un contenedor tecnico cifrado para futuras senales
+privadas hacia Control. No contiene alias ni consentimiento en claro, y el
+servidor debe limitarse a validar/rutear sin descifrar ni persistir contenido.
+La capa E2E simplificada usa Web Crypto: Control publica una clave publica ECDH
+P-256, Audience cifra con una clave AES-GCM 256 derivada y un nonce aleatorio de
+12 bytes por mensaje, y las claves privadas quedan solo en memoria del cliente.
+El servidor WebSocket gestiona el Control principal: la primera conexion
+`/control` es `PRINCIPAL`, las siguientes quedan `PENDING` con codigo `NNN-NNN`
+temporal, y solo Controles autorizados reciben senales privadas o pueden emitir
+acciones de moderacion.
+
+## Live Audio opcional
+
+Fase 5.1 solo define contratos y validacion. No instala ni conecta LiveKit.
+
+- `VITE_SEFER_LIVE_AUDIO_BUILD`: flag de build frontend. Cuando sea `false`, el
+  bundle base no debe importar estaticamente `src/features/liveAudio/` ni incluir
+  `@livekit/client`.
+- `SEFER_LIVE_AUDIO_ENABLED`: flag backend/runtime. Cuando sea `false`, el
+  servidor debe reportar voz en vivo desactivada y conservar los flujos actuales
+  de presentacion, audience, control, media, quiz y textos.
+
+`@livekit/client` no debe importarse desde `src/App.tsx`,
+`src/hooks/useSyncState.ts`, `src/components/shared/` existente ni tipos
+compartidos. Si se anade en fases posteriores, debe quedar aislado dentro de
+`src/features/liveAudio/` o cargarse dinamicamente desde ese modulo.
 
 ## Legacy
 

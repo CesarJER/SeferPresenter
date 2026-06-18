@@ -21,6 +21,8 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
 - [useServerClock](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useServerClock.ts) - `src/hooks/useServerClock.ts`: WebSocket server clock offset and RTT estimation from `SERVER_TIME_PING` / `SERVER_TIME_PONG`.
 - [useAudioTimeline](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useAudioTimeline.ts) - `src/hooks/useAudioTimeline.ts`: local audio timeline tracking, status estimation, action dispatching over WebSocket.
 - [useAudioTimelineApplicator](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useAudioTimelineApplicator.ts) - `src/hooks/useAudioTimelineApplicator.ts`: applies audio timeline changes (source, status, volume, rate) to the presenter's HTML audio element.
+- [usePrivateControlSignals](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/usePrivateControlSignals.ts) - `src/hooks/usePrivateControlSignals.ts`: Fase 5.2 crypto-only private moderation signaling with in-memory ECDH P-256 keys, AES-GCM private signals, nonce replay rejection, key rotation, and secondary Control key transfer.
+- [useControlAuthorization](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useControlAuthorization.ts) - `src/hooks/useControlAuthorization.ts`: Fase 5.3 Control principal/secondary state, pending verification-code countdown, delegated approval/rejection commands, and succession reflection over WebSocket.
 - `useBackgroundResolver` - `src/hooks/useBackgroundResolver.ts`: active background, lock, and override behavior.
 - `useUrlSync` - `src/hooks/useUrlSync.ts`: presenter URL/hash synchronization.
 - `useKeyboardNavigation` - `src/hooks/useKeyboardNavigation.ts`: keyboard navigation for slides and scripture.
@@ -31,6 +33,13 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
 - Quiz answer hooks - `src/hooks/useQuizAnswers.ts`: audience answer sessions and controller aggregation through `useAudienceAnswers` and `useControllerAnswers`.
 - `useQuizAudio` - `src/hooks/useQuizAudio.ts`: quiz feedback sounds.
 - `scriptureNumerals` helpers - `src/hooks/scriptureNumerals.ts`: scripture numeral utilities.
+- Proposed Live Audio hooks -
+  `src/features/liveAudio/hooks/useLiveAudioAvailability.ts`,
+  `src/features/liveAudio/hooks/useLiveAudio.ts`,
+  `src/features/liveAudio/hooks/usePrivateControlSignals.ts`,
+  `src/features/liveAudio/hooks/useControlAuthorization.ts`: future optional
+  LiveKit availability, connection lifecycle, encrypted private signal handling,
+  and Control authorization. These hooks are not connected in Fase 5.1.
 
 ## Components
 
@@ -49,16 +58,37 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
 - `SeferFlowView` - `src/components/presenter/SeferFlowView.tsx`: scripture flow visual.
 - `VerseSidebar` - `src/components/presenter/VerseSidebar.tsx`: verse sidebar visual.
 - `AudienceScreen` - `src/components/audience/AudienceScreen.tsx`: audience route projection/quiz selection.
+- Proposed Live Audio components - future optional runtime components under
+  `src/features/liveAudio/components/control/`,
+  `src/features/liveAudio/components/audience/`, and
+  `src/features/liveAudio/components/shared/`. Core legal components for
+  `/proteccion-datos` may stay outside the LiveKit module.
 - `QuizPresenterView` - `src/components/quiz/QuizPresenterView.tsx`: projected quiz view.
 - `QuizControllerView` - `src/components/quiz/QuizControllerView.tsx`: controller quiz controls/results.
 - `QuizAudienceView` - `src/components/quiz/QuizAudienceView.tsx`: audience quiz answer UI.
 - `QuizSlideEditor` - `src/components/quiz/QuizSlideEditor.tsx`: quiz editing UI.
+- `LiveAudioControlAuthorization` - `src/components/control/LiveAudioControlAuthorization.tsx`: compact Fase 5.3 Control principal/pending authorization panel.
+- `ControlVerificationCode` - `src/components/shared/ControlVerificationCode.tsx`: short verification-code display with countdown.
 - `SlideVisualizer` - `src/components/shared/SlideVisualizer.tsx`: control-side preview.
 - `AutoResizeText` - `src/components/shared/AutoResizeText.tsx`: projected responsive text.
 
 ## Sync Modules
 
 - `RemoteCommandPayload` / `SyncStatePayload` - `src/types/sync.ts`: sync contracts.
+- `LiveAudioBroadcastMessage` / `PrivateControlSignalMessage` -
+  `src/types/liveAudio.ts`: optional Live Audio message family kept separate from
+  `SyncStatePayload` and existing remote commands.
+- `src/features/liveAudio/` - future optional Live Audio runtime module. This is
+  the only place where `@livekit/client`, LiveKit track lifecycle, and heavy Live
+  Audio UI should live.
+- `src/hooks/usePrivateControlSignals.ts` - Fase 5.2 crypto-only private
+  moderation lifecycle using existing WebSocket send/subscribe functions and no
+  LiveKit import.
+- `src/hooks/useControlAuthorization.ts` - Fase 5.3 Control authorization
+  lifecycle using existing WebSocket send/subscribe functions.
+- `server/ws-server.mjs` - WebSocket `/ws` server for audio timeline plus Fase
+  5.3 Control principal election, pending code TTL, authorization decisions,
+  private-signal routing, moderation filtering, and succession.
 - `makeSyncMessage` - `src/utils/syncProtocol.ts`: message envelope creation.
 - `server/local-server.mjs`: SSE/API mirroring for state, commands, media telemetry, quiz events, assets, persistence.
 - `server/ws-server.mjs`: WebSocket `/ws` server for F2 audio timeline messages.
@@ -69,6 +99,15 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
 - `validatePresentationList` / `validatePresentation` - `src/utils/validation.ts`: presentation payload validation.
 - `validateAudioSyncMaps` - `src/utils/validation.ts`: audio sync map validation.
 - `validateRemoteStatePayload` / `validateSyncMessage` - `src/utils/validation.ts`: remote state and sync message validation.
+- `isValidPrivateControlSignal` / `isValidEphemeralParticipantId` -
+  `src/utils/validation.ts`: Live Audio technical envelope and ephemeral UUID v4
+  validation. Backend runtime authorization must still bind IDs to live sessions
+  and roles.
+- `isValidControlVerificationCode` - `src/utils/validation.ts`: verifies Fase
+  5.3 Control authorization codes in `NNN-NNN` format.
+- `src/utils/cryptoUtils.ts`: Web Crypto helpers for ECDH P-256 session and
+  ephemeral keys, public/private key import/export, AES-GCM 256 encrypt/decrypt,
+  base64 conversion, and nonce replay rejection.
 
 ## Types
 
@@ -76,6 +115,14 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
 - `AudioState`, `AudioSyncMap`, `AudioSyncCue`, `AudioSyncMode`, `AudioTimelineState`, `AudioTimelineAction` - `src/types/audio.ts`.
 - `QuizTimerState`, `QuizSubslide`, `QuizAudienceAnswer`, `QuizSyncState` - `src/types/quiz.ts`.
 - `BroadcastMessage`, `DisplayTelemetryState`, `AudiencePublicState` - `src/types/sync.ts`.
+- `LiveAudioAvailability`, `ControlPrincipalState`, `ControlSecondaryState`,
+  `SpeakerState`, `LiveAudioParticipantStatusMessage`,
+  `LiveAudioGrantSpeakMessage`, `LiveAudioRevokeSpeakMessage`,
+  `LiveAudioMuteParticipantMessage`, `LiveAudioMuteAllMessage`,
+  `LiveAudioKickParticipantMessage`, `LiveAudioControlPublicKeyMessage`,
+  `LiveAudioControlJoinRequestMessage`,
+  `LiveAudioControlAuthorizedMessage`, `ControlKeyRotatedMessage`,
+  `PrivateControlSignalMessage` - `src/types/liveAudio.ts`.
 
 ## Data/Content Modules
 

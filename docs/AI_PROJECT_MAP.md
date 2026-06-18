@@ -20,6 +20,7 @@ Fast map for agents. Use real paths only; this repo does not currently have
 - `server/local-server.mjs`: local backend, static serving, SSE, persistence endpoints, auth gate, and WebSocket attachment.
 - `server/ws-server.mjs`: WebSocket `/ws` server for backend-owned audio timeline messages.
 - `server/timelineManager.mjs`: isolated audio timeline state and action reducer.
+- `src/types/liveAudio.ts`: optional Live Audio protocol contracts and role state types; no LiveKit connection code.
 - `vite.config.ts`: Vite config, development proxy, and multi-entry build inputs.
 
 ## Folder Responsibilities
@@ -29,9 +30,14 @@ Fast map for agents. Use real paths only; this repo does not currently have
 - `src/components/audience/`: audience route wrapper and audience quiz/projection selection.
 - `src/components/quiz/`: quiz presenter, controller, audience, results, timer, and editor UI.
 - `src/components/shared/`: reusable UI widgets such as auto-resizing text/input and slide previews.
-- `src/hooks/`: stateful behavior for sync, background resolution, media playback, keyboard, URL sync, quiz, Sefer reader, scripture navigation.
-- `src/utils/`: validation, normalization, sync message construction, quiz parsing/scoring, scripture parsing/lookup, media helpers.
+- `src/hooks/`: stateful behavior for sync, background resolution, media playback, keyboard, URL sync, quiz, Sefer reader, scripture navigation, and the Fase 5.2 crypto-only `usePrivateControlSignals.ts` hook. LiveKit runtime hooks should still live under `src/features/liveAudio/hooks/` when implemented.
+- `src/utils/`: validation, normalization, sync message construction, quiz parsing/scoring, scripture parsing/lookup, media helpers, and Web Crypto helpers.
 - `src/types/`: shared contracts for presentations, sync, audio, quiz, and transliteration.
+- `src/types/liveAudio.ts`: LiveKit-ready but optional Live Audio message contracts, kept separate from presentation sync state.
+- `src/features/liveAudio/`: future optional Live Audio runtime module. This is where LiveKit hooks, UI, crypto helpers, and any `@livekit/client` imports belong.
+- `src/hooks/usePrivateControlSignals.ts`: Fase 5.2 crypto-only private moderation signaling hook. It owns in-memory Web Crypto keys and consumes the existing WebSocket send/subscribe functions without importing LiveKit.
+- `src/hooks/useControlAuthorization.ts`: Fase 5.3 Control principal/secondary authorization state derived from WebSocket messages.
+- `src/utils/cryptoUtils.ts`: pure Web Crypto helpers for ECDH P-256, AES-GCM 256, base64 encoding, and nonce replay rejection.
 - `server/`: local Node backend and dev launcher.
 - `scripts/`: generated data and utility scripts.
 - `__tests__/`: Vitest tests for utils and selected hooks.
@@ -79,6 +85,7 @@ Presenter components should render from props and report media telemetry. They s
 Start with:
 
 - `src/types/sync.ts`
+- `src/types/liveAudio.ts` when adding optional Live Audio messages
 - `src/utils/syncProtocol.ts`
 - `src/utils/validation.ts`
 - `src/hooks/useSyncState.ts`
@@ -87,6 +94,46 @@ Start with:
 - `server/ws-server.mjs` and `server/timelineManager.mjs` when changing backend-owned audio timeline behavior
 
 Prefer typed `REMOTE_COMMAND` messages for operator intent and lightweight telemetry for frequent media/display changes.
+
+### Add Or Modify Live Audio
+
+Start with:
+
+- `src/types/liveAudio.ts`
+- `src/types/sync.ts`
+- `src/utils/validation.ts`
+- `src/utils/cryptoUtils.ts` for private moderation cryptography
+- `src/hooks/usePrivateControlSignals.ts` for Fase 5.2 encrypted signal lifecycle
+- `src/hooks/useControlAuthorization.ts`,
+  `src/components/control/LiveAudioControlAuthorization.tsx`, and
+  `src/components/shared/ControlVerificationCode.tsx` for Fase 5.3 Control
+  authorization UI/lifecycle
+- `server/ws-server.mjs` for principal election, pending Control TTL,
+  authorization, moderation filtering, private-signal routing, and succession
+- `docs/SYNC_ARCHITECTURE.md`
+- `docs/COMPONENT_OWNERSHIP.md`
+
+Future implementation entry points should be focused hooks such as
+`src/features/liveAudio/hooks/useLiveAudioAvailability.ts`,
+`src/features/liveAudio/hooks/useLiveAudio.ts`,
+`src/features/liveAudio/hooks/usePrivateControlSignals.ts`, and
+`src/features/liveAudio/hooks/useControlAuthorization.ts`.
+Control UI should live under `src/features/liveAudio/components/control/`,
+audience voice UI under `src/features/liveAudio/components/audience/`, and
+Live Audio reusable privacy/status widgets under
+`src/features/liveAudio/components/shared/`. Core/shared legal elements such as
+`DataProtectionPage` and `DataProtectionLink` can stay outside the LiveKit module
+so `/proteccion-datos` works without LiveKit. Keep Live Audio optional: disabled
+or misconfigured LiveKit must leave `/presenter`, `/control`, and `/audience`
+usable in presentation-only mode.
+
+Build/runtime split:
+
+- `VITE_SEFER_LIVE_AUDIO_BUILD` is a frontend build flag. When false, the base
+  bundle must not statically include the optional Live Audio implementation or
+  `@livekit/client`.
+- `SEFER_LIVE_AUDIO_ENABLED` is a backend/runtime flag. When false, the server
+  reports Live Audio disabled and existing presentation flows continue normally.
 
 ### Modify Sacred Text Navigation
 

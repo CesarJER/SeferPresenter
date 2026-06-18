@@ -4,6 +4,8 @@ import './index.css';
 
 import MenuPopup from './components/control/MenuPopup';
 import defaultPresentations from '../presentations.json';
+import { DataProtectionLink } from './components/shared/DataProtectionLink';
+import { LiveAudioControlAuthorization } from './components/control/LiveAudioControlAuthorization';
 
 import type { AudioState, AudioSyncMap } from './types/audio';
 import { DEFAULT_AUDIO_STATE } from './types/audio';
@@ -16,6 +18,7 @@ import {
 } from './utils/normalizePresentation';
 
 import { useSyncState } from './hooks/useSyncState';
+import { useControlAuthorization } from './hooks/useControlAuthorization';
 import { useBackgroundResolver } from './hooks/useBackgroundResolver';
 import { validateAudioSyncMaps, validatePresentationList } from './utils/validation';
 import { generateQuizSubslides } from './utils/quizUtils';
@@ -121,7 +124,7 @@ function ControlApp() {
       .catch(err => console.error("Error loading audio sync maps", err));
   }, []);
 
-  const { emitCommand, channel } = useSyncState({
+  const { emitCommand, channel, wsStatus, wsSend, subscribeToWsMessage } = useSyncState({
     isControlMode: true,
     isPresenterMode: false,
     clientIdRef,
@@ -148,6 +151,12 @@ function ControlApp() {
     setAudioState,
     setAudioSyncMaps,
     setQuizState,
+  });
+
+  const controlAuthorization = useControlAuthorization({
+    wsStatus,
+    sendMessage: wsSend,
+    subscribeToWsMessage,
   });
 
   const { getActiveBackground } = useBackgroundResolver({
@@ -234,7 +243,7 @@ function ControlApp() {
   }, [presentations, emitCommand]);
 
   return (
-    <div id="section-app-control-mode" className="w-full h-dvh bg-gray-900 overflow-hidden">
+    <div id="section-app-control-mode" className="w-full h-dvh bg-gray-900 overflow-hidden relative">
       <MenuPopup
         presentations={presentations}
         backgrounds={backgrounds}
@@ -320,6 +329,12 @@ function ControlApp() {
         onQuizPlayMal={() => emitCommand({ command: 'QUIZ_PLAY_MAL' })}
         onQuizAdjustTimer={(seconds) => emitCommand({ command: 'QUIZ_ADJUST_TIMER', seconds })}
       />
+      <div className="absolute bottom-2 right-2 z-50">
+        <DataProtectionLink className="text-xs text-gray-500 hover:text-gray-300 flex items-center gap-1 transition-colors" />
+      </div>
+      <div className="absolute top-2 right-2 z-50">
+        <LiveAudioControlAuthorization authorization={controlAuthorization} />
+      </div>
     </div>
   );
 }
