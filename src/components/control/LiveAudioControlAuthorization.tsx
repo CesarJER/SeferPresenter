@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Check, ShieldCheck, ShieldQuestion, X } from 'lucide-react';
 import type { ControlAuthorizationState } from '../../hooks/useControlAuthorization';
 import { ControlVerificationCode } from '../shared/ControlVerificationCode';
+import { useLiveAudioAvailability } from '../../features/liveAudio';
 
 interface LiveAudioControlAuthorizationProps {
   authorization: ControlAuthorizationState;
@@ -24,6 +25,7 @@ const getSecondsRemaining = (expiresAt: number): number =>
   Math.max(0, Math.ceil((expiresAt - Date.now()) / 1000));
 
 export const LiveAudioControlAuthorization: React.FC<LiveAudioControlAuthorizationProps> = ({ authorization }) => {
+  const { availability, isLoading } = useLiveAudioAvailability();
   const {
     controlState,
     verificationCode,
@@ -42,6 +44,32 @@ export const LiveAudioControlAuthorization: React.FC<LiveAudioControlAuthorizati
     return () => window.clearInterval(timer);
   }, [canAuthorize, pendingControls.length]);
 
+  if (isLoading) {
+    return (
+      <section className="rounded-md border border-gray-800 bg-gray-900/80 px-3 py-2 text-gray-400 text-xs w-[min(28rem,calc(100vw-1rem))] flex justify-between items-center shadow-lg">
+        <span>Cargando estado de audio...</span>
+        <span className="text-[10px] text-gray-600 font-mono">Live Audio</span>
+      </section>
+    );
+  }
+
+  if (availability === 'disabled' || availability === 'misconfigured') {
+    return (
+      <section className="rounded-md border border-gray-800 bg-gray-900/60 px-3 py-2 text-gray-400 text-xs w-[min(28rem,calc(100vw-1rem))] flex justify-between items-center shadow-lg">
+        <span>Voz en vivo no configurada</span>
+        <span className="text-[10px] text-gray-600 font-mono">Live Audio</span>
+      </section>
+    );
+  }
+
+  if (availability === 'unsupported') {
+    return (
+      <section className="rounded-md border border-red-950 bg-red-950/20 px-3 py-2 text-red-300 text-xs w-[min(28rem,calc(100vw-1rem))] flex justify-between items-center shadow-lg">
+        <span>Audio no compatible</span>
+        <span className="text-[10px] text-red-700 font-mono">Live Audio</span>
+      </section>
+    );
+  }
   return (
     <section className="rounded-md border border-gray-700 bg-gray-900/95 shadow-lg text-gray-100 w-[min(28rem,calc(100vw-1rem))]">
       <div className="flex items-center justify-between gap-3 border-b border-gray-800 px-3 py-2">
