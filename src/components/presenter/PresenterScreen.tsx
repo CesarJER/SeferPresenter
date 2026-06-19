@@ -334,108 +334,115 @@ const PresenterScreen: React.FC<PresenterScreenProps> = ({
         </div>
       ) : (
         <div className="relative z-20 h-full w-full px-[6vw] pt-[7vh] pb-[9vh]" style={scaleStyle}>
-          <div className={`grid h-full grid-rows-[minmax(0,1fr)_auto] gap-[3vh] transition-all duration-500 ease-in-out ${isResultsSlide ? 'w-full' : 'w-[min(88vw,920px)] lg:w-[min(58vw,920px)]'}`}>
-            <main className="flex min-w-0 items-center h-full max-h-full">
-              {!hideLyricsOverlay && (
-                <AnimatePresence mode="wait">
-                  <motion.div
-                    key={slide.id}
-                    initial={{ opacity: 0, y: 14 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -14 }}
-                    transition={{ duration: 0.28, ease: 'easeOut' }}
-                    className="w-full flex flex-col justify-center max-h-full h-full min-h-0"
-                  >
-                    {isTrilingual ? (
-                      <div className="flex flex-col w-full h-full max-h-full gap-[2.4vh] min-h-0">
-                        {slide.lines.map((line, idx) => (
-                          <section
-                            key={idx}
-                            className="glass-panel flex min-h-0 min-h-[12vh] flex-1 flex-col px-[3vw] py-[2.4vh]"
-                          >
-                            <div className="flex-1 overflow-hidden">
-                              <AutoResizeText
-                                text={line}
-                                html={true}
-                                fontScale={fontScale}
-                                className={`drop-shadow-2xl font-semibold ${idx === 0
-                                    ? 'hebrew-text text-[#f3c96a] text-[calc(clamp(1.8rem,4vw,5.8rem)*var(--font-scale))]'
-                                    : idx === 1
-                                      ? 'text-sky-200 text-[calc(clamp(1.2rem,2.2vw,3rem)*var(--font-scale))]'
-                                      : 'text-white text-[calc(clamp(1rem,2vw,2.6rem)*var(--font-scale))]'
-                                  }`}
-                              />
-                            </div>
-                          </section>
-                        ))}
-                      </div>
-                    ) : (
-                      <section className="glass-panel flex min-h-0 min-h-[40vh] w-full flex-1 flex-col px-[4vw] py-[5vh]">
-                        <div className="flex-1 overflow-hidden">
-                          <AutoResizeText
-                            text={slide.lines[0]}
-                            html={true}
-                            fontScale={fontScale}
-                            className="font-bold text-white drop-shadow-2xl text-[calc(clamp(2rem,4.8vw,7rem)*var(--font-scale))]"
-                          />
+          <div className={`grid h-full transition-all duration-500 ease-in-out ${isResultsSlide ? 'w-full' : 'md:grid-cols-[minmax(0,min(58vw,920px))_1fr] md:gap-[3vw]'}`}>
+            <div className={`grid h-full grid-rows-[minmax(0,1fr)_auto] gap-[3vh] transition-all duration-500 ease-in-out ${isResultsSlide ? 'w-full' : 'w-[min(88vw,920px)] md:w-auto lg:w-full'}`}>
+              <main className="flex min-w-0 items-center h-full max-h-full">
+                {!hideLyricsOverlay && (
+                  <AnimatePresence mode="wait">
+                    <motion.div
+                      key={slide.id}
+                      initial={{ opacity: 0, y: 14 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -14 }}
+                      transition={{ duration: 0.28, ease: 'easeOut' }}
+                      className="w-full flex flex-col justify-center max-h-full h-full min-h-0"
+                    >
+                      {isTrilingual ? (
+                        <div className="flex flex-col w-full h-full max-h-full gap-[2.4vh] min-h-0">
+                          {slide.lines.map((line, idx) => (
+                            <section
+                              key={idx}
+                              className="glass-panel flex min-h-0 min-h-[12vh] flex-1 flex-col px-[3vw] py-[2.4vh]"
+                            >
+                              <div className="flex-1 overflow-hidden">
+                                <AutoResizeText
+                                  text={line}
+                                  html={true}
+                                  fontScale={fontScale}
+                                  className={`drop-shadow-2xl font-semibold ${idx === 0
+                                      ? 'hebrew-text text-[#f3c96a] text-[calc(clamp(1.8rem,4vw,5.8rem)*var(--font-scale))]'
+                                      : idx === 1
+                                        ? 'text-sky-200 text-[calc(clamp(1.2rem,2.2vw,3rem)*var(--font-scale))]'
+                                        : 'text-white text-[calc(clamp(1rem,2vw,2.6rem)*var(--font-scale))]'
+                                    }`}
+                                />
+                              </div>
+                            </section>
+                          ))}
                         </div>
-                      </section>
-                    )}
-                  </motion.div>
-                </AnimatePresence>
-              )}
-              {/* Quiz overlay */}
-              {isQuizSlide && slide.quizData && quizSubslides && quizTimerState && (
+                      ) : (
+                        <section className="glass-panel flex min-h-0 min-h-[40vh] w-full flex-1 flex-col px-[4vw] py-[5vh]">
+                          <div className="flex-1 overflow-hidden">
+                            <AutoResizeText
+                              text={slide.lines[0]}
+                              html={true}
+                              fontScale={fontScale}
+                              className="font-bold text-white drop-shadow-2xl text-[calc(clamp(2rem,4.8vw,7rem)*var(--font-scale))]"
+                            />
+                          </div>
+                        </section>
+                      )}
+                    </motion.div>
+                  </AnimatePresence>
+                )}
+                {/* Quiz overlay */}
+                {isQuizSlide && slide.quizData && quizSubslides && quizTimerState && (
+                  <AnimatePresence mode="wait">
+                    <motion.div
+                      key={`quiz-${slide.id}`}
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.25 }}
+                      className="w-full flex flex-col justify-center max-h-full h-full min-h-0"
+                    >
+                      <QuizPresenterView
+                        slide={slide}
+                        quizData={slide.quizData}
+                        subslides={quizSubslides}
+                        currentSubslideIndex={quizCurrentSubslideIndex}
+                        timerState={quizTimerState}
+                        presenterDemoSelection={quizPresenterDemoSelection}
+                        maxBaseCentipunts={quizMaxBaseCentipunts}
+                        fontScale={fontScale}
+                      />
+                    </motion.div>
+                  </AnimatePresence>
+                )}
+              </main>
+
+              <footer
+                className={`group/nav grid h-[7vh] min-h-14 max-h-20 w-full grid-cols-[1.25fr_0.5fr_clamp(3.5rem,7vh,5rem)] gap-2 text-center font-bold transition-opacity duration-200 ${presenterNavVisible ? 'opacity-100' : 'opacity-0 hover:opacity-100'}`}
+              >
+                <div className="glass-panel-nav flex min-w-0 items-center justify-center px-3 text-[clamp(0.72rem,1vw,1.18rem)] sm:px-4">
+                  {titleText}
+                </div>
                 <AnimatePresence mode="wait">
                   <motion.div
-                    key={`quiz-${slide.id}`}
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ duration: 0.25 }}
-                    className="w-full flex flex-col justify-center max-h-full h-full min-h-0"
+                    key={slideLabel}
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -8 }}
+                    transition={{ duration: 0.2 }}
+                    className="glass-panel-nav flex min-w-0 items-center justify-center px-3 text-[clamp(0.72rem,1vw,1.18rem)] sm:px-4"
                   >
-                    <QuizPresenterView
-                      slide={slide}
-                      quizData={slide.quizData}
-                      subslides={quizSubslides}
-                      currentSubslideIndex={quizCurrentSubslideIndex}
-                      timerState={quizTimerState}
-                      presenterDemoSelection={quizPresenterDemoSelection}
-                      maxBaseCentipunts={quizMaxBaseCentipunts}
-                      fontScale={fontScale}
-                    />
+                    {slideLabel}
                   </motion.div>
                 </AnimatePresence>
-              )}
-            </main>
-
-            <footer
-              className={`group/nav grid h-[7vh] min-h-14 max-h-20 w-full grid-cols-[1.25fr_0.5fr_clamp(3.5rem,7vh,5rem)] gap-2 text-center font-bold transition-opacity duration-200 ${presenterNavVisible ? 'opacity-100' : 'opacity-0 hover:opacity-100'}`}
-            >
-              <div className="glass-panel-nav flex min-w-0 items-center justify-center px-3 text-[clamp(0.72rem,1vw,1.18rem)] sm:px-4">
-                {titleText}
-              </div>
-              <AnimatePresence mode="wait">
-                <motion.div
-                  key={slideLabel}
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -8 }}
-                  transition={{ duration: 0.2 }}
-                  className="glass-panel-nav flex min-w-0 items-center justify-center px-3 text-[clamp(0.72rem,1vw,1.18rem)] sm:px-4"
+                <button
+                  onClick={onLogoClick}
+                  className="glass-panel-button flex aspect-square h-full min-w-0 cursor-pointer items-center justify-center p-2 pointer-events-auto"
+                  title="Abrir Menú"
                 >
-                  {slideLabel}
-                </motion.div>
-              </AnimatePresence>
-              <button
-                onClick={onLogoClick}
-                className="glass-panel-button flex aspect-square h-full min-w-0 cursor-pointer items-center justify-center p-2 pointer-events-auto"
-                title="Abrir Menú"
-              >
-                <img src="/logo.svg" alt="La operador" className="object-contain h-full w-full max-h-full max-w-full" />
-              </button>
-            </footer>
+                  <img src="/logo.svg" alt="La operador" className="object-contain h-full w-full max-h-full max-w-full" />
+                </button>
+              </footer>
+            </div>
+
+            {/* Injected Audio Panel from Audience Screen */}
+            {!isResultsSlide && (
+              <div id="audience-audio-portal" className="flex items-end justify-center fixed bottom-[4vh] left-1/2 -translate-x-1/2 md:static md:translate-x-0 md:bottom-auto md:left-auto w-full md:w-auto z-[60] pointer-events-none"></div>
+            )}
           </div>
         </div>
       )}

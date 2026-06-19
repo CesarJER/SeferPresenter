@@ -1,5 +1,5 @@
-import React from 'react';
-import { Mic, MicOff, Hand, MessageSquare, LogOut, Volume2, Play } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Mic, MicOff, Hand, MessageSquare, LogOut, Volume2, VolumeX, Play } from 'lucide-react';
 import type { LiveAudioConnectionState } from '../../../../types/liveAudio';
 
 interface AudienceLiveAudioPanelProps {
@@ -9,6 +9,8 @@ interface AudienceLiveAudioPanelProps {
   hasAudioStarted: boolean;
   isPendingWord: boolean;
   isWordGranted: boolean;
+  volume: number;
+  onVolumeChange: (vol: number) => void;
   onStartAudio: () => void;
   onJoinActive: () => void;
   onLeaveActive: () => void;
@@ -25,6 +27,8 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
   hasAudioStarted,
   isPendingWord,
   isWordGranted,
+  volume,
+  onVolumeChange,
   onStartAudio,
   onJoinActive,
   onLeaveActive,
@@ -33,40 +37,91 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
   onToggleMicrophone,
   onOpenMessage,
 }) => {
+  const [isVisible, setIsVisible] = useState(true);
+
+  const hasAudioStartedRef = React.useRef(hasAudioStarted);
+  useEffect(() => {
+    hasAudioStartedRef.current = hasAudioStarted;
+  }, [hasAudioStarted]);
+
+  // First interaction anywhere starts audio
+  useEffect(() => {
+    const handleFirstInteraction = () => {
+      if (!hasAudioStartedRef.current) {
+        onStartAudio();
+      }
+    };
+    window.addEventListener('click', handleFirstInteraction, true);
+    window.addEventListener('touchstart', handleFirstInteraction, true);
+    return () => {
+      window.removeEventListener('click', handleFirstInteraction, true);
+      window.removeEventListener('touchstart', handleFirstInteraction, true);
+    };
+  }, [onStartAudio]);
+
+  // Randomly reappear passive button to act as a reminder if the user has hidden it
+  useEffect(() => {
+    if (isActive || isVisible) return;
+
+    // Randomly reappear between 2 and 5 minutes (120000 ms - 300000 ms)
+    const timeout = setTimeout(() => {
+      setIsVisible(true);
+    }, 120000 + Math.random() * 180000);
+    return () => clearTimeout(timeout);
+  }, [isActive, isVisible]);
+
+  // Listen to outside clicks to toggle panel
+  useEffect(() => {
+    const handleGlobalClick = () => {
+      setIsVisible(v => !v);
+    };
+    window.addEventListener('click', handleGlobalClick);
+    return () => window.removeEventListener('click', handleGlobalClick);
+  }, []);
+
   if (state !== 'connected' && state !== 'reconnecting') {
-    return null; // Don't show if disconnected or unavailable
+    return null;
   }
 
-  // Passive Mode
+  if (!isVisible) return null;
+
+  const handlePanelClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+  };
+
+  const wrapperClass = "flex items-end justify-center w-full h-full pointer-events-none z-[60]";
+  const panelClass = "h-[7vh] min-h-14 max-h-20 flex items-center gap-1.5 sm:gap-2 pointer-events-auto";
+
   if (!isActive) {
     return (
-      <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2">
-        {!hasAudioStarted && (
+      <div className={wrapperClass} onClick={handlePanelClick}>
+        <div className={panelClass}>
+          {!hasAudioStarted && (
+            <button
+              onClick={onStartAudio}
+              className="flex items-center gap-2 h-full bg-blue-600/90 hover:bg-blue-500/90 text-white px-4 rounded-full shadow-lg backdrop-blur-sm transition-all"
+            >
+              <Play className="w-5 h-5" />
+              <span className="text-sm font-medium">Escuchar en vivo</span>
+            </button>
+          )}
           <button
-            onClick={onStartAudio}
-            className="flex items-center gap-2 bg-blue-600/90 hover:bg-blue-500/90 text-white px-4 py-2 rounded-full shadow-lg backdrop-blur-sm transition-all"
+            onClick={onJoinActive}
+            className="flex items-center gap-2 h-full bg-yellow-500 hover:bg-yellow-400 border border-yellow-300 text-black px-4 rounded-full shadow-[0_0_15px_rgba(234,179,8,0.6)] backdrop-blur-md transition-all animate-pulse"
+            title="Participar"
           >
-            <Play className="w-4 h-4" />
-            <span className="text-sm font-medium">Escuchar en vivo</span>
+            <Hand className="w-5 h-5" />
+            <span className="font-bold text-sm pr-1">Participa</span>
           </button>
-        )}
-        <button
-          onClick={onJoinActive}
-          className="bg-gray-800/80 hover:bg-gray-700/80 border border-gray-600/50 text-gray-200 p-3 rounded-full shadow-lg backdrop-blur-md transition-all animate-pulse"
-          title="Participar"
-        >
-          <Mic className="w-5 h-5" />
-        </button>
+        </div>
       </div>
     );
   }
 
-  // Active Mode (Glassmorphism bar)
   return (
-    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50">
-      <div className="flex items-center gap-2 bg-gray-900/60 backdrop-blur-lg border border-white/10 p-2 rounded-2xl shadow-2xl">
+    <div className={wrapperClass} onClick={handlePanelClick}>
+      <div className={`${panelClass} bg-gray-900/70 backdrop-blur-lg border border-white/10 px-2 rounded-2xl shadow-2xl`}>
         
-        {/* Toggle Mic / Request Word */}
         {isWordGranted ? (
           <button
             onClick={onToggleMicrophone}
@@ -93,7 +148,6 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
           </button>
         )}
 
-        {/* Message to Control */}
         <button
           onClick={onOpenMessage}
           className="flex items-center justify-center p-3 rounded-xl bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors"
@@ -102,17 +156,26 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
           <MessageSquare className="w-6 h-6" />
         </button>
 
-        {/* Volume (Placeholder for MVP, full implement later if needed) */}
-        <div className="flex items-center justify-center p-3 rounded-xl bg-gray-700 text-gray-300">
-          <Volume2 className="w-6 h-6" />
+        <div className="group relative flex items-center justify-center p-3 rounded-xl bg-gray-700 text-gray-300 hover:bg-gray-600 transition-colors cursor-pointer">
+          {volume === 0 ? <VolumeX className="w-6 h-6" /> : <Volume2 className="w-6 h-6" />}
+          
+          <div className="absolute bottom-full mb-3 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto transition-opacity bg-gray-800 p-3 rounded-xl shadow-xl border border-gray-700">
+            <input 
+              type="range" 
+              min="0" max="1" step="0.05" 
+              value={volume} 
+              onChange={e => onVolumeChange(parseFloat(e.target.value))} 
+              className="w-24 h-2 accent-blue-500 cursor-pointer"
+              title="Volumen del audio en vivo"
+            />
+          </div>
         </div>
 
         <div className="w-[1px] h-8 bg-white/20 mx-1"></div>
 
-        {/* Leave Active Mode */}
         <button
           onClick={onLeaveActive}
-          className="flex items-center justify-center p-3 rounded-xl bg-red-900/50 hover:bg-red-800/60 text-red-300 transition-colors"
+          className="flex items-center justify-center p-3 rounded-xl bg-red-900/60 hover:bg-red-800/80 text-red-300 transition-colors"
           title="Salir del Modo Activo"
         >
           <LogOut className="w-6 h-6" />

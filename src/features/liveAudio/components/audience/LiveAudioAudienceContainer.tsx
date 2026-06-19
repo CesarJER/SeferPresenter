@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { AudienceLiveAudioPanel } from './AudienceLiveAudioPanel';
 import { AudienceInterventionModal } from './AudienceInterventionModal';
 import { AudiencePrivateControlMessage } from './AudiencePrivateControlMessage';
@@ -12,6 +13,21 @@ interface LiveAudioAudienceContainerProps {
   subscribeToWsMessage: (handler: (type: string, payload: Record<string, unknown>) => void) => () => void;
   clientId: string; // Used as fallback or session identifier if needed
 }
+
+const AudioRenderer = ({ track, volume }: { track: MediaStreamTrack, volume: number }) => {
+  const audioRef = useRef<HTMLAudioElement>(null);
+  useEffect(() => {
+    if (audioRef.current && !audioRef.current.srcObject) {
+      audioRef.current.srcObject = new MediaStream([track]);
+    }
+  }, [track]);
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.volume = volume;
+    }
+  }, [volume]);
+  return <audio ref={audioRef} autoPlay playsInline />;
+};
 
 export default function LiveAudioAudienceContainer({
   availability,
@@ -27,10 +43,23 @@ export default function LiveAudioAudienceContainer({
   const [showPrivateMessageModal, setShowPrivateMessageModal] = useState(false);
 
   const [hasAudioStarted, setHasAudioStarted] = useState(false);
+  const [volume, setVolume] = useState(1);
+
+  const [portalTarget, setPortalTarget] = useState<Element | null>(null);
+  useEffect(() => {
+    const checkPortal = () => {
+      const el = document.getElementById('audience-audio-portal');
+      if (el && el !== portalTarget) setPortalTarget(el);
+    };
+    checkPortal();
+    const interval = setInterval(checkPortal, 500);
+    return () => clearInterval(interval);
+  }, [portalTarget]);
 
   // 1. Connect to LiveKit as a passive listener
   const {
     state: liveKitState,
+    remoteTracks,
     participantId,
     isMicrophoneActive,
     startRemoteAudio,
@@ -105,7 +134,6 @@ export default function LiveAudioAudienceContainer({
     } else {
       void publishMicrophone().catch((err) => {
         console.error("Failed to publish mic:", err);
-        // Fallback or error handling
       });
     }
   }, [isMicrophoneActive, publishMicrophone, unpublishMicrophone]);
@@ -127,7 +155,13 @@ export default function LiveAudioAudienceContainer({
 
   return (
     <>
-      <div className="pointer-events-auto">
+      {remoteTracks.map(t => <AudioRenderer key={t.id} track={t} volume={volume} />)}
+
+      {isMicrophoneActive && (
+        <div className="fixed inset-0 z-40 pointer-events-none border-[6px] md:border-[10px] border-blue-500/80 rounded-xl transition-all shadow-[inset_0_0_30px_rgba(59,130,246,0.6)]"></div>
+      )}
+
+      {portalTarget ? createPortal(
         <AudienceLiveAudioPanel
           state={liveKitState}
           isActive={isActive}
@@ -135,15 +169,38 @@ export default function LiveAudioAudienceContainer({
           hasAudioStarted={hasAudioStarted}
           isPendingWord={isPendingWord}
           isWordGranted={isWordGranted}
+          volume={volume}
+          onVolumeChange={setVolume}
           onStartAudio={handleStartAudio}
           onJoinActive={handleJoinActive}
           onLeaveActive={handleLeaveActive}
-          onRequestWord={() => setIsPendingWord(true) /* We already submitted alias, so we just send another request if needed, but usually alias modal is the request. We should probably resend the request with a known alias, but for MVP just sending a generic request if we are already active. */}
+          onRequestWord={() => setIsPendingWord(true)}
           onCancelRequest={handleCancelRequest}
           onToggleMicrophone={handleToggleMicrophone}
           onOpenMessage={handleOpenMessage}
-        />
-      </div>
+        />,
+        portalTarget
+      ) : (
+        <div className="pointer-events-auto">
+          <AudienceLiveAudioPanel
+            state={liveKitState}
+            isActive={isActive}
+            isMicrophoneActive={isMicrophoneActive}
+            hasAudioStarted={hasAudioStarted}
+            isPendingWord={isPendingWord}
+            isWordGranted={isWordGranted}
+            volume={volume}
+            onVolumeChange={setVolume}
+            onStartAudio={handleStartAudio}
+            onJoinActive={handleJoinActive}
+            onLeaveActive={handleLeaveActive}
+            onRequestWord={() => setIsPendingWord(true)}
+            onCancelRequest={handleCancelRequest}
+            onToggleMicrophone={handleToggleMicrophone}
+            onOpenMessage={handleOpenMessage}
+          />
+        </div>
+      )}
 
       {showInterventionModal && (
         <AudienceInterventionModal
