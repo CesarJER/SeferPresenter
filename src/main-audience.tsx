@@ -7,6 +7,7 @@ import { useQuizTimer } from './hooks/useQuizTimer';
 import { generateQuizSubslides, calcMaxBaseCentipunts } from './utils/quizUtils';
 import { makeClientId } from './utils/normalizePresentation';
 import { DataProtectionLink } from './components/shared/DataProtectionLink';
+import { useLiveAudioAvailability } from './features/liveAudio/hooks/useLiveAudioAvailability';
 
 import type { AppMode, Presentation, ScriptureNavState, VideoState } from './types/presentation';
 import type { QuizSyncState } from './types/quiz';
@@ -76,7 +77,7 @@ function AudienceApp() {
     quizTimer.setTimerState(state.timerState);
   };
 
-  useSyncState({
+  const { wsSend, subscribeToWsMessage } = useSyncState({
     isControlMode: false,
     isPresenterMode: false,
     clientIdRef,
@@ -104,6 +105,9 @@ function AudienceApp() {
     setAudioSyncMaps: () => {},
     setQuizState: applyRemoteQuizState,
   });
+
+  const liveAudioAvailability = useLiveAudioAvailability();
+  const LiveAudioContainer = useMemo(() => React.lazy(() => import('./features/liveAudio/components/audience/LiveAudioAudienceContainer')), []);
 
   const { getActiveBackground } = useBackgroundResolver({
     currentPresentation, currentSlideIndex, backgroundLock, lockedBackgroundValue, userSelectedBackground, scriptureState,
@@ -172,6 +176,14 @@ function AudienceApp() {
         quizTimerState={quizTimer.timerState}
         quizMaxBaseCentipunts={maxBaseCentipunts}
       />
+      <React.Suspense fallback={null}>
+        <LiveAudioContainer
+          availability={liveAudioAvailability.availability}
+          wsSend={wsSend}
+          subscribeToWsMessage={subscribeToWsMessage}
+          clientId={clientIdRef.current}
+        />
+      </React.Suspense>
       <div className="fixed bottom-2 right-2 z-50 opacity-50 hover:opacity-100 transition-opacity">
         <DataProtectionLink className="text-[10px] text-white/70 hover:text-white flex items-center gap-1" />
       </div>
