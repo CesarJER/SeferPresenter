@@ -94,7 +94,11 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
   delivery, guaranteed cleanup after audience rejoin grace, participant
   snapshot lookup for token refresh, and succession.
 - `makeSyncMessage` - `src/utils/syncProtocol.ts`: message envelope creation.
-- `server/local-server.mjs`: SSE/API mirroring for state, commands, media telemetry, quiz events, assets, persistence.
+- `reduceProjectionCommand` / `makeProjectionSyncStateMessage` -
+  `server/projection-state-reducer.mjs`: pure backend-consumable reduction of
+  supported projection `REMOTE_COMMAND` payloads into canonical `SYNC_STATE`.
+- `server/local-server.mjs`: SSE/API mirroring for state, backend reduction of
+  projection commands, media telemetry, quiz events, assets, persistence.
 - `server/ws-server.mjs`: WebSocket `/ws` server for F2 audio timeline messages.
 - `server/livekit-server.mjs`: optional Fase 5.4/5.11 LiveKit self-hosted
   status, token, refresh-token, and moderation endpoints with memory-only state

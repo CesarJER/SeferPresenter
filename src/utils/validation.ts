@@ -928,6 +928,17 @@ export const validateSyncMessage = (value: unknown): ValidationResult<BroadcastM
       // Basic semantic checks on known commands
       const payload = value.payload as Record<string, unknown>;
       switch (payload.command) {
+        case 'SELECT_PRESENTATION_AND_SLIDE':
+          if (payload.presentation !== null && !isRecord(payload.presentation)) baseErrors.push('presentation debe ser objeto o null');
+          if (!isFiniteNumber(payload.slideIndex)) baseErrors.push('slideIndex debe ser numero');
+          if (payload.direction !== undefined && payload.direction !== 'forward' && payload.direction !== 'backward') {
+            baseErrors.push('direction debe ser forward o backward');
+          }
+          if (payload.targetVerse !== undefined && typeof payload.targetVerse !== 'string') baseErrors.push('targetVerse debe ser texto');
+          break;
+        case 'SELECT_STEP':
+          if (!Number.isInteger(payload.stepIndex) || (payload.stepIndex as number) < 0) baseErrors.push('stepIndex debe ser entero >= 0');
+          break;
         case 'TOGGLE_APP_MODE':
           if (!appModes.has(payload.mode as string)) baseErrors.push(`Modo invalido: ${payload.mode}`);
           break;
@@ -940,11 +951,38 @@ export const validateSyncMessage = (value: unknown): ValidationResult<BroadcastM
         case 'QUIZ_SELECT_SUBSLIDE':
           if (!Number.isInteger(payload.index) || (payload.index as number) < 0) baseErrors.push('index debe ser entero >= 0');
           break;
+        case 'QUIZ_ADJUST_TIMER':
+          if (!isFiniteNumber(payload.seconds) || (payload.seconds as number) < 1) baseErrors.push('seconds debe ser numero >= 1');
+          break;
+        case 'QUIZ_DEMO_SELECT':
+          if (payload.optionId !== null && typeof payload.optionId !== 'string') baseErrors.push('optionId debe ser texto o null');
+          break;
+        case 'SCRIPTURE_PROJECT':
+          if (!isRecord(payload.state)) baseErrors.push('state debe ser objeto');
+          if (
+            payload.navCommand !== undefined &&
+            payload.navCommand !== 'navigate' &&
+            payload.navCommand !== 'next' &&
+            payload.navCommand !== 'previous'
+          ) {
+            baseErrors.push('navCommand debe ser navigate, next o previous');
+          }
+          break;
         case 'SCRIPTURE_ARROW_NAV':
           if (payload.direction !== 'up' && payload.direction !== 'down') baseErrors.push('direction debe ser up o down');
           break;
         case 'SCRIPTURE_BOUNDARY':
           if (payload.direction !== 'next' && payload.direction !== 'previous') baseErrors.push('direction debe ser next o previous');
+          break;
+        case 'UPDATE_FONT_SIZES':
+          if (payload.hebrewFontSize !== undefined && !isFiniteNumber(payload.hebrewFontSize)) baseErrors.push('hebrewFontSize debe ser numero');
+          if (payload.combinedTextBaseSize !== undefined && !isFiniteNumber(payload.combinedTextBaseSize)) baseErrors.push('combinedTextBaseSize debe ser numero');
+          break;
+        case 'VIDEO_STATE_CHANGE':
+          if (payload.state !== null && !isRecord(payload.state)) baseErrors.push('state debe ser objeto o null');
+          break;
+        case 'AUDIO_STATE_CHANGE':
+          if (!isRecord(payload.state)) baseErrors.push('state debe ser objeto');
           break;
       }
     }

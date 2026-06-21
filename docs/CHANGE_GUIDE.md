@@ -44,14 +44,19 @@ Use these checklists before implementing future tasks.
 - For optional Live Audio messages, update `src/types/liveAudio.ts` first and
   add only the message-family union to `src/types/sync.ts`.
 - Update validation in `src/utils/validation.ts`.
-- Emit commands from control wiring in `src/App.tsx`.
-- Handle commands in `App.handleRemoteCommand`.
+- Emit commands from control wiring in `src/App.tsx` / `src/main-control.tsx`.
+- Reduce supported projection commands in `server/projection-state-reducer.mjs`
+  and invoke that reducer from `server/local-server.mjs`.
+- Keep `App.handleRemoteCommand` only for local compatibility or side effects
+  that are not canonical projection state.
 - Apply/broadcast through `src/hooks/useSyncState.ts`.
 - Mirror backend endpoints/SSE in `server/local-server.mjs` only when needed.
 - For backend-owned audio timeline behavior, update `server/timelineManager.mjs` and `server/ws-server.mjs` without mixing it into `currentState`.
 - Do not broadcast high-frequency timer/media ticks through full `SYNC_STATE`.
 - Do not mix Live Audio messages into `SyncStatePayload`,
   `RemoteCommandPayload`, `AudioState`, or `AudioTimelineState`.
+- Do not reintroduce Presenter as the required reducer for Control navigation;
+  Control-to-Audience projection changes must work through backend snapshots.
 
 ## When Editing Live Audio
 
@@ -132,7 +137,9 @@ Use these checklists before implementing future tasks.
 ## Documentation Update Triggers
 
 - `src/types/*`: check `docs/SYMBOL_INDEX.md`, `docs/COMPONENT_OWNERSHIP.md`, and `docs/CHANGE_GUIDE.md`.
-- `src/hooks/useSyncState.ts`, `src/types/sync.ts`, `src/utils/syncProtocol.ts`, `server/local-server.mjs`: check `docs/SYNC_ARCHITECTURE.md`.
+- `src/hooks/useSyncState.ts`, `src/types/sync.ts`,
+  `src/utils/syncProtocol.ts`, `server/projection-state-reducer.mjs`,
+  `server/local-server.mjs`: check `docs/SYNC_ARCHITECTURE.md`.
 - `src/types/liveAudio.ts`: check `docs/SYNC_ARCHITECTURE.md`,
   `docs/SYMBOL_INDEX.md`, `docs/COMPONENT_OWNERSHIP.md`, `docs/CHANGE_GUIDE.md`,
   and `README.md`.

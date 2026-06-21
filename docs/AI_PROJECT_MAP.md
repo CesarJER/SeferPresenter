@@ -21,6 +21,7 @@ Fast map for agents. Use real paths only; this repo does not currently have
 - `server/ws-server.mjs`: WebSocket `/ws` server for backend-owned audio timeline messages.
 - `server/livekit-server.mjs`: optional self-hosted LiveKit token and moderation endpoints with memory-only state.
 - `server/timelineManager.mjs`: isolated audio timeline state and action reducer.
+- `server/projection-state-reducer.mjs`: pure backend-consumable reducer for supported projection `REMOTE_COMMAND` payloads into canonical `SYNC_STATE` state.
 - `src/types/liveAudio.ts`: optional Live Audio protocol contracts and role state types; no LiveKit connection code.
 - `vite.config.ts`: Vite config, development proxy, and multi-entry build inputs.
 
@@ -33,6 +34,7 @@ Fast map for agents. Use real paths only; this repo does not currently have
 - `src/components/shared/`: reusable UI widgets such as auto-resizing text/input and slide previews.
 - `src/hooks/`: stateful behavior for sync, background resolution, media playback, keyboard, URL sync, quiz, Sefer reader, scripture navigation, and the Fase 5.2 crypto-only `usePrivateControlSignals.ts` hook. LiveKit runtime hooks should still live under `src/features/liveAudio/hooks/` when implemented.
 - `src/utils/`: validation, normalization, sync message construction, quiz parsing/scoring, scripture parsing/lookup, media helpers, and Web Crypto helpers.
+- `server/projection-state-reducer.mjs`: projection-state command reducer shared by backend runtime and Vitest.
 - `src/types/`: shared contracts for presentations, sync, audio, quiz, and transliteration.
 - `src/types/liveAudio.ts`: LiveKit-ready but optional Live Audio message contracts, kept separate from presentation sync state.
 - `src/features/liveAudio/`: optional Live Audio runtime module. This is where LiveKit hooks, UI, crypto helpers, and any LiveKit browser SDK imports belong.
@@ -90,11 +92,14 @@ Start with:
 - `src/utils/syncProtocol.ts`
 - `src/utils/validation.ts`
 - `src/hooks/useSyncState.ts`
+- `server/projection-state-reducer.mjs`
 - `src/App.tsx`
 - `server/local-server.mjs`
 - `server/ws-server.mjs` and `server/timelineManager.mjs` when changing backend-owned audio timeline behavior
 
-Prefer typed `REMOTE_COMMAND` messages for operator intent and lightweight telemetry for frequent media/display changes.
+Prefer typed `REMOTE_COMMAND` messages for operator intent. Supported projection
+commands are reduced by the backend, while lightweight telemetry remains for
+frequent media/display changes.
 
 ### Add Or Modify Live Audio
 

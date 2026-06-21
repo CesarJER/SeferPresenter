@@ -10,6 +10,12 @@ import {
   isLiveAudioControlAuthorized,
 } from './ws-server.mjs'
 import { isAuthRequired, hasValidBasicAuth } from './authUtils.mjs'
+import {
+  getDefaultProjectionState,
+  makeProjectionSyncStateMessage,
+  normalizeProjectionState,
+  reduceProjectionCommand,
+} from './projection-state-reducer.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const rootDir = path.resolve(__dirname, '..')
@@ -19,13 +25,10 @@ const staticArgIndex = process.argv.indexOf('--static')
 const staticDir = path.resolve(rootDir, staticArgIndex >= 0 ? process.argv[staticArgIndex + 1] || 'dist' : 'dist')
 const sseHeartbeatMs = 30_000
 
-let currentState = {
-  presentation: null,
-  slideIndex: -1,
-  backgroundLock: false,
-  lockedBackgroundValue: null,
-  userSelectedBackground: null,
-}
+let currentState = makeProjectionSyncStateMessage(getDefaultProjectionState(), {
+  clientId: 'server',
+  origin: 'control',
+})
 
 let clients = new Set()
 let audienceClients = new Set()
@@ -183,6 +186,60 @@ const broadcastQuizAnswer = (body) => {
   writeSseSet(quizClients, body)
 }
 
+const logStateChange = (state) => {
+  console.log(`[SERVER DBG - STATE] clientId=${state.clientId} origin=${state.origin} slideIndex=${state.slideIndex} appMode=${state.appMode} scriptureBook=${state.scriptureState?.bookAbbrevEs || state.scriptureState?.bookEs || ''}`);
+}
+
+const commitState = (state, metadata = {}) => {
+  currentState = makeProjectionSyncStateMessage(state, {
+    clientId: metadata.clientId,
+    origin: metadata.origin,
+    now: metadata.now,
+    messageId: metadata.messageId,
+  })
+  logStateChange(currentState)
+  broadcast(JSON.stringify(currentState))
+  return currentState
+}
+
+const canReduceRemoteCommand = (sourceMeta) => {
+  if (!sourceMeta) return true
+  if (sourceMeta.role !== 'control') return false
+  if (!sourceMeta.controlSessionId) return true
+  return isLiveAudioControlAuthorized(sourceMeta.controlSessionId)
+}
+
+const reduceRemoteCommandMessage = (message, sourceMeta) => {
+  if (!isObjectRecord(message) || message.type !== 'REMOTE_COMMAND') {
+    return { ok: false, status: 400, error: 'Invalid remote command message' }
+  }
+  if (typeof message.clientId !== 'string') {
+    return { ok: false, status: 400, error: 'REMOTE_COMMAND missing clientId' }
+  }
+  if (!canReduceRemoteCommand(sourceMeta)) {
+    return { ok: false, status: 403, error: 'Control is not authorized to mutate projection state' }
+  }
+
+  const now = Date.now()
+  const result = reduceProjectionCommand(currentState, message.payload, {
+    clientId: message.clientId,
+    origin: 'control',
+    now,
+  })
+  if (!result.ok) {
+    return { ok: false, status: 400, error: result.error }
+  }
+
+  return {
+    ok: true,
+    state: commitState(result.state, {
+      clientId: message.clientId,
+      origin: 'control',
+      now,
+    }),
+  }
+}
+
 const heartbeatSseClients = () => {
   writeSseSet(clients, 'heartbeat')
   writeSseSet(audienceClients, 'heartbeat')
@@ -329,9 +386,12 @@ const handleApi = async (req, res, url) => {
         sendJson(res, 400, { error: 'Invalid state payload: missing or invalid clientId or slideIndex' })
         return true
       }
-      console.log(`[SERVER DBG - STATE] clientId=${parsed.clientId} origin=${parsed.origin} slideIndex=${parsed.slideIndex} appMode=${parsed.appMode} scriptureBook=${parsed.scriptureState?.bookAbbrevEs || parsed.scriptureState?.bookEs || ''}`);
-      currentState = parsed
-      broadcast(JSON.stringify(parsed))
+      commitState(normalizeProjectionState(parsed), {
+        clientId: parsed.clientId,
+        origin: parsed.origin === 'presenter' ? 'presenter' : 'control',
+        now: parsed.timestamp,
+        messageId: parsed.messageId,
+      })
       sendJson(res, 200, { success: true })
     } catch (err) {
       sendJson(res, 400, { error: err.message || 'Invalid JSON' })
@@ -343,9 +403,12 @@ const handleApi = async (req, res, url) => {
     try {
       const body = await readBody(req)
       const parsed = JSON.parse(body)
-      // Broadcast the command to all SSE clients without mutating currentState in the backend
-      broadcast(JSON.stringify(parsed))
-      sendJson(res, 200, { success: true })
+      const result = reduceRemoteCommandMessage(parsed)
+      if (!result.ok) {
+        sendJson(res, result.status, { error: result.error })
+        return true
+      }
+      sendJson(res, 200, { success: true, state: result.state })
     } catch (err) {
       sendJson(res, 400, { error: err.message || 'Invalid JSON' })
     }
@@ -597,12 +660,20 @@ const server = http.createServer(async (req, res) => {
   sendJson(res, 404, { error: 'Static file not found' })
 })
 
-const handleWsMessageFromClient = (msg) => {
+const handleWsMessageFromClient = (msg, meta) => {
   if (msg.type === 'SYNC_STATE') {
-    currentState = msg
-    broadcast(JSON.stringify(msg))
+    if (meta?.role === 'control' && !canReduceRemoteCommand(meta)) return
+    commitState(normalizeProjectionState(msg), {
+      clientId: msg.clientId,
+      origin: msg.origin === 'presenter' ? 'presenter' : 'control',
+      now: msg.timestamp,
+      messageId: msg.messageId,
+    })
   } else if (msg.type === 'REMOTE_COMMAND') {
-    broadcast(JSON.stringify(msg))
+    const result = reduceRemoteCommandMessage(msg, meta)
+    if (!result.ok) {
+      console.warn(`[SERVER DBG - COMMAND] rejected clientId=${msg.clientId || ''} role=${meta?.role || 'http'} error=${result.error}`)
+    }
   } else if (msg.type === 'AUDIO_TELEMETRY') {
     currentState = { ...currentState, audioState: msg.audioState }
     broadcast(JSON.stringify(msg))

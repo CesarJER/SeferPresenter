@@ -94,6 +94,9 @@ Library/sync/validation:
   AES-GCM 256, base64 encoding, and nonce replay protection.
 - `src/utils/normalizePresentation.ts`: persistence/path normalization.
 - `src/utils/syncProtocol.ts`: sync message construction.
+- `server/projection-state-reducer.mjs`: pure projection-state reducer used by
+  the backend to turn supported Control `REMOTE_COMMAND` payloads into
+  canonical `SYNC_STATE`.
 - `src/utils/quizUtils.ts`: quiz parsing/scoring/subslides.
 - `src/utils/scriptureLookup.ts`, `scriptureParser.ts`, `metadataCache.ts`: sacred text data.
 - `server/timelineManager.mjs`: backend-owned audio timeline state; keep separate from presenter `currentState`.
@@ -109,7 +112,8 @@ Presentation state:
 Sync-ready state:
 
 - `SyncStatePayload`, `RemoteCommandPayload`, media/display telemetry in `src/types/sync.ts`.
-- Managed by `src/hooks/useSyncState.ts`.
+- Canonical projection state is owned by `server/local-server.mjs`; clients
+  mirror it through `src/hooks/useSyncState.ts`.
 - Includes current presentation, slide index, background lock/override, media state, app mode, scripture state, and quiz sync state.
 - `AudioTimelineState` is backend-owned in `server/timelineManager.mjs`; do not merge it into `App.tsx` state just to expose `/ws`.
 
@@ -160,7 +164,8 @@ Live Audio state:
 ## Prop Rules
 
 - Presenter components should receive display-ready data where possible.
-- Presenter components may emit media telemetry, but should not own operator navigation.
+- Presenter components may emit media telemetry, but should not own operator
+  navigation or reduce Control commands into canonical projection state.
 - Control components may receive editing and navigation callbacks.
 - Shared components should not know whether they are used by presenter, control, or audience.
 - Audience UI must not expose presenter/control actions.

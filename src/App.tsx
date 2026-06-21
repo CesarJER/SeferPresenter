@@ -237,12 +237,6 @@ function App() {
   }, [activeQuizData?.timerSeconds, activeSlide, quizTimer.resetTimer, quizTimer.setTimerState]);
 
   useEffect(() => {
-    if (isPresenterMode && quizSubslides[quizCurrentSubslideIndex]?.kind === 'pregunta' && quizTimer.timerState.status === 'idle') {
-      quizTimer.startTimer();
-    }
-  }, [isPresenterMode, quizSubslides, quizCurrentSubslideIndex, quizTimer.timerState.status, quizTimer.startTimer]);
-
-  useEffect(() => {
     currentPresentationRef.current = currentPresentation;
     currentSlideIndexRef.current = currentSlideIndex;
     currentStepIndexRef.current = currentStepIndex;
@@ -409,22 +403,6 @@ function App() {
   const { serverNow } = useServerClock(wsSend, wsStatus, subscribeToWsMessage);
   useAudioTimeline(audioTimeline, serverNow, wsSend);
   useAudioTimelineApplicator(audioRef, audioTimeline, serverNow);
-
-  useEffect(() => {
-    if (!isPresenterMode) return;
-    syncState({
-      presentation: currentPresentationRef.current,
-      slideIndex: currentSlideIndexRef.current,
-      bgLock: backgroundLockRef.current,
-      lockedBg: lockedBackgroundValueRef.current,
-      userSelectedBg: userSelectedBackgroundRef.current,
-      videoState: videoStateRef.current,
-      appMode: appModeRef.current,
-      scriptureState: scriptureStateRef.current,
-      audioState: audioStateRef.current,
-      quizState: activeQuizState,
-    });
-  }, [isPresenterMode, activeQuizState, syncState]);
 
   const { getActiveBackground, handleToggleBackgroundLock, handleSelectBackgroundOverride } = useBackgroundResolver({
     currentPresentation, currentSlideIndex, backgroundLock,

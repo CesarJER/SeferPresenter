@@ -93,7 +93,7 @@ const PresenterScreen: React.FC<PresenterScreenProps> = ({
 
   // 2. Slide change listener: Setup dedicated slide video when slide transitions
   const mediaSrc = slide?.type === 'media' ? slide.mediaSrc : null;
-  
+
   // 2A. Initialization: Load video and set start time (only when slide or media source changes)
   useEffect(() => {
     if (!videoElement || !slide || slide.type !== 'media' || !mediaSrc) return;
@@ -264,7 +264,7 @@ const PresenterScreen: React.FC<PresenterScreenProps> = ({
   const presenterNavVisible = !(isVideoSlide || isPhotoSlide) || slide?.mediaPresenterNav !== false;
   const isResultsSlide = isQuizSlide && quizSubslides?.[quizCurrentSubslideIndex]?.kind === 'results';
   const hideLyricsOverlay = isPhotoSlide || isVideoSlide || isQuizSlide;
-  
+
 
   return (
     <div className="relative h-full w-full overflow-hidden bg-slate-950 text-white">
@@ -356,7 +356,7 @@ const PresenterScreen: React.FC<PresenterScreenProps> = ({
                           {slide.lines.map((line, idx) => (
                             <section
                               key={idx}
-                              className="glass-panel flex min-h-0 min-h-[12vh] flex-1 flex-col px-[3vw] py-[2.4vh]"
+                              className="glass-panel flex min-h-[12vh] flex-1 flex-col px-[3vw] py-[2.4vh]"
                             >
                               <div className="flex-1 overflow-hidden">
                                 <AutoResizeText
@@ -364,10 +364,10 @@ const PresenterScreen: React.FC<PresenterScreenProps> = ({
                                   html={true}
                                   fontScale={fontScale}
                                   className={`drop-shadow-2xl font-semibold ${idx === 0
-                                      ? 'hebrew-text text-[#f3c96a] text-[calc(clamp(1.8rem,4vw,5.8rem)*var(--font-scale))]'
-                                      : idx === 1
-                                        ? 'text-sky-200 text-[calc(clamp(1.2rem,2.2vw,3rem)*var(--font-scale))]'
-                                        : 'text-white text-[calc(clamp(1rem,2vw,2.6rem)*var(--font-scale))]'
+                                    ? 'hebrew-text text-[#f3c96a] text-[calc(clamp(1.8rem,4vw,5.8rem)*var(--font-scale))]'
+                                    : idx === 1
+                                      ? 'text-sky-200 text-[calc(clamp(1.2rem,2.2vw,3rem)*var(--font-scale))]'
+                                      : 'text-white text-[calc(clamp(1rem,2vw,2.6rem)*var(--font-scale))]'
                                     }`}
                                 />
                               </div>
@@ -375,7 +375,7 @@ const PresenterScreen: React.FC<PresenterScreenProps> = ({
                           ))}
                         </div>
                       ) : (
-                        <section className="glass-panel flex min-h-0 min-h-[40vh] w-full flex-1 flex-col px-[4vw] py-[5vh]">
+                        <section className="glass-panel flex min-h-[40vh] w-full flex-1 flex-col px-[4vw] py-[5vh]">
                           <div className="flex-1 overflow-hidden">
                             <AutoResizeText
                               text={slide.lines[0]}

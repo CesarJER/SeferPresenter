@@ -888,7 +888,7 @@ const createWsServer = (httpServer, onFallbackMessage) => {
         case 'DISPLAY_TELEMETRY':
           if (meta?.role === 'audience') break
           if (onFallbackMessage) {
-            onFallbackMessage(msg)
+            onFallbackMessage(msg, meta)
           }
           break
 
@@ -935,7 +935,7 @@ const createWsServer = (httpServer, onFallbackMessage) => {
         case 'DISPLAY_TELEMETRY':
           if (meta?.role === 'audience') break
           if (onFallbackMessage) {
-            onFallbackMessage(msg)
+            onFallbackMessage(msg, meta)
           }
           break
 

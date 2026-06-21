@@ -11,9 +11,13 @@ The app uses two sync paths:
 - LAN/backend-ready mode: WebSocket at `/ws` is preferred for sending `SYNC_STATE` and `REMOTE_COMMAND` when the connection is open, falling back to HTTP POST endpoints (which broadcast updates via Server-Sent Events (SSE) in `server/local-server.mjs`).
 - Server audio timeline: WebSocket at `/ws`, attached by `server/ws-server.mjs`.
 
-Presenter is the practical source of truth for projected state. Control usually
-emits a `REMOTE_COMMAND`; presenter applies that command and then broadcasts
-state or telemetry.
+The backend is the practical source of truth for projected state. Control emits
+a `REMOTE_COMMAND`; `server/local-server.mjs` validates and reduces supported
+presentation commands through `server/projection-state-reducer.mjs`, updates
+`currentState`, logs the resulting `origin=control` state change, and broadcasts
+the updated `SYNC_STATE`. Presenter applies backend state as a display client.
+Presenter may still emit real media telemetry from its DOM media elements, but
+it is not required for Control-to-Audience navigation.
 
 The local backend keeps SSE connections alive with `data: heartbeat\n\n` every
 30 seconds on `/api/state-events`, `/api/audience/events`, and
@@ -23,12 +27,15 @@ client sets, and failed SSE writes are dropped from future broadcasts.
 Main message types live in `src/types/sync.ts`:
 
 - `SYNC_STATE`: full state needed to initialize or resynchronize clients.
-- `REMOTE_COMMAND`: operator intent sent from control to presenter (commands should send explicit desired state, not simple toggles, to avoid split-brain).
+- `REMOTE_COMMAND`: operator intent sent from control to the backend reducer
+  (commands should send explicit desired state, not simple toggles, to avoid
+  split-brain).
 - `AUDIO_TELEMETRY`: lightweight audio playback updates.
 - `VIDEO_TELEMETRY`: lightweight video playback updates.
 - `DISPLAY_TELEMETRY`: background lock/override updates.
 - `AUDIO_SYNC_MAPS_UPDATE`: audio cue map updates.
-- `REQUEST_STATE`: non-presenter clients ask presenter for current state.
+- `REQUEST_STATE`: clients ask for a fresh backend snapshot; clients also fetch
+  `/api/state` directly on startup.
 - Live Audio family: optional LiveKit-ready technical messages that stay
   outside `SYNC_STATE` and existing `REMOTE_COMMAND` payloads.
 
@@ -264,14 +271,16 @@ Keep these local unless another device/mode must observe them.
 
 ## Backend-Ready Direction
 
-Current inference: the backend is intentionally small and mirrors browser state
-for LAN/mobile use. The code appears designed so future online/mobile remote
-control can replace or extend the local server without changing every component.
+Current inference: the backend owns canonical projected state for LAN/mobile
+use. Browser clients still mirror and render state locally, but supported
+Control commands are reduced in the backend before being broadcast as
+`SYNC_STATE`.
 
 Backend-owned or backend-mirrored pieces:
 
 - `/api/state` and `/api/state-events`
-- `/api/command`
+- `/api/command`, which reduces supported `REMOTE_COMMAND` payloads into
+  canonical `SYNC_STATE`
 - `/api/audio-telemetry`
 - `/api/video-telemetry`
 - `/api/display-telemetry`
@@ -328,14 +337,18 @@ Synchronization protocol:
 - Message construction in `src/utils/syncProtocol.ts`.
 - Validation in `src/utils/validation.ts`.
 - Application/broadcast in `src/hooks/useSyncState.ts`.
+- Backend reduction of supported projection commands in
+  `server/projection-state-reducer.mjs`, invoked by `server/local-server.mjs`.
   WebSocket timeline state is owned separately by `server/timelineManager.mjs`.
 
 ## Where To Modify Sync Code
 
 - Add command or payload type: `src/types/sync.ts`.
 - Validate payload: `src/utils/validation.ts`.
-- Emit from control: `src/App.tsx` prop wiring.
-- Apply in presenter: `App.handleRemoteCommand`.
+- Emit from control: `src/App.tsx` / `src/main-control.tsx` prop wiring.
+- Reduce presentation-state commands in `server/projection-state-reducer.mjs`
+  through `server/local-server.mjs`.
+- Apply in presenter only for local side effects that are not canonical state.
 - Broadcast/apply/persist: `src/hooks/useSyncState.ts`.
 - Manage WebSocket connection: [useWebSocket.ts](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useWebSocket.ts).
 - Add optional Live Audio contracts: `src/types/liveAudio.ts`, then expose the
@@ -348,7 +361,8 @@ Synchronization protocol:
 - Synchronize server clock offset and RTT: [useServerClock.ts](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useServerClock.ts).
 - Track and dispatch audio timeline actions: [useAudioTimeline.ts](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useAudioTimeline.ts).
 - Apply timeline changes to presenter's audio element: [useAudioTimelineApplicator.ts](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useAudioTimelineApplicator.ts).
-- Mirror over network: `server/local-server.mjs`.
+- Mirror over network and own canonical projection state:
+  `server/local-server.mjs`.
 - Add backend-owned audio timeline behavior: `server/timelineManager.mjs` and `server/ws-server.mjs`.
 - Add optional LiveKit backend behavior: `server/livekit-server.mjs` and
   registration in `server/local-server.mjs`.
@@ -360,7 +374,7 @@ Synchronization protocol:
 - Do not mix temporary UI state with presentation state.
 - Do not broadcast frequent media progress or countdown ticks through full `SYNC_STATE`.
 - Do not let audience controls mutate presenter/control navigation.
-- Do not make server command handling mutate `currentState` unless that endpoint is intended to own state.
+- Do not bypass the backend reducer for supported presentation-state commands.
 - Do not add consent fields or endpoints to Live Audio contracts; privacy notice
   UI remains local and must not create persisted acceptance records.
 - Do not add `/accept-consent`, `/consent`, `/alias`, or readable chat endpoints.

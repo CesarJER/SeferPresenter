@@ -25,7 +25,7 @@ only the owner files for the task.
 
 - Preserve the refactored folder structure. Do not collapse logic back into `App.tsx`, `MenuPopup.tsx`, or `PresenterScreen.tsx`.
 - `App.tsx` may coordinate state and route wiring, but reusable behavior belongs in `src/hooks/`, pure logic in `src/utils/`, contracts in `src/types/`, and UI in the relevant `src/components/*/` folder.
-- Presenter is the live source of truth for projected state. Control usually emits `REMOTE_COMMAND`; presenter applies it and broadcasts state/telemetry.
+- The local backend is the live source of truth for projected state. Control emits `REMOTE_COMMAND`; supported projection commands are reduced in `server/projection-state-reducer.mjs` through `server/local-server.mjs` and broadcast as `SYNC_STATE`. Presenter displays backend state and may emit real media telemetry, but must not be required for Control-to-Audience navigation.
 - Audience mode is read-only for projection controls. Audience quiz answers are separate from presenter demo/correction state.
 - Validate and normalize anything loaded from APIs, localStorage, JSON imports, or sync messages.
 - Keep media/display telemetry lightweight. Avoid pushing high-frequency or large payloads through full state sync.

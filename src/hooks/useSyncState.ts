@@ -90,6 +90,15 @@ const liveAudioWsOnlyTypes = new Set([
 const isLiveAudioWsOnlyType = (type: unknown): type is string =>
   typeof type === 'string' && liveAudioWsOnlyTypes.has(type);
 
+const presenterSideEffectCommands = new Set<RemoteCommandPayload['command']>([
+  'QUIZ_PLAY_APPLAUSE',
+  'QUIZ_PLAY_MAL',
+  'SCRIPTURE_ADD_SLIDE',
+]);
+
+const isPresenterSideEffectCommand = (payload: RemoteCommandPayload) =>
+  presenterSideEffectCommands.has(payload.command);
+
 const arePresentationsEqual = (left: Presentation | null, right: Presentation | null) => {
   if (left === right) return true;
   if (!left || !right) return false;
@@ -524,6 +533,38 @@ export function useSyncState(props: UseSyncStateProps) {
     setAudioSyncMapsRef.current = setAudioSyncMaps;
   }, [applyRemoteState, onRemoteCommand, applyAudioTelemetry, applyDisplayTelemetry, setVideoState, setAudioSyncMaps]);
 
+  const requestBackendState = useCallback(async () => {
+    try {
+      const response = await fetch('/api/state', {
+        method: 'GET',
+        headers: { Accept: 'application/json' },
+        cache: 'no-store',
+      });
+      if (!response.ok) return false;
+      const data = await response.json();
+      if (!data) return false;
+
+      if (data.type) {
+        const validation = validateSyncMessage(data);
+        if (!validation.ok || !validation.value) {
+          console.error('Ignoring invalid backend state snapshot', validation.errors);
+          return false;
+        }
+        const safeData = validation.value;
+        if (safeData.type === 'SYNC_STATE') {
+          applyRemoteStateRef.current(safeData as unknown as Record<string, unknown>, true, true);
+          return true;
+        }
+      }
+
+      applyRemoteStateRef.current(data as Record<string, unknown>);
+      return true;
+    } catch (err) {
+      console.error('Error requesting backend state snapshot', err);
+      return false;
+    }
+  }, []);
+
   // ── BroadcastChannel listener ─────────────────────────────────────
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
@@ -571,25 +612,15 @@ export function useSyncState(props: UseSyncStateProps) {
       }
 
       if (data.type === 'REQUEST_STATE') {
-        if (!isPresenterMode) return; // only presenter responds
-        syncState({
-          presentation: currentPresentationRef.current,
-          slideIndex: currentSlideIndexRef.current,
-          bgLock: backgroundLockRef.current,
-          lockedBg: lockedBackgroundValueRef.current,
-          userSelectedBg: userSelectedBackgroundRef.current,
-          videoState: videoStateRef.current,
-          appMode: appModeRef.current,
-          scriptureState: scriptureStateRef.current,
-          audioState: audioStateRef.current,
-          quizState: quizStateRef?.current ?? null,
-        });
+        void requestBackendState();
         return;
       }
 
       if (data.type === 'REMOTE_COMMAND') {
-        if (!isPresenterMode) return; // only presenter processes commands
-        onRemoteCommandRef.current?.(data.payload as RemoteCommandPayload);
+        const payload = data.payload as RemoteCommandPayload;
+        if (isPresenterMode && isPresenterSideEffectCommand(payload)) {
+          onRemoteCommandRef.current?.(payload);
+        }
         return;
       }
 
@@ -600,14 +631,15 @@ export function useSyncState(props: UseSyncStateProps) {
 
     channel.addEventListener('message', handleMessage);
 
-    // Clients ask for current state on open (except Presenter, who is the source of truth)
-    if (!isPresenterMode) {
-      channel.postMessage(makeSyncMessage({ type: 'REQUEST_STATE', clientId: clientIdRef.current }));
-    }
+    void requestBackendState().then((loaded) => {
+      if (!loaded) {
+        channel.postMessage(makeSyncMessage({ type: 'REQUEST_STATE', clientId: clientIdRef.current }));
+      }
+    });
 
     return () => channel.removeEventListener('message', handleMessage);
   }, [
-    isPresenterMode, channel, clientIdRef, syncState
+    isPresenterMode, channel, clientIdRef, requestBackendState, videoStateRef
   ]);
 
   // ── SSE listener (web mode only) ──────────────────────────────────
@@ -618,7 +650,7 @@ export function useSyncState(props: UseSyncStateProps) {
       try {
         if (event.data === 'heartbeat') return;
         const data = JSON.parse(event.data);
-        if (!data || data.clientId === clientIdRef.current) return;
+        if (!data) return;
 
         if (data.type) {
           const validation = validateSyncMessage(data);
@@ -657,8 +689,10 @@ export function useSyncState(props: UseSyncStateProps) {
           }
 
           if (safeData.type === 'REMOTE_COMMAND') {
-            if (!isPresenterMode) return;
-            onRemoteCommandRef.current?.(safeData.payload as RemoteCommandPayload);
+            const payload = safeData.payload as RemoteCommandPayload;
+            if (isPresenterMode && isPresenterSideEffectCommand(payload)) {
+              onRemoteCommandRef.current?.(payload);
+            }
             return;
           }
 
@@ -674,7 +708,7 @@ export function useSyncState(props: UseSyncStateProps) {
 
     return () => eventSource.close();
   }, [
-    clientIdRef, isPresenterMode
+    clientIdRef, isPresenterMode, videoStateRef
   ]);
 
   return { channel, syncState, emitCommand, persistState, emitAudioTelemetry, emitVideoTelemetry, emitDisplayTelemetry, wsStatus, wsSend, subscribeToWsMessage };

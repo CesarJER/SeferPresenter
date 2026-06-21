@@ -55,9 +55,12 @@ El backend local vive en `server/local-server.mjs`. Mantiene inicialmente la mis
 - `POST /api/livekit/kick-participant`
 
 El backend tambien adjunta WebSocket en `ws://localhost:8787/ws`. En Fase 2
-ese canal solo es propietario de la timeline de audio del servidor:
+ese canal es propietario de la timeline de audio del servidor:
 `WELCOME`, `SERVER_TIME_PING/PONG`, `AUDIO_TIMELINE_ACTION` y
-`AUDIO_TIMELINE_STATE`. SSE y los endpoints HTTP existentes siguen activos.
+`AUDIO_TIMELINE_STATE`. Ademas, los `REMOTE_COMMAND` de Control soportados se
+reducen en el backend a `SYNC_STATE`, por lo que Control y Audiencia pueden
+sincronizar navegacion sin requerir que `/presenter` este abierto. SSE y los
+endpoints HTTP existentes siguen activos.
 
 En desarrollo, `npm run dev` arranca el backend local y Vite juntos. Vite proxya `/api` a `http://localhost:8787`. Si arrancas solo `npm run dev:frontend`, debes tener `npm run dev:backend` abierto en otra terminal. Para pruebas locales estables, ejecuta `npm run build` y despues `npm run start:local`.
 
@@ -112,11 +115,15 @@ La aplicacion se organiza por consumidor:
 ## Sincronizacion
 
 La sincronizacion usa `BroadcastChannel` para pestanas locales, SSE/API para red
-local y WebSocket para la timeline de audio backend-owned.
+local y WebSocket para la timeline de audio backend-owned. El estado canonico de
+proyeccion vive en el backend local; Presenter lo muestra, pero no es requerido
+como fuente funcional para comandos de Control.
 
 Canales principales:
 
 - `SYNC_STATE`: navegacion y estado completo necesario para inicializacion.
+- `REMOTE_COMMAND`: intencion de Control reducida por el backend para comandos
+  de proyeccion soportados.
 - `AUDIO_TELEMETRY`: estado ligero de reproduccion de audio.
 - `VIDEO_TELEMETRY`: estado ligero de reproduccion de video.
 - `DISPLAY_TELEMETRY`: cambios de fondo, override y candado.
