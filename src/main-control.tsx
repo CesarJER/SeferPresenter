@@ -328,9 +328,17 @@ function ControlApp() {
         onQuizPlayApplause={() => emitCommand({ command: 'QUIZ_PLAY_APPLAUSE' })}
         onQuizPlayMal={() => emitCommand({ command: 'QUIZ_PLAY_MAL' })}
         onQuizAdjustTimer={(seconds) => emitCommand({ command: 'QUIZ_ADJUST_TIMER', seconds })}
+        controlAuthorization={{
+          role: controlAuthorization.controlState === 'PRINCIPAL' ? 'principal' : 
+                controlAuthorization.controlState === 'AUTHORIZED' ? 'delegated' : 'pending',
+          verificationCode: controlAuthorization.verificationCode ?? undefined,
+          pendingControls: controlAuthorization.pendingControls
+        }}
+        onApproveControlRequest={controlAuthorization.approveControl}
+        onRejectControlRequest={controlAuthorization.rejectControl}
       />
-      <div className="absolute bottom-2 right-2 z-50">
-        <DataProtectionLink className="text-xs text-gray-500 hover:text-gray-300 flex items-center gap-1 transition-colors" />
+      <div className="absolute bottom-2 left-2 z-50">
+        <DataProtectionLink />
       </div>
       <div className="absolute top-2 right-2 z-50">
         <LiveAudioControlAuthorization authorization={controlAuthorization} />

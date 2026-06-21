@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState, useRef } from 'react';
+import React, { useCallback, useEffect, useState, useRef, Suspense, lazy } from 'react';
 import type { Presentation, QuizData, Slide, VideoState, AppMode, ScriptureNavState } from '../../types/presentation';
 import type { SeferReaderState } from '../../hooks/useSeferReader';
 import { transliterateText } from '../../utils/transliterate';
@@ -16,6 +16,9 @@ import { PresentationEditor } from './PresentationEditor';
 import { CustomSearchSelect } from '../shared/CustomSearchSelect';
 import type { AudioState, AudioSyncMap } from '../../types/audio';
 import type { QuizOptionId, QuizSubslide, QuizTimerState } from '../../types/quiz';
+import type { PendingControlAuthorization } from '../../types/liveAudio';
+
+const LiveAudioControlContainer = lazy(() => import('../../features/liveAudio/components/control/LiveAudioControlContainer'));
 import { useControllerAnswers } from '../../hooks/useQuizAnswers';
 import { QuizControllerView } from '../quiz/QuizControllerView';
 import {
@@ -70,6 +73,9 @@ interface MenuPopupProps {
   onQuizPlayApplause?: () => void;
   onQuizPlayMal?: () => void;
   onQuizAdjustTimer?: (seconds: number) => void;
+  controlAuthorization?: { role: string; verificationCode?: string; pendingControls?: PendingControlAuthorization[]; };
+  onApproveControlRequest?: (sessionId: string) => void;
+  onRejectControlRequest?: (sessionId: string) => void;
 }
 
 const isTitleSlide = (slide: Slide) =>
@@ -139,6 +145,9 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
   onQuizPlayApplause = () => { },
   onQuizPlayMal = () => { },
   onQuizAdjustTimer = () => { },
+  controlAuthorization,
+  onApproveControlRequest,
+  onRejectControlRequest,
 }) => {
   const controllerAnswers = useControllerAnswers();
   // ────────────────────────────────────────────────────────────────
@@ -1396,6 +1405,9 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
           <span>Gestor de Presentaciones</span>
         </h2>
         <div className="flex items-center gap-2">
+          {/* Live Audio Inbox Portal Target */}
+          <div id="live-audio-inbox-portal-target" className="relative flex items-center z-50"></div>
+
           {/* Music Controller Button */}
           <button
             type="button"
@@ -1865,6 +1877,17 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
           </div>
         </div>
       )}
+
+      {/* Live Audio Control Container */}
+      <Suspense fallback={null}>
+        <LiveAudioControlContainer 
+          isControlAuthorized={controlAuthorization?.role === 'principal' || controlAuthorization?.role === 'delegated'}
+          totalAudience={0}
+          authorizationRequests={controlAuthorization?.pendingControls || []}
+          onApproveRequest={onApproveControlRequest}
+          onRejectRequest={onRejectControlRequest}
+        />
+      </Suspense>
     </div>
   );
 };
