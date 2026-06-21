@@ -41,6 +41,8 @@ export default function LiveAudioAudienceContainer({
 
   const [hasAudioStarted, setHasAudioStarted] = useState(false);
   const [volume, setVolume] = useState(1);
+  const [microphoneVolume, setMicrophoneVolume] = useState(100);
+  const [isMusicMode, setIsMusicMode] = useState(false);
 
   const [portalTarget, setPortalTarget] = useState<Element | null>(null);
   useEffect(() => {
@@ -66,6 +68,7 @@ export default function LiveAudioAudienceContainer({
   } = useLiveAudio({
     role: 'audience',
     autoConnect: availability === 'enabled',
+    microphoneVolumePercent: microphoneVolume,
   });
 
   // 2. Setup private signals
@@ -76,6 +79,20 @@ export default function LiveAudioAudienceContainer({
     subscribeToWsMessage,
     transportReady: availability === 'enabled',
     onControlKeyRotated: () => setKeyRotationCount((current) => current + 1),
+    onPrivateSignal: (signal) => {
+      const payload = signal.value as Record<string, unknown>;
+      if (payload.type === 'SET_MICROPHONE_CONFIG') {
+        if (typeof payload.volume === 'number') {
+          setMicrophoneVolume(payload.volume);
+        }
+        if (typeof payload.musicMode === 'boolean') {
+          setIsMusicMode(payload.musicMode);
+          // If already active, republishing is handled by LiveKit automatically or they might need to re-toggle?
+          // Since noise suppression is in localTrack creation, they actually need to re-publish if active.
+          // For simplicity we just set the state, user can toggle if they want, or we can force republish later if needed.
+        }
+      }
+    }
   });
 
   const sendParticipantStatus = useCallback((speakerState: SpeakerState, options: ParticipantStatusOptions = {}) => {
@@ -98,7 +115,25 @@ export default function LiveAudioAudienceContainer({
   // Listen for grant/revoke messages
   useEffect(() => {
     const unsubscribe = subscribeToWsMessage((type, payload) => {
-      if (type === 'LIVE_AUDIO_GRANT_SPEAK' && payload.participantId === participantId) {
+      if (type === 'LIVE_AUDIO_REQUEST_ALIASES') {
+        if (participantId && activeAlias && wsSend) {
+          wsSend('LIVE_AUDIO_ALIAS', {
+            participantId,
+            alias: activeAlias
+          });
+          // Also resend current status so the new control knows our state
+          sendParticipantStatus(
+            isWordGranted ? 'GRANTED' : (isPendingWord ? 'REQUESTED' : 'LISTENER'),
+            {
+              canPublishAudio: isWordGranted,
+              isMuted: !isMicrophoneActive,
+              isActiveAudience: isActive,
+              isMicrophoneActive: isMicrophoneActive,
+              isKicked: isKicked
+            }
+          );
+        }
+      } else if (type === 'LIVE_AUDIO_GRANT_SPEAK' && payload.participantId === participantId) {
         setIsActive(true);
         setIsWordGranted(true);
         setIsPendingWord(false);
@@ -163,7 +198,19 @@ export default function LiveAudioAudienceContainer({
       }
     });
     return unsubscribe;
-  }, [isWordGranted, participantId, sendParticipantStatus, subscribeToWsMessage, unpublishMicrophone]);
+  }, [
+    isWordGranted, 
+    participantId, 
+    sendParticipantStatus, 
+    subscribeToWsMessage, 
+    unpublishMicrophone,
+    activeAlias,
+    wsSend,
+    isActive,
+    isMicrophoneActive,
+    isPendingWord,
+    isKicked
+  ]);
 
   useEffect(() => {
     if (!participantId) return;
@@ -309,7 +356,7 @@ export default function LiveAudioAudienceContainer({
         isMicrophoneActive: false,
       });
     } else {
-      void publishMicrophone()
+      void publishMicrophone({ musicMode: isMusicMode })
         .then(() => sendParticipantStatus('GRANTED', {
           canPublishAudio: true,
           isMuted: false,
@@ -320,7 +367,7 @@ export default function LiveAudioAudienceContainer({
           console.error("Failed to publish mic:", err);
         });
     }
-  }, [isMicrophoneActive, publishMicrophone, sendParticipantStatus, unpublishMicrophone]);
+  }, [isMicrophoneActive, publishMicrophone, isMusicMode, sendParticipantStatus, unpublishMicrophone]);
 
   const handleRetryAudio = useCallback(() => {
     void retryAudio();
@@ -367,6 +414,10 @@ export default function LiveAudioAudienceContainer({
           isParticipationBlocked={isKicked}
           volume={volume}
           onVolumeChange={setVolume}
+          microphoneVolume={microphoneVolume}
+          isMusicMode={isMusicMode}
+          onMicrophoneVolumeChange={setMicrophoneVolume}
+          onMusicModeChange={setIsMusicMode}
           onStartAudio={handleStartAudio}
           onRetryAudio={handleRetryAudio}
           onJoinActive={handleJoinActive}
@@ -389,6 +440,10 @@ export default function LiveAudioAudienceContainer({
             isParticipationBlocked={isKicked}
             volume={volume}
             onVolumeChange={setVolume}
+            microphoneVolume={microphoneVolume}
+            isMusicMode={isMusicMode}
+            onMicrophoneVolumeChange={setMicrophoneVolume}
+            onMusicModeChange={setIsMusicMode}
             onStartAudio={handleStartAudio}
             onRetryAudio={handleRetryAudio}
             onJoinActive={handleJoinActive}

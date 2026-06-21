@@ -36,7 +36,7 @@ interface UseLiveAudioResult {
   participantIdentity: string | null;
   isMicrophoneActive: boolean;
   startRemoteAudio: () => Promise<void>;
-  publishMicrophone: () => Promise<void>;
+  publishMicrophone: (options?: { musicMode?: boolean }) => Promise<void>;
   unpublishMicrophone: () => Promise<void>;
   retryAudio: () => Promise<void>;
   disconnect: () => void;
@@ -346,7 +346,7 @@ export const useLiveAudio = ({
     }, delayMs);
   }, []);
 
-  const publishMicrophone = useCallback(async () => {
+  const publishMicrophone = useCallback(async (options?: { musicMode?: boolean }) => {
     if (!canRolePublish(role)) {
       throw new Error('This Live Audio role cannot publish microphone audio');
     }
@@ -365,7 +365,11 @@ export const useLiveAudio = ({
           throw new Error('Live Audio room is not connected after permission refresh');
         }
       }
-      const localTrack = await createLocalAudioTrack();
+      const localTrack = await createLocalAudioTrack({
+        echoCancellation: true,
+        noiseSuppression: !options?.musicMode,
+        autoGainControl: !options?.musicMode,
+      });
       const audioContext = createBrowserAudioContext();
       if (audioContext) {
         try {

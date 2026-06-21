@@ -59,11 +59,13 @@ const liveAudioMessageTypes = new Set([
   'LIVE_AUDIO_CONTROL_AUTHORIZATION_DECISION',
   'CONTROL_KEY_ROTATED',
   'PRIVATE_CONTROL_SIGNAL',
+  'LIVE_AUDIO_REQUEST_ALIASES',
 ]);
 const privateControlSignalAllowedKeys = new Set([
   'type',
   'fromParticipantId',
   'toControlSessionId',
+  'toParticipantId',
   'keyId',
   'ephemeralPublicKey',
   'ciphertext',
@@ -122,6 +124,9 @@ const validatePrivateControlSignalValue = (
   validateParticipantId(msg.fromParticipantId, 'PRIVATE_CONTROL_SIGNAL.fromParticipantId', errors);
   if (msg.toControlSessionId !== undefined && typeof msg.toControlSessionId !== 'string') {
     errors.push('PRIVATE_CONTROL_SIGNAL.toControlSessionId debe ser texto.');
+  }
+  if (msg.toParticipantId !== undefined && typeof msg.toParticipantId !== 'string') {
+    errors.push('PRIVATE_CONTROL_SIGNAL.toParticipantId debe ser texto.');
   }
   if (typeof msg.keyId !== 'string' || msg.keyId.trim() === '') errors.push('PRIVATE_CONTROL_SIGNAL.keyId debe ser texto no vacio.');
   if (!isValidBase64(msg.ephemeralPublicKey)) errors.push('PRIVATE_CONTROL_SIGNAL.ephemeralPublicKey debe ser base64.');

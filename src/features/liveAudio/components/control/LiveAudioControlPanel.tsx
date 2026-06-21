@@ -15,6 +15,8 @@ interface LiveAudioControlPanelProps {
   onListenVolumeChange: (volume: number) => void;
   microphoneVolume: number;
   onMicrophoneVolumeChange: (volume: number) => void;
+  isModeratorMusicMode?: boolean;
+  onModeratorMusicModeChange?: (mode: boolean) => void;
   participants: LiveAudioParticipant[];
   isControlAuthorized: boolean;
   onMuteAll: () => void;
@@ -24,6 +26,7 @@ interface LiveAudioControlPanelProps {
   onMute: (id: string) => void;
   onKick: (id: string) => void;
   onVolumeChange: (id: string, volume: number) => void;
+  onMicrophoneConfigChange?: (id: string, config: { volume?: number; musicMode?: boolean }) => void;
   pendingWordCount: number;
 }
 
@@ -37,6 +40,8 @@ export const LiveAudioControlPanel: React.FC<LiveAudioControlPanelProps> = ({
   onListenVolumeChange,
   microphoneVolume,
   onMicrophoneVolumeChange,
+  isModeratorMusicMode,
+  onModeratorMusicModeChange,
   participants,
   isControlAuthorized,
   onMuteAll,
@@ -46,6 +51,7 @@ export const LiveAudioControlPanel: React.FC<LiveAudioControlPanelProps> = ({
   onMute,
   onKick,
   onVolumeChange,
+  onMicrophoneConfigChange,
   pendingWordCount
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
@@ -100,6 +106,7 @@ export const LiveAudioControlPanel: React.FC<LiveAudioControlPanelProps> = ({
               onMute={onMute}
               onKick={onKick}
               onVolumeChange={onVolumeChange}
+              onMicrophoneConfigChange={onMicrophoneConfigChange}
             />
             <LiveAudioListeners 
               participants={participants}
@@ -189,6 +196,17 @@ export const LiveAudioControlPanel: React.FC<LiveAudioControlPanelProps> = ({
                 className="absolute bottom-full mb-2 -right-4 bg-gray-800 border border-gray-700 p-3 rounded shadow-xl flex flex-col items-center gap-2 z-[100]"
                 onClick={e => e.stopPropagation()}
               >
+                {onModeratorMusicModeChange && (
+                  <label className="flex items-center gap-1 cursor-pointer bg-gray-900 px-2 py-1 rounded w-full justify-center" title="Modo Música">
+                    <input 
+                      type="checkbox" 
+                      checked={isModeratorMusicMode} 
+                      onChange={(e) => onModeratorMusicModeChange(e.target.checked)}
+                      className="accent-purple-500 w-3 h-3"
+                    />
+                    <span className="text-[10px]">🎵</span>
+                  </label>
+                )}
                 <span className="text-xs font-semibold text-gray-300">{microphoneVolume}%</span>
                 <div className="h-32 w-8 flex items-center justify-center">
                   <input

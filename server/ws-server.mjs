@@ -849,6 +849,53 @@ const createWsServer = (httpServer, onFallbackMessage) => {
           }
           break
 
+        case 'LIVE_AUDIO_CONTROL_AUTHORIZATION_DECISION':
+          if (meta?.role !== 'control') break
+          handleAuthorizationDecision(meta, msg)
+          break
+
+        case 'LIVE_AUDIO_CONTROL_JOIN_REQUEST': {
+          if (meta?.role !== 'control') break
+          const sourceControl = liveAudioControls.get(meta.controlSessionId)
+          if (!sourceControl || sourceControl.controlState !== 'PENDING') break
+          forwardToAuthorizingControls(msg, sourceControl)
+          break
+        }
+
+        case 'LIVE_AUDIO_CONTROL_AUTHORIZED': {
+          if (meta?.role !== 'control') break
+          const issuer = liveAudioControls.get(meta.controlSessionId)
+          forwardAuthorizedControlMessage(msg, issuer)
+          break
+        }
+
+        case 'LIVE_AUDIO_CONTROL_PUBLIC_KEY': {
+          if (meta?.role !== 'control') break
+          const issuer = liveAudioControls.get(meta.controlSessionId)
+          if (
+            typeof msg.controlSessionId !== 'string' ||
+            msg.controlSessionId !== issuer?.controlSessionId ||
+            typeof msg.keyId !== 'string' ||
+            msg.keyId.trim() === '' ||
+            !isValidBase64(msg.publicKey)
+          ) {
+            break
+          }
+          routeControlPublicKey(msg, issuer)
+          break
+        }
+
+        case 'SYNC_STATE':
+        case 'REMOTE_COMMAND':
+        case 'AUDIO_TELEMETRY':
+        case 'VIDEO_TELEMETRY':
+        case 'DISPLAY_TELEMETRY':
+          if (meta?.role === 'audience') break
+          if (onFallbackMessage) {
+            onFallbackMessage(msg)
+          }
+          break
+
         case 'LIVE_AUDIO_GRANT_SPEAK':
         case 'LIVE_AUDIO_REVOKE_SPEAK':
         case 'LIVE_AUDIO_MUTE_PARTICIPANT':
@@ -863,6 +910,17 @@ const createWsServer = (httpServer, onFallbackMessage) => {
           }
           applyModerationState(msg)
           broadcast(msg, (targetMeta) => canReceiveModerationMessage(targetMeta, msg))
+          break
+        }
+
+        case 'LIVE_AUDIO_REQUEST_ALIASES': {
+          if (meta?.role !== 'control') break
+          const controlMeta = liveAudioControls.get(meta.controlSessionId)
+          if (!isControlAuthorized(controlMeta)) {
+            sendError(ws, 'CONTROL_PENDING_FORBIDDEN', 'Pending controls cannot request aliases')
+            break
+          }
+          broadcast(msg, (targetMeta) => targetMeta.role === 'audience')
           break
         }
 

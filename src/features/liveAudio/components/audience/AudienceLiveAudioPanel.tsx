@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Mic, MicOff, Hand, MessageSquare, LogOut, Volume2, VolumeX, Play, RotateCcw, CheckCircle2, Loader2 } from 'lucide-react';
 import type { LiveAudioConnectionState } from '../../../../types/liveAudio';
 
@@ -12,6 +12,10 @@ interface AudienceLiveAudioPanelProps {
   isParticipationBlocked: boolean;
   volume: number;
   onVolumeChange: (vol: number) => void;
+  microphoneVolume?: number;
+  isMusicMode?: boolean;
+  onMicrophoneVolumeChange?: (vol: number) => void;
+  onMusicModeChange?: (mode: boolean) => void;
   onStartAudio: () => void;
   onRetryAudio: () => void;
   onJoinActive: () => void;
@@ -32,6 +36,10 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
   isParticipationBlocked,
   volume,
   onVolumeChange,
+  microphoneVolume,
+  isMusicMode,
+  onMicrophoneVolumeChange,
+  onMusicModeChange,
   onStartAudio,
   onRetryAudio,
   onJoinActive,
@@ -43,8 +51,8 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
 }) => {
   const [isVisible, setIsVisible] = useState(true);
   const [isVolumeOpen, setIsVolumeOpen] = useState(false);
+  const hasAudioStartedRef = useRef(hasAudioStarted);
 
-  const hasAudioStartedRef = React.useRef(hasAudioStarted);
   useEffect(() => {
     hasAudioStartedRef.current = hasAudioStarted;
   }, [hasAudioStarted]);
@@ -201,17 +209,45 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
           
           {isVolumeOpen && (
             <div
-              className="absolute bottom-full mb-3 left-1/2 -translate-x-1/2 bg-gray-800 p-3 rounded-xl shadow-xl border border-gray-700"
+              className="absolute bottom-full mb-3 left-1/2 -translate-x-1/2 bg-gray-800 p-3 rounded-xl shadow-xl border border-gray-700 flex flex-col gap-3 min-w-[8rem]"
               onClick={(event) => event.stopPropagation()}
             >
-              <input
-                type="range"
-                min="0" max="1" step="0.05"
-                value={volume}
-                onChange={e => onVolumeChange(parseFloat(e.target.value))}
-                className="w-24 h-2 accent-blue-500 cursor-pointer"
-                title="Volumen del audio en vivo"
-              />
+              <div className="flex flex-col gap-1 items-center">
+                <span className="text-[10px] text-gray-400 font-bold uppercase">Volumen {Math.round(volume * 100)}%</span>
+                <input
+                  type="range"
+                  min="0" max="1" step="0.05"
+                  value={volume}
+                  onChange={e => onVolumeChange(parseFloat(e.target.value))}
+                  className="w-24 h-2 accent-blue-500 cursor-pointer"
+                  title="Volumen del audio en vivo"
+                />
+              </div>
+
+              {isWordGranted && microphoneVolume !== undefined && onMicrophoneVolumeChange && (
+                <div className="flex flex-col gap-1 items-center pt-3 border-t border-gray-700">
+                  <span className="text-[10px] text-gray-400 font-bold uppercase">Micro {Math.round(microphoneVolume)}%</span>
+                  <input
+                    type="range"
+                    min="0" max="200" step="5"
+                    value={microphoneVolume}
+                    onChange={e => onMicrophoneVolumeChange(parseFloat(e.target.value))}
+                    className="w-24 h-2 accent-green-500 cursor-pointer"
+                    title="Volumen del micrófono (%)"
+                  />
+                  {isMusicMode !== undefined && onMusicModeChange && (
+                    <label className="flex items-center gap-2 mt-2 cursor-pointer hover:bg-gray-700 p-1 rounded transition-colors w-full justify-center" title="Modo Música (Desactiva filtro de ruido)">
+                      <input 
+                        type="checkbox" 
+                        checked={isMusicMode} 
+                        onChange={(e) => onMusicModeChange(e.target.checked)} 
+                        className="accent-purple-500 w-4 h-4 cursor-pointer"
+                      />
+                      <span className="text-sm">🎵</span>
+                    </label>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>

@@ -150,10 +150,16 @@ export interface PrivateControlSignalMessage {
   type: 'PRIVATE_CONTROL_SIGNAL';
   fromParticipantId: string;
   toControlSessionId?: string;
+  toParticipantId?: string;
   keyId: string;
   ephemeralPublicKey: string;
   ciphertext: string;
   nonce: string;
+  createdAt?: number;
+}
+
+export interface LiveAudioRequestAliasesMessage {
+  type: 'LIVE_AUDIO_REQUEST_ALIASES';
   createdAt?: number;
 }
 
@@ -185,4 +191,5 @@ export type LiveAudioBroadcastMessage =
   | LiveAudioControlAuthorizationStateMessage
   | LiveAudioControlAuthorizationDecisionMessage
   | ControlKeyRotatedMessage
-  | PrivateControlSignalMessage;
+  | PrivateControlSignalMessage
+  | LiveAudioRequestAliasesMessage;

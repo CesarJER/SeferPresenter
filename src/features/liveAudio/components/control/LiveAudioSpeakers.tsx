@@ -9,6 +9,7 @@ interface LiveAudioSpeakersProps {
   onMute: (id: string) => void;
   onKick: (id: string) => void;
   onVolumeChange: (id: string, volume: number) => void;
+  onMicrophoneConfigChange?: (id: string, config: { volume?: number; musicMode?: boolean }) => void;
 }
 
 export const LiveAudioSpeakers: React.FC<LiveAudioSpeakersProps> = ({
@@ -17,7 +18,8 @@ export const LiveAudioSpeakers: React.FC<LiveAudioSpeakersProps> = ({
   onRevoke,
   onMute,
   onKick,
-  onVolumeChange
+  onVolumeChange,
+  onMicrophoneConfigChange
 }) => {
   const speakers = participants.filter(p => p.speakerState === 'GRANTED' && !p.isKicked);
 
@@ -44,6 +46,7 @@ export const LiveAudioSpeakers: React.FC<LiveAudioSpeakersProps> = ({
             onMute={onMute}
             onKick={onKick}
             onVolumeChange={onVolumeChange}
+            onMicrophoneConfigChange={onMicrophoneConfigChange}
           />
         ))}
       </div>

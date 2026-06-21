@@ -18,6 +18,7 @@ import {
   importPublicKey,
 } from '../utils/cryptoUtils';
 import { makeSyncMessage } from '../utils/syncProtocol';
+
 import { isValidPrivateControlSignal } from '../utils/validation';
 
 type PrivateSignalRole = 'control' | 'audience';
@@ -30,6 +31,7 @@ export interface DecryptedPrivateControlSignal {
   plaintext: string;
   value: unknown;
   receivedAt: number;
+  ephemeralPublicKey?: string;
 }
 
 export interface UsePrivateControlSignalsOptions {
@@ -56,6 +58,8 @@ export interface PrivateControlSignalsState {
   publishControlPublicKey: () => Promise<void>;
   rotateControlKey: () => Promise<void>;
   sendPrivateSignal: (value: unknown, options?: SendPrivateSignalOptions) => Promise<boolean>;
+  sendPrivateSignalToParticipant: (participantId: string, participantPublicKeyBase64: string, value: unknown) => Promise<boolean>;
+  requestAliases: () => Promise<boolean>;
   requestControlAuthorization: (verificationCode: string) => Promise<boolean>;
   authorizeSecondaryControl: (request: LiveAudioControlJoinRequestMessage) => Promise<boolean>;
   clearPrivateState: () => void;
@@ -224,6 +228,37 @@ export function usePrivateControlSignals(options: UsePrivateControlSignalsOption
     return sendMessageRef.current(message.type, message);
   }, [participantId, role]);
 
+  const sendPrivateSignalToParticipant = useCallback(async (
+    targetParticipantId: string,
+    targetPublicKeyBase64: string,
+    value: unknown
+  ): Promise<boolean> => {
+    if (role !== 'control' || !sessionKeyPairRef.current || !currentKeyIdRef.current || !currentControlPublicKeyRef.current) return false;
+
+    const participantPublicKey = await importPublicKey(targetPublicKeyBase64);
+    const sharedKey = await deriveSharedKey(sessionKeyPairRef.current.privateKey, participantPublicKey);
+    const encrypted = await encrypt(sharedKey, serializeSignalValue(value));
+
+    const message = makeSyncMessage({
+      type: 'PRIVATE_CONTROL_SIGNAL' as const,
+      fromParticipantId: participantId,
+      toParticipantId: targetParticipantId,
+      keyId: currentKeyIdRef.current,
+      ephemeralPublicKey: currentControlPublicKeyRef.current,
+      ciphertext: encrypted.ciphertext,
+      nonce: encrypted.nonce,
+      createdAt: Date.now(),
+    });
+
+    return sendMessageRef.current(message.type, message);
+  }, [participantId, role]);
+
+  const requestAliases = useCallback(async (): Promise<boolean> => {
+    if (role !== 'control' || !transportReady) return false;
+    const message = makeSyncMessage({ type: 'LIVE_AUDIO_REQUEST_ALIASES' as const });
+    return sendMessageRef.current(message.type, message);
+  }, [role, transportReady]);
+
   const requestControlAuthorization = useCallback(async (verificationCode: string): Promise<boolean> => {
     if (role !== 'control' || !transportReady) return false;
 
@@ -269,28 +304,49 @@ export function usePrivateControlSignals(options: UsePrivateControlSignalsOption
   }, [controlSessionId, role, transportReady]);
 
   const handlePrivateControlSignal = useCallback(async (payload: Record<string, unknown>) => {
-    if (role !== 'control') return;
-    if (!isValidPrivateControlSignal(payload, 'audience')) return;
-    if (!sessionKeyPairRef.current || payload.keyId !== currentKeyIdRef.current) return;
-
     const signal = payload as unknown as PrivateControlSignalMessage;
-    const participantPublicKey = await importPublicKey(signal.ephemeralPublicKey);
-    const sharedKey = await deriveSharedKey(sessionKeyPairRef.current.privateKey, participantPublicKey);
-    const plaintext = await decryptWithNonceReplayProtection(
-      sharedKey,
-      signal.ciphertext,
-      signal.nonce,
-      usedNonceKeysRef.current,
-    );
+    
+    if (role === 'control') {
+      if (!isValidPrivateControlSignal(payload, 'audience')) return;
+      if (!sessionKeyPairRef.current || payload.keyId !== currentKeyIdRef.current) return;
 
-    onPrivateSignalRef.current?.({
-      fromParticipantId: signal.fromParticipantId,
-      keyId: signal.keyId,
-      plaintext,
-      value: parseSignalPlaintext(plaintext),
-      receivedAt: Date.now(),
-    });
-  }, [role]);
+      const participantPublicKey = await importPublicKey(signal.ephemeralPublicKey);
+      const sharedKey = await deriveSharedKey(sessionKeyPairRef.current.privateKey, participantPublicKey);
+      const plaintext = await decryptWithNonceReplayProtection(
+        sharedKey,
+        signal.ciphertext,
+        signal.nonce,
+        usedNonceKeysRef.current,
+      );
+
+      onPrivateSignalRef.current?.({
+        fromParticipantId: signal.fromParticipantId,
+        keyId: signal.keyId,
+        plaintext,
+        value: parseSignalPlaintext(plaintext),
+        receivedAt: Date.now(),
+        ephemeralPublicKey: signal.ephemeralPublicKey,
+      });
+    } else if (role === 'audience') {
+      if (!audienceSharedKeyRef.current || payload.keyId !== currentKeyIdRef.current) return;
+      if (signal.toParticipantId !== participantId) return;
+
+      const plaintext = await decryptWithNonceReplayProtection(
+        audienceSharedKeyRef.current,
+        signal.ciphertext,
+        signal.nonce,
+        usedNonceKeysRef.current,
+      );
+
+      onPrivateSignalRef.current?.({
+        fromParticipantId: signal.fromParticipantId,
+        keyId: signal.keyId,
+        plaintext,
+        value: parseSignalPlaintext(plaintext),
+        receivedAt: Date.now(),
+      });
+    }
+  }, [role, participantId]);
 
   const handleControlAuthorized = useCallback(async (payload: Record<string, unknown>) => {
     if (role !== 'control' || payload.controlSessionId !== controlSessionId) return;
@@ -394,6 +450,8 @@ export function usePrivateControlSignals(options: UsePrivateControlSignalsOption
     publishControlPublicKey,
     rotateControlKey,
     sendPrivateSignal,
+    sendPrivateSignalToParticipant,
+    requestAliases,
     requestControlAuthorization,
     authorizeSecondaryControl,
     clearPrivateState,

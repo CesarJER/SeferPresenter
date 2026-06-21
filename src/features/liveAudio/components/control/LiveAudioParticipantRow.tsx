@@ -12,6 +12,8 @@ export interface LiveAudioParticipant {
   isActiveAudience: boolean;
   isKicked: boolean;
   volume: number;
+  microphoneVolume?: number;
+  isMusicMode?: boolean;
 }
 
 interface LiveAudioParticipantRowProps {
@@ -22,6 +24,7 @@ interface LiveAudioParticipantRowProps {
   onMute?: (id: string) => void;
   onKick?: (id: string) => void;
   onVolumeChange?: (id: string, volume: number) => void;
+  onMicrophoneConfigChange?: (id: string, config: { volume?: number; musicMode?: boolean }) => void;
 }
 
 export const LiveAudioParticipantRow: React.FC<LiveAudioParticipantRowProps> = ({
@@ -32,8 +35,10 @@ export const LiveAudioParticipantRow: React.FC<LiveAudioParticipantRowProps> = (
   onMute,
   onKick,
   onVolumeChange,
+  onMicrophoneConfigChange,
 }) => {
   const [isVolumeOpen, setIsVolumeOpen] = useState(false);
+  const [isMicConfigOpen, setIsMicConfigOpen] = useState(false);
   const isRequested = participant.speakerState === 'REQUESTED' && !participant.isKicked;
   const isGranted = participant.speakerState === 'GRANTED' && !participant.isKicked;
   const isListener = participant.speakerState === 'LISTENER' && participant.isActiveAudience && !participant.isKicked;
@@ -133,6 +138,51 @@ export const LiveAudioParticipantRow: React.FC<LiveAudioParticipantRowProps> = (
                 <button onClick={() => setIsVolumeOpen(false)} className="text-gray-500 hover:text-white transition-colors">
                   <X size={14} />
                 </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {hasOpenMicrophone && onMicrophoneConfigChange && (
+          <div className="relative flex items-center">
+            <button
+              onClick={() => setIsMicConfigOpen(!isMicConfigOpen)}
+              className={`flex items-center gap-1 p-1 rounded transition-colors ${
+                isMicConfigOpen ? 'bg-green-600 text-white' : 'text-gray-400 hover:text-white hover:bg-gray-700'
+              }`}
+              title="Ajustar micrófono remoto"
+            >
+              <MicOff size={16} className="hidden" /> {/* Para mantener alineación si se necesita */}
+              <span className="text-[10px] w-8 text-left">{participant.microphoneVolume ?? 100}%</span>
+            </button>
+            {isMicConfigOpen && (
+              <div className="absolute right-8 top-1/2 -translate-y-1/2 bg-gray-800 border border-gray-700 p-3 rounded shadow-xl flex flex-col items-center gap-2 z-[100] min-w-32">
+                <div className="flex w-full justify-between items-start mb-1">
+                  <label className="flex items-center gap-1 cursor-pointer bg-gray-900 px-2 py-1 rounded" title="Modo Música">
+                    <input 
+                      type="checkbox" 
+                      checked={participant.isMusicMode ?? false} 
+                      onChange={(e) => onMicrophoneConfigChange(participant.participantId, { musicMode: e.target.checked })} 
+                      className="accent-purple-500 w-3 h-3"
+                    />
+                    <span className="text-[10px]">🎵 Modo Música</span>
+                  </label>
+                  <button onClick={() => setIsMicConfigOpen(false)} className="text-gray-500 hover:text-white transition-colors ml-2 mt-1">
+                    <X size={14} />
+                  </button>
+                </div>
+                <div className="flex flex-col gap-1 items-center w-full">
+                  <span className="text-[10px] font-semibold text-gray-300">Micro {participant.microphoneVolume ?? 100}%</span>
+                  <input
+                    type="range"
+                    min="0"
+                    max="200"
+                    step="5"
+                    value={participant.microphoneVolume ?? 100}
+                    onChange={(e) => onMicrophoneConfigChange(participant.participantId, { volume: parseInt(e.target.value, 10) })}
+                    className="w-full accent-green-500 cursor-pointer"
+                  />
+                </div>
               </div>
             )}
           </div>

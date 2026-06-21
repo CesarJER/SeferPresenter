@@ -64,9 +64,12 @@ export default function LiveAudioControlContainer({
   const [isModeratorMuted, setIsModeratorMuted] = useState(true);
   const [listenVolume, setListenVolume] = useState(100);
   const [microphoneVolume, setMicrophoneVolume] = useState(100);
+  const [isModeratorMusicMode, setIsModeratorMusicMode] = useState(false);
   const [participantsMap, setParticipantsMap] = useState<Record<string, LiveAudioParticipantStatusMessage>>({});
   const [participantAliases, setParticipantAliases] = useState<Record<string, string>>({});
   const [participantVolumes, setParticipantVolumes] = useState<Record<string, number>>({});
+  const [participantEphemeralKeys, setParticipantEphemeralKeys] = useState<Record<string, string>>({});
+  const [participantMicrophoneConfigs, setParticipantMicrophoneConfigs] = useState<Record<string, { volume: number; musicMode: boolean }>>({});
   const [connectionCounts, setConnectionCounts] = useState<LiveAudioConnectionCountsMessage | null>(null);
   const [messages, setMessages] = useState<PrivateMessage[]>([]);
   const participantAliasesRef = useRef(participantAliases);
@@ -139,6 +142,10 @@ export default function LiveAudioControlContainer({
     if (alias) {
       setParticipantAliases(prev => ({ ...prev, [signal.fromParticipantId]: alias }));
     }
+    
+    if (signal.ephemeralPublicKey) {
+      setParticipantEphemeralKeys(prev => ({ ...prev, [signal.fromParticipantId]: signal.ephemeralPublicKey! }));
+    }
 
     const signalType = typeof data.type === 'string' ? data.type : '';
     const content = typeof data.text === 'string'
@@ -158,7 +165,7 @@ export default function LiveAudioControlContainer({
     }
   }, []);
 
-  usePrivateControlSignals({
+  const { sendPrivateSignalToParticipant, requestAliases, ready: privateSignalsReady } = usePrivateControlSignals({
     role: 'control',
     participantId: participantId || controlSessionId || 'control',
     controlSessionId: controlSessionId || undefined,
@@ -167,6 +174,12 @@ export default function LiveAudioControlContainer({
     transportReady: Boolean(isControlAuthorized && wsSend && subscribeToWsMessage),
     onPrivateSignal: handlePrivateSignal,
   });
+
+  useEffect(() => {
+    if (privateSignalsReady) {
+      void requestAliases();
+    }
+  }, [privateSignalsReady, requestAliases]);
 
   const participants: LiveAudioParticipant[] = useMemo(() => (
     Object.values(participantsMap)
@@ -188,9 +201,11 @@ export default function LiveAudioControlContainer({
           isActiveAudience,
           isKicked,
           volume: participantVolumes[p.participantId] ?? 100,
+          microphoneVolume: participantMicrophoneConfigs[p.participantId]?.volume ?? 100,
+          isMusicMode: participantMicrophoneConfigs[p.participantId]?.musicMode ?? false,
         };
       })
-  ), [participantAliases, participantVolumes, participantsMap]);
+  ), [participantAliases, participantVolumes, participantMicrophoneConfigs, participantsMap]);
 
   const activeUsers = participants.filter(p => p.isActiveAudience && !p.isKicked).length;
   const pendingWordCount = participants.filter(p => p.speakerState === 'REQUESTED' && !p.isKicked).length;
@@ -204,11 +219,11 @@ export default function LiveAudioControlContainer({
 
   const handleToggleModeratorMic = useCallback(async () => {
     if (isModeratorMuted) {
-      await publishMicrophone();
+      await publishMicrophone({ musicMode: isModeratorMusicMode });
     } else {
       await unpublishMicrophone();
     }
-  }, [isModeratorMuted, publishMicrophone, unpublishMicrophone]);
+  }, [isModeratorMuted, isModeratorMusicMode, publishMicrophone, unpublishMicrophone]);
 
   const sendModerationMessage = useCallback((endpoint: ModerationEndpoint, pid?: string) => {
     if (!wsSend) return false;
@@ -301,6 +316,25 @@ export default function LiveAudioControlContainer({
     setParticipantVolumes(prev => ({ ...prev, [id]: clampVolume(volume) }));
   }, []);
 
+  const handleParticipantMicrophoneConfigChange = useCallback((id: string, config: { volume?: number; musicMode?: boolean }) => {
+    setParticipantMicrophoneConfigs(prev => {
+      const current = prev[id] || { volume: 100, musicMode: false };
+      const next = { ...current };
+      if (config.volume !== undefined) next.volume = clampVolume(config.volume);
+      if (config.musicMode !== undefined) next.musicMode = config.musicMode;
+      
+      const targetPublicKey = participantEphemeralKeys[id];
+      if (targetPublicKey) {
+        void sendPrivateSignalToParticipant(id, targetPublicKey, {
+          type: 'SET_MICROPHONE_CONFIG',
+          ...config
+        });
+      }
+
+      return { ...prev, [id]: next };
+    });
+  }, [participantEphemeralKeys, sendPrivateSignalToParticipant]);
+
   if (availability !== 'enabled') {
     return null;
   }
@@ -365,6 +399,8 @@ export default function LiveAudioControlContainer({
         onListenVolumeChange={(volume) => setListenVolume(clampVolume(volume))}
         microphoneVolume={microphoneVolume}
         onMicrophoneVolumeChange={(volume) => setMicrophoneVolume(clampVolume(volume))}
+        isModeratorMusicMode={isModeratorMusicMode}
+        onModeratorMusicModeChange={setIsModeratorMusicMode}
         participants={participants}
         isControlAuthorized={isControlAuthorized}
         onMuteAll={handleMuteAll}
@@ -374,6 +410,7 @@ export default function LiveAudioControlContainer({
         onMute={(id) => void doModerationAction('mute-participant', id)}
         onKick={(id) => void doModerationAction('kick-participant', id)}
         onVolumeChange={handleParticipantVolumeChange}
+        onMicrophoneConfigChange={handleParticipantMicrophoneConfigChange}
         pendingWordCount={pendingWordCount}
       />
     </>
