@@ -16,6 +16,8 @@ import {
   normalizeProjectionState,
   reduceProjectionCommand,
 } from './projection-state-reducer.mjs'
+import { hasActivePresenter, broadcastWs } from './ws-server.mjs'
+import { getTimeline, applyAction } from './timelineManager.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const rootDir = path.resolve(__dirname, '..')
@@ -34,6 +36,7 @@ let clients = new Set()
 let audienceClients = new Set()
 let quizClients = new Set()
 let liveKitApi = null
+let audioSyncMapsCache = []
 
 const contentTypes = {
   '.css': 'text/css; charset=utf-8',
@@ -517,6 +520,7 @@ const handleApi = async (req, res, url) => {
     try {
       const parsed = JSON.parse(await readBody(req))
       writeJsonAtomic(path.join(rootDir, 'audio_sync.json'), parsed)
+      audioSyncMapsCache = parsed
       sendJson(res, 200, { success: true })
     } catch (err) {
       sendJson(res, 400, { error: err.message || 'Invalid JSON' })
@@ -677,6 +681,16 @@ const handleWsMessageFromClient = (msg, meta) => {
   } else if (msg.type === 'AUDIO_TELEMETRY') {
     currentState = { ...currentState, audioState: msg.audioState }
     broadcast(JSON.stringify(msg))
+    if (meta?.role === 'presenter' || msg.audioState.lastUpdatedBy === 'projection') {
+      const tl = getTimeline();
+      const currentEstimated = tl.status === 'playing'
+        ? tl.basePositionSec + ((Date.now() - tl.baseServerTimeMs) / 1000) * tl.playbackRate
+        : tl.basePositionSec;
+      if (Math.abs(currentEstimated - msg.audioState.currentTime) > 1.0) {
+        applyAction({ type: 'SEEK', positionSec: msg.audioState.currentTime });
+        broadcastWs({ type: 'AUDIO_TIMELINE_STATE', timeline: getTimeline() }, (m) => m.role !== 'audience');
+      }
+    }
   } else if (msg.type === 'VIDEO_TELEMETRY') {
     currentState = { ...currentState, videoState: msg.videoState }
     broadcast(JSON.stringify(msg))
@@ -693,8 +707,58 @@ const handleWsMessageFromClient = (msg, meta) => {
 
 const sseHeartbeat = setInterval(heartbeatSseClients, sseHeartbeatMs)
 sseHeartbeat.unref?.()
+
+let lastActiveCueIndex = -1
+let lastSyncMapId = null
+
+const evaluateServerCues = () => {
+  if (hasActivePresenter()) return
+  const tl = getTimeline()
+  if (tl.status !== 'playing' || tl.syncMode === 'none' || !tl.syncMapId) return
+
+  const syncMap = audioSyncMapsCache.find(m => m.id === tl.syncMapId)
+  if (!syncMap || !syncMap.cues || syncMap.cues.length === 0) return
+
+  const now = Date.now()
+  const elapsedSec = (now - tl.baseServerTimeMs) / 1000
+  const currentPos = tl.basePositionSec + elapsedSec * tl.playbackRate
+
+  let activeCueIdx = -1
+  for (let i = syncMap.cues.length - 1; i >= 0; i--) {
+    if (currentPos >= syncMap.cues[i].timeSec) {
+      activeCueIdx = i
+      break
+    }
+  }
+
+  if (tl.syncMapId !== lastSyncMapId) {
+    lastSyncMapId = tl.syncMapId
+    lastActiveCueIndex = -1
+  }
+
+  if (activeCueIdx !== -1 && activeCueIdx !== lastActiveCueIndex) {
+    lastActiveCueIndex = activeCueIdx
+    const cue = syncMap.cues[activeCueIdx]
+
+    reduceRemoteCommandMessage({
+      type: 'REMOTE_COMMAND',
+      clientId: 'server',
+      payload: {
+        command: 'SELECT_PRESENTATION_AND_SLIDE',
+        presentationId: cue.presentationId,
+        slideIndex: cue.slideIndex,
+        targetVerse: cue.verse
+      }
+    }, null)
+  }
+}
+
+const serverCueInterval = setInterval(evaluateServerCues, 100)
+serverCueInterval.unref?.()
+
 server.on('close', () => {
   clearInterval(sseHeartbeat)
+  clearInterval(serverCueInterval)
   liveKitApi?.close()
 })
 
@@ -705,6 +769,7 @@ liveKitApi = createLiveKitApi({
 })
 
 server.listen(port, () => {
+  audioSyncMapsCache = readJsonFile(path.join(rootDir, 'audio_sync.json'), [])
   const staticLabel = staticDir ? `, serving ${path.relative(rootDir, staticDir)}` : ''
   createWsServer(server, handleWsMessageFromClient)
   console.log(`SeferPresenter local backend listening on http://localhost:${port}${staticLabel}`)

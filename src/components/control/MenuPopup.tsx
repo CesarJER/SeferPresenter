@@ -170,7 +170,8 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
 
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isMusicPanelOpen, setIsMusicPanelOpen] = useState(false);
-  
+  const [resolvedScriptureState, setResolvedScriptureState] = useState<any>(null);
+
   const [showResetConfirm, setShowResetConfirm] = useState(false);
 
   // ────────────────────────────────────────────────────────────────
@@ -1481,7 +1482,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
       {/* ── App Mode Wrapper ───────────────────────────────── */}
       <div id="section-app-mode-wrapper" className="flex-1 min-h-0 overflow-auto flex flex-col">
         {isMusicPanelOpen && (
-<AudioPanel
+          <AudioPanel
             audioState={audioState}
             onAudioStateChange={onAudioStateChange}
             audioSyncMaps={audioSyncMaps}
@@ -1505,6 +1506,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                 onAddSlide={onAddScriptureSlide}
                 restoredState={scriptureState ? { ...scriptureState, verseEnd: undefined } : null}
                 onUpdateFontSizes={onUpdateScriptureFontSizes}
+                onVerseResolved={(state) => setResolvedScriptureState(state)}
               />
             </div>
           </div>
@@ -1647,6 +1649,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                           onBoundaryReached={onBoundaryReached}
                           restoredState={scriptureState}
                           onUpdateFontSizes={onUpdateScriptureFontSizes}
+                          onVerseResolved={(state) => setResolvedScriptureState(state)}
                         />
                       </div>
                     )}
@@ -1719,7 +1722,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
           <SlideVisualizer
             slide={activeSlide}
             appMode={appMode}
-            scriptureState={scriptureState}
+            scriptureState={resolvedScriptureState || scriptureState}
             quizSubslide={activeSlide?.type === 'quiz' ? quizSubslides[quizCurrentSubslideIndex] : undefined}
             videoState={videoState}
           >

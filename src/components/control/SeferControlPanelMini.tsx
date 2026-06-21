@@ -13,6 +13,8 @@ interface SeferControlPanelMiniProps {
   restoredState?: ScriptureNavState | null;
   /** Callback to update font sizes */
   onUpdateFontSizes?: (sizes: { hebrewFontSize: number; combinedTextBaseSize: number }) => void;
+  /** Emits the fully resolved verse data for preview */
+  onVerseResolved?: (state: SeferReaderState | null) => void;
 }
 
 const SeferControlPanelMini: React.FC<SeferControlPanelMiniProps> = ({
@@ -20,6 +22,7 @@ const SeferControlPanelMini: React.FC<SeferControlPanelMiniProps> = ({
   onBoundaryReached,
   restoredState,
   onUpdateFontSizes,
+  onVerseResolved,
 }) => {
   const {
     metadata,
@@ -43,6 +46,12 @@ const SeferControlPanelMini: React.FC<SeferControlPanelMiniProps> = ({
     restoredState,
     onUpdateFontSizes,
   });
+
+  React.useEffect(() => {
+    if (onVerseResolved) {
+      onVerseResolved(currentVerse);
+    }
+  }, [currentVerse, onVerseResolved]);
 
   if (Object.keys(metadata).length === 0) {
     return (

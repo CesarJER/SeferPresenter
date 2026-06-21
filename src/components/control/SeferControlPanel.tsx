@@ -14,6 +14,8 @@ interface SeferControlPanelProps {
   restoredState?: ScriptureNavState | null;
   /** Callback to update font sizes */
   onUpdateFontSizes?: (sizes: { hebrewFontSize: number; combinedTextBaseSize: number }) => void;
+  /** Emits the fully resolved verse data for preview */
+  onVerseResolved?: (state: SeferReaderState | null) => void;
 }
 
 const SeferControlPanel: React.FC<SeferControlPanelProps> = ({
@@ -21,6 +23,7 @@ const SeferControlPanel: React.FC<SeferControlPanelProps> = ({
   onAddSlide,
   restoredState,
   onUpdateFontSizes,
+  onVerseResolved,
 }) => {
   const {
     metadata,
@@ -55,6 +58,15 @@ const SeferControlPanel: React.FC<SeferControlPanelProps> = ({
     restoredState,
     onUpdateFontSizes,
   });
+
+  // ----------------------------------------------------------------
+  // Emitting resolved verse for preview
+  // ----------------------------------------------------------------
+  React.useEffect(() => {
+    if (onVerseResolved) {
+      onVerseResolved(currentVerse);
+    }
+  }, [currentVerse, onVerseResolved]);
 
   // ----------------------------------------------------------------
   // Loading / unavailable states

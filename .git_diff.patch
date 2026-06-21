@@ -1,0 +1,1643 @@
+﻿commit 1f4c9130411eb0cf7ffa53d276f973b03f9499fc
+Author: CesarJER <cesnmi@gmail.com>
+Date:   Sun Jun 21 15:15:19 2026 +0200
+
+    feat: centralize projection state logic on the server and update documentation
+
+diff --git a/AGENTS.md b/AGENTS.md
+index 59ca3ff..491497d 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -25,7 +25,7 @@ only the owner files for the task.
+ 
+ - Preserve the refactored folder structure. Do not collapse logic back into `App.tsx`, `MenuPopup.tsx`, or `PresenterScreen.tsx`.
+ - `App.tsx` may coordinate state and route wiring, but reusable behavior belongs in `src/hooks/`, pure logic in `src/utils/`, contracts in `src/types/`, and UI in the relevant `src/components/*/` folder.
+-- Presenter is the live source of truth for projected state. Control usually emits `REMOTE_COMMAND`; presenter applies it and broadcasts state/telemetry.
++- The local backend is the live source of truth for projected state. Control emits `REMOTE_COMMAND`; supported projection commands are reduced in `server/projection-state-reducer.mjs` through `server/local-server.mjs` and broadcast as `SYNC_STATE`. Presenter displays backend state and may emit real media telemetry, but must not be required for Control-to-Audience navigation.
+ - Audience mode is read-only for projection controls. Audience quiz answers are separate from presenter demo/correction state.
+ - Validate and normalize anything loaded from APIs, localStorage, JSON imports, or sync messages.
+ - Keep media/display telemetry lightweight. Avoid pushing high-frequency or large payloads through full state sync.
+diff --git a/README.md b/README.md
+index 35a1e4b..65b4731 100644
+--- a/README.md
++++ b/README.md
+@@ -55,9 +55,12 @@ El backend local vive en `server/local-server.mjs`. Mantiene inicialmente la mis
+ - `POST /api/livekit/kick-participant`
+ 
+ El backend tambien adjunta WebSocket en `ws://localhost:8787/ws`. En Fase 2
+-ese canal solo es propietario de la timeline de audio del servidor:
++ese canal es propietario de la timeline de audio del servidor:
+ `WELCOME`, `SERVER_TIME_PING/PONG`, `AUDIO_TIMELINE_ACTION` y
+-`AUDIO_TIMELINE_STATE`. SSE y los endpoints HTTP existentes siguen activos.
++`AUDIO_TIMELINE_STATE`. Ademas, los `REMOTE_COMMAND` de Control soportados se
++reducen en el backend a `SYNC_STATE`, por lo que Control y Audiencia pueden
++sincronizar navegacion sin requerir que `/presenter` este abierto. SSE y los
++endpoints HTTP existentes siguen activos.
+ 
+ En desarrollo, `npm run dev` arranca el backend local y Vite juntos. Vite proxya `/api` a `http://localhost:8787`. Si arrancas solo `npm run dev:frontend`, debes tener `npm run dev:backend` abierto en otra terminal. Para pruebas locales estables, ejecuta `npm run build` y despues `npm run start:local`.
+ 
+@@ -112,11 +115,15 @@ La aplicacion se organiza por consumidor:
+ ## Sincronizacion
+ 
+ La sincronizacion usa `BroadcastChannel` para pestanas locales, SSE/API para red
+-local y WebSocket para la timeline de audio backend-owned.
++local y WebSocket para la timeline de audio backend-owned. El estado canonico de
++proyeccion vive en el backend local; Presenter lo muestra, pero no es requerido
++como fuente funcional para comandos de Control.
+ 
+ Canales principales:
+ 
+ - `SYNC_STATE`: navegacion y estado completo necesario para inicializacion.
++- `REMOTE_COMMAND`: intencion de Control reducida por el backend para comandos
++  de proyeccion soportados.
+ - `AUDIO_TELEMETRY`: estado ligero de reproduccion de audio.
+ - `VIDEO_TELEMETRY`: estado ligero de reproduccion de video.
+ - `DISPLAY_TELEMETRY`: cambios de fondo, override y candado.
+diff --git a/__tests__/utils/projectionStateReducer.test.ts b/__tests__/utils/projectionStateReducer.test.ts
+new file mode 100644
+index 0000000..410174b
+--- /dev/null
++++ b/__tests__/utils/projectionStateReducer.test.ts
+@@ -0,0 +1,168 @@
++import { describe, expect, it } from 'vitest';
++import { DEFAULT_AUDIO_STATE } from '../../src/types/audio';
++import { validateSyncMessage } from '../../src/utils/validation';
++import {
++  makeProjectionSyncStateMessage,
++  reduceProjectionCommand,
++} from '../../server/projection-state-reducer.mjs';
++
++const quizData = {
++  question: 'Pregunta',
++  options: [
++    { id: 'A', text: 'Uno', isCorrect: true },
++    { id: 'B', text: 'Dos', isCorrect: false },
++  ],
++  timerSeconds: 45,
++  randomize: false,
++  multiSelect: false,
++};
++
++const presentation = {
++  id: 'p1',
++  title: 'Servicio',
++  background: '/backgrounds/bg.png',
++  mode: 'trilingual',
++  slides: [
++    {
++      id: 's1',
++      label: 'Inicio',
++      lines: ['Linea 1'],
++      type: 'text',
++    },
++    {
++      id: 'sf1',
++      label: 'Gn 1:1',
++      lines: ['Hebreo', 'Trans', 'Trad'],
++      type: 'sefer',
++      scriptureBook: 'Gn',
++      scriptureChapter: '1',
++      scriptureVerseStart: '1',
++      scriptureVerseEnd: '2',
++    },
++    {
++      id: 'q1',
++      label: 'Quiz',
++      lines: ['P: Pregunta'],
++      type: 'quiz',
++      quizData,
++    },
++  ],
++};
++
++const baseState = {
++  type: 'SYNC_STATE',
++  clientId: 'server',
++  origin: 'control',
++  presentation,
++  slideIndex: 0,
++  backgroundLock: false,
++  lockedBackgroundValue: null,
++  userSelectedBackground: null,
++  videoState: null,
++  appMode: 'slides',
++  scriptureState: null,
++  audioState: DEFAULT_AUDIO_STATE,
++  quizState: null,
++  stepIndex: 0,
++};
++
++describe('projectionStateReducer', () => {
++  it('reduces SELECT_PRESENTATION_AND_SLIDE from Control into canonical state', () => {
++    const result = reduceProjectionCommand(
++      baseState,
++      {
++        command: 'SELECT_PRESENTATION_AND_SLIDE',
++        presentation,
++        slideIndex: 1,
++        direction: 'forward',
++      },
++      { clientId: 'control-1', now: 1000 },
++    );
++
++    expect(result.ok).toBe(true);
++    if (!result.ok) return;
++
++    const syncState = makeProjectionSyncStateMessage(result.state, {
++      clientId: 'control-1',
++      origin: 'control',
++      now: 1000,
++      messageId: 'm1',
++    });
++
++    expect(syncState.type).toBe('SYNC_STATE');
++    expect(syncState.origin).toBe('control');
++    expect(syncState.slideIndex).toBe(1);
++    expect(syncState.appMode).toBe('scripture');
++    expect(syncState.scriptureState?.bookAbbrevEs).toBe('Gn');
++    expect(validateSyncMessage(syncState).ok).toBe(true);
++  });
++
++  it('can enter manual Sefer mode without Presenter state reduction', () => {
++    const selected = reduceProjectionCommand(baseState, {
++      command: 'SELECT_PRESENTATION_AND_SLIDE',
++      presentation,
++      slideIndex: 1,
++      direction: 'forward',
++    }, { now: 1000 });
++    expect(selected.ok).toBe(true);
++    if (!selected.ok) return;
++
++    const manual = reduceProjectionCommand(selected.state, {
++      command: 'TOGGLE_APP_MODE',
++      mode: 'seferManual',
++    }, { now: 2000 });
++
++    expect(manual.ok).toBe(true);
++    if (!manual.ok) return;
++    expect(manual.state.appMode).toBe('seferManual');
++    expect(manual.state.scriptureState?.scriptureKind).toBe('sefer');
++    expect(manual.state.scriptureState?.command).toBe('navigate');
++  });
++
++  it('reduces quiz subslide and timer commands into quizState', () => {
++    const selected = reduceProjectionCommand(baseState, {
++      command: 'SELECT_PRESENTATION_AND_SLIDE',
++      presentation,
++      slideIndex: 2,
++      direction: 'forward',
++    }, { now: 1000 });
++    expect(selected.ok).toBe(true);
++    if (!selected.ok) return;
++
++    const subslide = reduceProjectionCommand(selected.state, {
++      command: 'QUIZ_SELECT_SUBSLIDE',
++      index: 1,
++    }, { now: 1500 });
++    expect(subslide.ok).toBe(true);
++    if (!subslide.ok) return;
++    expect(subslide.state.quizState?.currentSubslideIndex).toBe(1);
++
++    const running = reduceProjectionCommand(subslide.state, {
++      command: 'QUIZ_START_TIMER',
++    }, { now: 2000 });
++    expect(running.ok).toBe(true);
++    if (!running.ok) return;
++    expect(running.state.quizState?.timerState.status).toBe('running');
++    expect(running.state.quizState?.timerState.timerStartedAt).toBe(2000);
++  });
++
++  it('rejects malformed commands before producing state', () => {
++    const result = reduceProjectionCommand(baseState, {
++      command: 'SELECT_STEP',
++      stepIndex: -1,
++    }, { now: 1000 });
++
++    expect(result.ok).toBe(false);
++
++    const messageValidation = validateSyncMessage({
++      type: 'REMOTE_COMMAND',
++      clientId: 'control-1',
++      payload: {
++        command: 'SELECT_STEP',
++        stepIndex: -1,
++      },
++    });
++
++    expect(messageValidation.ok).toBe(false);
++  });
++});
+diff --git a/docs/AI_PROJECT_MAP.md b/docs/AI_PROJECT_MAP.md
+index fc219d6..01566e6 100644
+--- a/docs/AI_PROJECT_MAP.md
++++ b/docs/AI_PROJECT_MAP.md
+@@ -21,6 +21,7 @@ Fast map for agents. Use real paths only; this repo does not currently have
+ - `server/ws-server.mjs`: WebSocket `/ws` server for backend-owned audio timeline messages.
+ - `server/livekit-server.mjs`: optional self-hosted LiveKit token and moderation endpoints with memory-only state.
+ - `server/timelineManager.mjs`: isolated audio timeline state and action reducer.
++- `server/projection-state-reducer.mjs`: pure backend-consumable reducer for supported projection `REMOTE_COMMAND` payloads into canonical `SYNC_STATE` state.
+ - `src/types/liveAudio.ts`: optional Live Audio protocol contracts and role state types; no LiveKit connection code.
+ - `vite.config.ts`: Vite config, development proxy, and multi-entry build inputs.
+ 
+@@ -33,6 +34,7 @@ Fast map for agents. Use real paths only; this repo does not currently have
+ - `src/components/shared/`: reusable UI widgets such as auto-resizing text/input and slide previews.
+ - `src/hooks/`: stateful behavior for sync, background resolution, media playback, keyboard, URL sync, quiz, Sefer reader, scripture navigation, and the Fase 5.2 crypto-only `usePrivateControlSignals.ts` hook. LiveKit runtime hooks should still live under `src/features/liveAudio/hooks/` when implemented.
+ - `src/utils/`: validation, normalization, sync message construction, quiz parsing/scoring, scripture parsing/lookup, media helpers, and Web Crypto helpers.
++- `server/projection-state-reducer.mjs`: projection-state command reducer shared by backend runtime and Vitest.
+ - `src/types/`: shared contracts for presentations, sync, audio, quiz, and transliteration.
+ - `src/types/liveAudio.ts`: LiveKit-ready but optional Live Audio message contracts, kept separate from presentation sync state.
+ - `src/features/liveAudio/`: optional Live Audio runtime module. This is where LiveKit hooks, UI, crypto helpers, and any LiveKit browser SDK imports belong.
+@@ -90,11 +92,14 @@ Start with:
+ - `src/utils/syncProtocol.ts`
+ - `src/utils/validation.ts`
+ - `src/hooks/useSyncState.ts`
++- `server/projection-state-reducer.mjs`
+ - `src/App.tsx`
+ - `server/local-server.mjs`
+ - `server/ws-server.mjs` and `server/timelineManager.mjs` when changing backend-owned audio timeline behavior
+ 
+-Prefer typed `REMOTE_COMMAND` messages for operator intent and lightweight telemetry for frequent media/display changes.
++Prefer typed `REMOTE_COMMAND` messages for operator intent. Supported projection
++commands are reduced by the backend, while lightweight telemetry remains for
++frequent media/display changes.
+ 
+ ### Add Or Modify Live Audio
+ 
+diff --git a/docs/CHANGE_GUIDE.md b/docs/CHANGE_GUIDE.md
+index 6406c18..5a9c0bd 100644
+--- a/docs/CHANGE_GUIDE.md
++++ b/docs/CHANGE_GUIDE.md
+@@ -44,14 +44,19 @@ Use these checklists before implementing future tasks.
+ - For optional Live Audio messages, update `src/types/liveAudio.ts` first and
+   add only the message-family union to `src/types/sync.ts`.
+ - Update validation in `src/utils/validation.ts`.
+-- Emit commands from control wiring in `src/App.tsx`.
+-- Handle commands in `App.handleRemoteCommand`.
++- Emit commands from control wiring in `src/App.tsx` / `src/main-control.tsx`.
++- Reduce supported projection commands in `server/projection-state-reducer.mjs`
++  and invoke that reducer from `server/local-server.mjs`.
++- Keep `App.handleRemoteCommand` only for local compatibility or side effects
++  that are not canonical projection state.
+ - Apply/broadcast through `src/hooks/useSyncState.ts`.
+ - Mirror backend endpoints/SSE in `server/local-server.mjs` only when needed.
+ - For backend-owned audio timeline behavior, update `server/timelineManager.mjs` and `server/ws-server.mjs` without mixing it into `currentState`.
+ - Do not broadcast high-frequency timer/media ticks through full `SYNC_STATE`.
+ - Do not mix Live Audio messages into `SyncStatePayload`,
+   `RemoteCommandPayload`, `AudioState`, or `AudioTimelineState`.
++- Do not reintroduce Presenter as the required reducer for Control navigation;
++  Control-to-Audience projection changes must work through backend snapshots.
+ 
+ ## When Editing Live Audio
+ 
+@@ -132,7 +137,9 @@ Use these checklists before implementing future tasks.
+ ## Documentation Update Triggers
+ 
+ - `src/types/*`: check `docs/SYMBOL_INDEX.md`, `docs/COMPONENT_OWNERSHIP.md`, and `docs/CHANGE_GUIDE.md`.
+-- `src/hooks/useSyncState.ts`, `src/types/sync.ts`, `src/utils/syncProtocol.ts`, `server/local-server.mjs`: check `docs/SYNC_ARCHITECTURE.md`.
++- `src/hooks/useSyncState.ts`, `src/types/sync.ts`,
++  `src/utils/syncProtocol.ts`, `server/projection-state-reducer.mjs`,
++  `server/local-server.mjs`: check `docs/SYNC_ARCHITECTURE.md`.
+ - `src/types/liveAudio.ts`: check `docs/SYNC_ARCHITECTURE.md`,
+   `docs/SYMBOL_INDEX.md`, `docs/COMPONENT_OWNERSHIP.md`, `docs/CHANGE_GUIDE.md`,
+   and `README.md`.
+diff --git a/docs/COMPONENT_OWNERSHIP.md b/docs/COMPONENT_OWNERSHIP.md
+index e9241e1..d1035ef 100644
+--- a/docs/COMPONENT_OWNERSHIP.md
++++ b/docs/COMPONENT_OWNERSHIP.md
+@@ -94,6 +94,9 @@ Library/sync/validation:
+   AES-GCM 256, base64 encoding, and nonce replay protection.
+ - `src/utils/normalizePresentation.ts`: persistence/path normalization.
+ - `src/utils/syncProtocol.ts`: sync message construction.
++- `server/projection-state-reducer.mjs`: pure projection-state reducer used by
++  the backend to turn supported Control `REMOTE_COMMAND` payloads into
++  canonical `SYNC_STATE`.
+ - `src/utils/quizUtils.ts`: quiz parsing/scoring/subslides.
+ - `src/utils/scriptureLookup.ts`, `scriptureParser.ts`, `metadataCache.ts`: sacred text data.
+ - `server/timelineManager.mjs`: backend-owned audio timeline state; keep separate from presenter `currentState`.
+@@ -109,7 +112,8 @@ Presentation state:
+ Sync-ready state:
+ 
+ - `SyncStatePayload`, `RemoteCommandPayload`, media/display telemetry in `src/types/sync.ts`.
+-- Managed by `src/hooks/useSyncState.ts`.
++- Canonical projection state is owned by `server/local-server.mjs`; clients
++  mirror it through `src/hooks/useSyncState.ts`.
+ - Includes current presentation, slide index, background lock/override, media state, app mode, scripture state, and quiz sync state.
+ - `AudioTimelineState` is backend-owned in `server/timelineManager.mjs`; do not merge it into `App.tsx` state just to expose `/ws`.
+ 
+@@ -160,7 +164,8 @@ Live Audio state:
+ ## Prop Rules
+ 
+ - Presenter components should receive display-ready data where possible.
+-- Presenter components may emit media telemetry, but should not own operator navigation.
++- Presenter components may emit media telemetry, but should not own operator
++  navigation or reduce Control commands into canonical projection state.
+ - Control components may receive editing and navigation callbacks.
+ - Shared components should not know whether they are used by presenter, control, or audience.
+ - Audience UI must not expose presenter/control actions.
+diff --git a/docs/SYMBOL_INDEX.md b/docs/SYMBOL_INDEX.md
+index 357276c..5e65b5d 100644
+--- a/docs/SYMBOL_INDEX.md
++++ b/docs/SYMBOL_INDEX.md
+@@ -94,7 +94,11 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
+   delivery, guaranteed cleanup after audience rejoin grace, participant
+   snapshot lookup for token refresh, and succession.
+ - `makeSyncMessage` - `src/utils/syncProtocol.ts`: message envelope creation.
+-- `server/local-server.mjs`: SSE/API mirroring for state, commands, media telemetry, quiz events, assets, persistence.
++- `reduceProjectionCommand` / `makeProjectionSyncStateMessage` -
++  `server/projection-state-reducer.mjs`: pure backend-consumable reduction of
++  supported projection `REMOTE_COMMAND` payloads into canonical `SYNC_STATE`.
++- `server/local-server.mjs`: SSE/API mirroring for state, backend reduction of
++  projection commands, media telemetry, quiz events, assets, persistence.
+ - `server/ws-server.mjs`: WebSocket `/ws` server for F2 audio timeline messages.
+ - `server/livekit-server.mjs`: optional Fase 5.4/5.11 LiveKit self-hosted
+   status, token, refresh-token, and moderation endpoints with memory-only state
+diff --git a/docs/SYNC_ARCHITECTURE.md b/docs/SYNC_ARCHITECTURE.md
+index ce4e8c0..db7e09a 100644
+--- a/docs/SYNC_ARCHITECTURE.md
++++ b/docs/SYNC_ARCHITECTURE.md
+@@ -11,9 +11,13 @@ The app uses two sync paths:
+ - LAN/backend-ready mode: WebSocket at `/ws` is preferred for sending `SYNC_STATE` and `REMOTE_COMMAND` when the connection is open, falling back to HTTP POST endpoints (which broadcast updates via Server-Sent Events (SSE) in `server/local-server.mjs`).
+ - Server audio timeline: WebSocket at `/ws`, attached by `server/ws-server.mjs`.
+ 
+-Presenter is the practical source of truth for projected state. Control usually
+-emits a `REMOTE_COMMAND`; presenter applies that command and then broadcasts
+-state or telemetry.
++The backend is the practical source of truth for projected state. Control emits
++a `REMOTE_COMMAND`; `server/local-server.mjs` validates and reduces supported
++presentation commands through `server/projection-state-reducer.mjs`, updates
++`currentState`, logs the resulting `origin=control` state change, and broadcasts
++the updated `SYNC_STATE`. Presenter applies backend state as a display client.
++Presenter may still emit real media telemetry from its DOM media elements, but
++it is not required for Control-to-Audience navigation.
+ 
+ The local backend keeps SSE connections alive with `data: heartbeat\n\n` every
+ 30 seconds on `/api/state-events`, `/api/audience/events`, and
+@@ -23,12 +27,15 @@ client sets, and failed SSE writes are dropped from future broadcasts.
+ Main message types live in `src/types/sync.ts`:
+ 
+ - `SYNC_STATE`: full state needed to initialize or resynchronize clients.
+-- `REMOTE_COMMAND`: operator intent sent from control to presenter (commands should send explicit desired state, not simple toggles, to avoid split-brain).
++- `REMOTE_COMMAND`: operator intent sent from control to the backend reducer
++  (commands should send explicit desired state, not simple toggles, to avoid
++  split-brain).
+ - `AUDIO_TELEMETRY`: lightweight audio playback updates.
+ - `VIDEO_TELEMETRY`: lightweight video playback updates.
+ - `DISPLAY_TELEMETRY`: background lock/override updates.
+ - `AUDIO_SYNC_MAPS_UPDATE`: audio cue map updates.
+-- `REQUEST_STATE`: non-presenter clients ask presenter for current state.
++- `REQUEST_STATE`: clients ask for a fresh backend snapshot; clients also fetch
++  `/api/state` directly on startup.
+ - Live Audio family: optional LiveKit-ready technical messages that stay
+   outside `SYNC_STATE` and existing `REMOTE_COMMAND` payloads.
+ 
+@@ -264,14 +271,16 @@ Keep these local unless another device/mode must observe them.
+ 
+ ## Backend-Ready Direction
+ 
+-Current inference: the backend is intentionally small and mirrors browser state
+-for LAN/mobile use. The code appears designed so future online/mobile remote
+-control can replace or extend the local server without changing every component.
++Current inference: the backend owns canonical projected state for LAN/mobile
++use. Browser clients still mirror and render state locally, but supported
++Control commands are reduced in the backend before being broadcast as
++`SYNC_STATE`.
+ 
+ Backend-owned or backend-mirrored pieces:
+ 
+ - `/api/state` and `/api/state-events`
+-- `/api/command`
++- `/api/command`, which reduces supported `REMOTE_COMMAND` payloads into
++  canonical `SYNC_STATE`
+ - `/api/audio-telemetry`
+ - `/api/video-telemetry`
+ - `/api/display-telemetry`
+@@ -328,14 +337,18 @@ Synchronization protocol:
+ - Message construction in `src/utils/syncProtocol.ts`.
+ - Validation in `src/utils/validation.ts`.
+ - Application/broadcast in `src/hooks/useSyncState.ts`.
++- Backend reduction of supported projection commands in
++  `server/projection-state-reducer.mjs`, invoked by `server/local-server.mjs`.
+   WebSocket timeline state is owned separately by `server/timelineManager.mjs`.
+ 
+ ## Where To Modify Sync Code
+ 
+ - Add command or payload type: `src/types/sync.ts`.
+ - Validate payload: `src/utils/validation.ts`.
+-- Emit from control: `src/App.tsx` prop wiring.
+-- Apply in presenter: `App.handleRemoteCommand`.
++- Emit from control: `src/App.tsx` / `src/main-control.tsx` prop wiring.
++- Reduce presentation-state commands in `server/projection-state-reducer.mjs`
++  through `server/local-server.mjs`.
++- Apply in presenter only for local side effects that are not canonical state.
+ - Broadcast/apply/persist: `src/hooks/useSyncState.ts`.
+ - Manage WebSocket connection: [useWebSocket.ts](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useWebSocket.ts).
+ - Add optional Live Audio contracts: `src/types/liveAudio.ts`, then expose the
+@@ -348,7 +361,8 @@ Synchronization protocol:
+ - Synchronize server clock offset and RTT: [useServerClock.ts](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useServerClock.ts).
+ - Track and dispatch audio timeline actions: [useAudioTimeline.ts](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useAudioTimeline.ts).
+ - Apply timeline changes to presenter's audio element: [useAudioTimelineApplicator.ts](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useAudioTimelineApplicator.ts).
+-- Mirror over network: `server/local-server.mjs`.
++- Mirror over network and own canonical projection state:
++  `server/local-server.mjs`.
+ - Add backend-owned audio timeline behavior: `server/timelineManager.mjs` and `server/ws-server.mjs`.
+ - Add optional LiveKit backend behavior: `server/livekit-server.mjs` and
+   registration in `server/local-server.mjs`.
+@@ -360,7 +374,7 @@ Synchronization protocol:
+ - Do not mix temporary UI state with presentation state.
+ - Do not broadcast frequent media progress or countdown ticks through full `SYNC_STATE`.
+ - Do not let audience controls mutate presenter/control navigation.
+-- Do not make server command handling mutate `currentState` unless that endpoint is intended to own state.
++- Do not bypass the backend reducer for supported presentation-state commands.
+ - Do not add consent fields or endpoints to Live Audio contracts; privacy notice
+   UI remains local and must not create persisted acceptance records.
+ - Do not add `/accept-consent`, `/consent`, `/alias`, or readable chat endpoints.
+diff --git a/server/local-server.mjs b/server/local-server.mjs
+index 3df1112..4bc3d29 100644
+--- a/server/local-server.mjs
++++ b/server/local-server.mjs
+@@ -10,6 +10,12 @@ import {
+   isLiveAudioControlAuthorized,
+ } from './ws-server.mjs'
+ import { isAuthRequired, hasValidBasicAuth } from './authUtils.mjs'
++import {
++  getDefaultProjectionState,
++  makeProjectionSyncStateMessage,
++  normalizeProjectionState,
++  reduceProjectionCommand,
++} from './projection-state-reducer.mjs'
+ 
+ const __dirname = path.dirname(fileURLToPath(import.meta.url))
+ const rootDir = path.resolve(__dirname, '..')
+@@ -19,13 +25,10 @@ const staticArgIndex = process.argv.indexOf('--static')
+ const staticDir = path.resolve(rootDir, staticArgIndex >= 0 ? process.argv[staticArgIndex + 1] || 'dist' : 'dist')
+ const sseHeartbeatMs = 30_000
+ 
+-let currentState = {
+-  presentation: null,
+-  slideIndex: -1,
+-  backgroundLock: false,
+-  lockedBackgroundValue: null,
+-  userSelectedBackground: null,
+-}
++let currentState = makeProjectionSyncStateMessage(getDefaultProjectionState(), {
++  clientId: 'server',
++  origin: 'control',
++})
+ 
+ let clients = new Set()
+ let audienceClients = new Set()
+@@ -183,6 +186,60 @@ const broadcastQuizAnswer = (body) => {
+   writeSseSet(quizClients, body)
+ }
+ 
++const logStateChange = (state) => {
++  console.log(`[SERVER DBG - STATE] clientId=${state.clientId} origin=${state.origin} slideIndex=${state.slideIndex} appMode=${state.appMode} scriptureBook=${state.scriptureState?.bookAbbrevEs || state.scriptureState?.bookEs || ''}`);
++}
++
++const commitState = (state, metadata = {}) => {
++  currentState = makeProjectionSyncStateMessage(state, {
++    clientId: metadata.clientId,
++    origin: metadata.origin,
++    now: metadata.now,
++    messageId: metadata.messageId,
++  })
++  logStateChange(currentState)
++  broadcast(JSON.stringify(currentState))
++  return currentState
++}
++
++const canReduceRemoteCommand = (sourceMeta) => {
++  if (!sourceMeta) return true
++  if (sourceMeta.role !== 'control') return false
++  if (!sourceMeta.controlSessionId) return true
++  return isLiveAudioControlAuthorized(sourceMeta.controlSessionId)
++}
++
++const reduceRemoteCommandMessage = (message, sourceMeta) => {
++  if (!isObjectRecord(message) || message.type !== 'REMOTE_COMMAND') {
++    return { ok: false, status: 400, error: 'Invalid remote command message' }
++  }
++  if (typeof message.clientId !== 'string') {
++    return { ok: false, status: 400, error: 'REMOTE_COMMAND missing clientId' }
++  }
++  if (!canReduceRemoteCommand(sourceMeta)) {
++    return { ok: false, status: 403, error: 'Control is not authorized to mutate projection state' }
++  }
++
++  const now = Date.now()
++  const result = reduceProjectionCommand(currentState, message.payload, {
++    clientId: message.clientId,
++    origin: 'control',
++    now,
++  })
++  if (!result.ok) {
++    return { ok: false, status: 400, error: result.error }
++  }
++
++  return {
++    ok: true,
++    state: commitState(result.state, {
++      clientId: message.clientId,
++      origin: 'control',
++      now,
++    }),
++  }
++}
++
+ const heartbeatSseClients = () => {
+   writeSseSet(clients, 'heartbeat')
+   writeSseSet(audienceClients, 'heartbeat')
+@@ -329,9 +386,12 @@ const handleApi = async (req, res, url) => {
+         sendJson(res, 400, { error: 'Invalid state payload: missing or invalid clientId or slideIndex' })
+         return true
+       }
+-      console.log(`[SERVER DBG - STATE] clientId=${parsed.clientId} origin=${parsed.origin} slideIndex=${parsed.slideIndex} appMode=${parsed.appMode} scriptureBook=${parsed.scriptureState?.bookAbbrevEs || parsed.scriptureState?.bookEs || ''}`);
+-      currentState = parsed
+-      broadcast(JSON.stringify(parsed))
++      commitState(normalizeProjectionState(parsed), {
++        clientId: parsed.clientId,
++        origin: parsed.origin === 'presenter' ? 'presenter' : 'control',
++        now: parsed.timestamp,
++        messageId: parsed.messageId,
++      })
+       sendJson(res, 200, { success: true })
+     } catch (err) {
+       sendJson(res, 400, { error: err.message || 'Invalid JSON' })
+@@ -343,9 +403,12 @@ const handleApi = async (req, res, url) => {
+     try {
+       const body = await readBody(req)
+       const parsed = JSON.parse(body)
+-      // Broadcast the command to all SSE clients without mutating currentState in the backend
+-      broadcast(JSON.stringify(parsed))
+-      sendJson(res, 200, { success: true })
++      const result = reduceRemoteCommandMessage(parsed)
++      if (!result.ok) {
++        sendJson(res, result.status, { error: result.error })
++        return true
++      }
++      sendJson(res, 200, { success: true, state: result.state })
+     } catch (err) {
+       sendJson(res, 400, { error: err.message || 'Invalid JSON' })
+     }
+@@ -597,12 +660,20 @@ const server = http.createServer(async (req, res) => {
+   sendJson(res, 404, { error: 'Static file not found' })
+ })
+ 
+-const handleWsMessageFromClient = (msg) => {
++const handleWsMessageFromClient = (msg, meta) => {
+   if (msg.type === 'SYNC_STATE') {
+-    currentState = msg
+-    broadcast(JSON.stringify(msg))
++    if (meta?.role === 'control' && !canReduceRemoteCommand(meta)) return
++    commitState(normalizeProjectionState(msg), {
++      clientId: msg.clientId,
++      origin: msg.origin === 'presenter' ? 'presenter' : 'control',
++      now: msg.timestamp,
++      messageId: msg.messageId,
++    })
+   } else if (msg.type === 'REMOTE_COMMAND') {
+-    broadcast(JSON.stringify(msg))
++    const result = reduceRemoteCommandMessage(msg, meta)
++    if (!result.ok) {
++      console.warn(`[SERVER DBG - COMMAND] rejected clientId=${msg.clientId || ''} role=${meta?.role || 'http'} error=${result.error}`)
++    }
+   } else if (msg.type === 'AUDIO_TELEMETRY') {
+     currentState = { ...currentState, audioState: msg.audioState }
+     broadcast(JSON.stringify(msg))
+diff --git a/server/projection-state-reducer.mjs b/server/projection-state-reducer.mjs
+new file mode 100644
+index 0000000..3b357bf
+--- /dev/null
++++ b/server/projection-state-reducer.mjs
+@@ -0,0 +1,710 @@
++const DEFAULT_AUDIO_STATE = {
++  isPlaying: false,
++  currentTime: 0,
++  duration: 0,
++  volume: 0.7,
++  audioSrc: null,
++  activeSyncMapId: null,
++  syncMode: 'none',
++  lastUpdatedBy: 'controller',
++  timestamp: 0,
++};
++
++const DEFAULT_STATE = {
++  clientId: 'server',
++  origin: 'control',
++  presentation: null,
++  slideIndex: -1,
++  stepIndex: 0,
++  backgroundLock: false,
++  lockedBackgroundValue: null,
++  userSelectedBackground: null,
++  videoState: null,
++  appMode: 'slides',
++  scriptureState: null,
++  audioState: DEFAULT_AUDIO_STATE,
++  quizState: null,
++};
++
++const APP_MODES = new Set(['slides', 'scripture', 'seferManual']);
++const DIRECTIONS = new Set(['forward', 'backward']);
++const SCRIPTURE_BOUNDARIES = new Set(['next', 'previous']);
++const SCRIPTURE_ARROWS = new Set(['up', 'down']);
++
++const isRecord = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
++const isFiniteNumber = (value) => typeof value === 'number' && Number.isFinite(value);
++const isInteger = (value) => Number.isInteger(value);
++const isNullableString = (value) => value === null || typeof value === 'string';
++
++const clone = (value) => {
++  if (value === undefined) return undefined;
++  if (typeof structuredClone === 'function') return structuredClone(value);
++  return JSON.parse(JSON.stringify(value));
++};
++
++const makeError = (message) => ({ ok: false, error: message });
++const makeOk = (state) => ({ ok: true, state });
++
++export const getDefaultProjectionState = () => clone(DEFAULT_STATE);
++
++export const normalizeProjectionState = (state = {}) => {
++  const source = isRecord(state) ? state : {};
++  const audioState = isRecord(source.audioState) ? source.audioState : DEFAULT_AUDIO_STATE;
++  return {
++    ...clone(DEFAULT_STATE),
++    ...clone(source),
++    clientId: typeof source.clientId === 'string' ? source.clientId : DEFAULT_STATE.clientId,
++    origin: source.origin === 'presenter' || source.origin === 'control' ? source.origin : DEFAULT_STATE.origin,
++    presentation: isRecord(source.presentation) || source.presentation === null ? clone(source.presentation) : null,
++    slideIndex: isFiniteNumber(source.slideIndex) ? source.slideIndex : -1,
++    stepIndex: isFiniteNumber(source.stepIndex) ? source.stepIndex : 0,
++    backgroundLock: typeof source.backgroundLock === 'boolean' ? source.backgroundLock : false,
++    lockedBackgroundValue: isNullableString(source.lockedBackgroundValue) ? source.lockedBackgroundValue : null,
++    userSelectedBackground: isNullableString(source.userSelectedBackground) ? source.userSelectedBackground : null,
++    videoState: source.videoState === null || isRecord(source.videoState) ? clone(source.videoState) : null,
++    appMode: APP_MODES.has(source.appMode) ? source.appMode : 'slides',
++    scriptureState: source.scriptureState === null || isRecord(source.scriptureState) ? clone(source.scriptureState) : null,
++    audioState: { ...clone(DEFAULT_AUDIO_STATE), ...clone(audioState) },
++    quizState: source.quizState === null || isRecord(source.quizState) ? clone(source.quizState) : null,
++  };
++};
++
++const makeSyncState = (state, metadata = {}) => ({
++  type: 'SYNC_STATE',
++  clientId: typeof metadata.clientId === 'string' ? metadata.clientId : state.clientId,
++  origin: metadata.origin === 'presenter' ? 'presenter' : 'control',
++  presentation: state.presentation,
++  slideIndex: state.slideIndex,
++  backgroundLock: state.backgroundLock,
++  lockedBackgroundValue: state.lockedBackgroundValue,
++  userSelectedBackground: state.userSelectedBackground,
++  videoState: state.videoState,
++  appMode: state.appMode,
++  scriptureState: state.scriptureState,
++  audioState: state.audioState,
++  quizState: state.quizState,
++  stepIndex: state.stepIndex,
++  protocolVersion: 1,
++  timestamp: metadata.now || Date.now(),
++  messageId: metadata.messageId || `${metadata.now || Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
++});
++
++export const makeProjectionSyncStateMessage = (state, metadata = {}) =>
++  makeSyncState(normalizeProjectionState(state), metadata);
++
++const getSlides = (presentation) => Array.isArray(presentation?.slides) ? presentation.slides : [];
++
++const getActiveSlide = (state) => {
++  const slides = getSlides(state.presentation);
++  return state.slideIndex >= 0 && state.slideIndex < slides.length ? slides[state.slideIndex] : null;
++};
++
++const parseCitaRef = (citaRef) => {
++  if (typeof citaRef !== 'string') return null;
++  const clean = citaRef.trim().replace(/^\[(?:Tanaj|Sefer)\s+/i, '').replace(/\]$/, '');
++  const match = clean.match(/^(.+?)\s+(\d+):(\d+)(?:-(\d+))?$/);
++  if (!match) return null;
++  return {
++    bookToken: match[1].trim(),
++    chapter: match[2],
++    verseStart: match[3],
++    verseEnd: match[4],
++  };
++};
++
++const generateQuizSubslides = (quizData) => {
++  if (!isRecord(quizData)) return [];
++  if (quizData.isResultsSlide === true) return [{ kind: 'results', label: 'Resultados' }];
++
++  const subslides = [
++    { kind: 'lectura', label: 'Lectura' },
++    { kind: 'pregunta', label: 'Pregunta' },
++  ];
++
++  const parsed = parseCitaRef(quizData.citaRef);
++  if (parsed) {
++    const start = Number.parseInt(parsed.verseStart, 10);
++    const end = parsed.verseEnd ? Number.parseInt(parsed.verseEnd, 10) : start;
++    if (Number.isFinite(start) && Number.isFinite(end)) {
++      for (let verse = start; verse <= end; verse += 1) {
++        subslides.push({
++          kind: 'cita-verse',
++          label: verse === start ? `${parsed.bookToken} ${parsed.chapter}:${verse}` : String(verse),
++          verse: String(verse),
++          verseStart: String(start),
++          verseEnd: String(end),
++          bookToken: parsed.bookToken,
++          chapter: String(parsed.chapter),
++        });
++      }
++    }
++  }
++
++  subslides.push({ kind: 'respuesta', label: 'Respuesta' });
++  return subslides;
++};
++
++const generatePresentationSteps = (presentation) => {
++  const steps = [];
++  getSlides(presentation).forEach((slide, slideIndex) => {
++    if (slide?.type === 'quiz' && slide.quizData) {
++      generateQuizSubslides(slide.quizData).forEach((_, subslideIndex) => {
++        steps.push({ type: 'quiz', slideIndex, subslideIndex });
++      });
++      return;
++    }
++
++    if (
++      (slide?.type === 'sefer' || slide?.type === 'tanaj') &&
++      slide.scriptureBook &&
++      slide.scriptureChapter &&
++      slide.scriptureVerseStart
++    ) {
++      const start = Number.parseInt(slide.scriptureVerseStart, 10);
++      const end = slide.scriptureVerseEnd ? Number.parseInt(slide.scriptureVerseEnd, 10) : start;
++      const resolvedStart = Number.isFinite(start) ? start : 1;
++      const resolvedEnd = Number.isFinite(end) ? end : resolvedStart;
++      for (let verse = resolvedStart; verse <= resolvedEnd; verse += 1) {
++        steps.push({
++          type: 'scripture',
++          slideIndex,
++          book: slide.scriptureBook,
++          chapter: slide.scriptureChapter,
++          verse: String(verse),
++        });
++      }
++      return;
++    }
++
++    steps.push({ type: 'normal', slideIndex });
++  });
++  return steps;
++};
++
++const getFirstStepIndexForSlide = (slideIndex, steps) => steps.findIndex((step) => step.slideIndex === slideIndex);
++
++const calcMaxBaseCentipunts = (presentation) =>
++  getSlides(presentation).reduce((total, slide) => {
++    const quizData = slide?.type === 'quiz' ? slide.quizData : null;
++    if (!quizData || quizData.isResultsSlide === true) return total;
++    return total + (quizData.citaRef ? 100 : 50);
++  }, 0);
++
++const makeInitialQuizState = (slide, direction = 'forward', presentation = null) => {
++  const quizData = slide?.type === 'quiz' ? slide.quizData : null;
++  if (!quizData || !slide) return null;
++  const subslides = generateQuizSubslides(quizData);
++  const initialIndex = direction === 'backward' && subslides.length > 0 ? subslides.length - 1 : 0;
++  return {
++    currentSubslideIndex: initialIndex,
++    timerState: {
++      status: 'idle',
++      timerStartedAt: null,
++      timerDurationMs: Math.max(1, Number(quizData.timerSeconds) || 30) * 1000,
++      pausedRemainingMs: null,
++    },
++    presenterDemoSelection: {
++      [slide.id]: null,
++    },
++    maxBaseCentipunts: calcMaxBaseCentipunts(presentation),
++  };
++};
++
++const buildScriptureSlideState = (slide, currentScripture, direction = 'forward', targetVerse, now = Date.now()) => {
++  if (!slide || (slide.type !== 'sefer' && slide.type !== 'tanaj' && !slide.scriptureBook)) return null;
++
++  const verseStart = String(slide.scriptureVerseStart || '1');
++  const verseEnd = String(slide.scriptureVerseEnd || verseStart);
++  const startNum = Number(verseStart);
++  const endNum = Number(verseEnd);
++  const totalVerses = Number.isFinite(startNum) && Number.isFinite(endNum)
++    ? Math.max(1, Math.abs(endNum - startNum) + 1)
++    : 1;
++  const targetNum = Number(targetVerse);
++  const hasTargetVerse = targetVerse !== undefined && Number.isFinite(targetNum) && Number.isFinite(startNum) && Number.isFinite(endNum);
++  const targetInsideRange = hasTargetVerse && targetNum >= Math.min(startNum, endNum) && targetNum <= Math.max(startNum, endNum);
++  const activeVerse = targetInsideRange ? String(targetVerse) : direction === 'backward' ? verseEnd : verseStart;
++  const activeVerseIdx = targetInsideRange ? Math.abs(targetNum - startNum) : direction === 'backward' ? totalVerses - 1 : 0;
++
++  return {
++    bookEs: String(slide.scriptureBook || 'Gn'),
++    bookHeb: '',
++    bookAbbrevEs: String(slide.scriptureBook || 'Gn'),
++    chapter: String(slide.scriptureChapter || '1'),
++    verseStart,
++    verse: activeVerse,
++    verseEnd,
++    verseNikud: String(slide.lines?.[0] || ''),
++    transliteration: String(slide.lines?.[1] || ''),
++    translation: String(slide.lines?.[2] || ''),
++    verseIdx: activeVerseIdx,
++    totalVerses,
++    scriptureKind: slide.type === 'tanaj' ? 'tanaj' : 'sefer',
++    command: 'navigate',
++    commandId: now,
++    hebrewFontSize: currentScripture?.hebrewFontSize ?? 42,
++    combinedTextBaseSize: currentScripture?.combinedTextBaseSize ?? 50,
++  };
++};
++
++const applySlideSelection = (state, presentation, slideIndex, direction = 'forward', targetVerse, now = Date.now()) => {
++  const next = normalizeProjectionState({
++    ...state,
++    presentation: presentation === undefined ? state.presentation : presentation,
++    slideIndex,
++    videoState: null,
++  });
++  const steps = generatePresentationSteps(next.presentation);
++  let stepIndex = 0;
++
++  if (slideIndex >= 0 && steps.length > 0) {
++    if (targetVerse) {
++      const found = steps.findIndex((step) =>
++        step.slideIndex === slideIndex && step.type === 'scripture' && step.verse === String(targetVerse)
++      );
++      stepIndex = found >= 0 ? found : getFirstStepIndexForSlide(slideIndex, steps);
++    } else if (direction === 'backward') {
++      const reversedIndex = [...steps].reverse().findIndex((step) => step.slideIndex === slideIndex);
++      stepIndex = reversedIndex >= 0 ? steps.length - 1 - reversedIndex : getFirstStepIndexForSlide(slideIndex, steps);
++    } else {
++      stepIndex = getFirstStepIndexForSlide(slideIndex, steps);
++    }
++  }
++
++  next.stepIndex = stepIndex >= 0 ? stepIndex : 0;
++  const slide = getActiveSlide(next);
++  const scriptureState = buildScriptureSlideState(slide, state.scriptureState, direction, targetVerse, now);
++  next.appMode = scriptureState ? 'scripture' : 'slides';
++  next.scriptureState = scriptureState ?? state.scriptureState;
++  next.quizState = makeInitialQuizState(slide, direction, next.presentation);
++
++  const bgValue = slide?.background ?? '';
++  if (bgValue !== 'Ignorar' && bgValue !== 'No cambiar') {
++    next.userSelectedBackground = null;
++  }
++
++  return next;
++};
++
++const calcRemainingMs = (timerState, now) => {
++  if (!timerState) return 30_000;
++  if (timerState.status === 'expired' || timerState.status === 'completed') return 0;
++  if (timerState.status === 'idle') return timerState.timerDurationMs;
++  if (timerState.status === 'paused') return timerState.pausedRemainingMs ?? timerState.timerDurationMs;
++  if (timerState.status === 'running' && timerState.timerStartedAt !== null) {
++    return Math.max(0, timerState.timerDurationMs - (now - timerState.timerStartedAt));
++  }
++  return timerState.timerDurationMs;
++};
++
++const getQuizTimerState = (state) => {
++  const activeSlide = getActiveSlide(state);
++  return state.quizState?.timerState ?? {
++    status: 'idle',
++    timerStartedAt: null,
++    timerDurationMs: Math.max(1, Number(activeSlide?.quizData?.timerSeconds) || 30) * 1000,
++    pausedRemainingMs: null,
++  };
++};
++
++const updateQuizState = (state, updater) => {
++  const activeSlide = getActiveSlide(state);
++  if (!activeSlide || activeSlide.type !== 'quiz' || !activeSlide.quizData) return state;
++  const base = state.quizState ?? makeInitialQuizState(activeSlide, 'forward', state.presentation);
++  return {
++    ...state,
++    quizState: updater(base, activeSlide),
++  };
++};
++
++const findQuizStepIndex = (presentation, slideIndex, subslideIndex) =>
++  generatePresentationSteps(presentation).findIndex((step) =>
++    step.slideIndex === slideIndex && step.type === 'quiz' && step.subslideIndex === subslideIndex
++  );
++
++const selectQuizSubslide = (state, index) => updateQuizState(state, (quizState, activeSlide) => {
++  const subslides = generateQuizSubslides(activeSlide.quizData);
++  const safeIndex = Math.max(0, Math.min(index, Math.max(0, subslides.length - 1)));
++  const nextTimerState = subslides[safeIndex]?.kind === 'respuesta'
++    ? { ...quizState.timerState, status: 'completed' }
++    : quizState.timerState;
++  const stepIndex = findQuizStepIndex(state.presentation, state.slideIndex, safeIndex);
++  state.stepIndex = stepIndex >= 0 ? stepIndex : state.stepIndex;
++  return {
++    ...quizState,
++    currentSubslideIndex: safeIndex,
++    timerState: nextTimerState,
++  };
++});
++
++const validateCommandPayload = (payload) => {
++  if (!isRecord(payload) || typeof payload.command !== 'string') return makeError('REMOTE_COMMAND payload must include command');
++
++  switch (payload.command) {
++    case 'SELECT_PRESENTATION_AND_SLIDE':
++      if (payload.presentation !== null && !isRecord(payload.presentation)) return makeError('presentation must be an object or null');
++      if (!isFiniteNumber(payload.slideIndex)) return makeError('slideIndex must be a number');
++      if (payload.direction !== undefined && !DIRECTIONS.has(payload.direction)) return makeError('direction must be forward or backward');
++      if (payload.targetVerse !== undefined && typeof payload.targetVerse !== 'string') return makeError('targetVerse must be text');
++      break;
++    case 'SELECT_STEP':
++      if (!isInteger(payload.stepIndex) || payload.stepIndex < 0) return makeError('stepIndex must be an integer >= 0');
++      break;
++    case 'TOGGLE_APP_MODE':
++      if (!APP_MODES.has(payload.mode)) return makeError('mode is not valid');
++      break;
++    case 'TOGGLE_BG_LOCK':
++      if (typeof payload.locked !== 'boolean') return makeError('locked must be boolean');
++      break;
++    case 'SELECT_BG_OVERRIDE':
++      if (!isNullableString(payload.bg)) return makeError('bg must be text or null');
++      break;
++    case 'SCRIPTURE_PROJECT':
++      if (!isRecord(payload.state)) return makeError('state must be an object');
++      if (payload.navCommand !== undefined && !SCRIPTURE_BOUNDARIES.has(payload.navCommand) && payload.navCommand !== 'navigate') {
++        return makeError('navCommand is not valid');
++      }
++      break;
++    case 'SCRIPTURE_BOUNDARY':
++      if (!SCRIPTURE_BOUNDARIES.has(payload.direction)) return makeError('direction must be next or previous');
++      break;
++    case 'SCRIPTURE_ARROW_NAV':
++      if (!SCRIPTURE_ARROWS.has(payload.direction)) return makeError('direction must be up or down');
++      break;
++    case 'UPDATE_FONT_SIZES':
++      if (payload.hebrewFontSize !== undefined && !isFiniteNumber(payload.hebrewFontSize)) return makeError('hebrewFontSize must be a number');
++      if (payload.combinedTextBaseSize !== undefined && !isFiniteNumber(payload.combinedTextBaseSize)) return makeError('combinedTextBaseSize must be a number');
++      break;
++    case 'VIDEO_STATE_CHANGE':
++      if (payload.state !== null && !isRecord(payload.state)) return makeError('video state must be an object or null');
++      break;
++    case 'AUDIO_STATE_CHANGE':
++      if (!isRecord(payload.state)) return makeError('audio state must be an object');
++      break;
++    case 'QUIZ_SELECT_SUBSLIDE':
++      if (!isInteger(payload.index) || payload.index < 0) return makeError('index must be an integer >= 0');
++      break;
++    case 'QUIZ_ADJUST_TIMER':
++      if (!isFiniteNumber(payload.seconds) || payload.seconds < 1) return makeError('seconds must be a number >= 1');
++      break;
++    case 'QUIZ_DEMO_SELECT':
++      if (payload.optionId !== null && typeof payload.optionId !== 'string') return makeError('optionId must be text or null');
++      break;
++    case 'QUIZ_START_TIMER':
++    case 'QUIZ_PAUSE_TIMER':
++    case 'QUIZ_RESUME_TIMER':
++    case 'QUIZ_RESET_TIMER':
++    case 'QUIZ_COMPLETE':
++    case 'QUIZ_PLAY_APPLAUSE':
++    case 'QUIZ_PLAY_MAL':
++    case 'SCRIPTURE_ESCAPE':
++    case 'RESET_STATE':
++      break;
++    default:
++      return makeError(`Unsupported REMOTE_COMMAND: ${payload.command}`);
++  }
++
++  return { ok: true };
++};
++
++export const validateProjectionCommandPayload = (payload) => validateCommandPayload(payload);
++
++export const reduceProjectionCommand = (currentState, payload, metadata = {}) => {
++  const validation = validateCommandPayload(payload);
++  if (!validation.ok) return validation;
++
++  const now = metadata.now || Date.now();
++  const state = normalizeProjectionState(currentState);
++
++  switch (payload.command) {
++    case 'SELECT_PRESENTATION_AND_SLIDE':
++      return makeOk(applySlideSelection(
++        state,
++        payload.presentation,
++        payload.slideIndex,
++        payload.direction || 'forward',
++        payload.targetVerse,
++        now,
++      ));
++
++    case 'SELECT_STEP': {
++      const steps = generatePresentationSteps(state.presentation);
++      const step = steps[payload.stepIndex];
++      if (!step) return makeError('stepIndex is outside the current presentation');
++
++      if (step.type === 'normal') {
++        return makeOk({
++          ...state,
++          slideIndex: step.slideIndex,
++          stepIndex: payload.stepIndex,
++          appMode: 'slides',
++          videoState: null,
++          quizState: null,
++        });
++      }
++
++      if (step.type === 'quiz') {
++        const next = {
++          ...state,
++          slideIndex: step.slideIndex,
++          stepIndex: payload.stepIndex,
++          appMode: 'slides',
++          videoState: null,
++        };
++        return makeOk(selectQuizSubslide(next, step.subslideIndex));
++      }
++
++      const slide = getSlides(state.presentation)[step.slideIndex] || null;
++      return makeOk({
++        ...state,
++        slideIndex: step.slideIndex,
++        stepIndex: payload.stepIndex,
++        appMode: 'scripture',
++        videoState: null,
++        scriptureState: buildScriptureSlideState(slide, state.scriptureState, 'forward', step.verse, now),
++        quizState: null,
++      });
++    }
++
++    case 'TOGGLE_APP_MODE': {
++      if (payload.mode === 'seferManual') {
++        const slide = getActiveSlide(state);
++        const source = state.scriptureState ?? buildScriptureSlideState(slide, state.scriptureState, 'forward', undefined, now);
++        return makeOk({
++          ...state,
++          appMode: 'seferManual',
++          scriptureState: source ? {
++            ...source,
++            verseStart: source.verse,
++            verseEnd: undefined,
++            scriptureKind: 'sefer',
++            command: 'navigate',
++            commandId: now,
++          } : state.scriptureState,
++        });
++      }
++
++      if (payload.mode === 'slides') {
++        const slide = getActiveSlide(state);
++        const restored = buildScriptureSlideState(slide, state.scriptureState, 'forward', undefined, now);
++        const returnsToScripture = Boolean(restored && (slide?.type === 'sefer' || slide?.type === 'tanaj'));
++        return makeOk({
++          ...state,
++          appMode: returnsToScripture ? 'scripture' : 'slides',
++          scriptureState: restored ?? state.scriptureState,
++        });
++      }
++
++      return makeOk({ ...state, appMode: payload.mode });
++    }
++
++    case 'TOGGLE_BG_LOCK':
++      return makeOk({ ...state, backgroundLock: payload.locked });
++
++    case 'SELECT_BG_OVERRIDE':
++      return makeOk({ ...state, userSelectedBackground: payload.bg });
++
++    case 'SCRIPTURE_PROJECT': {
++      const projected = payload.state;
++      const verseStart = projected.verseStart ?? projected.verse;
++      return makeOk({
++        ...state,
++        appMode: state.appMode === 'seferManual' ? 'seferManual' : 'scripture',
++        scriptureState: {
++          bookEs: String(projected.bookEs ?? ''),
++          bookHeb: String(projected.bookHeb ?? ''),
++          bookAbbrevEs: String(projected.bookAbbrevEs ?? projected.bookEs ?? ''),
++          chapter: String(projected.chapter ?? '1'),
++          verseStart: String(verseStart ?? '1'),
++          verse: String(projected.verse ?? verseStart ?? '1'),
++          verseEnd: projected.verseEnd !== undefined ? String(projected.verseEnd) || undefined : undefined,
++          verseNikud: String(projected.verseNikud ?? ''),
++          transliteration: String(projected.transliteration ?? ''),
++          translation: String(projected.translation ?? ''),
++          verseIdx: isFiniteNumber(projected.verseIdx) ? projected.verseIdx : 0,
++          totalVerses: isFiniteNumber(projected.totalVerses) ? projected.totalVerses : 0,
++          scriptureKind: projected.scriptureKind === 'tanaj' ? 'tanaj' : 'sefer',
++          command: payload.navCommand || 'navigate',
++          commandId: now,
++          hebrewFontSize: state.scriptureState?.hebrewFontSize ?? 42,
++          combinedTextBaseSize: state.scriptureState?.combinedTextBaseSize ?? 50,
++        },
++      });
++    }
++
++    case 'SCRIPTURE_BOUNDARY': {
++      if (!state.presentation) return makeOk(state);
++      const nextIndex = payload.direction === 'next' ? state.slideIndex + 1 : state.slideIndex - 1;
++      const slides = getSlides(state.presentation);
++      if (nextIndex < 0 || nextIndex >= slides.length) return makeOk(state);
++      return makeOk(applySlideSelection(
++        state,
++        state.presentation,
++        nextIndex,
++        payload.direction === 'next' ? 'forward' : 'backward',
++        undefined,
++        now,
++      ));
++    }
++
++    case 'SCRIPTURE_ESCAPE': {
++      if (state.appMode === 'seferManual') {
++        const slide = getActiveSlide(state);
++        const restored = buildScriptureSlideState(slide, state.scriptureState, 'forward', undefined, now);
++        const returnsToScripture = Boolean(restored && (slide?.type === 'sefer' || slide?.type === 'tanaj'));
++        return makeOk({
++          ...state,
++          appMode: returnsToScripture ? 'scripture' : 'slides',
++          scriptureState: restored ?? state.scriptureState,
++        });
++      }
++      const slide = getActiveSlide(state);
++      if (slide?.type === 'sefer' || slide?.type === 'tanaj') return makeOk(state);
++      return makeOk({ ...state, appMode: 'slides' });
++    }
++
++    case 'SCRIPTURE_ARROW_NAV':
++      if (!state.scriptureState) return makeOk(state);
++      return makeOk({
++        ...state,
++        scriptureState: {
++          ...state.scriptureState,
++          command: payload.direction === 'up' ? 'previous' : 'next',
++          commandId: now,
++        },
++      });
++
++    case 'UPDATE_FONT_SIZES': {
++      const previous = state.scriptureState ?? {
++        bookEs: '',
++        bookHeb: '',
++        bookAbbrevEs: '',
++        chapter: '1',
++        verseStart: '1',
++        verse: '1',
++        verseNikud: '',
++        transliteration: '',
++        translation: '',
++        verseIdx: 0,
++        totalVerses: 0,
++      };
++      return makeOk({
++        ...state,
++        scriptureState: {
++          ...previous,
++          hebrewFontSize: payload.hebrewFontSize ?? 42,
++          combinedTextBaseSize: payload.combinedTextBaseSize ?? 50,
++        },
++      });
++    }
++
++    case 'VIDEO_STATE_CHANGE':
++      return makeOk({ ...state, videoState: clone(payload.state) });
++
++    case 'AUDIO_STATE_CHANGE':
++      return makeOk({ ...state, audioState: { ...state.audioState, ...clone(payload.state) } });
++
++    case 'QUIZ_START_TIMER':
++      return makeOk(updateQuizState(state, (quizState) => ({
++        ...quizState,
++        timerState: {
++          ...quizState.timerState,
++          status: 'running',
++          timerStartedAt: now,
++          pausedRemainingMs: null,
++        },
++      })));
++
++    case 'QUIZ_PAUSE_TIMER':
++      return makeOk(updateQuizState(state, (quizState) => {
++        if (quizState.timerState.status !== 'running') return quizState;
++        return {
++          ...quizState,
++          timerState: {
++            ...quizState.timerState,
++            status: 'paused',
++            timerStartedAt: null,
++            pausedRemainingMs: calcRemainingMs(quizState.timerState, now),
++          },
++        };
++      }));
++
++    case 'QUIZ_RESUME_TIMER':
++      return makeOk(updateQuizState(state, (quizState) => {
++        if (quizState.timerState.status !== 'paused') return quizState;
++        const remaining = quizState.timerState.pausedRemainingMs ?? quizState.timerState.timerDurationMs;
++        return {
++          ...quizState,
++          timerState: {
++            ...quizState.timerState,
++            status: 'running',
++            timerStartedAt: now,
++            timerDurationMs: remaining,
++            pausedRemainingMs: null,
++          },
++        };
++      }));
++
++    case 'QUIZ_RESET_TIMER':
++      return makeOk(updateQuizState(state, (quizState, activeSlide) => ({
++        ...quizState,
++        timerState: {
++          status: 'idle',
++          timerStartedAt: null,
++          timerDurationMs: Math.max(1, Number(activeSlide.quizData.timerSeconds) || 30) * 1000,
++          pausedRemainingMs: null,
++        },
++      })));
++
++    case 'QUIZ_ADJUST_TIMER':
++      return makeOk(updateQuizState(state, (quizState) => {
++        const ms = payload.seconds * 1000;
++        if (quizState.timerState.status === 'paused') {
++          return { ...quizState, timerState: { ...quizState.timerState, pausedRemainingMs: ms } };
++        }
++        if (quizState.timerState.status === 'idle') {
++          return { ...quizState, timerState: { ...quizState.timerState, timerDurationMs: ms } };
++        }
++        return quizState;
++      }));
++
++    case 'QUIZ_COMPLETE': {
++      const activeSlide = getActiveSlide(state);
++      const subslides = generateQuizSubslides(activeSlide?.quizData);
++      const answerIndex = subslides.findIndex((subslide) => subslide.kind === 'respuesta');
++      const next = updateQuizState(state, (quizState) => ({
++        ...quizState,
++        timerState: { ...getQuizTimerState(state), status: 'completed' },
++      }));
++      return makeOk(answerIndex >= 0 ? selectQuizSubslide(next, answerIndex) : next);
++    }
++
++    case 'QUIZ_SELECT_SUBSLIDE':
++      return makeOk(selectQuizSubslide(state, payload.index));
++
++    case 'QUIZ_DEMO_SELECT':
++      return makeOk(updateQuizState(state, (quizState, activeSlide) => ({
++        ...quizState,
++        presenterDemoSelection: {
++          ...(quizState.presenterDemoSelection ?? {}),
++          [activeSlide.id]: payload.optionId,
++        },
++      })));
++
++    case 'QUIZ_PLAY_APPLAUSE':
++    case 'QUIZ_PLAY_MAL':
++      return makeOk(state);
++
++    case 'RESET_STATE':
++      return makeOk({
++        ...clone(DEFAULT_STATE),
++        clientId: state.clientId,
++        origin: state.origin,
++        audioState: { ...clone(DEFAULT_AUDIO_STATE), timestamp: now },
++      });
++
++    default:
++      return makeError(`Unsupported REMOTE_COMMAND: ${payload.command}`);
++  }
++};
++
+diff --git a/server/ws-server.mjs b/server/ws-server.mjs
+index 951d91e..5e2e005 100644
+--- a/server/ws-server.mjs
++++ b/server/ws-server.mjs
+@@ -888,7 +888,7 @@ const createWsServer = (httpServer, onFallbackMessage) => {
+         case 'DISPLAY_TELEMETRY':
+           if (meta?.role === 'audience') break
+           if (onFallbackMessage) {
+-            onFallbackMessage(msg)
++            onFallbackMessage(msg, meta)
+           }
+           break
+ 
+@@ -935,7 +935,7 @@ const createWsServer = (httpServer, onFallbackMessage) => {
+         case 'DISPLAY_TELEMETRY':
+           if (meta?.role === 'audience') break
+           if (onFallbackMessage) {
+-            onFallbackMessage(msg)
++            onFallbackMessage(msg, meta)
+           }
+           break
+ 
+diff --git a/src/App.tsx b/src/App.tsx
+index d422899..a77bf38 100644
+--- a/src/App.tsx
++++ b/src/App.tsx
+@@ -236,12 +236,6 @@ function App() {
+     setQuizPresenterDemoSelection(activeSlide ? state.presenterDemoSelection?.[activeSlide.id] ?? fallbackSelection : fallbackSelection);
+   }, [activeQuizData?.timerSeconds, activeSlide, quizTimer.resetTimer, quizTimer.setTimerState]);
+ 
+-  useEffect(() => {
+-    if (isPresenterMode && quizSubslides[quizCurrentSubslideIndex]?.kind === 'pregunta' && quizTimer.timerState.status === 'idle') {
+-      quizTimer.startTimer();
+-    }
+-  }, [isPresenterMode, quizSubslides, quizCurrentSubslideIndex, quizTimer.timerState.status, quizTimer.startTimer]);
+-
+   useEffect(() => {
+     currentPresentationRef.current = currentPresentation;
+     currentSlideIndexRef.current = currentSlideIndex;
+@@ -410,22 +404,6 @@ function App() {
+   useAudioTimeline(audioTimeline, serverNow, wsSend);
+   useAudioTimelineApplicator(audioRef, audioTimeline, serverNow);
+ 
+-  useEffect(() => {
+-    if (!isPresenterMode) return;
+-    syncState({
+-      presentation: currentPresentationRef.current,
+-      slideIndex: currentSlideIndexRef.current,
+-      bgLock: backgroundLockRef.current,
+-      lockedBg: lockedBackgroundValueRef.current,
+-      userSelectedBg: userSelectedBackgroundRef.current,
+-      videoState: videoStateRef.current,
+-      appMode: appModeRef.current,
+-      scriptureState: scriptureStateRef.current,
+-      audioState: audioStateRef.current,
+-      quizState: activeQuizState,
+-    });
+-  }, [isPresenterMode, activeQuizState, syncState]);
+-
+   const { getActiveBackground, handleToggleBackgroundLock, handleSelectBackgroundOverride } = useBackgroundResolver({
+     currentPresentation, currentSlideIndex, backgroundLock,
+     lockedBackgroundValue, userSelectedBackground, scriptureState,
+diff --git a/src/components/presenter/PresenterScreen.tsx b/src/components/presenter/PresenterScreen.tsx
+index 366ef01..82c58eb 100644
+--- a/src/components/presenter/PresenterScreen.tsx
++++ b/src/components/presenter/PresenterScreen.tsx
+@@ -93,7 +93,7 @@ const PresenterScreen: React.FC<PresenterScreenProps> = ({
+ 
+   // 2. Slide change listener: Setup dedicated slide video when slide transitions
+   const mediaSrc = slide?.type === 'media' ? slide.mediaSrc : null;
+-  
++
+   // 2A. Initialization: Load video and set start time (only when slide or media source changes)
+   useEffect(() => {
+     if (!videoElement || !slide || slide.type !== 'media' || !mediaSrc) return;
+@@ -264,7 +264,7 @@ const PresenterScreen: React.FC<PresenterScreenProps> = ({
+   const presenterNavVisible = !(isVideoSlide || isPhotoSlide) || slide?.mediaPresenterNav !== false;
+   const isResultsSlide = isQuizSlide && quizSubslides?.[quizCurrentSubslideIndex]?.kind === 'results';
+   const hideLyricsOverlay = isPhotoSlide || isVideoSlide || isQuizSlide;
+-  
++
+ 
+   return (
+     <div className="relative h-full w-full overflow-hidden bg-slate-950 text-white">
+@@ -356,7 +356,7 @@ const PresenterScreen: React.FC<PresenterScreenProps> = ({
+                           {slide.lines.map((line, idx) => (
+                             <section
+                               key={idx}
+-                              className="glass-panel flex min-h-0 min-h-[12vh] flex-1 flex-col px-[3vw] py-[2.4vh]"
++                              className="glass-panel flex min-h-[12vh] flex-1 flex-col px-[3vw] py-[2.4vh]"
+                             >
+                               <div className="flex-1 overflow-hidden">
+                                 <AutoResizeText
+@@ -364,10 +364,10 @@ const PresenterScreen: React.FC<PresenterScreenProps> = ({
+                                   html={true}
+                                   fontScale={fontScale}
+                                   className={`drop-shadow-2xl font-semibold ${idx === 0
+-                                      ? 'hebrew-text text-[#f3c96a] text-[calc(clamp(1.8rem,4vw,5.8rem)*var(--font-scale))]'
+-                                      : idx === 1
+-                                        ? 'text-sky-200 text-[calc(clamp(1.2rem,2.2vw,3rem)*var(--font-scale))]'
+-                                        : 'text-white text-[calc(clamp(1rem,2vw,2.6rem)*var(--font-scale))]'
++                                    ? 'hebrew-text text-[#f3c96a] text-[calc(clamp(1.8rem,4vw,5.8rem)*var(--font-scale))]'
++                                    : idx === 1
++                                      ? 'text-sky-200 text-[calc(clamp(1.2rem,2.2vw,3rem)*var(--font-scale))]'
++                                      : 'text-white text-[calc(clamp(1rem,2vw,2.6rem)*var(--font-scale))]'
+                                     }`}
+                                 />
+                               </div>
+@@ -375,7 +375,7 @@ const PresenterScreen: React.FC<PresenterScreenProps> = ({
+                           ))}
+                         </div>
+                       ) : (
+-                        <section className="glass-panel flex min-h-0 min-h-[40vh] w-full flex-1 flex-col px-[4vw] py-[5vh]">
++                        <section className="glass-panel flex min-h-[40vh] w-full flex-1 flex-col px-[4vw] py-[5vh]">
+                           <div className="flex-1 overflow-hidden">
+                             <AutoResizeText
+                               text={slide.lines[0]}
+diff --git a/src/hooks/useSyncState.ts b/src/hooks/useSyncState.ts
+index 046a903..cc22081 100644
+--- a/src/hooks/useSyncState.ts
++++ b/src/hooks/useSyncState.ts
+@@ -90,6 +90,15 @@ const liveAudioWsOnlyTypes = new Set([
+ const isLiveAudioWsOnlyType = (type: unknown): type is string =>
+   typeof type === 'string' && liveAudioWsOnlyTypes.has(type);
+ 
++const presenterSideEffectCommands = new Set<RemoteCommandPayload['command']>([
++  'QUIZ_PLAY_APPLAUSE',
++  'QUIZ_PLAY_MAL',
++  'SCRIPTURE_ADD_SLIDE',
++]);
++
++const isPresenterSideEffectCommand = (payload: RemoteCommandPayload) =>
++  presenterSideEffectCommands.has(payload.command);
++
+ const arePresentationsEqual = (left: Presentation | null, right: Presentation | null) => {
+   if (left === right) return true;
+   if (!left || !right) return false;
+@@ -524,6 +533,38 @@ export function useSyncState(props: UseSyncStateProps) {
+     setAudioSyncMapsRef.current = setAudioSyncMaps;
+   }, [applyRemoteState, onRemoteCommand, applyAudioTelemetry, applyDisplayTelemetry, setVideoState, setAudioSyncMaps]);
+ 
++  const requestBackendState = useCallback(async () => {
++    try {
++      const response = await fetch('/api/state', {
++        method: 'GET',
++        headers: { Accept: 'application/json' },
++        cache: 'no-store',
++      });
++      if (!response.ok) return false;
++      const data = await response.json();
++      if (!data) return false;
++
++      if (data.type) {
++        const validation = validateSyncMessage(data);
++        if (!validation.ok || !validation.value) {
++          console.error('Ignoring invalid backend state snapshot', validation.errors);
++          return false;
++        }
++        const safeData = validation.value;
++        if (safeData.type === 'SYNC_STATE') {
++          applyRemoteStateRef.current(safeData as unknown as Record<string, unknown>, true, true);
++          return true;
++        }
++      }
++
++      applyRemoteStateRef.current(data as Record<string, unknown>);
++      return true;
++    } catch (err) {
++      console.error('Error requesting backend state snapshot', err);
++      return false;
++    }
++  }, []);
++
+   // ÔöÇÔöÇ BroadcastChannel listener ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+   useEffect(() => {
+     const handleMessage = (event: MessageEvent) => {
+@@ -571,25 +612,15 @@ export function useSyncState(props: UseSyncStateProps) {
+       }
+ 
+       if (data.type === 'REQUEST_STATE') {
+-        if (!isPresenterMode) return; // only presenter responds
+-        syncState({
+-          presentation: currentPresentationRef.current,
+-          slideIndex: currentSlideIndexRef.current,
+-          bgLock: backgroundLockRef.current,
+-          lockedBg: lockedBackgroundValueRef.current,
+-          userSelectedBg: userSelectedBackgroundRef.current,
+-          videoState: videoStateRef.current,
+-          appMode: appModeRef.current,
+-          scriptureState: scriptureStateRef.current,
+-          audioState: audioStateRef.current,
+-          quizState: quizStateRef?.current ?? null,
+-        });
++        void requestBackendState();
+         return;
+       }
+ 
+       if (data.type === 'REMOTE_COMMAND') {
+-        if (!isPresenterMode) return; // only presenter processes commands
+-        onRemoteCommandRef.current?.(data.payload as RemoteCommandPayload);
++        const payload = data.payload as RemoteCommandPayload;
++        if (isPresenterMode && isPresenterSideEffectCommand(payload)) {
++          onRemoteCommandRef.current?.(payload);
++        }
+         return;
+       }
+ 
+@@ -600,14 +631,15 @@ export function useSyncState(props: UseSyncStateProps) {
+ 
+     channel.addEventListener('message', handleMessage);
+ 
+-    // Clients ask for current state on open (except Presenter, who is the source of truth)
+-    if (!isPresenterMode) {
+-      channel.postMessage(makeSyncMessage({ type: 'REQUEST_STATE', clientId: clientIdRef.current }));
+-    }
++    void requestBackendState().then((loaded) => {
++      if (!loaded) {
++        channel.postMessage(makeSyncMessage({ type: 'REQUEST_STATE', clientId: clientIdRef.current }));
++      }
++    });
+ 
+     return () => channel.removeEventListener('message', handleMessage);
+   }, [
+-    isPresenterMode, channel, clientIdRef, syncState
++    isPresenterMode, channel, clientIdRef, requestBackendState, videoStateRef
+   ]);
+ 
+   // ÔöÇÔöÇ SSE listener (web mode only) ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+@@ -618,7 +650,7 @@ export function useSyncState(props: UseSyncStateProps) {
+       try {
+         if (event.data === 'heartbeat') return;
+         const data = JSON.parse(event.data);
+-        if (!data || data.clientId === clientIdRef.current) return;
++        if (!data) return;
+ 
+         if (data.type) {
+           const validation = validateSyncMessage(data);
+@@ -657,8 +689,10 @@ export function useSyncState(props: UseSyncStateProps) {
+           }
+ 
+           if (safeData.type === 'REMOTE_COMMAND') {
+-            if (!isPresenterMode) return;
+-            onRemoteCommandRef.current?.(safeData.payload as RemoteCommandPayload);
++            const payload = safeData.payload as RemoteCommandPayload;
++            if (isPresenterMode && isPresenterSideEffectCommand(payload)) {
++              onRemoteCommandRef.current?.(payload);
++            }
+             return;
+           }
+ 
+@@ -674,7 +708,7 @@ export function useSyncState(props: UseSyncStateProps) {
+ 
+     return () => eventSource.close();
+   }, [
+-    clientIdRef, isPresenterMode
++    clientIdRef, isPresenterMode, videoStateRef
+   ]);
+ 
+   return { channel, syncState, emitCommand, persistState, emitAudioTelemetry, emitVideoTelemetry, emitDisplayTelemetry, wsStatus, wsSend, subscribeToWsMessage };
+diff --git a/src/utils/validation.ts b/src/utils/validation.ts
+index 1b549f7..bfc29f0 100644
+--- a/src/utils/validation.ts
++++ b/src/utils/validation.ts
+@@ -928,6 +928,17 @@ export const validateSyncMessage = (value: unknown): ValidationResult<BroadcastM
+       // Basic semantic checks on known commands
+       const payload = value.payload as Record<string, unknown>;
+       switch (payload.command) {
++        case 'SELECT_PRESENTATION_AND_SLIDE':
++          if (payload.presentation !== null && !isRecord(payload.presentation)) baseErrors.push('presentation debe ser objeto o null');
++          if (!isFiniteNumber(payload.slideIndex)) baseErrors.push('slideIndex debe ser numero');
++          if (payload.direction !== undefined && payload.direction !== 'forward' && payload.direction !== 'backward') {
++            baseErrors.push('direction debe ser forward o backward');
++          }
++          if (payload.targetVerse !== undefined && typeof payload.targetVerse !== 'string') baseErrors.push('targetVerse debe ser texto');
++          break;
++        case 'SELECT_STEP':
++          if (!Number.isInteger(payload.stepIndex) || (payload.stepIndex as number) < 0) baseErrors.push('stepIndex debe ser entero >= 0');
++          break;
+         case 'TOGGLE_APP_MODE':
+           if (!appModes.has(payload.mode as string)) baseErrors.push(`Modo invalido: ${payload.mode}`);
+           break;
+@@ -940,12 +951,39 @@ export const validateSyncMessage = (value: unknown): ValidationResult<BroadcastM
+         case 'QUIZ_SELECT_SUBSLIDE':
+           if (!Number.isInteger(payload.index) || (payload.index as number) < 0) baseErrors.push('index debe ser entero >= 0');
+           break;
++        case 'QUIZ_ADJUST_TIMER':
++          if (!isFiniteNumber(payload.seconds) || (payload.seconds as number) < 1) baseErrors.push('seconds debe ser numero >= 1');
++          break;
++        case 'QUIZ_DEMO_SELECT':
++          if (payload.optionId !== null && typeof payload.optionId !== 'string') baseErrors.push('optionId debe ser texto o null');
++          break;
++        case 'SCRIPTURE_PROJECT':
++          if (!isRecord(payload.state)) baseErrors.push('state debe ser objeto');
++          if (
++            payload.navCommand !== undefined &&
++            payload.navCommand !== 'navigate' &&
++            payload.navCommand !== 'next' &&
++            payload.navCommand !== 'previous'
++          ) {
++            baseErrors.push('navCommand debe ser navigate, next o previous');
++          }
++          break;
+         case 'SCRIPTURE_ARROW_NAV':
+           if (payload.direction !== 'up' && payload.direction !== 'down') baseErrors.push('direction debe ser up o down');
+           break;
+         case 'SCRIPTURE_BOUNDARY':
+           if (payload.direction !== 'next' && payload.direction !== 'previous') baseErrors.push('direction debe ser next o previous');
+           break;
++        case 'UPDATE_FONT_SIZES':
++          if (payload.hebrewFontSize !== undefined && !isFiniteNumber(payload.hebrewFontSize)) baseErrors.push('hebrewFontSize debe ser numero');
++          if (payload.combinedTextBaseSize !== undefined && !isFiniteNumber(payload.combinedTextBaseSize)) baseErrors.push('combinedTextBaseSize debe ser numero');
++          break;
++        case 'VIDEO_STATE_CHANGE':
++          if (payload.state !== null && !isRecord(payload.state)) baseErrors.push('state debe ser objeto o null');
++          break;
++        case 'AUDIO_STATE_CHANGE':
++          if (!isRecord(payload.state)) baseErrors.push('state debe ser objeto');
++          break;
+       }
+     }
+     return baseErrors.length > 0 ? fail(baseErrors) : ok(value as unknown as BroadcastMessage);
