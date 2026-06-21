@@ -10,6 +10,8 @@
         "dev": "node server/dev.mjs",
         "dev:frontend": "vite",
         "dev:backend": "node server/local-server.mjs",
+        "docker:up": "docker compose up --build",
+        "docker:down": "docker compose down",
         "build": "tsc -b && vite build",
         "build:web": "tsc -b && vite build",
         "lint": "eslint .",

@@ -17,6 +17,8 @@ SeferPresenter es una aplicacion React/Vite para proyectar presentaciones con so
 npm run dev          # backend local + servidor Vite frontend
 npm run dev:frontend # solo servidor Vite frontend
 npm run dev:backend  # backend local Node en http://localhost:8787
+npm run docker:up    # stack completo con Docker Compose
+npm run docker:down  # detener el stack completo de Docker Compose
 npm run build        # build web
 npm run start:local  # backend local sirviendo dist/
 npm run test         # Vitest
@@ -53,6 +55,7 @@ El backend local vive en `server/local-server.mjs`. Mantiene inicialmente la mis
 - `POST /api/livekit/mute-participant`
 - `POST /api/livekit/mute-all`
 - `POST /api/livekit/kick-participant`
+- `POST /api/livekit/rescue-participant`
 
 El backend tambien adjunta WebSocket en `ws://localhost:8787/ws`. En Fase 2
 ese canal es propietario de la timeline de audio del servidor:
@@ -61,6 +64,11 @@ ese canal es propietario de la timeline de audio del servidor:
 reducen en el backend a `SYNC_STATE`, por lo que Control y Audiencia pueden
 sincronizar navegacion sin requerir que `/presenter` este abierto. SSE y los
 endpoints HTTP existentes siguen activos.
+
+Si necesitas probar el stack completo con proxy, Redis y LiveKit, usa
+`docker compose` mediante `npm run docker:up`. `npm run dev` sigue siendo util
+para desarrollo local del frontend/backend, pero no sustituye el entorno
+contenedorizado cuando quieres validar la ruta completa de voz en vivo.
 
 En desarrollo, `npm run dev` arranca el backend local y Vite juntos. Vite proxya `/api` a `http://localhost:8787`. Si arrancas solo `npm run dev:frontend`, debes tener `npm run dev:backend` abierto en otra terminal. Para pruebas locales estables, ejecuta `npm run build` y despues `npm run start:local`.
 
@@ -131,6 +139,9 @@ Canales principales:
 - Familia Live Audio: mensajes opcionales tipados para voz en vivo
   (`LIVE_AUDIO_*`, `CONTROL_KEY_ROTATED`, `PRIVATE_CONTROL_SIGNAL`) separados de
   `SYNC_STATE`, `AudioState` y `AudioTimelineState`.
+- `LIVE_AUDIO_SNAPSHOT_REQUEST` / `LIVE_AUDIO_SNAPSHOT`: snapshot operacional
+  efimero para Controles autorizados, con participantes, cola, autorizaciones,
+  estado LiveKit y agregados anonimos de quiz. Controles pendientes no lo reciben.
 
 La audiencia muestra la misma imagen viva del presenter, sin controles de navegacion ni apertura del panel de control.
 
@@ -171,6 +182,10 @@ memoria. Si `SEFER_LIVE_AUDIO_ENABLED=false` o faltan `LIVEKIT_URL`,
 `GET /api/livekit/status` responde que Live Audio esta desactivado o no
 disponible. Las respuestas de estado no exponen secretos.
 
+Para validar Live Audio end-to-end con LiveKit real, el camino soportado es
+Docker Compose (`npm run docker:up`), porque el stack incluye `caddy`, `redis`
+y `livekit` junto con la app.
+
 Variables:
 
 ```bash
@@ -197,11 +212,16 @@ Endpoints:
   en memoria antes de expirar, preservando `participantId` e identidad LiveKit
   cuando el participante sigue dentro del margen de retorno.
 - `POST /api/livekit/grant-speak`, `revoke-speak`, `mute-participant`,
-  `mute-all`, `kick-participant`: requieren `role: "control"` y un
-  `controlSessionId` autorizado por WebSocket. `audience` recibe 403.
+  `mute-all`, `kick-participant`, `rescue-participant`: requieren
+  `role: "control"` y un `controlSessionId` autorizado por WebSocket.
+  `audience` recibe 403. `rescue-participant` devuelve al usuario expulsado a
+  audiencia activa muda (`LISTENER`) sin abrir ni publicar microfono.
 
 No hay endpoints de consentimiento, alias legible ni chat legible. El backend no
 persiste claves, alias, tokens ni mensajes privados en archivos o base de datos.
+El snapshot operacional vive solo en memoria; las partes sensibles que el
+servidor llega a conocer por parches de Control autorizado se cifran con una
+clave derivada de `SEFER_CONTROL_PASSWORD` y no se guardan en disco.
 
 ## Legacy
 

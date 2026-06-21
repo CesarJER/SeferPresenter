@@ -90,6 +90,13 @@ Use these checklists before implementing future tasks.
   Controls are pending with `NNN-NNN` codes, pending Controls cannot receive
   private signals or send moderation actions, and principal succession promotes
   the oldest authorized Control.
+- Keep Control handoff snapshots server-owned in `server/ws-server.mjs`.
+  Authorized Controls may request/receive `LIVE_AUDIO_SNAPSHOT`; pending
+  Controls must not receive it. Sensitive snapshot overlays learned from Control
+  patches must stay ephemeral and encrypted in server memory with a key derived
+  from `SEFER_CONTROL_PASSWORD`; do not persist them to disk.
+- Rescue actions must clear `isKicked` and return the participant to active
+  muted `LISTENER` without opening or publishing microphone tracks.
 - Keep Control authorization UI compact and separate from `MenuPopup.tsx`;
   `src/hooks/useControlAuthorization.ts` should reflect WebSocket state and emit
   approval/rejection decisions without persisting codes or messages.
@@ -99,6 +106,8 @@ Use these checklists before implementing future tasks.
   consent endpoints, or persisted privacy acknowledgement records.
 - Do not log aliases, private text, keys, ciphertext, or full private signal
   payloads.
+- Do not include private message history, private signal plaintext, or ciphertext
+  history in operational snapshots.
 - Do not use localStorage, sessionStorage, backend endpoints, or server state for
   private keys.
 - Do not touch `src/App.tsx`, `AudioState`, or `AudioTimelineState` for

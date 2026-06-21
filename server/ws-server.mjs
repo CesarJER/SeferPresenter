@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto'
+import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from 'node:crypto'
 import { WebSocket, WebSocketServer } from 'ws'
 import { applyAction, getTimeline } from './timelineManager.mjs'
 import { isAuthRequired, hasValidBasicAuth } from './authUtils.mjs'
@@ -7,19 +7,24 @@ const wsClients = new Map()
 const roles = new Set(['presenter', 'control', 'audience', 'unknown'])
 const liveAudioControls = new Map()
 const liveAudioParticipants = new Map()
+let presentationSessionId = randomUUID()
 let liveAudioControlPublicKeyMessage = null
+let encryptedSensitiveSnapshot = null
 const PRIVATE_CONTROL_SIGNAL_MAX_CIPHERTEXT_BYTES = 4096
 const PRIVATE_CONTROL_SIGNAL_RATE_LIMIT = 5
 const PRIVATE_CONTROL_SIGNAL_RATE_WINDOW_MS = 60_000
 const uuidV4Pattern = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const base64Pattern = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/
 const speakerStates = new Set(['LISTENER', 'REQUESTED', 'GRANTED', 'MUTED', 'REVOKED'])
+const microphonePermissionStates = new Set(['unknown', 'prompt', 'denied', 'granted', 'unavailable'])
+const microphoneTrackStates = new Set(['notRequested', 'off', 'publishing', 'mutedByUser', 'mutedByControl', 'error'])
 const liveAudioModerationTypes = new Set([
   'LIVE_AUDIO_GRANT_SPEAK',
   'LIVE_AUDIO_REVOKE_SPEAK',
   'LIVE_AUDIO_MUTE_PARTICIPANT',
   'LIVE_AUDIO_MUTE_ALL',
   'LIVE_AUDIO_KICK_PARTICIPANT',
+  'LIVE_AUDIO_RESCUE_PARTICIPANT',
 ])
 const audienceAllowedTypes = new Set([
   'SERVER_TIME_PING',
@@ -37,6 +42,82 @@ const getControlCodeTtlMs = () => {
 
 const allowDelegatedModerators = () =>
   String(process.env.SEFER_LIVE_AUDIO_ALLOW_DELEGATED_MODERATORS || 'true').toLowerCase() !== 'false'
+
+const getSnapshotEncryptionKey = () => {
+  const password = process.env.SEFER_CONTROL_PASSWORD || 'sefer-local-ephemeral-snapshot'
+  return createHash('sha256').update(`sefer-control-snapshot:${password}`).digest()
+}
+
+const encryptSensitiveSnapshot = (value) => {
+  const iv = randomBytes(12)
+  const cipher = createCipheriv('aes-256-gcm', getSnapshotEncryptionKey(), iv)
+  const plaintext = Buffer.from(JSON.stringify(value), 'utf8')
+  const ciphertext = Buffer.concat([cipher.update(plaintext), cipher.final()])
+  return {
+    iv: iv.toString('base64'),
+    tag: cipher.getAuthTag().toString('base64'),
+    ciphertext: ciphertext.toString('base64'),
+    updatedAt: Date.now(),
+  }
+}
+
+const decryptSensitiveSnapshot = () => {
+  if (!encryptedSensitiveSnapshot) {
+    return {
+      aliases: {},
+      microphonePermissionStates: {},
+      microphoneTrackStates: {},
+    }
+  }
+
+  try {
+    const decipher = createDecipheriv(
+      'aes-256-gcm',
+      getSnapshotEncryptionKey(),
+      Buffer.from(encryptedSensitiveSnapshot.iv, 'base64'),
+    )
+    decipher.setAuthTag(Buffer.from(encryptedSensitiveSnapshot.tag, 'base64'))
+    const plaintext = Buffer.concat([
+      decipher.update(Buffer.from(encryptedSensitiveSnapshot.ciphertext, 'base64')),
+      decipher.final(),
+    ])
+    const parsed = JSON.parse(plaintext.toString('utf8'))
+    return parsed && typeof parsed === 'object' ? parsed : {}
+  } catch {
+    return {
+      aliases: {},
+      microphonePermissionStates: {},
+      microphoneTrackStates: {},
+    }
+  }
+}
+
+const mergeSensitiveSnapshot = (patch) => {
+  if (!patch || typeof patch !== 'object') return
+  const current = decryptSensitiveSnapshot()
+  const next = {
+    aliases: { ...(current.aliases || {}) },
+    microphonePermissionStates: { ...(current.microphonePermissionStates || {}) },
+    microphoneTrackStates: { ...(current.microphoneTrackStates || {}) },
+  }
+
+  if (Array.isArray(patch.participants)) {
+    for (const participant of patch.participants) {
+      if (!participant || typeof participant !== 'object' || !isValidParticipantId(participant.participantId)) continue
+      if (typeof participant.alias === 'string' && participant.alias.trim()) {
+        next.aliases[participant.participantId] = participant.alias.trim().slice(0, 80)
+      }
+      if (typeof participant.microphonePermissionState === 'string') {
+        next.microphonePermissionStates[participant.participantId] = participant.microphonePermissionState
+      }
+      if (typeof participant.microphoneTrackState === 'string') {
+        next.microphoneTrackStates[participant.participantId] = participant.microphoneTrackState
+      }
+    }
+  }
+
+  encryptedSensitiveSnapshot = encryptSensitiveSnapshot(next)
+}
 
 const getRejoinGraceMs = () => {
   const raw = Number.parseInt(process.env.SEFER_LIVE_AUDIO_REJOIN_GRACE_SECONDS || '60', 10)
@@ -127,6 +208,103 @@ const getLiveAudioParticipantSnapshot = () => ({
   })),
 })
 
+const getConnectionCountsSnapshot = () => {
+  const counts = {
+    audienceConnections: 0,
+    controlConnections: 0,
+    presenterConnections: 0,
+  }
+
+  for (const [client, meta] of wsClients) {
+    if (client.readyState !== WebSocket.OPEN) continue
+    if (meta.role === 'audience') counts.audienceConnections += 1
+    if (meta.role === 'control') counts.controlConnections += 1
+    if (meta.role === 'presenter') counts.presenterConnections += 1
+  }
+
+  return {
+    totalConnections: counts.audienceConnections + counts.controlConnections + counts.presenterConnections,
+    ...counts,
+    updatedAt: Date.now(),
+  }
+}
+
+const inferOperationalRole = (participant) => {
+  if (participant.role === 'control') return 'control'
+  if (participant.role === 'presenter') return 'presenter'
+  if (participant.isKicked || participant.speakerState === 'REVOKED' || participant.isActiveAudience === false) return 'pasivo'
+  if (participant.speakerState === 'REQUESTED') return 'cola'
+  if (participant.speakerState === 'GRANTED' || participant.isMicrophoneActive) return 'orador'
+  return 'activo'
+}
+
+const inferMicrophoneTrackState = (participant) => {
+  if (participant.microphoneTrackState) return participant.microphoneTrackState
+  if (participant.isKicked || participant.speakerState === 'REVOKED') return 'off'
+  if (participant.isMicrophoneActive) return 'publishing'
+  if (participant.speakerState === 'GRANTED' && participant.isMuted) return 'mutedByControl'
+  if (participant.canPublishAudio) return 'off'
+  return 'notRequested'
+}
+
+const makeOperationalParticipantSnapshot = (participant, sensitive = {}) => {
+  const participantId = participant.participantId
+  return {
+    participantId,
+    role: participant.role,
+    alias: sensitive.aliases?.[participantId],
+    operationalRole: inferOperationalRole(participant),
+    microphonePermissionState: sensitive.microphonePermissionStates?.[participantId] || participant.microphonePermissionState || 'unknown',
+    microphoneTrackState: sensitive.microphoneTrackStates?.[participantId] || inferMicrophoneTrackState(participant),
+    speakerState: participant.speakerState,
+    canSubscribe: participant.canSubscribe,
+    canPublishAudio: participant.canPublishAudio,
+    isMuted: participant.isMuted,
+    isActiveAudience: participant.isActiveAudience,
+    isMicrophoneActive: participant.isMicrophoneActive,
+    isKicked: participant.isKicked,
+    connected: Boolean(participant.ws && participant.ws.readyState === WebSocket.OPEN),
+    connectedAt: participant.connectedAt,
+    disconnectedAt: participant.disconnectedAt,
+    updatedAt: participant.updatedAt,
+  }
+}
+
+const makeOperationalSnapshot = ({ liveKitState, quizAggregate } = {}) => {
+  const sensitive = decryptSensitiveSnapshot()
+  const participants = Array.from(liveAudioParticipants.values()).map((participant) =>
+    makeOperationalParticipantSnapshot(participant, sensitive))
+  return {
+    snapshotId: `snapshot-${Date.now()}-${randomUUID()}`,
+    createdAt: Date.now(),
+    connectionCounts: getConnectionCountsSnapshot(),
+    participants,
+    interventionQueue: participants
+      .filter((participant) => participant.speakerState === 'REQUESTED' && !participant.isKicked)
+      .map((participant) => participant.participantId),
+    authorizations: {
+      principalControlSessionId: findPrincipalControl()?.controlSessionId || null,
+      controls: getLiveAudioControlSnapshot().controls,
+      pendingControls: getPendingControls(),
+      allowDelegatedModerators: allowDelegatedModerators(),
+    },
+    liveKit: {
+      enabled: liveKitState?.enabled,
+      available: liveKitState?.available,
+      participants: liveKitState?.participants || [],
+      speakers: liveKitState?.speakers || [],
+      muted: liveKitState?.muted || [],
+      kicked: liveKitState?.kicked || [],
+    },
+    quizAggregate: quizAggregate || {
+      submittedAnswersBySlideId: {},
+      finalScoreRanges: {},
+      totalFinalScores: 0,
+      updatedAt: null,
+    },
+  }
+}
+
 const hasActivePresenter = () => {
   for (const meta of wsClients.values()) {
     if (meta.role === 'presenter' && meta.ws && meta.ws.readyState === WebSocket.OPEN) {
@@ -201,13 +379,14 @@ const resetWsServerStateForTests = () => {
   liveAudioControls.clear()
   liveAudioParticipants.clear()
   liveAudioControlPublicKeyMessage = null
+  encryptedSensitiveSnapshot = null
 }
 
-const createWsServer = (httpServer, onFallbackMessage) => {
+const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) => {
   const wss = new WebSocketServer({ server: httpServer, path: '/ws' })
 
   const broadcast = (message, filter) => {
-    const data = JSON.stringify(message)
+    const data = typeof message === 'string' ? message : JSON.stringify(message)
     for (const [client, meta] of wsClients) {
       if (client.readyState !== WebSocket.OPEN) continue
       if (filter && !filter(meta)) continue
@@ -288,9 +467,24 @@ const createWsServer = (httpServer, onFallbackMessage) => {
     sendJson(control.ws, message)
   }
 
+  const makeSnapshotMessage = () => ({
+    type: 'LIVE_AUDIO_SNAPSHOT',
+    snapshot: makeOperationalSnapshot({
+      liveKitState: snapshotProviders.getLiveKitState?.(),
+      quizAggregate: snapshotProviders.getQuizAggregateSnapshot?.(),
+    }),
+    createdAt: Date.now(),
+  })
+
+  const sendOperationalSnapshot = (control) => {
+    if (!isControlAuthorized(control)) return false
+    return sendJson(control.ws, makeSnapshotMessage())
+  }
+
   const broadcastAuthorizationState = () => {
     for (const control of liveAudioControls.values()) {
       sendAuthorizationState(control)
+      sendOperationalSnapshot(control)
     }
     broadcastMediaMasterStatus()
   }
@@ -502,6 +696,8 @@ const createWsServer = (httpServer, onFallbackMessage) => {
     if (msg.isActiveAudience !== undefined && typeof msg.isActiveAudience !== 'boolean') return false
     if (msg.isMicrophoneActive !== undefined && typeof msg.isMicrophoneActive !== 'boolean') return false
     if (msg.isKicked !== undefined && typeof msg.isKicked !== 'boolean') return false
+    if (msg.microphonePermissionState !== undefined && !microphonePermissionStates.has(msg.microphonePermissionState)) return false
+    if (msg.microphoneTrackState !== undefined && !microphoneTrackStates.has(msg.microphoneTrackState)) return false
     if (msg.updatedAt !== undefined && (typeof msg.updatedAt !== 'number' || !Number.isFinite(msg.updatedAt))) return false
     return msg.alias === undefined
   }
@@ -543,6 +739,12 @@ const createWsServer = (httpServer, onFallbackMessage) => {
       isActiveAudience: isKicked ? false : typeof status.isActiveAudience === 'boolean' ? status.isActiveAudience : existing?.isActiveAudience ?? false,
       isMicrophoneActive,
       isKicked,
+      microphonePermissionState: typeof status.microphonePermissionState === 'string'
+        ? status.microphonePermissionState
+        : existing?.microphonePermissionState || 'unknown',
+      microphoneTrackState: typeof status.microphoneTrackState === 'string'
+        ? status.microphoneTrackState
+        : existing?.microphoneTrackState,
       connectedAt: existing?.connectedAt || now,
       updatedAt: now,
       disconnectedAt: undefined,
@@ -646,6 +848,8 @@ const createWsServer = (httpServer, onFallbackMessage) => {
     isActiveAudience: msg.isActiveAudience,
     isMicrophoneActive: msg.isMicrophoneActive,
     isKicked: msg.isKicked,
+    microphonePermissionState: msg.microphonePermissionState,
+    microphoneTrackState: msg.microphoneTrackState,
     updatedAt: msg.updatedAt || Date.now(),
   })
 
@@ -719,6 +923,17 @@ const createWsServer = (httpServer, onFallbackMessage) => {
           isActiveAudience: false,
           isMicrophoneActive: false,
           isKicked: true,
+        })
+        break
+      case 'LIVE_AUDIO_RESCUE_PARTICIPANT':
+        update(msg.participantId, {
+          speakerState: 'LISTENER',
+          canPublishAudio: false,
+          isMuted: true,
+          isActiveAudience: true,
+          isMicrophoneActive: false,
+          isKicked: false,
+          microphoneTrackState: 'off',
         })
         break
       case 'LIVE_AUDIO_MUTE_ALL': {
@@ -807,6 +1022,7 @@ const createWsServer = (httpServer, onFallbackMessage) => {
       role,
       controlSessionId: control?.controlSessionId,
       controlState: control?.controlState,
+      presentationSessionId,
     }))
     broadcastConnectionCounts()
     broadcastMediaMasterStatus()
@@ -928,8 +1144,33 @@ const createWsServer = (httpServer, onFallbackMessage) => {
           break
         }
 
+        case 'LIVE_AUDIO_SNAPSHOT_REQUEST': {
+          if (meta?.role !== 'control') break
+          const controlMeta = liveAudioControls.get(meta.controlSessionId)
+          if (!isControlAuthorized(controlMeta)) {
+            sendError(ws, 'CONTROL_PENDING_FORBIDDEN', 'Pending controls cannot request operational snapshots')
+            break
+          }
+          sendOperationalSnapshot(controlMeta)
+          break
+        }
+
+        case 'LIVE_AUDIO_SNAPSHOT_PATCH': {
+          if (meta?.role !== 'control') break
+          const controlMeta = liveAudioControls.get(meta.controlSessionId)
+          if (!isControlAuthorized(controlMeta)) {
+            sendError(ws, 'CONTROL_PENDING_FORBIDDEN', 'Pending controls cannot publish operational snapshot patches')
+            break
+          }
+          mergeSensitiveSnapshot(msg.snapshot)
+          broadcast(makeSnapshotMessage(), (targetMeta) => {
+            if (targetMeta.role !== 'control') return false
+            return isControlAuthorized(liveAudioControls.get(targetMeta.controlSessionId))
+          })
+          break
+        }
+
         case 'SYNC_STATE':
-        case 'REMOTE_COMMAND':
         case 'AUDIO_TELEMETRY':
         case 'VIDEO_TELEMETRY':
         case 'DISPLAY_TELEMETRY':
@@ -939,13 +1180,31 @@ const createWsServer = (httpServer, onFallbackMessage) => {
           }
           break
 
-
+        case 'REMOTE_COMMAND':
+          if (meta?.role === 'audience') break
+          if (msg.payload?.command === 'RESET_STATE' && msg.payload.clearSession) {
+            presentationSessionId = randomUUID()
+            liveAudioControls.clear()
+            liveAudioParticipants.clear()
+            broadcastConnectionCounts()
+            broadcastAuthorizationState()
+            broadcast(JSON.stringify({
+              type: 'PRESENTATION_SESSION_ROTATED',
+              presentationSessionId,
+            }))
+            console.log(`[SERVER DBG] Global presentation session rotated by ${meta.clientId}, new ID: ${presentationSessionId}`)
+          }
+          if (onFallbackMessage) {
+            onFallbackMessage(msg, meta)
+          }
+          break
 
         case 'LIVE_AUDIO_GRANT_SPEAK':
         case 'LIVE_AUDIO_REVOKE_SPEAK':
         case 'LIVE_AUDIO_MUTE_PARTICIPANT':
         case 'LIVE_AUDIO_MUTE_ALL':
-        case 'LIVE_AUDIO_KICK_PARTICIPANT': {
+        case 'LIVE_AUDIO_KICK_PARTICIPANT':
+        case 'LIVE_AUDIO_RESCUE_PARTICIPANT': {
           if (meta?.role !== 'control') break
           if (!validateModerationMessage(msg)) break
           const controlMeta = liveAudioControls.get(meta.controlSessionId)

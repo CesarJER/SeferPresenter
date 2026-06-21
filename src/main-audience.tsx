@@ -9,6 +9,7 @@ import { makeClientId } from './utils/normalizePresentation';
 import { DataProtectionLink } from './components/shared/DataProtectionLink';
 import { useLiveAudioAvailability } from './features/liveAudio/hooks/useLiveAudioAvailability';
 import { useAudienceAudioPlayback } from './hooks/useAudienceAudioPlayback';
+import { useAudienceSession } from './hooks/useAudienceSession';
 
 import type { AppMode, Presentation, ScriptureNavState, VideoState } from './types/presentation';
 import type { QuizSyncState } from './types/quiz';
@@ -116,6 +117,7 @@ function AudienceApp() {
   });
 
   const liveAudioAvailability = useLiveAudioAvailability();
+  const audienceSession = useAudienceSession({ subscribeToWsMessage });
 
   const { getActiveBackground } = useBackgroundResolver({
     currentPresentation, currentSlideIndex, backgroundLock, lockedBackgroundValue, userSelectedBackground, scriptureState,
@@ -190,6 +192,7 @@ function AudienceApp() {
           wsSend={wsSend}
           subscribeToWsMessage={subscribeToWsMessage}
           clientId={clientIdRef.current}
+          audienceSession={audienceSession}
         />
       </React.Suspense>
       

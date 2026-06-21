@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Hand, MessageSquare, MicOff, Volume2, X, XCircle } from 'lucide-react';
+import { Hand, MessageSquare, MicOff, RotateCcw, Volume2, X, XCircle } from 'lucide-react';
 import type { SpeakerState } from '../../../../types/liveAudio';
 import { LiveAudioStatusBadge, type ParticipantStatus } from '../shared/LiveAudioStatusBadge';
 
@@ -22,6 +22,7 @@ interface LiveAudioParticipantRowProps {
   onRevoke?: (id: string) => void;
   onMute?: (id: string) => void;
   onKick?: (id: string) => void;
+  onRescue?: (id: string) => void;
   onMicrophoneConfigChange?: (
     id: string,
     config: { volume?: number; musicMode?: boolean }
@@ -35,6 +36,7 @@ export const LiveAudioParticipantRow: React.FC<LiveAudioParticipantRowProps> = (
   onRevoke,
   onMute,
   onKick,
+  onRescue,
   onMicrophoneConfigChange,
 }) => {
   const [isVolumeOpen, setIsVolumeOpen] = useState(false);
@@ -196,7 +198,18 @@ export const LiveAudioParticipantRow: React.FC<LiveAudioParticipantRowProps> = (
           </div>
         )}
 
-        {onKick && (
+        {participant.isKicked && onRescue && (
+          <button
+            onClick={() => onRescue(participant.participantId)}
+            className="flex items-center gap-1 bg-blue-700 hover:bg-blue-600 text-white px-2 py-1 rounded text-xs"
+            title="Rescatar como activo sin abrir micrófono"
+          >
+            <RotateCcw size={14} />
+            <span className="hidden sm:inline">Rescatar</span>
+          </button>
+        )}
+
+        {onKick && !participant.isKicked && (
           <button
             onClick={() => {
               if (window.confirm(`¿Expulsar a ${displayName}?`)) {

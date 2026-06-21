@@ -1,5 +1,7 @@
 /**
  * useQuizAnswers — Audience answer collection with controller sync.
+/**
+ * useQuizAnswers — Audience answer collection with controller sync.
  *
  * This hook manages:
  * 1. The audience member's own answers (local state)
@@ -7,11 +9,11 @@
  * 3. On the controller side: receiving and aggregating all answers
  *
  * Architecture:
- * - Audience side: stores answers in sessionStorage (persist across page refresh).
+ * - Audience side: stores answers in localStorage (persist across page refresh/PWA restart).
  *   On answer submit, broadcasts via a dedicated 'sefer-quiz' channel.
  * - Controller side: listens on 'sefer-quiz' channel and accumulates session answers.
  *
- * Session ID: Generated once per audience tab, stored in sessionStorage.
+ * Session ID: Generated once per audience device, stored in localStorage.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -27,11 +29,15 @@ import { makeEmptyAudienceAnswer } from '../types/quiz';
 // ── Session ID ────────────────────────────────────────────────────────────────
 
 function getOrCreateSessionId(): string {
+  // Trata de usar el device ID de la audiencia si existe
+  let id = localStorage.getItem('sefer-audience-device-id');
+  if (id) return id;
+
   const key = 'sefer-quiz-session-id';
-  let id = sessionStorage.getItem(key);
+  id = localStorage.getItem(key);
   if (!id) {
     id = `qs-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-    sessionStorage.setItem(key, id);
+    localStorage.setItem(key, id);
   }
   return id;
 }
@@ -93,9 +99,9 @@ export function useAudienceAnswers(): UseAudienceAnswersReturn {
   const channel = useMemo(() => new BroadcastChannel('sefer-quiz'), []);
 
   const [answers, setAnswers] = useState<Record<string, QuizAudienceAnswer>>(() => {
-    // Restore from sessionStorage on mount
+    // Restore from localStorage on mount
     try {
-      const stored = sessionStorage.getItem('sefer-quiz-answers');
+      const stored = localStorage.getItem('sefer-quiz-answers');
       return stored ? JSON.parse(stored) : {};
     } catch {
       return {};
@@ -104,32 +110,32 @@ export function useAudienceAnswers(): UseAudienceAnswersReturn {
 
   const [scores, setScores] = useState<Record<string, QuizQuestionScore>>(() => {
     try {
-      const stored = sessionStorage.getItem('sefer-quiz-scores');
+      const stored = localStorage.getItem('sefer-quiz-scores');
       return stored ? JSON.parse(stored) : {};
     } catch {
       return {};
     }
   });
 
-  // Persist to sessionStorage whenever answers change
+  // Persist to localStorage whenever answers change
   useEffect(() => {
     try {
-      sessionStorage.setItem('sefer-quiz-answers', JSON.stringify(answers));
+      localStorage.setItem('sefer-quiz-answers', JSON.stringify(answers));
     } catch {
       // Storage quota exceeded — silently ignore
     }
   }, [answers]);
 
-  // Persist to sessionStorage whenever scores change
+  // Persist to localStorage whenever scores change
   useEffect(() => {
     try {
-      sessionStorage.setItem('sefer-quiz-scores', JSON.stringify(scores));
+      localStorage.setItem('sefer-quiz-scores', JSON.stringify(scores));
     } catch {
       // Ignore
     }
   }, [scores]);
 
-  // Listen for CLEAR commands from controller
+  // Listen for CLEAR commands from controller and LOGOUT events from PWA identity
   useEffect(() => {
     const processClear = (slideId: string) => {
       setAnswers(prev => {
@@ -199,6 +205,7 @@ export function useAudienceAnswers(): UseAudienceAnswersReturn {
     const msg: QuizAnswerMessage = {
       type: 'QUIZ_ANSWER',
       sessionId,
+      displayName: localStorage.getItem('sefer-audience-nick') || undefined,
       slideId,
       answer,
     };

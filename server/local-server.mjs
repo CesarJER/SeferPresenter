@@ -37,6 +37,12 @@ let audienceClients = new Set()
 let quizClients = new Set()
 let liveKitApi = null
 let audioSyncMapsCache = []
+const quizAggregateState = {
+  submittedSessionsBySlideId: new Map(),
+  finalScoreBuckets: new Map(),
+  finalScoreSessions: new Map(),
+  updatedAt: null,
+}
 
 const contentTypes = {
   '.css': 'text/css; charset=utf-8',
@@ -188,6 +194,67 @@ const broadcast = (body) => {
 const broadcastQuizAnswer = (body) => {
   writeSseSet(quizClients, body)
 }
+
+const scoreBucketForCentipunts = (value) => {
+  if (!Number.isFinite(value)) return null
+  const score = Math.max(0, Math.floor(value))
+  const lower = Math.floor(score / 100) * 100
+  return `${lower}-${lower + 99}`
+}
+
+const updateQuizAggregate = (message) => {
+  if (!isObjectRecord(message)) return
+  const now = Date.now()
+
+  if (message.type === 'QUIZ_ANSWER') {
+    if (typeof message.sessionId !== 'string' || typeof message.slideId !== 'string') return
+    if (!isObjectRecord(message.answer) || message.answer.submitted !== true) return
+
+    const sessions = quizAggregateState.submittedSessionsBySlideId.get(message.slideId) || new Set()
+    sessions.add(message.sessionId)
+    quizAggregateState.submittedSessionsBySlideId.set(message.slideId, sessions)
+    quizAggregateState.updatedAt = now
+    return
+  }
+
+  if (message.type === 'QUIZ_FINAL_SCORE') {
+    if (typeof message.sessionId !== 'string' || !Number.isFinite(message.totalCentipunts)) return
+    const previousBucket = quizAggregateState.finalScoreSessions.get(message.sessionId)
+    if (previousBucket) {
+      const previousCount = quizAggregateState.finalScoreBuckets.get(previousBucket) || 0
+      if (previousCount <= 1) quizAggregateState.finalScoreBuckets.delete(previousBucket)
+      else quizAggregateState.finalScoreBuckets.set(previousBucket, previousCount - 1)
+    }
+
+    const bucket = scoreBucketForCentipunts(message.totalCentipunts)
+    if (!bucket) return
+    quizAggregateState.finalScoreSessions.set(message.sessionId, bucket)
+    quizAggregateState.finalScoreBuckets.set(bucket, (quizAggregateState.finalScoreBuckets.get(bucket) || 0) + 1)
+    quizAggregateState.updatedAt = now
+    return
+  }
+
+  if (message.type === 'QUIZ_CLEAR_ANSWERS') {
+    if (typeof message.slideId === 'string') {
+      quizAggregateState.submittedSessionsBySlideId.delete(message.slideId)
+    } else {
+      quizAggregateState.submittedSessionsBySlideId.clear()
+      quizAggregateState.finalScoreBuckets.clear()
+      quizAggregateState.finalScoreSessions.clear()
+    }
+    quizAggregateState.updatedAt = now
+  }
+}
+
+const getQuizAggregateSnapshot = () => ({
+  submittedAnswersBySlideId: Object.fromEntries(
+    Array.from(quizAggregateState.submittedSessionsBySlideId.entries())
+      .map(([slideId, sessions]) => [slideId, sessions.size]),
+  ),
+  finalScoreRanges: Object.fromEntries(quizAggregateState.finalScoreBuckets.entries()),
+  totalFinalScores: quizAggregateState.finalScoreSessions.size,
+  updatedAt: quizAggregateState.updatedAt,
+})
 
 const logStateChange = (state) => {
   // Removed spammy log
@@ -381,7 +448,8 @@ const handleApi = async (req, res, url) => {
   if (url.pathname === '/api/quiz-answer' && req.method === 'POST') {
     try {
       const body = await readBody(req)
-      JSON.parse(body)
+      const parsed = JSON.parse(body)
+      updateQuizAggregate(parsed)
       broadcastQuizAnswer(body)
       sendJson(res, 200, { success: true })
     } catch (err) {
@@ -801,7 +869,17 @@ liveKitApi = createLiveKitApi({
 server.listen(port, () => {
   audioSyncMapsCache = readJsonFile(path.join(rootDir, 'audio_sync.json'), [])
   const staticLabel = staticDir ? `, serving ${path.relative(rootDir, staticDir)}` : ''
-  createWsServer(server, handleWsMessageFromClient)
+  createWsServer(server, handleWsMessageFromClient, {
+    getLiveKitState: () => liveKitApi?.getState?.() || {
+      enabled: false,
+      available: false,
+      participants: [],
+      speakers: [],
+      muted: [],
+      kicked: [],
+    },
+    getQuizAggregateSnapshot,
+  })
   console.log(`SeferPresenter local backend listening on http://localhost:${port}${staticLabel}`)
   console.log(`SeferPresenter WebSocket disponible en ws://localhost:${port}/ws`)
 })

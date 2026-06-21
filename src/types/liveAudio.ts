@@ -1,6 +1,15 @@
 export type LiveAudioAvailability = 'enabled' | 'disabled' | 'misconfigured' | 'unsupported';
 
 export type LiveAudioParticipantRole = 'audience' | 'control' | 'presenter';
+export type LiveAudioOperationalRole = 'pasivo' | 'activo' | 'cola' | 'orador' | 'control' | 'presenter';
+export type MicrophonePermissionState = 'unknown' | 'prompt' | 'denied' | 'granted' | 'unavailable';
+export type MicrophoneTrackState =
+  | 'notRequested'
+  | 'off'
+  | 'publishing'
+  | 'mutedByUser'
+  | 'mutedByControl'
+  | 'error';
 export type LiveAudioConnectionState =
   | 'connected'
   | 'connecting'
@@ -36,6 +45,10 @@ export interface LiveAudioParticipantStatusMessage {
   type: 'LIVE_AUDIO_PARTICIPANT_STATUS';
   participantId: string;
   role: LiveAudioParticipantRole;
+  alias?: string;
+  operationalRole?: LiveAudioOperationalRole;
+  microphonePermissionState?: MicrophonePermissionState;
+  microphoneTrackState?: MicrophoneTrackState;
   speakerState: SpeakerState;
   controlState?: ControlPrincipalState | ControlSecondaryState;
   canSubscribe: boolean;
@@ -86,6 +99,13 @@ export interface LiveAudioMuteAllMessage {
 
 export interface LiveAudioKickParticipantMessage {
   type: 'LIVE_AUDIO_KICK_PARTICIPANT';
+  participantId: string;
+  issuedByParticipantId?: string;
+  createdAt?: number;
+}
+
+export interface LiveAudioRescueParticipantMessage {
+  type: 'LIVE_AUDIO_RESCUE_PARTICIPANT';
   participantId: string;
   issuedByParticipantId?: string;
   createdAt?: number;
@@ -165,6 +185,97 @@ export interface LiveAudioRequestAliasesMessage {
   createdAt?: number;
 }
 
+export interface LiveAudioOperationalParticipantSnapshot {
+  participantId: string;
+  role: LiveAudioParticipantRole;
+  alias?: string;
+  operationalRole: LiveAudioOperationalRole;
+  microphonePermissionState: MicrophonePermissionState;
+  microphoneTrackState: MicrophoneTrackState;
+  speakerState: SpeakerState;
+  canSubscribe: boolean;
+  canPublishAudio: boolean;
+  isMuted: boolean;
+  isActiveAudience: boolean;
+  isMicrophoneActive: boolean;
+  isKicked: boolean;
+  connected: boolean;
+  connectedAt?: number;
+  disconnectedAt?: number;
+  updatedAt: number;
+}
+
+export interface LiveAudioOperationalControlSnapshot {
+  controlSessionId: string;
+  clientId: string;
+  controlState: LiveAudioControlState;
+  connectedAt: number;
+  authorizedAt: number;
+  codeExpiresAt?: number;
+}
+
+export interface LiveAudioOperationalQuizAggregateSnapshot {
+  submittedAnswersBySlideId: Record<string, number>;
+  finalScoreRanges?: Record<string, number>;
+  totalFinalScores: number;
+  updatedAt: number | null;
+}
+
+export interface LiveAudioOperationalSnapshot {
+  snapshotId: string;
+  createdAt: number;
+  connectionCounts: {
+    totalConnections: number;
+    audienceConnections: number;
+    controlConnections: number;
+    presenterConnections: number;
+    updatedAt: number;
+  };
+  participants: LiveAudioOperationalParticipantSnapshot[];
+  interventionQueue: string[];
+  authorizations: {
+    principalControlSessionId: string | null;
+    controls: LiveAudioOperationalControlSnapshot[];
+    pendingControls: PendingControlAuthorization[];
+    allowDelegatedModerators: boolean;
+  };
+  liveKit: {
+    enabled?: boolean;
+    available?: boolean;
+    participants: Array<{
+      participantId: string;
+      role: LiveAudioParticipantRole;
+      room?: string;
+      speakerState: SpeakerState;
+      canSubscribe: boolean;
+      canPublish: boolean;
+      expiresAt?: number;
+    }>;
+    speakers: string[];
+    muted: string[];
+    kicked: string[];
+  };
+  quizAggregate: LiveAudioOperationalQuizAggregateSnapshot;
+}
+
+export interface LiveAudioSnapshotRequestMessage {
+  type: 'LIVE_AUDIO_SNAPSHOT_REQUEST';
+  controlSessionId?: string;
+  createdAt?: number;
+}
+
+export interface LiveAudioSnapshotMessage {
+  type: 'LIVE_AUDIO_SNAPSHOT';
+  snapshot: LiveAudioOperationalSnapshot;
+  createdAt?: number;
+}
+
+export interface LiveAudioSnapshotPatchMessage {
+  type: 'LIVE_AUDIO_SNAPSHOT_PATCH';
+  snapshot: Partial<LiveAudioOperationalSnapshot>;
+  createdAt?: number;
+}
+
 export interface LiveAudioStatusResponse {
   enabled: boolean;
   available?: boolean;
@@ -187,6 +298,7 @@ export type LiveAudioBroadcastMessage =
   | LiveAudioMuteParticipantMessage
   | LiveAudioMuteAllMessage
   | LiveAudioKickParticipantMessage
+  | LiveAudioRescueParticipantMessage
   | LiveAudioControlPublicKeyMessage
   | LiveAudioControlJoinRequestMessage
   | LiveAudioControlAuthorizedMessage
@@ -194,4 +306,7 @@ export type LiveAudioBroadcastMessage =
   | LiveAudioControlAuthorizationDecisionMessage
   | ControlKeyRotatedMessage
   | PrivateControlSignalMessage
-  | LiveAudioRequestAliasesMessage;
+  | LiveAudioRequestAliasesMessage
+  | LiveAudioSnapshotRequestMessage
+  | LiveAudioSnapshotMessage
+  | LiveAudioSnapshotPatchMessage;

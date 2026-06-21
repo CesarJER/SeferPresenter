@@ -62,7 +62,7 @@ interface MenuPopupProps {
   availableAudioFiles: string[];
   onAudioStateChange: (state: AudioState) => void;
   onAudioSyncMapsChange: (maps: AudioSyncMap[]) => void;
-  onResetState?: () => void;
+  onResetState?: (clearSession?: boolean) => void;
   quizSubslides?: QuizSubslide[];
   quizCurrentSubslideIndex?: number;
   quizTimerState?: QuizTimerState;
@@ -1879,6 +1879,19 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                 className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded border border-gray-700 font-semibold cursor-pointer"
               >
                 Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowResetConfirm(false);
+                  if (onResetState) {
+                    onResetState(true);
+                  }
+                }}
+                className="px-4 py-2 bg-red-900 hover:bg-red-800 text-white rounded font-bold cursor-pointer"
+                title="Borrar id de sesión, desconectar PWA y restablecer todo"
+              >
+                Cerrar sesión y reiniciar
               </button>
               <button
                 type="button"

@@ -69,7 +69,7 @@ Hooks:
 - [useSeferReader.ts](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useSeferReader.ts): book/chapter/verse reader state and loading.
 - [useBackgroundResolver.ts](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useBackgroundResolver.ts): active background and lock/override behavior.
 - [useAudioPlayback.ts](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useAudioPlayback.ts): hidden presenter audio element and audio sync.
-- [useQuizTimer.ts](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useQuizTimer.ts), [useQuizAnswers.ts](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useQuizAnswers.ts), [useQuizAudio.ts](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useQuizAudio.ts): quiz runtime behavior.
+- [useQuizTimer.ts](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useQuizTimer.ts), [useQuizAnswers.ts](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useQuizAnswers.ts), [useQuizAudio.ts](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useQuizAudio.ts), [useAudienceSession.ts](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useAudienceSession.ts): quiz and session runtime behavior.
 - Proposed Live Audio hooks live under `src/features/liveAudio/hooks/`, except
   for the Fase 5.2 crypto-only `src/hooks/usePrivateControlSignals.ts` hook:
   `useLiveAudioAvailability.ts` should own optional module availability
@@ -88,7 +88,9 @@ Library/sync/validation:
 - `src/types/liveAudio.ts`: optional Live Audio contracts and privacy-boundary
   message types. Do not add consent fields or mix these contracts into
   presentation `SYNC_STATE`. This file is shared core and must not import
-  the LiveKit browser SDK or runtime LiveKit code.
+  the LiveKit browser SDK or runtime LiveKit code. Operational snapshot types
+  for Control handoff also live here, but they remain WebSocket-only Live Audio
+  messages rather than projection state.
 - `src/utils/validation.ts`: runtime validation.
 - `src/utils/cryptoUtils.ts`: pure Web Crypto helpers for ECDH P-256,
   AES-GCM 256, base64 encoding, and nonce replay protection.
@@ -156,6 +158,12 @@ Live Audio state:
 - Control authorization state is server-owned in `server/ws-server.mjs` and
   reflected by `src/hooks/useControlAuthorization.ts`; do not persist Control
   codes, authorization decisions, aliases, keys, or private messages.
+- Control handoff snapshot state is server-owned in `server/ws-server.mjs`.
+  Control UI under `src/features/liveAudio/components/control/` may hydrate
+  participant lists, queue state, permissions, microphone state, and anonymous
+  quiz aggregates from `LIVE_AUDIO_SNAPSHOT`, but should not persist that data
+  locally beyond the active session. Sensitive snapshot overlays are encrypted
+  in server memory with a key derived from `SEFER_CONTROL_PASSWORD`.
 - The LiveKit browser SDK may only be imported inside `src/features/liveAudio/` or via
   dynamic import from that module. Core files such as `src/App.tsx`,
   `src/hooks/useSyncState.ts`, existing `src/components/shared/`, and shared

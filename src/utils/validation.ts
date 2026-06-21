@@ -44,6 +44,9 @@ const liveAudioParticipantRoles = new Set<LiveAudioParticipantRole>(['audience',
 const liveAudioPrivateSignalSenderRoles = new Set<LiveAudioParticipantRole>(['audience', 'control']);
 const liveAudioSpeakerStates = new Set(['LISTENER', 'REQUESTED', 'GRANTED', 'MUTED', 'REVOKED']);
 const liveAudioControlStates = new Set(['PRINCIPAL', 'PENDING', 'AUTHORIZED']);
+const liveAudioOperationalRoles = new Set(['pasivo', 'activo', 'cola', 'orador', 'control', 'presenter']);
+const liveAudioMicrophonePermissionStates = new Set(['unknown', 'prompt', 'denied', 'granted', 'unavailable']);
+const liveAudioMicrophoneTrackStates = new Set(['notRequested', 'off', 'publishing', 'mutedByUser', 'mutedByControl', 'error']);
 const liveAudioMessageTypes = new Set([
   'LIVE_AUDIO_PARTICIPANT_STATUS',
   'LIVE_AUDIO_CONNECTION_COUNTS',
@@ -52,6 +55,7 @@ const liveAudioMessageTypes = new Set([
   'LIVE_AUDIO_MUTE_PARTICIPANT',
   'LIVE_AUDIO_MUTE_ALL',
   'LIVE_AUDIO_KICK_PARTICIPANT',
+  'LIVE_AUDIO_RESCUE_PARTICIPANT',
   'LIVE_AUDIO_CONTROL_PUBLIC_KEY',
   'LIVE_AUDIO_CONTROL_JOIN_REQUEST',
   'LIVE_AUDIO_CONTROL_AUTHORIZED',
@@ -60,6 +64,9 @@ const liveAudioMessageTypes = new Set([
   'CONTROL_KEY_ROTATED',
   'PRIVATE_CONTROL_SIGNAL',
   'LIVE_AUDIO_REQUEST_ALIASES',
+  'LIVE_AUDIO_SNAPSHOT_REQUEST',
+  'LIVE_AUDIO_SNAPSHOT',
+  'LIVE_AUDIO_SNAPSHOT_PATCH',
 ]);
 const privateControlSignalAllowedKeys = new Set([
   'type',
@@ -103,6 +110,12 @@ const validateOptionalCreatedAt = (value: Record<string, unknown>, path: string,
 const validateOptionalParticipantId = (value: unknown, path: string, errors: string[]) => {
   if (value !== undefined && !isValidEphemeralParticipantId(value)) {
     errors.push(`${path} debe ser UUID v4 efimero.`);
+  }
+};
+
+const validateStringArray = (value: unknown, path: string, errors: string[]) => {
+  if (!Array.isArray(value) || !value.every((entry) => typeof entry === 'string')) {
+    errors.push(`${path} debe ser un array de textos.`);
   }
 };
 
@@ -180,6 +193,141 @@ export const isValidPrivateControlSignal = (
   msg: unknown,
   senderRole?: LiveAudioParticipantRole,
 ): msg is PrivateControlSignalMessage => validatePrivateControlSignalValue(msg, senderRole).ok;
+
+const validateOperationalParticipantSnapshot = (
+  value: unknown,
+  path: string,
+  errors: string[],
+) => {
+  if (!isRecord(value)) {
+    errors.push(`${path} debe ser un objeto.`);
+    return;
+  }
+  validateParticipantId(value.participantId, `${path}.participantId`, errors);
+  if (typeof value.role !== 'string' || !liveAudioParticipantRoles.has(value.role as LiveAudioParticipantRole)) {
+    errors.push(`${path}.role no es valido.`);
+  }
+  if (value.alias !== undefined && typeof value.alias !== 'string') errors.push(`${path}.alias debe ser texto.`);
+  if (typeof value.operationalRole !== 'string' || !liveAudioOperationalRoles.has(value.operationalRole)) {
+    errors.push(`${path}.operationalRole no es valido.`);
+  }
+  if (typeof value.microphonePermissionState !== 'string' || !liveAudioMicrophonePermissionStates.has(value.microphonePermissionState)) {
+    errors.push(`${path}.microphonePermissionState no es valido.`);
+  }
+  if (typeof value.microphoneTrackState !== 'string' || !liveAudioMicrophoneTrackStates.has(value.microphoneTrackState)) {
+    errors.push(`${path}.microphoneTrackState no es valido.`);
+  }
+  if (typeof value.speakerState !== 'string' || !liveAudioSpeakerStates.has(value.speakerState)) {
+    errors.push(`${path}.speakerState no es valido.`);
+  }
+  [
+    'canSubscribe',
+    'canPublishAudio',
+    'isMuted',
+    'isActiveAudience',
+    'isMicrophoneActive',
+    'isKicked',
+    'connected',
+  ].forEach((key) => {
+    if (typeof value[key] !== 'boolean') errors.push(`${path}.${key} debe ser booleano.`);
+  });
+  if (value.connectedAt !== undefined && !isFiniteNumber(value.connectedAt)) errors.push(`${path}.connectedAt debe ser numero.`);
+  if (value.disconnectedAt !== undefined && !isFiniteNumber(value.disconnectedAt)) errors.push(`${path}.disconnectedAt debe ser numero.`);
+  if (!isFiniteNumber(value.updatedAt)) errors.push(`${path}.updatedAt debe ser numero.`);
+};
+
+const validateOperationalSnapshot = (snapshot: unknown, path: string, errors: string[]) => {
+  if (!isRecord(snapshot)) {
+    errors.push(`${path} debe ser un objeto.`);
+    return;
+  }
+  if (typeof snapshot.snapshotId !== 'string' || snapshot.snapshotId.trim() === '') errors.push(`${path}.snapshotId debe ser texto no vacio.`);
+  if (!isFiniteNumber(snapshot.createdAt)) errors.push(`${path}.createdAt debe ser numero.`);
+  if (!isRecord(snapshot.connectionCounts)) {
+    errors.push(`${path}.connectionCounts debe ser un objeto.`);
+  } else {
+    const connectionCounts = snapshot.connectionCounts;
+    ['totalConnections', 'audienceConnections', 'controlConnections', 'presenterConnections'].forEach((key) => {
+      if (!Number.isInteger(connectionCounts[key]) || (connectionCounts[key] as number) < 0) {
+        errors.push(`${path}.connectionCounts.${key} debe ser entero >= 0.`);
+      }
+    });
+    if (!isFiniteNumber(connectionCounts.updatedAt)) errors.push(`${path}.connectionCounts.updatedAt debe ser numero.`);
+  }
+  if (!Array.isArray(snapshot.participants)) {
+    errors.push(`${path}.participants debe ser un array.`);
+  } else {
+    snapshot.participants.forEach((participant, index) => {
+      validateOperationalParticipantSnapshot(participant, `${path}.participants[${index}]`, errors);
+    });
+  }
+  validateStringArray(snapshot.interventionQueue, `${path}.interventionQueue`, errors);
+
+  if (!isRecord(snapshot.authorizations)) {
+    errors.push(`${path}.authorizations debe ser un objeto.`);
+  } else {
+    const auth = snapshot.authorizations;
+    if (auth.principalControlSessionId !== null && typeof auth.principalControlSessionId !== 'string') {
+      errors.push(`${path}.authorizations.principalControlSessionId debe ser texto o null.`);
+    }
+    if (!Array.isArray(auth.controls)) {
+      errors.push(`${path}.authorizations.controls debe ser un array.`);
+    } else {
+      auth.controls.forEach((control, index) => {
+        if (!isRecord(control)) {
+          errors.push(`${path}.authorizations.controls[${index}] debe ser un objeto.`);
+          return;
+        }
+        if (typeof control.controlSessionId !== 'string') errors.push(`${path}.authorizations.controls[${index}].controlSessionId debe ser texto.`);
+        if (typeof control.clientId !== 'string') errors.push(`${path}.authorizations.controls[${index}].clientId debe ser texto.`);
+        if (typeof control.controlState !== 'string' || !liveAudioControlStates.has(control.controlState)) {
+          errors.push(`${path}.authorizations.controls[${index}].controlState no es valido.`);
+        }
+        if (!isFiniteNumber(control.connectedAt)) errors.push(`${path}.authorizations.controls[${index}].connectedAt debe ser numero.`);
+        if (!isFiniteNumber(control.authorizedAt)) errors.push(`${path}.authorizations.controls[${index}].authorizedAt debe ser numero.`);
+        if (control.codeExpiresAt !== undefined && !isFiniteNumber(control.codeExpiresAt)) {
+          errors.push(`${path}.authorizations.controls[${index}].codeExpiresAt debe ser numero.`);
+        }
+      });
+    }
+    if (!Array.isArray(auth.pendingControls)) errors.push(`${path}.authorizations.pendingControls debe ser un array.`);
+    if (typeof auth.allowDelegatedModerators !== 'boolean') errors.push(`${path}.authorizations.allowDelegatedModerators debe ser booleano.`);
+  }
+
+  if (!isRecord(snapshot.liveKit)) {
+    errors.push(`${path}.liveKit debe ser un objeto.`);
+  } else {
+    const liveKit = snapshot.liveKit;
+    if (liveKit.enabled !== undefined && typeof liveKit.enabled !== 'boolean') errors.push(`${path}.liveKit.enabled debe ser booleano.`);
+    if (liveKit.available !== undefined && typeof liveKit.available !== 'boolean') errors.push(`${path}.liveKit.available debe ser booleano.`);
+    if (!Array.isArray(liveKit.participants)) errors.push(`${path}.liveKit.participants debe ser un array.`);
+    validateStringArray(liveKit.speakers, `${path}.liveKit.speakers`, errors);
+    validateStringArray(liveKit.muted, `${path}.liveKit.muted`, errors);
+    validateStringArray(liveKit.kicked, `${path}.liveKit.kicked`, errors);
+  }
+
+  if (!isRecord(snapshot.quizAggregate)) {
+    errors.push(`${path}.quizAggregate debe ser un objeto.`);
+  } else {
+    const quiz = snapshot.quizAggregate;
+    if (!isRecord(quiz.submittedAnswersBySlideId)) {
+      errors.push(`${path}.quizAggregate.submittedAnswersBySlideId debe ser un objeto.`);
+    } else {
+      Object.values(quiz.submittedAnswersBySlideId).forEach((count) => {
+        if (!Number.isInteger(count) || (count as number) < 0) {
+          errors.push(`${path}.quizAggregate.submittedAnswersBySlideId contiene conteos invalidos.`);
+        }
+      });
+    }
+    if (quiz.finalScoreRanges !== undefined && !isRecord(quiz.finalScoreRanges)) {
+      errors.push(`${path}.quizAggregate.finalScoreRanges debe ser un objeto.`);
+    }
+    if (!Number.isInteger(quiz.totalFinalScores) || (quiz.totalFinalScores as number) < 0) {
+      errors.push(`${path}.quizAggregate.totalFinalScores debe ser entero >= 0.`);
+    }
+    if (quiz.updatedAt !== null && !isFiniteNumber(quiz.updatedAt)) errors.push(`${path}.quizAggregate.updatedAt debe ser numero o null.`);
+  }
+};
 
 // ── Quiz validators ──────────────────────────────────────────────────────────
 
@@ -566,6 +714,7 @@ const validateLiveAudioBroadcastMessage = (value: Record<string, unknown>): Vali
     case 'LIVE_AUDIO_REVOKE_SPEAK':
     case 'LIVE_AUDIO_MUTE_PARTICIPANT':
     case 'LIVE_AUDIO_KICK_PARTICIPANT':
+    case 'LIVE_AUDIO_RESCUE_PARTICIPANT':
       validateParticipantId(value.participantId, 'participantId', errors);
       validateOptionalParticipantId(value.issuedByParticipantId, 'issuedByParticipantId', errors);
       validateOptionalCreatedAt(value, value.type, errors);
@@ -668,6 +817,20 @@ const validateLiveAudioBroadcastMessage = (value: Record<string, unknown>): Vali
       validateOptionalCreatedAt(value, value.type, errors);
       break;
     case 'LIVE_AUDIO_REQUEST_ALIASES':
+      validateOptionalCreatedAt(value, value.type, errors);
+      break;
+    case 'LIVE_AUDIO_SNAPSHOT_REQUEST':
+      if (value.controlSessionId !== undefined && typeof value.controlSessionId !== 'string') {
+        errors.push('controlSessionId debe ser texto.');
+      }
+      validateOptionalCreatedAt(value, value.type, errors);
+      break;
+    case 'LIVE_AUDIO_SNAPSHOT':
+      validateOperationalSnapshot(value.snapshot, 'snapshot', errors);
+      validateOptionalCreatedAt(value, value.type, errors);
+      break;
+    case 'LIVE_AUDIO_SNAPSHOT_PATCH':
+      if (!isRecord(value.snapshot)) errors.push('snapshot debe ser un objeto.');
       validateOptionalCreatedAt(value, value.type, errors);
       break;
     default:

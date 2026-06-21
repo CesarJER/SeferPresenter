@@ -300,7 +300,7 @@ function ControlApp() {
         onToggleBackgroundLock={(locked) => emitCommand({ command: 'TOGGLE_BG_LOCK', locked })}
         onSelectBackgroundOverride={(bg) => emitCommand({ command: 'SELECT_BG_OVERRIDE', bg })}
         onSave={handleSave}
-        onResetState={() => emitCommand({ command: 'RESET_STATE' })}
+        onResetState={(clearSession) => emitCommand({ command: 'RESET_STATE', clearSession })}
         onSelectPresentation={(p, idx, targetVerse) => {
           setCurrentPresentation(p);
           setCurrentSlideIndex(idx ?? 0);

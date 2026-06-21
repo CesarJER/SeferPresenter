@@ -80,7 +80,7 @@ export type RemoteCommandPayload =
   | { command: 'UPDATE_FONT_SIZES'; hebrewFontSize?: number; combinedTextBaseSize?: number }
   | { command: 'VIDEO_STATE_CHANGE'; state: VideoState | null }
   | { command: 'AUDIO_STATE_CHANGE'; state: AudioState }
-  | { command: 'RESET_STATE' };
+  | { command: 'RESET_STATE'; clearSession?: boolean };
 
 export type BroadcastMessage =
   | ({ type: 'SYNC_STATE' } & SyncStatePayload & SyncProtocolMeta)
@@ -90,7 +90,8 @@ export type BroadcastMessage =
   | ({ type: 'AUDIO_SYNC_MAPS_UPDATE'; maps: unknown[] } & SyncProtocolMeta)
   | ({ type: 'REQUEST_STATE'; clientId?: string } & SyncProtocolMeta)
   | ({ type: 'REMOTE_COMMAND'; clientId: string; payload: RemoteCommandPayload } & SyncProtocolMeta)
-  | ({ type: 'WELCOME'; clientId: string; serverTimeMs: number; role?: 'presenter' | 'control' | 'audience' | 'unknown' } & SyncProtocolMeta)
+  | ({ type: 'WELCOME'; clientId: string; serverTimeMs: number; role?: 'presenter' | 'control' | 'audience' | 'unknown'; presentationSessionId?: string } & SyncProtocolMeta)
+  | ({ type: 'PRESENTATION_SESSION_ROTATED'; presentationSessionId: string } & SyncProtocolMeta)
   | ({ type: 'SERVER_TIME_PING'; clientSentAtMs: number } & SyncProtocolMeta)
   | ({ type: 'SERVER_TIME_PONG'; clientSentAtMs: number; serverTimeMs: number } & SyncProtocolMeta)
   | ({ type: 'AUDIO_TIMELINE_ACTION'; action: AudioTimelineAction } & SyncProtocolMeta)

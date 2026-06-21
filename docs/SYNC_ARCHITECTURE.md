@@ -67,7 +67,8 @@ in `BroadcastMessage` as a separate family:
 - `LIVE_AUDIO_GRANT_SPEAK`, `LIVE_AUDIO_REVOKE_SPEAK`: Control-authorized
   speaker permission changes by `participantId`.
 - `LIVE_AUDIO_MUTE_PARTICIPANT`, `LIVE_AUDIO_MUTE_ALL`,
-  `LIVE_AUDIO_KICK_PARTICIPANT`: moderation actions by `participantId`.
+  `LIVE_AUDIO_KICK_PARTICIPANT`, `LIVE_AUDIO_RESCUE_PARTICIPANT`: moderation
+  actions by `participantId`.
 - `LIVE_AUDIO_CONTROL_PUBLIC_KEY`: current Control public key for encrypted
   private signaling.
 - `LIVE_AUDIO_CONTROL_JOIN_REQUEST`, `LIVE_AUDIO_CONTROL_AUTHORIZED`: secondary
@@ -144,6 +145,15 @@ authorization.
   Controls to audience clients. Audience responses must travel back as encrypted
   `PRIVATE_CONTROL_SIGNAL` payloads such as `ACTIVE_STATE` or `REQUEST_WORD`,
   never as clear-text alias messages.
+- `LIVE_AUDIO_SNAPSHOT_REQUEST`, `LIVE_AUDIO_SNAPSHOT`, and
+  `LIVE_AUDIO_SNAPSHOT_PATCH` support Control handoff. Only authorized Controls
+  receive or publish operational snapshots; pending Controls receive an error
+  and no snapshot. The snapshot includes connected-user counts, participants,
+  operational aliases known to authorized Control, logical roles (`pasivo`,
+  `activo`, `cola`, `orador`, `control`, `presenter`), microphone permission/track state,
+  speaker state, intervention queue, Control authorizations, relevant LiveKit
+  state, and anonymous quiz aggregates. It does not include historical private
+  messages or ciphertext history.
 - The WebSocket server keeps the current authorized Control public key in memory
   and replays it to audience clients that connect later, so nicknames and
   private messages can be encrypted even when Control was already open.
@@ -151,7 +161,8 @@ authorization.
   or active-muted audience to `GRANTED` with microphone closed; mute keeps the
   participant `GRANTED` but closes the microphone; revoke moves a speaker back
   to active-muted `LISTENER`; kick moves the participant to passive `REVOKED`
-  with `isKicked=true` until Control grants again.
+  with `isKicked=true`; rescue clears `isKicked` and returns the participant to
+  active muted `LISTENER` with `canPublishAudio=false` and no published track.
 - `allowDelegatedModerators` is controlled by
   `SEFER_LIVE_AUDIO_ALLOW_DELEGATED_MODERATORS` and defaults to true. When false,
   only the principal Control may authorize pending Controls.
@@ -174,6 +185,21 @@ be folded into presentation `SYNC_STATE`, audio playback `AudioState`, or the
 backend-owned `AudioTimelineState`.
 `src/hooks/useSyncState.ts` treats Live Audio message types as WebSocket-only
 subscriber events and ignores them on BroadcastChannel/SSE paths.
+
+### Operational Snapshot Privacy
+
+`server/ws-server.mjs` keeps the Control handoff snapshot in process memory only.
+Sensitive snapshot overlays that the server can learn from authorized Control
+patches, such as operational aliases and microphone state hints, are encrypted
+with AES-256-GCM using a key derived from `SEFER_CONTROL_PASSWORD`. If that
+environment variable is not set, the fallback key remains local to the process
+and the snapshot still is not persisted to disk. The server never stores private
+message history, private signal plaintext, private keys, or ciphertext logs in
+the snapshot.
+
+`server/local-server.mjs` contributes only anonymous quiz aggregates to the
+snapshot: submitted-answer counts by slide and final-score buckets. It does not
+include individual answers, nominal rankings, display names, or session IDs.
 
 ### Build And Runtime Optionality
 
@@ -210,7 +236,7 @@ user gesture publishes microphone audio; passive listeners do not publish LiveKi
 data.
 
 Fase 5.4 adds `server/livekit-server.mjs` for self-hosted LiveKit backend
-endpoints. It keeps participant, token, speaker, mute, and kick state in memory
+endpoints. It keeps participant, token, speaker, mute, kick, and rescue state in memory
 only. If `SEFER_LIVE_AUDIO_ENABLED=false` or any required `LIVEKIT_*` variable is
 missing, `/api/livekit/status` reports disabled or unavailable and the server
 still starts without importing or requiring a LiveKit SDK. Token generation uses
@@ -224,6 +250,8 @@ requests are rejected with 403.
 and consults the WebSocket participant state so a granted audience speaker can
 receive microphone-only publish permission without changing `participantId` or
 recovering any private alias/message history.
+`/api/livekit/rescue-participant` clears kicked state for an authorized Control
+and keeps the participant as `LISTENER` without publish permission.
 
 ## WebSocket Audio Timeline
 
@@ -292,6 +320,8 @@ Backend-owned or backend-mirrored pieces:
 - `/api/livekit/status`, `/api/livekit/token`, `/api/livekit/refresh-token`,
   and `/api/livekit/*` moderation endpoints for optional Live Audio state in
   memory only
+- `/ws` operational Live Audio snapshots for authorized Control handoff; these
+  are ephemeral, memory-only, and separate from `SYNC_STATE`
 
 Telemetry POST endpoints validate the existing message shape before broadcast:
 `AUDIO_TELEMETRY` requires `audioState`, `VIDEO_TELEMETRY` requires
@@ -323,7 +353,7 @@ Controller UI state:
 
 Quiz answers and personal scoring are fundamentally anonymous and decoupled from Live Audio identity. The architecture enforces the following privacy rules:
 
-- **Local Storage:** Individual answers and scoring remain on the audience member's device (`sessionStorage`). The server does not receive or persist individual, nominal answers linked to a profile.
+- **Local Storage:** Individual answers and scoring remain on the audience member's device (`localStorage`). The server does not receive or persist individual, nominal answers linked to a profile.
 - **Separate Session IDs:** The quiz module generates its own ephemeral `sessionId` on first interaction. This ID is strictly separated from the LiveKit `participantId`. The quiz hook (`useQuizAnswers`) does not share state with `useLiveAudio` or `usePrivateControlSignals`.
 - **Aggregated Results:** The controller receives aggregated session scores and answers to calculate overall ranges and statistics for the results slide. The controller does not project nominal rankings, aliases, or performance history.
 - **No Participant Profiling:** There is no historical performance tracking by participant. Aggregated session scores are ephemeral and disappear when the quiz session is cleared or the browser tab is closed.

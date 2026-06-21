@@ -25,6 +25,7 @@ interface LiveAudioControlPanelProps {
   onRevoke: (id: string) => void;
   onMute: (id: string) => void;
   onKick: (id: string) => void;
+  onRescue: (id: string) => void;
   onMicrophoneConfigChange?: (id: string, config: { volume?: number; musicMode?: boolean }) => void;
   pendingWordCount: number;
 }
@@ -49,6 +50,7 @@ export const LiveAudioControlPanel: React.FC<LiveAudioControlPanelProps> = ({
   onRevoke,
   onMute,
   onKick,
+  onRescue,
   onMicrophoneConfigChange,
   pendingWordCount
 }) => {
@@ -96,6 +98,7 @@ export const LiveAudioControlPanel: React.FC<LiveAudioControlPanelProps> = ({
               isControlAuthorized={isControlAuthorized}
               onGrant={onGrant}
               onKick={onKick}
+              onRescue={onRescue}
               onMicrophoneConfigChange={onMicrophoneConfigChange}
             />
             <LiveAudioSpeakers 
@@ -104,6 +107,7 @@ export const LiveAudioControlPanel: React.FC<LiveAudioControlPanelProps> = ({
               onRevoke={onRevoke}
               onMute={onMute}
               onKick={onKick}
+              onRescue={onRescue}
               onMicrophoneConfigChange={onMicrophoneConfigChange}
             />
             <LiveAudioListeners 
@@ -111,6 +115,7 @@ export const LiveAudioControlPanel: React.FC<LiveAudioControlPanelProps> = ({
               isControlAuthorized={isControlAuthorized}
               onGrant={onGrant}
               onKick={onKick}
+              onRescue={onRescue}
               onMicrophoneConfigChange={onMicrophoneConfigChange}
             />
           </div>

@@ -242,6 +242,75 @@ describe('runtime validation', () => {
     }).ok).toBe(true);
   });
 
+  it('accepts operational snapshot and rescue messages', () => {
+    const participantId = '550e8400-e29b-41d4-a716-446655440000';
+    expect(validateSyncMessage({
+      type: 'LIVE_AUDIO_RESCUE_PARTICIPANT',
+      participantId,
+      createdAt: Date.now(),
+    }).ok).toBe(true);
+
+    expect(validateSyncMessage({
+      type: 'LIVE_AUDIO_SNAPSHOT',
+      snapshot: {
+        snapshotId: 'snapshot-1',
+        createdAt: Date.now(),
+        connectionCounts: {
+          totalConnections: 1,
+          audienceConnections: 1,
+          controlConnections: 0,
+          presenterConnections: 0,
+          updatedAt: Date.now(),
+        },
+        participants: [{
+          participantId,
+          role: 'audience',
+          alias: 'Temporal',
+          operationalRole: 'activo',
+          microphonePermissionState: 'unknown',
+          microphoneTrackState: 'off',
+          speakerState: 'LISTENER',
+          canSubscribe: true,
+          canPublishAudio: false,
+          isMuted: true,
+          isActiveAudience: true,
+          isMicrophoneActive: false,
+          isKicked: false,
+          connected: true,
+          updatedAt: Date.now(),
+        }],
+        interventionQueue: [],
+        authorizations: {
+          principalControlSessionId: 'control-1',
+          controls: [{
+            controlSessionId: 'control-1',
+            clientId: 'client-1',
+            controlState: 'PRINCIPAL',
+            connectedAt: Date.now(),
+            authorizedAt: Date.now(),
+          }],
+          pendingControls: [],
+          allowDelegatedModerators: true,
+        },
+        liveKit: {
+          enabled: true,
+          available: true,
+          participants: [],
+          speakers: [],
+          muted: [],
+          kicked: [],
+        },
+        quizAggregate: {
+          submittedAnswersBySlideId: { slide1: 2 },
+          finalScoreRanges: { '0-99': 1 },
+          totalFinalScores: 1,
+          updatedAt: Date.now(),
+        },
+      },
+      createdAt: Date.now(),
+    }).ok).toBe(true);
+  });
+
   it('rejects malformed private control signals', () => {
     expect(isValidPrivateControlSignal({
       type: 'PRIVATE_CONTROL_SIGNAL',

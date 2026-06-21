@@ -6,6 +6,7 @@ import { PrivateControlInbox, type PrivateMessage } from './PrivateControlInbox'
 import type { LiveAudioParticipant } from './LiveAudioParticipantRow';
 import type {
   LiveAudioConnectionCountsMessage,
+  LiveAudioOperationalSnapshot,
   LiveAudioParticipantStatusMessage,
   PendingControlAuthorization,
 } from '../../../../types/liveAudio';
@@ -20,7 +21,8 @@ type ModerationEndpoint =
   | 'revoke-speak'
   | 'mute-participant'
   | 'mute-all'
-  | 'kick-participant';
+  | 'kick-participant'
+  | 'rescue-participant';
 
 export interface LiveAudioControlContainerProps {
   isControlAuthorized: boolean;
@@ -52,6 +54,24 @@ const sanitizeAlias = (value: unknown): string | null => {
 
 const clampVolume = (volume: number) => Math.max(0, Math.min(volume, 300));
 const clampListenVolume = (volume: number) => Math.max(0, Math.min(volume, 100));
+
+const snapshotParticipantToStatus = (
+  participant: LiveAudioOperationalSnapshot['participants'][number],
+): LiveAudioParticipantStatusMessage => ({
+  type: 'LIVE_AUDIO_PARTICIPANT_STATUS',
+  participantId: participant.participantId,
+  role: participant.role,
+  speakerState: participant.speakerState,
+  canSubscribe: participant.canSubscribe,
+  canPublishAudio: participant.canPublishAudio,
+  isMuted: participant.isMuted,
+  isActiveAudience: participant.isActiveAudience,
+  isMicrophoneActive: participant.isMicrophoneActive,
+  isKicked: participant.isKicked,
+  microphonePermissionState: participant.microphonePermissionState,
+  microphoneTrackState: participant.microphoneTrackState,
+  updatedAt: participant.updatedAt,
+});
 
 export default function LiveAudioControlContainer({
   isControlAuthorized,
@@ -102,6 +122,35 @@ export default function LiveAudioControlContainer({
   useEffect(() => {
     if (!subscribeToWsMessage) return;
     const unsubscribe = subscribeToWsMessage((type, payload) => {
+      if (type === 'LIVE_AUDIO_SNAPSHOT') {
+        const snapshot = payload.snapshot as LiveAudioOperationalSnapshot | undefined;
+        if (!snapshot || !Array.isArray(snapshot.participants)) return;
+        setParticipantsMap(prev => {
+          const next = { ...prev };
+          snapshot.participants.forEach((participant) => {
+            if (participant.role !== 'audience') return;
+            const existing = next[participant.participantId];
+            if (existing?.updatedAt && existing.updatedAt > participant.updatedAt) return;
+            next[participant.participantId] = snapshotParticipantToStatus(participant);
+          });
+          return next;
+        });
+        setParticipantAliases(prev => {
+          const next = { ...prev };
+          snapshot.participants.forEach((participant) => {
+            if (participant.role === 'audience' && participant.alias) {
+              next[participant.participantId] = participant.alias;
+            }
+          });
+          return next;
+        });
+        setConnectionCounts({
+          type: 'LIVE_AUDIO_CONNECTION_COUNTS',
+          ...snapshot.connectionCounts,
+        });
+        return;
+      }
+
       if (type === 'LIVE_AUDIO_PARTICIPANT_STATUS') {
         const msg = payload as unknown as LiveAudioParticipantStatusMessage;
         setParticipantsMap(prev => ({ ...prev, [msg.participantId]: msg }));
@@ -138,11 +187,31 @@ export default function LiveAudioControlContainer({
     return unsubscribe;
   }, [subscribeToWsMessage]);
 
+  useEffect(() => {
+    if (!isControlAuthorized || !wsSend) return;
+    wsSend('LIVE_AUDIO_SNAPSHOT_REQUEST', {
+      type: 'LIVE_AUDIO_SNAPSHOT_REQUEST',
+      controlSessionId: controlSessionId || undefined,
+      createdAt: Date.now(),
+    });
+  }, [controlSessionId, isControlAuthorized, wsSend]);
+
   const handlePrivateSignal = useCallback((signal: DecryptedPrivateControlSignal) => {
     const data = getSignalRecord(signal);
     const alias = sanitizeAlias(data.alias);
     if (alias) {
       setParticipantAliases(prev => ({ ...prev, [signal.fromParticipantId]: alias }));
+      wsSend?.('LIVE_AUDIO_SNAPSHOT_PATCH', {
+        type: 'LIVE_AUDIO_SNAPSHOT_PATCH',
+        snapshot: {
+          participants: [{
+            participantId: signal.fromParticipantId,
+            role: 'audience',
+            alias,
+          }],
+        },
+        createdAt: Date.now(),
+      });
     }
     
     if (signal.ephemeralPublicKey) {
@@ -165,7 +234,7 @@ export default function LiveAudioControlContainer({
         timestamp: Date.now(),
       }]);
     }
-  }, []);
+  }, [wsSend]);
 
   const { sendPrivateSignalToParticipant, requestAliases, ready: privateSignalsReady } = usePrivateControlSignals({
     role: 'control',
@@ -284,6 +353,13 @@ export default function LiveAudioControlContainer({
         if (!pid) return false;
         return wsSend('LIVE_AUDIO_KICK_PARTICIPANT', {
           type: 'LIVE_AUDIO_KICK_PARTICIPANT',
+          participantId: pid,
+          ...base,
+        });
+      case 'rescue-participant':
+        if (!pid) return false;
+        return wsSend('LIVE_AUDIO_RESCUE_PARTICIPANT', {
+          type: 'LIVE_AUDIO_RESCUE_PARTICIPANT',
           participantId: pid,
           ...base,
         });
@@ -421,6 +497,7 @@ export default function LiveAudioControlContainer({
         onRevoke={(id) => void doModerationAction('revoke-speak', id)}
         onMute={(id) => void doModerationAction('mute-participant', id)}
         onKick={(id) => void doModerationAction('kick-participant', id)}
+        onRescue={(id) => void doModerationAction('rescue-participant', id)}
         onMicrophoneConfigChange={handleParticipantMicrophoneConfigChange}
         pendingWordCount={pendingWordCount}
       />

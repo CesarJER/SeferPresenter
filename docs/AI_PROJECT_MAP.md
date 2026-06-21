@@ -116,10 +116,11 @@ Start with:
   authorization UI/lifecycle
 - `server/ws-server.mjs` for principal election, pending Control TTL,
   authorization, moderation filtering, private-signal routing, rejoin-grace
-  cleanup, participant snapshot lookup, and succession
+  cleanup, participant snapshot lookup, operational Control handoff snapshots,
+  rescue-to-active-muted transitions, and succession
 - `server/livekit-server.mjs` and `server/local-server.mjs` for Fase 5.4
   self-hosted token, status, refresh, participant identity preservation, and
-  moderation endpoints
+  moderation/rescue endpoints plus anonymous quiz aggregate snapshot input
 - `docs/SYNC_ARCHITECTURE.md`
 - `docs/COMPONENT_OWNERSHIP.md`
 

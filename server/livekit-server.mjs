@@ -7,6 +7,7 @@ const mutatingPaths = new Set([
   '/api/livekit/mute-participant',
   '/api/livekit/mute-all',
   '/api/livekit/kick-participant',
+  '/api/livekit/rescue-participant',
 ])
 const uuidV4Pattern = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
@@ -347,6 +348,13 @@ const handleModeration = async ({ req, res, url, readBody, sendJson, controlApi 
       roomState.muted.delete(participant.participantId)
       participant.speakerState = 'REVOKED'
     },
+    '/api/livekit/rescue-participant': (participant) => {
+      roomState.kicked.delete(participant.participantId)
+      roomState.speakers.delete(participant.participantId)
+      roomState.muted.delete(participant.participantId)
+      participant.speakerState = 'LISTENER'
+      participant.canPublish = false
+    },
   }
 
   const mutator = actions[url.pathname]
@@ -369,6 +377,8 @@ export const createLiveKitApi = (controlApi) => {
   return {
     close: () => clearInterval(cleanupTimer),
     getState: () => ({
+      enabled: getConfig().enabled,
+      available: getConfig().available,
       participants: Array.from(participants.values()).map((participant) => ({
         participantId: participant.participantId,
         role: participant.role,
@@ -380,6 +390,7 @@ export const createLiveKitApi = (controlApi) => {
       })),
       speakers: Array.from(roomState.speakers),
       muted: Array.from(roomState.muted),
+      kicked: Array.from(roomState.kicked),
     }),
     handle: async ({ req, res, url, readBody, sendJson }) => {
       try {

@@ -5,14 +5,21 @@ import { AudienceInterventionModal } from './AudienceInterventionModal';
 import { AudiencePrivateControlMessage } from './AudiencePrivateControlMessage';
 import { useLiveAudio } from '../../hooks/useLiveAudio';
 import { usePrivateControlSignals } from '../../../../hooks/usePrivateControlSignals';
-import type { LiveAudioAvailability, SpeakerState } from '../../../../types/liveAudio';
+import type {
+  LiveAudioAvailability,
+  MicrophonePermissionState,
+  MicrophoneTrackState,
+  SpeakerState,
+} from '../../../../types/liveAudio';
 import { LiveAudioTrackOutput } from '../shared/LiveAudioTrackOutput';
+import type { useAudienceSession } from '../../../../hooks/useAudienceSession';
 
 interface LiveAudioAudienceContainerProps {
   availability: LiveAudioAvailability;
   wsSend: (type: string, payload?: unknown) => boolean;
   subscribeToWsMessage: (handler: (type: string, payload: Record<string, unknown>) => void) => () => void;
   clientId: string; // Used as fallback or session identifier if needed
+  audienceSession: ReturnType<typeof useAudienceSession>;
 }
 
 interface ParticipantStatusOptions {
@@ -21,13 +28,16 @@ interface ParticipantStatusOptions {
   isActiveAudience?: boolean;
   isMicrophoneActive?: boolean;
   isKicked?: boolean;
+  microphonePermissionState?: MicrophonePermissionState;
+  microphoneTrackState?: MicrophoneTrackState;
 }
 
 export default function LiveAudioAudienceContainer({
   availability,
   wsSend,
   subscribeToWsMessage,
-  clientId
+  clientId,
+  audienceSession
 }: LiveAudioAudienceContainerProps) {
   const [isActive, setIsActive] = useState(false);
   const [isPendingWord, setIsPendingWord] = useState(false);
@@ -84,6 +94,14 @@ export default function LiveAudioAudienceContainer({
       isActiveAudience: options.isActiveAudience ?? false,
       isMicrophoneActive: options.isMicrophoneActive ?? false,
       isKicked: options.isKicked ?? false,
+      microphonePermissionState: options.microphonePermissionState ?? 'unknown',
+      microphoneTrackState: options.microphoneTrackState ?? (
+        options.isMicrophoneActive
+          ? 'publishing'
+          : options.canPublishAudio && options.isMuted
+            ? 'mutedByControl'
+            : 'off'
+      ),
       updatedAt: Date.now(),
     });
   }, [participantId, wsSend]);
@@ -207,6 +225,20 @@ export default function LiveAudioAudienceContainer({
           isMicrophoneActive: false,
           isKicked: true,
         });
+      } else if (type === 'LIVE_AUDIO_RESCUE_PARTICIPANT' && payload.participantId === participantId) {
+        setIsActive(true);
+        setIsPendingWord(false);
+        setIsWordGranted(false);
+        setIsKicked(false);
+        void unpublishMicrophone();
+        sendParticipantStatus('LISTENER', {
+          canPublishAudio: false,
+          isMuted: true,
+          isActiveAudience: true,
+          isMicrophoneActive: false,
+          isKicked: false,
+          microphoneTrackState: 'off',
+        });
       }
     });
     return unsubscribe;
@@ -219,10 +251,31 @@ export default function LiveAudioAudienceContainer({
     activeAlias,
     sendPrivateSignal,
     isActive,
-    isMicrophoneActive,
     isPendingWord,
     isKicked
   ]);
+
+  // Sync session state to active state
+  useEffect(() => {
+    if (audienceSession.isLoggedIn && audienceSession.nick && !isActive && !isKicked) {
+      setIsActive(true);
+      setActiveAlias(audienceSession.nick);
+      sendParticipantStatus('LISTENER', {
+        canPublishAudio: false,
+        isMuted: true,
+        isActiveAudience: true,
+        isMicrophoneActive: false,
+        isKicked: false,
+      });
+      if (privateSignalReady) {
+        sendPrivateSignal({
+          type: 'ACTIVE_STATE',
+          alias: audienceSession.nick,
+          speakerState: 'LISTENER',
+        }).catch(console.error);
+      }
+    }
+  }, [audienceSession.isLoggedIn, audienceSession.nick, isActive, isKicked, sendParticipantStatus, sendPrivateSignal, privateSignalReady]);
 
   useEffect(() => {
     if (!participantId) return;
@@ -297,6 +350,7 @@ export default function LiveAudioAudienceContainer({
     setActiveAlias(null);
     setShowInterventionModal(false);
     setShowPrivateMessageModal(false);
+    audienceSession.logout();
     sendParticipantStatus('REVOKED', {
       canPublishAudio: false,
       isMuted: true,
@@ -305,9 +359,10 @@ export default function LiveAudioAudienceContainer({
       isKicked: false,
     });
     void unpublishMicrophone();
-  }, [sendParticipantStatus, unpublishMicrophone]);
+  }, [sendParticipantStatus, unpublishMicrophone, audienceSession]);
 
   const handleSubmitAlias = useCallback(async (alias: string) => {
+    audienceSession.login(alias);
     setShowInterventionModal(false);
     setIsActive(true);
     setIsPendingWord(false);

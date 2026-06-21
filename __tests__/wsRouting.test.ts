@@ -370,6 +370,151 @@ describe('Live Audio WebSocket routing', () => {
     expect(snapshot?.isKicked).toBe(true);
   });
 
+  it('sends an operational snapshot to a secondary control after authorization', async () => {
+    const principal = await connectWs('control');
+    const secondary = await connectWs('control');
+    const audience = await connectWs('audience');
+    const participantId = randomUUID();
+
+    const pending = await waitFor(
+      secondary,
+      (message) => message.type === 'LIVE_AUDIO_CONTROL_AUTHORIZATION_STATE' && message.controlState === 'PENDING',
+    );
+    audience.send({
+      ...makeParticipantStatus(participantId),
+      isActiveAudience: true,
+      speakerState: 'REQUESTED',
+    });
+    await waitFor(
+      principal,
+      (message) => message.type === 'LIVE_AUDIO_PARTICIPANT_STATUS' && message.participantId === participantId,
+    );
+
+    principal.send({
+      type: 'LIVE_AUDIO_CONTROL_AUTHORIZATION_DECISION',
+      targetControlSessionId: pending.controlSessionId,
+      decision: 'APPROVE',
+      createdAt: Date.now(),
+    });
+
+    const snapshot = await waitFor(secondary, (message) => message.type === 'LIVE_AUDIO_SNAPSHOT');
+    const participants = snapshot.snapshot as { participants?: Array<{ participantId: string; speakerState: string }> };
+    expect(participants.participants?.some((participant) => (
+      participant.participantId === participantId && participant.speakerState === 'REQUESTED'
+    ))).toBe(true);
+  });
+
+  it('sends an operational snapshot to a new control when the previous control is gone', async () => {
+    const firstControl = await connectWs('control');
+    const audience = await connectWs('audience');
+    const participantId = randomUUID();
+
+    audience.send({
+      ...makeParticipantStatus(participantId),
+      isActiveAudience: true,
+    });
+    await waitFor(
+      firstControl,
+      (message) => message.type === 'LIVE_AUDIO_PARTICIPANT_STATUS' && message.participantId === participantId,
+    );
+
+    firstControl.ws.close();
+    await wait(100);
+    const nextControl = await connectWs('control');
+    const snapshot = await waitFor(nextControl, (message) => message.type === 'LIVE_AUDIO_SNAPSHOT');
+    const body = snapshot.snapshot as { participants?: Array<{ participantId: string }> };
+    expect(body.participants?.some((participant) => participant.participantId === participantId)).toBe(true);
+  });
+
+  it('does not send operational snapshots to pending controls', async () => {
+    await connectWs('control');
+    const pending = await connectWs('control');
+
+    await waitFor(
+      pending,
+      (message) => message.type === 'LIVE_AUDIO_CONTROL_AUTHORIZATION_STATE' && message.controlState === 'PENDING',
+    );
+    pending.send({
+      type: 'LIVE_AUDIO_SNAPSHOT_REQUEST',
+      createdAt: Date.now(),
+    });
+    const error = await waitFor(
+      pending,
+      (message) => message.type === 'ERROR' && message.code === 'CONTROL_PENDING_FORBIDDEN',
+    );
+    await wait(100);
+
+    expect(String(error.message)).toContain('snapshots');
+    expect(pending.messages.some((message) => message.type === 'LIVE_AUDIO_SNAPSHOT')).toBe(false);
+  });
+
+  it('rescues kicked participants as active listeners without microphone publishing', async () => {
+    const control = await connectWs('control');
+    const audience = await connectWs('audience');
+    const participantId = randomUUID();
+
+    audience.send({
+      ...makeParticipantStatus(participantId),
+      isActiveAudience: true,
+      speakerState: 'REQUESTED',
+    });
+    await waitFor(
+      control,
+      (message) => message.type === 'LIVE_AUDIO_PARTICIPANT_STATUS' && message.participantId === participantId,
+    );
+
+    control.send({
+      type: 'LIVE_AUDIO_KICK_PARTICIPANT',
+      participantId,
+      createdAt: Date.now(),
+    });
+    await waitFor(
+      control,
+      (message) => message.type === 'LIVE_AUDIO_PARTICIPANT_STATUS' && message.participantId === participantId && message.isKicked === true,
+    );
+
+    control.send({
+      type: 'LIVE_AUDIO_RESCUE_PARTICIPANT',
+      participantId,
+      createdAt: Date.now(),
+    });
+
+    const rescued = await waitFor(
+      control,
+      (message) => (
+        message.type === 'LIVE_AUDIO_PARTICIPANT_STATUS' &&
+        message.participantId === participantId &&
+        message.isKicked === false &&
+        message.speakerState === 'LISTENER'
+      ),
+    );
+    expect(rescued.speakerState).toBe('LISTENER');
+    expect(rescued.isActiveAudience).toBe(true);
+    expect(rescued.canPublishAudio).toBe(false);
+    expect(rescued.isMicrophoneActive).toBe(false);
+  });
+
+  it('does not include historical private messages in operational snapshots', async () => {
+    const control = await connectWs('control');
+    const audience = await connectWs('audience');
+    const participantId = randomUUID();
+
+    audience.send(makeParticipantStatus(participantId));
+    audience.send(makePrivateSignal(participantId, 'secret'));
+    await waitFor(control, (message) => message.type === 'PRIVATE_CONTROL_SIGNAL');
+
+    control.send({
+      type: 'LIVE_AUDIO_SNAPSHOT_REQUEST',
+      createdAt: Date.now(),
+    });
+
+    const snapshot = await waitFor(control, (message) => message.type === 'LIVE_AUDIO_SNAPSHOT');
+    const serialized = JSON.stringify(snapshot);
+    expect(serialized).not.toContain('PRIVATE_CONTROL_SIGNAL');
+    expect(serialized).not.toContain('ciphertext');
+    expect(serialized).not.toContain(Buffer.from('ciphertext-secret').toString('base64'));
+  });
+
   it('rate-limits private control signals to five messages per minute per participant', async () => {
     const control = await connectWs('control');
     const audience = await connectWs('audience');
