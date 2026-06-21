@@ -231,7 +231,9 @@ const deriveAudienceState = (state) => {
 
 const isProtectedPath = (url, method) => {
   if (!isAuthRequired()) return false
-  if (url.pathname === '/control' || url.pathname === '/audio-editor') return true
+  if (url.pathname.startsWith('/audience') || url.pathname === '/proteccion-datos') return false
+  if (url.pathname === '/control' || url.pathname === '/audio-editor' || url.pathname === '/presenter' || url.pathname === '/') return true
+  if (url.pathname === '/api/livekit/token' || url.pathname === '/api/livekit/refresh-token') return false
   if (url.pathname.startsWith('/api/') && method !== 'GET') return true
   return false
 }
@@ -239,6 +241,13 @@ const isProtectedPath = (url, method) => {
 const requireAuth = (req, res, url) => {
   if (!isProtectedPath(url, req.method || 'GET')) return false
   if (hasValidBasicAuth(req)) return false
+
+  if (url.pathname.startsWith('/api/')) {
+    res.writeHead(401, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ error: 'Authentication required' }))
+    return true
+  }
+
   res.writeHead(401, {
     'Content-Type': 'text/plain; charset=utf-8',
     'WWW-Authenticate': 'Basic realm="SeferPresenter"',

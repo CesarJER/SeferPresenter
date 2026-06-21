@@ -1,0 +1,23 @@
+{$DOMAIN} {
+	# Rutas específicas para el servidor LiveKit
+	handle /twirp/* {
+		reverse_proxy livekit:7880 {
+			header_up -Authorization
+		}
+	}
+	handle /rtc* {
+		reverse_proxy livekit:7880 {
+			header_up -Authorization
+		}
+	}
+
+	# Redirigir el tráfico a la aplicación Node.js interna en el puerto 8787
+	handle {
+		reverse_proxy app:8787 {
+			# Soporte nativo para WebSockets
+			header_up X-Real-IP {remote}
+			header_up X-Forwarded-For {remote}
+			header_up X-Forwarded-Proto {scheme}
+		}
+	}
+}

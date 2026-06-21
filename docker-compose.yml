@@ -1,0 +1,65 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: sefer-presenter-app
+    restart: unless-stopped
+    environment:
+      - SEFER_REQUIRE_AUTH=${SEFER_REQUIRE_AUTH:-false}
+      - SEFER_CONTROL_PASSWORD=${SEFER_CONTROL_PASSWORD:-}
+      - SEFER_LIVE_AUDIO_ENABLED=${SEFER_LIVE_AUDIO_ENABLED:-false}
+      - LIVEKIT_URL=${LIVEKIT_URL:-}
+      - LIVEKIT_API_KEY=${LIVEKIT_API_KEY:-}
+      - LIVEKIT_API_SECRET=${LIVEKIT_API_SECRET:-}
+      - SEFER_LIVE_AUDIO_PUBLIC_LISTEN=${SEFER_LIVE_AUDIO_PUBLIC_LISTEN:-true}
+    volumes:
+      - ${DATA_DIR:-.}/presentations.json:/app/presentations.json
+      - ${DATA_DIR:-.}/audio_sync.json:/app/audio_sync.json
+      - ${DATA_DIR:-.}/public/audio:/app/public/audio
+      - ${DATA_DIR:-.}/public/backgrounds:/app/public/backgrounds
+      - ${DATA_DIR:-.}/public/videos:/app/public/videos
+    expose:
+      - "8787"
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: sefer-presenter-proxy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp" # Required for HTTP/3
+    environment:
+      - DOMAIN=${DOMAIN:-localhost}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - app
+      - livekit
+
+  redis:
+    image: redis:7-alpine
+    container_name: sefer-presenter-redis
+    restart: unless-stopped
+    command: redis-server --save "" --appendonly no
+
+  livekit:
+    image: livekit/livekit-server:latest
+    container_name: sefer-presenter-livekit
+    restart: unless-stopped
+    command: --node-ip=${LIVEKIT_NODE_IP:-127.0.0.1}
+    environment:
+      - "LIVEKIT_KEYS=${LIVEKIT_API_KEY:-devkey}: ${LIVEKIT_API_SECRET:-secret}"
+      - LIVEKIT_REDIS_ADDRESS=redis:6379
+    ports:
+      - "7881:7881"
+      - "50000-50050:50000-50050/udp"
+    depends_on:
+      - redis
+
+volumes:
+  caddy_data:
+  caddy_config:

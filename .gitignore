@@ -32,3 +32,4 @@ launcher
 *.sln
 *.sw?
 .agents
+.env*

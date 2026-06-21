@@ -16,6 +16,8 @@ import { DEFAULT_AUDIO_STATE } from './types/audio';
 
 import './index.css';
 
+const LiveAudioContainer = React.lazy(() => import('./features/liveAudio/components/audience/LiveAudioAudienceContainer'));
+
 function AudienceApp() {
   const [currentPresentation, setCurrentPresentation] = useState<Presentation | null>(null);
   const [currentSlideIndex, setCurrentSlideIndex] = useState<number>(-1);
@@ -107,7 +109,6 @@ function AudienceApp() {
   });
 
   const liveAudioAvailability = useLiveAudioAvailability();
-  const LiveAudioContainer = useMemo(() => React.lazy(() => import('./features/liveAudio/components/audience/LiveAudioAudienceContainer')), []);
 
   const { getActiveBackground } = useBackgroundResolver({
     currentPresentation, currentSlideIndex, backgroundLock, lockedBackgroundValue, userSelectedBackground, scriptureState,
