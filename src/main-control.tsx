@@ -255,8 +255,15 @@ function ControlApp() {
         onSelectBackgroundOverride={(bg) => emitCommand({ command: 'SELECT_BG_OVERRIDE', bg })}
         onSave={handleSave}
         onResetState={() => emitCommand({ command: 'RESET_STATE' })}
-        onSelectPresentation={(p, idx, targetVerse) => emitCommand({ command: 'SELECT_PRESENTATION_AND_SLIDE', presentation: p, slideIndex: idx ?? 0, direction: 'forward', targetVerse })}
-        onSelectSlide={(idx) => emitCommand({ command: 'SELECT_PRESENTATION_AND_SLIDE', presentation: currentPresentation, slideIndex: idx, direction: idx < currentSlideIndex ? 'backward' : 'forward' })}
+        onSelectPresentation={(p, idx, targetVerse) => {
+          setCurrentPresentation(p);
+          setCurrentSlideIndex(idx ?? 0);
+          emitCommand({ command: 'SELECT_PRESENTATION_AND_SLIDE', presentation: p, slideIndex: idx ?? 0, direction: 'forward', targetVerse });
+        }}
+        onSelectSlide={(idx) => {
+          setCurrentSlideIndex(idx);
+          emitCommand({ command: 'SELECT_PRESENTATION_AND_SLIDE', presentation: currentPresentation, slideIndex: idx, direction: idx < currentSlideIndex ? 'backward' : 'forward' });
+        }}
         onImport={(imported) => {
           savePresentations(imported);
           if (imported.length > 0) {
@@ -289,7 +296,10 @@ function ControlApp() {
         appMode={appMode}
         scriptureState={scriptureState}
         onUpdateScriptureFontSizes={(sizes) => emitCommand({ command: 'UPDATE_FONT_SIZES', hebrewFontSize: sizes.hebrewFontSize, combinedTextBaseSize: sizes.combinedTextBaseSize })}
-        onToggleAppMode={(mode) => emitCommand({ command: 'TOGGLE_APP_MODE', mode })}
+        onToggleAppMode={(mode) => {
+          setAppMode(mode);
+          emitCommand({ command: 'TOGGLE_APP_MODE', mode });
+        }}
         onProjectScripture={(state) => emitCommand({ command: 'SCRIPTURE_PROJECT', state, navCommand: 'navigate' })}
         onAddScriptureSlide={(state, kind) => emitCommand({ command: 'SCRIPTURE_ADD_SLIDE', state, kind })}
         onBoundaryReached={(dir) => emitCommand({ command: 'SCRIPTURE_BOUNDARY', direction: dir })}

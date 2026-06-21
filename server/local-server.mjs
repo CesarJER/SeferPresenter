@@ -231,8 +231,8 @@ const deriveAudienceState = (state) => {
 
 const isProtectedPath = (url, method) => {
   if (!isAuthRequired()) return false
-  if (url.pathname.startsWith('/audience') || url.pathname === '/proteccion-datos') return false
-  if (url.pathname === '/control' || url.pathname === '/audio-editor' || url.pathname === '/presenter' || url.pathname === '/') return true
+  if (url.pathname.startsWith('/audience') || url.pathname === '/proteccion-datos' || url.pathname === '/') return false
+  if (url.pathname === '/control' || url.pathname === '/audio-editor' || url.pathname === '/presenter') return true
   if (url.pathname.startsWith('/api/livekit/')) return false
   if (url.pathname.startsWith('/api/') && method !== 'GET') return true
   return false
@@ -500,41 +500,81 @@ const handleApi = async (req, res, url) => {
   return false
 }
 
-const serveFile = (res, filePath) => {
+const serveFile = (req, res, filePath) => {
   const ext = path.extname(filePath).toLowerCase()
   const contentType = contentTypes[ext] || 'application/octet-stream'
-  res.writeHead(200, { 'Content-Type': contentType })
-  fs.createReadStream(filePath).pipe(res)
+
+  if (!fs.existsSync(filePath)) {
+    res.writeHead(404, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ error: 'File not found' }))
+    return
+  }
+
+  const stat = fs.statSync(filePath)
+  const totalSize = stat.size
+  const range = req.headers.range
+
+  if (range) {
+    const parts = range.replace(/bytes=/, "").split("-")
+    const start = parseInt(parts[0], 10)
+    const end = parts[1] ? parseInt(parts[1], 10) : totalSize - 1
+
+    if (start >= totalSize || end >= totalSize || start > end) {
+      res.writeHead(416, {
+        'Content-Range': `bytes */${totalSize}`,
+        'Content-Type': 'text/plain'
+      })
+      res.end('Requested range not satisfiable')
+      return
+    }
+
+    const chunksize = (end - start) + 1
+    const file = fs.createReadStream(filePath, { start, end })
+    res.writeHead(206, {
+      'Content-Range': `bytes ${start}-${end}/${totalSize}`,
+      'Accept-Ranges': 'bytes',
+      'Content-Length': chunksize,
+      'Content-Type': contentType
+    })
+    file.pipe(res)
+  } else {
+    res.writeHead(200, {
+      'Content-Length': totalSize,
+      'Accept-Ranges': 'bytes',
+      'Content-Type': contentType
+    })
+    fs.createReadStream(filePath).pipe(res)
+  }
 }
 
 const handleStatic = (req, res, url) => {
   if (!staticDir) return false
   const requestedPath = decodeURIComponent(url.pathname)
-  const cleanPath = requestedPath === '/' ? '/presenter' : requestedPath
+  const cleanPath = requestedPath === '/' ? '/audience' : requestedPath
   const candidate = path.resolve(staticDir, cleanPath.slice(1))
 
   if (candidate.startsWith(staticDir) && fs.existsSync(candidate) && fs.statSync(candidate).isFile()) {
-    serveFile(res, candidate)
+    serveFile(req, res, candidate)
     return true
   }
 
   const publicCandidate = path.resolve(publicDir, cleanPath.slice(1))
   if (publicCandidate.startsWith(publicDir) && fs.existsSync(publicCandidate) && fs.statSync(publicCandidate).isFile()) {
-    serveFile(res, publicCandidate)
+    serveFile(req, res, publicCandidate)
     return true
   }
 
-  const htmlFile = cleanPath.startsWith('/audience')
-    ? 'audience.html'
+  const htmlFile = cleanPath.startsWith('/presenter')
+    ? 'presenter.html'
     : cleanPath.startsWith('/control')
       ? 'control.html'
       : cleanPath.startsWith('/audio-editor')
         ? 'audio-editor.html'
-        : 'presenter.html'
+        : 'audience.html'
 
   const htmlPath = path.join(staticDir, htmlFile)
   if (fs.existsSync(htmlPath)) {
-    serveFile(res, htmlPath)
+    serveFile(req, res, htmlPath)
     return true
   }
 

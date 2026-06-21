@@ -36,6 +36,14 @@ export function useAudioPlayback(props: UseAudioPlaybackProps) {
   } = props;
 
   const lastSyncCueRef = useRef<number>(-1);
+  const isPerformingBilateralSeekRef = useRef<boolean>(false);
+  const currentSlideIndexRef = useRef<number>(currentSlideIndex);
+  const scriptureStateRef = useRef<ScriptureNavState | null>(scriptureState);
+
+  useEffect(() => {
+    currentSlideIndexRef.current = currentSlideIndex;
+    scriptureStateRef.current = scriptureState;
+  }, [currentSlideIndex, scriptureState]);
 
   // 1. Load/change source
   useEffect(() => {
@@ -185,6 +193,8 @@ export function useAudioPlayback(props: UseAudioPlaybackProps) {
     if (currentPresentationRef.current?.id !== syncMap.presentationId) return;
 
     const intervalId = setInterval(() => {
+      if (isPerformingBilateralSeekRef.current) return;
+
       const currentTime = audio.currentTime;
       let activeCueIdx = -1;
       for (let i = syncMap.cues.length - 1; i >= 0; i--) {
@@ -195,16 +205,22 @@ export function useAudioPlayback(props: UseAudioPlaybackProps) {
       }
 
       if (activeCueIdx >= 0 && activeCueIdx !== lastSyncCueRef.current) {
-        lastSyncCueRef.current = activeCueIdx;
         const cue = syncMap.cues[activeCueIdx];
+        const isDifferentSlide = cue.slideIndex !== currentSlideIndexRef.current;
+        const isDifferentVerse = cue.verse !== scriptureStateRef.current?.verse;
 
-        // Trigger slide/verse change on projection
-        handleSelectPresentationAndSlide(
-          currentPresentationRef.current,
-          cue.slideIndex,
-          'forward',
-          cue.verse
-        );
+        if (isDifferentSlide || isDifferentVerse) {
+          lastSyncCueRef.current = activeCueIdx;
+          // Trigger slide/verse change on projection
+          handleSelectPresentationAndSlide(
+            currentPresentationRef.current,
+            cue.slideIndex,
+            'forward',
+            cue.verse
+          );
+        } else {
+          lastSyncCueRef.current = activeCueIdx;
+        }
       }
     }, 200);
 
@@ -256,9 +272,9 @@ export function useAudioPlayback(props: UseAudioPlaybackProps) {
 
     if (matchingCue) {
       if (Math.abs(audio.currentTime - matchingCue.timeSec) > 1.0) {
+        isPerformingBilateralSeekRef.current = true;
         audio.currentTime = matchingCue.timeSec;
         lastSyncCueRef.current = cueIndex; // Evitar que la Sección 4 detecte este salto como un evento nuevo
-
 
         emitAudioTelemetry({
           ...audioStateRef.current,
@@ -270,6 +286,19 @@ export function useAudioPlayback(props: UseAudioPlaybackProps) {
           changeType: 'seek',
           timestamp: Date.now(),
         });
+
+        const handleSeeked = () => {
+          isPerformingBilateralSeekRef.current = false;
+          audio.removeEventListener('seeked', handleSeeked);
+        };
+        audio.addEventListener('seeked', handleSeeked);
+
+        setTimeout(() => {
+          if (isPerformingBilateralSeekRef.current) {
+            isPerformingBilateralSeekRef.current = false;
+            audio.removeEventListener('seeked', handleSeeked);
+          }
+        }, 500);
       }
     }
   }, [

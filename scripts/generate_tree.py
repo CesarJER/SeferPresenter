@@ -60,7 +60,7 @@ if __name__ == "__main__":
     project_path = r"c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter"
     tree_text = generate_tree(project_path)
     
-    output_path = os.path.join(project_path, "legacy/estructura_ficheros.txt")
+    output_path = os.path.join(project_path, "estructura_ficheros.txt.local")
     with open(output_path, "w", encoding="utf-8") as f:
         f.write(tree_text)
         

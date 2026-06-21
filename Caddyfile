@@ -1,4 +1,7 @@
 {$DOMAIN} {
+	# Habilitar compresión dinámica para recursos de texto (HTML, JS, CSS, JSON, etc.)
+	encode zstd gzip
+
 	# Rutas específicas para el servidor LiveKit
 	handle /twirp/* {
 		reverse_proxy livekit:7880 {
