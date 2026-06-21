@@ -17,6 +17,7 @@ import {
 } from './utils/normalizePresentation';
 
 import { useSyncState } from './hooks/useSyncState';
+import { useAudioPlayback } from './hooks/useAudioPlayback';
 import { useControlAuthorization } from './hooks/useControlAuthorization';
 import { useBackgroundResolver } from './hooks/useBackgroundResolver';
 import { useServerClock } from './hooks/useServerClock';
@@ -64,6 +65,7 @@ function ControlApp() {
   const quizStateRef = useRef<QuizSyncState | null>(quizState);
   const clientIdRef = useRef(makeClientId());
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const audioTimelineRef = useRef<HTMLAudioElement | null>(null);
 
   const steps = useMemo(() => {
     return currentPresentation ? generatePresentationSteps(currentPresentation) : [];
@@ -128,7 +130,7 @@ function ControlApp() {
       .catch(err => console.error("Error loading audio sync maps", err));
   }, []);
 
-  const { emitCommand, channel, wsStatus, wsSend, subscribeToWsMessage, isMediaMaster, emitVideoTelemetry } = useSyncState({
+  const { emitCommand, channel, wsStatus, wsSend, subscribeToWsMessage, isMediaMaster, emitVideoTelemetry, emitAudioTelemetry } = useSyncState({
     isControlMode: true,
     isPresenterMode: false,
     clientIdRef,
@@ -162,6 +164,31 @@ function ControlApp() {
   useAudioTimeline(audioTimeline, serverNow, wsSend);
   useAudioTimelineApplicator(audioRef, audioTimeline, serverNow);
 
+  useAudioPlayback({
+    isControlMode: !isMediaMaster,
+    audioState,
+    audioStateRef,
+    audioSyncMaps,
+    currentSlideIndex,
+    currentPresentationId: currentPresentation?.id,
+    scriptureState,
+    audioRef,
+    currentPresentationRef,
+    setAutoplayBlocked: () => {},
+    emitAudioTelemetry,
+    handleSelectPresentationAndSlide: (p, idx, direction, targetVerse) => {
+      setCurrentPresentation(p);
+      setCurrentSlideIndex(idx);
+      emitCommand({
+        command: 'SELECT_PRESENTATION_AND_SLIDE',
+        presentation: p,
+        slideIndex: idx,
+        direction: direction ?? 'forward',
+        targetVerse,
+      });
+    },
+  });
+
   const controlAuthorization = useControlAuthorization({
     wsStatus,
     sendMessage: wsSend,
@@ -176,6 +203,15 @@ function ControlApp() {
     setBackgroundLock, setLockedBackgroundValue, setUserSelectedBackground,
     emitDisplayTelemetry: () => {},
   });
+
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.muted = !isMediaMaster;
+    }
+    if (audioTimelineRef.current) {
+      audioTimelineRef.current.muted = !isMediaMaster;
+    }
+  }, [isMediaMaster]);
 
   const activeBackground = getActiveBackground();
 
@@ -283,13 +319,24 @@ function ControlApp() {
           }
         }}
         videoState={videoState}
-        onVideoStateChange={(s) => emitCommand({ command: 'VIDEO_STATE_CHANGE', state: s })}
+        onVideoStateChange={(s) => {
+          emitCommand({ command: 'VIDEO_STATE_CHANGE', state: s });
+          if (isMediaMaster) {
+            setVideoState(s);
+          }
+        }}
         emitVideoTelemetry={emitVideoTelemetry}
         emitCommand={emitCommand}
         audioState={audioState}
         audioSyncMaps={audioSyncMaps}
         availableAudioFiles={availableAudioFiles}
-        onAudioStateChange={(state) => emitCommand({ command: 'AUDIO_STATE_CHANGE', state })}
+        onAudioStateChange={(state) => {
+          emitCommand({ command: 'AUDIO_STATE_CHANGE', state });
+          if (isMediaMaster) {
+            setAudioState(state);
+            emitAudioTelemetry(state);
+          }
+        }}
         onAudioSyncMapsChange={(maps) => {
           const validation = validateAudioSyncMaps(maps);
           if (!validation.ok || !validation.value) {
@@ -369,8 +416,10 @@ function ControlApp() {
         <LiveAudioControlAuthorization authorization={controlAuthorization} />
       </div>
 
+      {/* Hidden audio element for Pista de Audio */}
+      <audio ref={audioRef} preload="auto" style={{ display: 'none' }} />
       {/* Hidden audio element for karaoke and music sync */}
-      <audio ref={audioRef} muted={!isMediaMaster} preload="auto" style={{ display: 'none' }} />
+      <audio ref={audioTimelineRef} preload="auto" style={{ display: 'none' }} />
     </div>
   );
 }

@@ -16,7 +16,7 @@ import {
   normalizeProjectionState,
   reduceProjectionCommand,
 } from './projection-state-reducer.mjs'
-import { hasActivePresenter, broadcastWs } from './ws-server.mjs'
+import { hasActivePresenter, broadcastWs, getMediaMasterClientId } from './ws-server.mjs'
 import { getTimeline, applyAction } from './timelineManager.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -190,7 +190,7 @@ const broadcastQuizAnswer = (body) => {
 }
 
 const logStateChange = (state) => {
-  console.log(`[SERVER DBG - STATE] clientId=${state.clientId} origin=${state.origin} slideIndex=${state.slideIndex} appMode=${state.appMode} scriptureBook=${state.scriptureState?.bookAbbrevEs || state.scriptureState?.bookEs || ''}`);
+  // Removed spammy log
 }
 
 const commitState = (state, metadata = {}) => {
@@ -219,6 +219,20 @@ const reduceRemoteCommandMessage = (message, sourceMeta) => {
   if (typeof message.clientId !== 'string') {
     return { ok: false, status: 400, error: 'REMOTE_COMMAND missing clientId' }
   }
+
+  // --- DEBUG INJECTADO PARA AUDIO/VÍDEO ---
+  if (message.payload?.command === 'AUDIO_STATE_CHANGE') {
+    const s = message.payload.state;
+    const isMaster = message.clientId === getMediaMasterClientId();
+    console.log(`[MEDIA DBG - AUDIO CMD] clientId=${message.clientId} isMaster=${isMaster} isPlaying=${s?.isPlaying} vol=${s?.volume} by=${s?.lastUpdatedBy} src=${s?.audioSrc?.substring(0,25)}`);
+  }
+  if (message.payload?.command === 'VIDEO_STATE_CHANGE') {
+    const s = message.payload.state;
+    const isMaster = message.clientId === getMediaMasterClientId();
+    console.log(`[MEDIA DBG - VIDEO CMD] clientId=${message.clientId} isMaster=${isMaster} isPlaying=${s?.isPlaying} vol=${s?.volume} by=${s?.lastUpdatedBy}`);
+  }
+  // ----------------------------------------
+
   if (!canReduceRemoteCommand(sourceMeta)) {
     return { ok: false, status: 403, error: 'Control is not authorized to mutate projection state' }
   }
@@ -431,6 +445,11 @@ const handleApi = async (req, res, url) => {
         sendJson(res, 400, { error })
         return true
       }
+      
+      const s = telemetry.audioState;
+      const isMaster = telemetry.clientId === getMediaMasterClientId();
+      console.log(`[MEDIA DBG - AUDIO TELEM] clientId=${telemetry.clientId} isMaster=${isMaster} by=${s?.lastUpdatedBy} isPlaying=${s?.isPlaying} vol=${s?.volume}`);
+
       currentState = { ...currentState, audioState: telemetry.audioState }
       broadcast(JSON.stringify(telemetry))
       sendJson(res, 200, { success: true })
@@ -453,6 +472,11 @@ const handleApi = async (req, res, url) => {
         sendJson(res, 400, { error })
         return true
       }
+
+      const s = telemetry.videoState;
+      const isMaster = telemetry.clientId === getMediaMasterClientId();
+      console.log(`[MEDIA DBG - VIDEO TELEM] clientId=${telemetry.clientId} isMaster=${isMaster} by=${s?.lastUpdatedBy} isPlaying=${s?.isPlaying} vol=${s?.volume}`);
+
       currentState = { ...currentState, videoState: telemetry.videoState }
       broadcast(JSON.stringify(telemetry))
       sendJson(res, 200, { success: true })
@@ -681,6 +705,9 @@ const handleWsMessageFromClient = (msg, meta) => {
   } else if (msg.type === 'AUDIO_TELEMETRY') {
     currentState = { ...currentState, audioState: msg.audioState }
     broadcast(JSON.stringify(msg))
+    const s = msg.audioState;
+    const isMaster = msg.clientId === getMediaMasterClientId();
+    console.log(`[MEDIA DBG - AUDIO TELEM WS] clientId=${msg.clientId} isMaster=${isMaster} by=${s?.lastUpdatedBy} isPlaying=${s?.isPlaying} vol=${s?.volume}`);
     if (meta?.role === 'presenter' || msg.audioState.lastUpdatedBy === 'projection') {
       const tl = getTimeline();
       const currentEstimated = tl.status === 'playing'
@@ -694,6 +721,9 @@ const handleWsMessageFromClient = (msg, meta) => {
   } else if (msg.type === 'VIDEO_TELEMETRY') {
     currentState = { ...currentState, videoState: msg.videoState }
     broadcast(JSON.stringify(msg))
+    const s = msg.videoState;
+    const isMaster = msg.clientId === getMediaMasterClientId();
+    console.log(`[MEDIA DBG - VIDEO TELEM WS] clientId=${msg.clientId} isMaster=${isMaster} by=${s?.lastUpdatedBy} isPlaying=${s?.isPlaying} vol=${s?.volume}`);
   } else if (msg.type === 'DISPLAY_TELEMETRY') {
     currentState = {
       ...currentState,

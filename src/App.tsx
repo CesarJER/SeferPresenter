@@ -69,6 +69,7 @@ function App() {
   const videoStateRef = useRef<VideoState | null>(videoState);
   const audioStateRef = useRef<AudioState>(audioState);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const audioTimelineRef = useRef<HTMLAudioElement | null>(null);
   const appModeRef = useRef<AppMode>(appMode);
   const scriptureStateRef = useRef<ScriptureNavState | null>(scriptureState);
   const slideScriptureStateBeforeManualRef = useRef<ScriptureNavState | null>(null);
@@ -402,7 +403,7 @@ function App() {
 
   const { serverNow } = useServerClock(wsSend, wsStatus, subscribeToWsMessage);
   useAudioTimeline(audioTimeline, serverNow, wsSend);
-  useAudioTimelineApplicator(audioRef, audioTimeline, serverNow);
+  useAudioTimelineApplicator(audioTimelineRef, audioTimeline, serverNow);
 
   const { getActiveBackground, handleToggleBackgroundLock, handleSelectBackgroundOverride } = useBackgroundResolver({
     currentPresentation, currentSlideIndex, backgroundLock,
@@ -815,8 +816,10 @@ function App() {
         </div>
       )}
 
-      {/* Hidden audio element for karaoke and music sync */}
+      {/* Hidden audio element for Pista de Audio */}
       <audio ref={audioRef} preload="auto" style={{ display: 'none' }} />
+      {/* Hidden audio element for karaoke and music sync */}
+      <audio ref={audioTimelineRef} preload="auto" style={{ display: 'none' }} />
 
       {/* Autoplay block overlay banner */}
 

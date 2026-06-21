@@ -136,6 +136,16 @@ const hasActivePresenter = () => {
   return false
 }
 
+const getMediaMasterClientId = () => {
+  for (const meta of wsClients.values()) {
+    if (meta.role === 'presenter' && meta.ws && meta.ws.readyState === WebSocket.OPEN) {
+      return meta.clientId
+    }
+  }
+  const principal = findPrincipalControl()
+  return principal ? principal.clientId : null
+}
+
 const broadcastMediaMasterStatus = () => {
   const hasPresenter = hasActivePresenter()
   const principal = findPrincipalControl()
@@ -799,6 +809,7 @@ const createWsServer = (httpServer, onFallbackMessage) => {
       controlState: control?.controlState,
     }))
     broadcastConnectionCounts()
+    broadcastMediaMasterStatus()
 
     if (control) {
       sendAuthorizationState(control)
@@ -971,6 +982,7 @@ const createWsServer = (httpServer, onFallbackMessage) => {
       }
       releaseParticipantConnection(meta)
       broadcastConnectionCounts()
+      broadcastMediaMasterStatus()
     })
     ws.on('error', () => {
       const meta = wsClients.get(ws)
@@ -980,6 +992,7 @@ const createWsServer = (httpServer, onFallbackMessage) => {
       }
       releaseParticipantConnection(meta)
       broadcastConnectionCounts()
+      broadcastMediaMasterStatus()
     })
   })
 
@@ -992,6 +1005,7 @@ const createWsServer = (httpServer, onFallbackMessage) => {
         }
         releaseParticipantConnection(meta)
         broadcastConnectionCounts()
+        broadcastMediaMasterStatus()
         client.terminate()
         continue
       }
@@ -1026,4 +1040,5 @@ export {
   resetWsServerStateForTests,
   hasActivePresenter,
   broadcastWs,
+  getMediaMasterClientId,
 }

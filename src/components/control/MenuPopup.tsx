@@ -1407,7 +1407,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
   return (
     <div id="section-menu-popup-container" className="flex h-full w-full flex-col bg-gray-800 text-white">
       {/* ── Menu Header ───────────────────────────────── */}
-      <div id="section-menu-header" className="flex items-center justify-between border-b border-gray-700 bg-gray-900 px-4 py-3 md:px-5 md:py-4">
+      <div id="section-menu-header" className={`flex items-center justify-between border-b px-4 py-3 md:px-5 md:py-4 transition-colors ${isMediaMaster ? 'bg-red-950 border-red-800' : 'bg-gray-900 border-gray-700'}`}>
         <h2 className="flex items-center gap-2 text-lg font-bold md:text-xl">
           <img
             src="/logo.svg"

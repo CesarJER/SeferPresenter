@@ -33,82 +33,27 @@ const SlideVisualizer: React.FC<SlideVisualizerProps> = ({
   videoState,
   isMediaMaster,
   emitVideoTelemetry,
-  emitCommand,
 }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [quizVerseLines, setQuizVerseLines] = useState<string[]>([]);
   const videoRef = React.useRef<HTMLVideoElement>(null);
+  const lastSeekIdRef = React.useRef<number | undefined>(undefined);
 
-  // Sync preview video with presenter video state OR act as media master
   useEffect(() => {
-    if (!videoRef.current || slide?.type !== 'media') return;
+    if (videoRef.current) {
+      videoRef.current.muted = !isMediaMaster;
+    }
+  }, [isMediaMaster]);
+
+  // 1. Listen to incoming videoState (from controller or projection)
+  useEffect(() => {
+    if (!videoRef.current || slide?.type !== 'media' || !videoState) return;
 
     const vid = videoRef.current;
 
-    // --- Media Master Mode ---
-    if (isMediaMaster) {
-      if (vid.paused) {
-        vid.play().catch(() => {});
-      }
+    // If we are the Master, we ONLY apply state if it comes from the controller explicitly
+    if (isMediaMaster && videoState.lastUpdatedBy !== 'controller') return;
 
-      const emitTelemetry = () => {
-        if (!emitVideoTelemetry) return;
-        emitVideoTelemetry({
-          isPlaying: !vid.paused,
-          currentTime: vid.currentTime,
-          duration: Number.isFinite(vid.duration) ? vid.duration : 0,
-          volume: vid.volume,
-          speed: vid.playbackRate,
-          loop: vid.loop,
-          mediaSrc: slide.mediaSrc || null,
-          startTime: slide.mediaStart,
-          endTime: slide.mediaEnd,
-          lastUpdatedBy: 'projection',
-          timestamp: Date.now()
-        });
-      };
-
-      let intervalId = setInterval(() => {
-        if (!vid) return;
-
-        const startTime = slide.mediaStart ?? 0;
-        const endTime = slide.mediaEnd;
-
-        if (endTime && vid.currentTime >= endTime) {
-          if (slide.mediaLoop !== false) {
-            vid.currentTime = startTime;
-            vid.play().catch(() => {});
-          } else {
-            vid.pause();
-          }
-        } else if (vid.currentTime < startTime) {
-          vid.currentTime = startTime;
-        }
-
-        emitTelemetry();
-      }, 250);
-
-      const handleEnded = () => {
-        emitTelemetry();
-      };
-
-      vid.addEventListener('play', emitTelemetry);
-      vid.addEventListener('pause', emitTelemetry);
-      vid.addEventListener('seeked', emitTelemetry);
-      vid.addEventListener('ended', handleEnded);
-
-      return () => {
-        clearInterval(intervalId);
-        vid.removeEventListener('play', emitTelemetry);
-        vid.removeEventListener('pause', emitTelemetry);
-        vid.removeEventListener('seeked', emitTelemetry);
-        vid.removeEventListener('ended', handleEnded);
-      };
-    }
-
-    // --- Slave Mode (Follow videoState) ---
-    if (!videoState) return;
-    
     if (vid.playbackRate !== (videoState.speed ?? 1.0)) {
       vid.playbackRate = videoState.speed ?? 1.0;
     }
@@ -117,16 +62,97 @@ const SlideVisualizer: React.FC<SlideVisualizerProps> = ({
       vid.loop = videoState.loop;
     }
 
-    if (Math.abs(vid.currentTime - videoState.currentTime) > 0.5) {
-      vid.currentTime = videoState.currentTime;
+    if (videoState.volume !== undefined && vid.volume !== videoState.volume) {
+      vid.volume = videoState.volume;
     }
-    
+
+    // Apply Scrubbing Time (ONLY if requested a seek via seekId, or if slave and out of sync)
+    const shouldSeek = isMediaMaster 
+      ? (videoState.seekId !== undefined && videoState.seekId !== lastSeekIdRef.current)
+      : Math.abs(vid.currentTime - videoState.currentTime) > 0.6;
+
+    if (shouldSeek) {
+      if (Math.abs(vid.currentTime - videoState.currentTime) > 0.6) {
+        vid.currentTime = videoState.currentTime;
+      }
+      if (isMediaMaster) lastSeekIdRef.current = videoState.seekId;
+    }
+
     if (videoState.isPlaying && vid.paused) {
       vid.play().catch(() => {});
     } else if (!videoState.isPlaying && !vid.paused) {
       vid.pause();
     }
-  }, [videoState, slide, isMediaMaster, emitVideoTelemetry, emitCommand]);
+  }, [videoState, slide, isMediaMaster]);
+
+  // 2. Media Master Mode: loop logic and telemetry emission
+  useEffect(() => {
+    if (!videoRef.current || slide?.type !== 'media' || !isMediaMaster) return;
+
+    const vid = videoRef.current;
+
+    // Ensure it starts playing if it's the first time and we have no state, or if we just mounted
+    // but only if videoState doesn't explicitly say isPlaying: false.
+    // Actually, we rely on the above useEffect to handle play/pause if videoState exists.
+    // If no videoState yet, we auto-play.
+    if (!videoState && vid.paused) {
+      vid.play().catch(() => {});
+    }
+
+    const emitTelemetry = () => {
+      if (!emitVideoTelemetry) return;
+      emitVideoTelemetry({
+        isPlaying: !vid.paused,
+        currentTime: vid.currentTime,
+        duration: Number.isFinite(vid.duration) ? vid.duration : 0,
+        volume: vid.volume,
+        speed: vid.playbackRate,
+        loop: vid.loop,
+        mediaSrc: slide.mediaSrc || null,
+        startTime: slide.mediaStart,
+        endTime: slide.mediaEnd,
+        lastUpdatedBy: 'projection',
+        timestamp: Date.now()
+      });
+    };
+
+    let intervalId = setInterval(() => {
+      if (!vid) return;
+
+      const startTime = slide.mediaStart ?? 0;
+      const endTime = slide.mediaEnd;
+
+      if (endTime && vid.currentTime >= endTime) {
+        if (slide.mediaLoop !== false) {
+          vid.currentTime = startTime;
+          vid.play().catch(() => {});
+        } else {
+          vid.pause();
+        }
+      } else if (vid.currentTime < startTime) {
+        vid.currentTime = startTime;
+      }
+
+      emitTelemetry();
+    }, 250);
+
+    const handleEnded = () => {
+      emitTelemetry();
+    };
+
+    vid.addEventListener('play', emitTelemetry);
+    vid.addEventListener('pause', emitTelemetry);
+    vid.addEventListener('seeked', emitTelemetry);
+    vid.addEventListener('ended', handleEnded);
+
+    return () => {
+      clearInterval(intervalId);
+      vid.removeEventListener('play', emitTelemetry);
+      vid.removeEventListener('pause', emitTelemetry);
+      vid.removeEventListener('seeked', emitTelemetry);
+      vid.removeEventListener('ended', handleEnded);
+    };
+  }, [slide, isMediaMaster, emitVideoTelemetry, videoState]);
 
   // Auto expand when switching to scripture mode
   useEffect(() => {

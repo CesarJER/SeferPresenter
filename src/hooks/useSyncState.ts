@@ -227,6 +227,7 @@ export function useSyncState(props: UseSyncStateProps) {
     
     if (type === 'WELCOME') {
       controlSessionIdRef.current = payload.controlSessionId as string | undefined;
+      console.log(`[CLIENT DBG] WebSocket WELCOME - clientId=${payload.clientId} role=${payload.role} controlSessionId=${payload.controlSessionId}`);
       wsSendRef.current('SERVER_TIME_PING', { clientSentAtMs: Date.now() });
       return;
     }
@@ -235,6 +236,7 @@ export function useSyncState(props: UseSyncStateProps) {
       const msg = payload as Record<string, unknown>;
       const masterControlSessionId = msg.masterControlSessionId as string | null;
       const isMaster = !!masterControlSessionId && masterControlSessionId === controlSessionIdRef.current;
+      console.log(`[CLIENT DBG] WebSocket MEDIA_MASTER_STATUS - masterControlSessionId=${masterControlSessionId} controlSessionId=${controlSessionIdRef.current} isMaster=${isMaster}`);
       setIsMediaMaster(isMaster);
       return;
     }
