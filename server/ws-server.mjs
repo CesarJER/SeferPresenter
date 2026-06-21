@@ -123,6 +123,22 @@ const getLiveAudioParticipantSnapshot = () => ({
   })),
 })
 
+const getLiveAudioParticipantState = (participantId) => {
+  const participant = liveAudioParticipants.get(participantId)
+  if (!participant) return null
+  return {
+    participantId: participant.participantId,
+    role: participant.role,
+    speakerState: participant.speakerState,
+    canSubscribe: participant.canSubscribe,
+    canPublishAudio: participant.canPublishAudio,
+    isMuted: participant.isMuted,
+    connected: Boolean(participant.ws && participant.ws.readyState === WebSocket.OPEN),
+    disconnectedAt: participant.disconnectedAt,
+    updatedAt: participant.updatedAt,
+  }
+}
+
 const resetWsServerStateForTests = () => {
   for (const control of liveAudioControls.values()) {
     clearTimeout(control.expiryTimer)
@@ -417,6 +433,7 @@ const createWsServer = (httpServer, onFallbackMessage) => {
       connectedAt: existing?.connectedAt || now,
       updatedAt: now,
       disconnectedAt: undefined,
+      cleanupDueAt: undefined,
       cleanupTimer: undefined,
       privateSignalTimestamps: existing?.privateSignalTimestamps || [],
     }
@@ -432,14 +449,47 @@ const createWsServer = (httpServer, onFallbackMessage) => {
 
     participant.ws = null
     participant.disconnectedAt = Date.now()
+    participant.cleanupDueAt = participant.disconnectedAt + getRejoinGraceMs()
     clearTimeout(participant.cleanupTimer)
-    participant.cleanupTimer = setTimeout(() => {
-      const current = liveAudioParticipants.get(meta.participantId)
-      if (current && current.ws === null) {
-        liveAudioParticipants.delete(meta.participantId)
-      }
-    }, getRejoinGraceMs())
+    participant.cleanupTimer = setTimeout(() => cleanupExpiredParticipant(meta.participantId), getRejoinGraceMs())
     participant.cleanupTimer.unref?.()
+  }
+
+  const cleanupExpiredParticipant = (participantId) => {
+    const current = liveAudioParticipants.get(participantId)
+    if (!current || current.ws !== null) return
+    if (current.cleanupDueAt && current.cleanupDueAt > Date.now()) return
+
+    const releasedStatus = {
+      ...makeReducedParticipantStatus(current),
+      speakerState: 'REVOKED',
+      canPublishAudio: false,
+      isMuted: false,
+      updatedAt: Date.now(),
+    }
+    current.speakerState = 'REVOKED'
+    current.canPublishAudio = false
+    current.isMuted = false
+    routeParticipantStatus(releasedStatus)
+    broadcast({
+      type: 'LIVE_AUDIO_REVOKE_SPEAK',
+      participantId,
+      createdAt: Date.now(),
+    }, (targetMeta) => {
+      if (targetMeta.role === 'presenter') return true
+      if (targetMeta.role !== 'control') return false
+      return isControlAuthorized(liveAudioControls.get(targetMeta.controlSessionId))
+    })
+    liveAudioParticipants.delete(participantId)
+  }
+
+  const sweepExpiredParticipants = () => {
+    const now = Date.now()
+    for (const participant of liveAudioParticipants.values()) {
+      if (participant.ws === null && participant.cleanupDueAt && participant.cleanupDueAt <= now) {
+        cleanupExpiredParticipant(participant.participantId)
+      }
+    }
   }
 
   const canAcceptPrivateSignal = (meta, msg) => {
@@ -733,6 +783,7 @@ const createWsServer = (httpServer, onFallbackMessage) => {
         wsClients.delete(client)
       }
     }
+    sweepExpiredParticipants()
   }, 25_000)
   heartbeat.unref?.()
 
@@ -745,6 +796,7 @@ export {
   createWsServer,
   getLiveAudioControlState,
   getLiveAudioControlSnapshot,
+  getLiveAudioParticipantState,
   getLiveAudioParticipantSnapshot,
   isLiveAudioControlAuthorized,
   resetWsServerStateForTests,

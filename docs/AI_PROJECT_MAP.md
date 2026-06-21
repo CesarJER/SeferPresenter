@@ -110,17 +110,21 @@ Start with:
   `src/components/shared/ControlVerificationCode.tsx` for Fase 5.3 Control
   authorization UI/lifecycle
 - `server/ws-server.mjs` for principal election, pending Control TTL,
-  authorization, moderation filtering, private-signal routing, and succession
+  authorization, moderation filtering, private-signal routing, rejoin-grace
+  cleanup, participant snapshot lookup, and succession
 - `server/livekit-server.mjs` and `server/local-server.mjs` for Fase 5.4
-  self-hosted token, status, refresh, and moderation endpoints
+  self-hosted token, status, refresh, participant identity preservation, and
+  moderation endpoints
 - `docs/SYNC_ARCHITECTURE.md`
 - `docs/COMPONENT_OWNERSHIP.md`
 
 Runtime implementation entry points are focused hooks such as
 `src/features/liveAudio/hooks/useLiveAudioAvailability.ts`,
 `src/features/liveAudio/hooks/useLiveAudio.ts`,
-`src/features/liveAudio/hooks/usePrivateControlSignals.ts`, and
-`src/features/liveAudio/hooks/useControlAuthorization.ts`.
+`src/hooks/usePrivateControlSignals.ts`, and
+`src/hooks/useControlAuthorization.ts`. `useLiveAudio.ts` owns token refresh,
+reconnection/retry states, audio-only subscription, microphone publication, and
+track cleanup.
 Control UI should live under `src/features/liveAudio/components/control/`,
 audience voice UI under `src/features/liveAudio/components/audience/`, and
 Live Audio reusable privacy/status widgets under

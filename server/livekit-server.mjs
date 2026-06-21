@@ -100,14 +100,21 @@ const getRoomName = (config, roomSession) => {
   return safeSession ? `${config.roomName}-${safeSession}` : config.roomName
 }
 
-const getVideoGrant = (role, room, config) => {
+const canAudiencePublish = (participantId, existingParticipant) =>
+  Boolean(participantId && roomState.speakers.has(participantId)) ||
+  existingParticipant?.speakerState === 'GRANTED' ||
+  existingParticipant?.canPublish === true
+
+const getVideoGrant = (role, room, config, participantId, existingParticipant) => {
   if (role === 'audience') {
+    const canPublish = canAudiencePublish(participantId, existingParticipant)
     return {
       room,
       roomJoin: true,
       canSubscribe: config.publicListen,
-      canPublish: false,
+      canPublish,
       canPublishData: false,
+      canPublishSources: canPublish ? ['microphone'] : undefined,
     }
   }
 
@@ -136,7 +143,7 @@ const issueToken = ({ role, roomSession, existingParticipant }) => {
   const participantId = existingParticipant?.participantId || randomUUID()
   const participantIdentity = existingParticipant?.participantIdentity || `${role}-${participantId}`
   const room = getRoomName(config, roomSession || existingParticipant?.roomSession)
-  const video = getVideoGrant(role, room, config)
+  const video = getVideoGrant(role, room, config, participantId, existingParticipant)
   const payload = {
     iss: config.apiKey,
     sub: participantIdentity,
@@ -263,6 +270,19 @@ const handleRefreshToken = async ({ req, res, readBody, sendJson }) => {
   }
 
   const existingParticipant = participants.get(body.participantId)
+  const wsParticipant = controlApi?.getLiveAudioParticipantState?.(body.participantId)
+  if (wsParticipant) {
+    existingParticipant.speakerState = wsParticipant.speakerState
+    existingParticipant.canPublish = wsParticipant.canPublishAudio
+    existingParticipant.canSubscribe = wsParticipant.canSubscribe
+    if (wsParticipant.speakerState === 'GRANTED' || wsParticipant.canPublishAudio) {
+      roomState.speakers.add(body.participantId)
+      roomState.muted.delete(body.participantId)
+    } else if (wsParticipant.speakerState === 'REVOKED' || wsParticipant.speakerState === 'MUTED') {
+      roomState.speakers.delete(body.participantId)
+      if (wsParticipant.speakerState === 'MUTED') roomState.muted.add(body.participantId)
+    }
+  }
   const result = issueToken({
     role: existingParticipant.role,
     roomSession: existingParticipant.roomSession,

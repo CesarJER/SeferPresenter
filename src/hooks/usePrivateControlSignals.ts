@@ -40,6 +40,7 @@ export interface UsePrivateControlSignalsOptions {
   transportReady?: boolean;
   controlSessionId?: string;
   onPrivateSignal?: (signal: DecryptedPrivateControlSignal) => void;
+  onControlKeyRotated?: (message: ControlKeyRotatedMessage) => void;
   onError?: (error: unknown) => void;
 }
 
@@ -57,6 +58,7 @@ export interface PrivateControlSignalsState {
   sendPrivateSignal: (value: unknown, options?: SendPrivateSignalOptions) => Promise<boolean>;
   requestControlAuthorization: (verificationCode: string) => Promise<boolean>;
   authorizeSecondaryControl: (request: LiveAudioControlJoinRequestMessage) => Promise<boolean>;
+  clearPrivateState: () => void;
 }
 
 const createId = (prefix: string): string => {
@@ -84,6 +86,7 @@ export function usePrivateControlSignals(options: UsePrivateControlSignalsOption
     transportReady = true,
     controlSessionId: providedControlSessionId,
     onPrivateSignal,
+    onControlKeyRotated,
     onError,
   } = options;
 
@@ -103,16 +106,30 @@ export function usePrivateControlSignals(options: UsePrivateControlSignalsOption
   const currentControlPublicKeyRef = useRef<string | null>(null);
   const sendMessageRef = useRef(sendMessage);
   const onPrivateSignalRef = useRef(onPrivateSignal);
+  const onControlKeyRotatedRef = useRef(onControlKeyRotated);
   const onErrorRef = useRef(onError);
 
   useEffect(() => {
     sendMessageRef.current = sendMessage;
     onPrivateSignalRef.current = onPrivateSignal;
+    onControlKeyRotatedRef.current = onControlKeyRotated;
     onErrorRef.current = onError;
-  }, [sendMessage, onPrivateSignal, onError]);
+  }, [sendMessage, onPrivateSignal, onControlKeyRotated, onError]);
 
   const reportError = useCallback((error: unknown) => {
     onErrorRef.current?.(error);
+  }, []);
+
+  const clearPrivateState = useCallback(() => {
+    sessionKeyPairRef.current = null;
+    audienceKeyPairRef.current = null;
+    audienceSharedKeyRef.current = null;
+    authorizationKeyPairRef.current = null;
+    usedNonceKeysRef.current.clear();
+    currentKeyIdRef.current = null;
+    currentControlPublicKeyRef.current = null;
+    setKeyId(null);
+    setControlPublicKey(null);
   }, []);
 
   const publishControlPublicKey = useCallback(async () => {
@@ -317,8 +334,26 @@ export function usePrivateControlSignals(options: UsePrivateControlSignalsOption
 
       if (type === 'CONTROL_KEY_ROTATED' && role === 'audience') {
         const rotation = payload as unknown as ControlKeyRotatedMessage;
+        audienceKeyPairRef.current = null;
+        audienceSharedKeyRef.current = null;
+        usedNonceKeysRef.current.clear();
         if (typeof rotation.publicKey === 'string' && typeof rotation.keyId === 'string') {
-          void negotiateAudienceKey(rotation.publicKey, rotation.keyId).catch(reportError);
+          void negotiateAudienceKey(rotation.publicKey, rotation.keyId)
+            .then(() => onControlKeyRotatedRef.current?.(rotation))
+            .catch(reportError);
+        } else {
+          currentKeyIdRef.current = null;
+          currentControlPublicKeyRef.current = null;
+          setKeyId(null);
+          setControlPublicKey(null);
+        }
+        return;
+      }
+
+      if (type === 'CONTROL_KEY_ROTATED' && role === 'control') {
+        usedNonceKeysRef.current.clear();
+        if (payload.reason === 'NO_AUTHORIZED_CONTROLS') {
+          clearPrivateState();
         }
         return;
       }
@@ -335,6 +370,7 @@ export function usePrivateControlSignals(options: UsePrivateControlSignalsOption
 
     return unsubscribe;
   }, [
+    clearPrivateState,
     handleControlAuthorized,
     handlePrivateControlSignal,
     negotiateAudienceKey,
@@ -348,6 +384,8 @@ export function usePrivateControlSignals(options: UsePrivateControlSignalsOption
     void publishControlPublicKey().catch(reportError);
   }, [publishControlPublicKey, reportError, role, transportReady]);
 
+  useEffect(() => clearPrivateState, [clearPrivateState]);
+
   return {
     controlSessionId,
     keyId,
@@ -358,5 +396,6 @@ export function usePrivateControlSignals(options: UsePrivateControlSignalsOption
     sendPrivateSignal,
     requestControlAuthorization,
     authorizeSecondaryControl,
+    clearPrivateState,
   };
 }

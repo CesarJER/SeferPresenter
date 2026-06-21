@@ -5,7 +5,7 @@ import { AudienceInterventionModal } from './AudienceInterventionModal';
 import { AudiencePrivateControlMessage } from './AudiencePrivateControlMessage';
 import { useLiveAudio } from '../../hooks/useLiveAudio';
 import { usePrivateControlSignals } from '../../../../hooks/usePrivateControlSignals';
-import type { LiveAudioAvailability } from '../../../../types/liveAudio';
+import type { LiveAudioAvailability, SpeakerState } from '../../../../types/liveAudio';
 
 interface LiveAudioAudienceContainerProps {
   availability: LiveAudioAvailability;
@@ -38,6 +38,8 @@ export default function LiveAudioAudienceContainer({
   const [isActive, setIsActive] = useState(false);
   const [isPendingWord, setIsPendingWord] = useState(false);
   const [isWordGranted, setIsWordGranted] = useState(false);
+  const [activeAlias, setActiveAlias] = useState<string | null>(null);
+  const [keyRotationCount, setKeyRotationCount] = useState(0);
   
   const [showInterventionModal, setShowInterventionModal] = useState(false);
   const [showPrivateMessageModal, setShowPrivateMessageModal] = useState(false);
@@ -65,19 +67,35 @@ export default function LiveAudioAudienceContainer({
     startRemoteAudio,
     publishMicrophone,
     unpublishMicrophone,
+    retryAudio,
   } = useLiveAudio({
     role: 'audience',
     autoConnect: availability === 'enabled',
   });
 
   // 2. Setup private signals
-  const { sendPrivateSignal } = usePrivateControlSignals({
+  const { sendPrivateSignal, clearPrivateState, ready: privateSignalReady } = usePrivateControlSignals({
     role: 'audience',
     participantId: participantId || clientId,
     sendMessage: wsSend,
     subscribeToWsMessage,
     transportReady: availability === 'enabled',
+    onControlKeyRotated: () => setKeyRotationCount((current) => current + 1),
   });
+
+  const sendParticipantStatus = useCallback((speakerState: SpeakerState, canPublishAudio = false, isMuted = false) => {
+    if (!participantId) return false;
+    return wsSend('LIVE_AUDIO_PARTICIPANT_STATUS', {
+      type: 'LIVE_AUDIO_PARTICIPANT_STATUS',
+      participantId,
+      role: 'audience',
+      speakerState,
+      canSubscribe: true,
+      canPublishAudio,
+      isMuted,
+      updatedAt: Date.now(),
+    });
+  }, [participantId, wsSend]);
 
   // Listen for grant/revoke messages
   useEffect(() => {
@@ -85,13 +103,58 @@ export default function LiveAudioAudienceContainer({
       if (type === 'LIVE_AUDIO_GRANT_SPEAK' && payload.participantId === participantId) {
         setIsWordGranted(true);
         setIsPendingWord(false);
+        sendParticipantStatus('GRANTED', true, false);
       } else if (type === 'LIVE_AUDIO_REVOKE_SPEAK' && payload.participantId === participantId) {
         setIsWordGranted(false);
         void unpublishMicrophone();
+        sendParticipantStatus('REVOKED', false, false);
+      } else if (type === 'LIVE_AUDIO_MUTE_PARTICIPANT' && payload.participantId === participantId) {
+        void unpublishMicrophone();
+        sendParticipantStatus('MUTED', false, true);
+      } else if (type === 'LIVE_AUDIO_KICK_PARTICIPANT' && payload.participantId === participantId) {
+        setIsActive(false);
+        setIsPendingWord(false);
+        setIsWordGranted(false);
+        setActiveAlias(null);
+        void unpublishMicrophone();
+        clearPrivateState();
       }
     });
     return unsubscribe;
-  }, [subscribeToWsMessage, participantId, unpublishMicrophone]);
+  }, [clearPrivateState, participantId, sendParticipantStatus, subscribeToWsMessage, unpublishMicrophone]);
+
+  useEffect(() => {
+    if (!participantId) return;
+    if (!isActive) {
+      sendParticipantStatus('LISTENER', false, false);
+    } else if (isWordGranted) {
+      sendParticipantStatus('GRANTED', true, false);
+    } else if (isPendingWord) {
+      sendParticipantStatus('REQUESTED', false, false);
+    }
+  }, [isActive, isPendingWord, isWordGranted, participantId, sendParticipantStatus]);
+
+  useEffect(() => {
+    if (liveKitState !== 'reconnectFailed') return;
+    if (!isActive && !isPendingWord && !isWordGranted) return;
+
+    void sendPrivateSignal({
+      type: 'AUDIO_FALLBACK',
+      state: isWordGranted ? 'GRANTED' : isPendingWord ? 'REQUESTED' : 'ACTIVE',
+      note: 'Audio no pudo reconectar; usar mensaje privado como respaldo.',
+    });
+  }, [isActive, isPendingWord, isWordGranted, liveKitState, sendPrivateSignal]);
+
+  useEffect(() => {
+    if (keyRotationCount === 0 || !privateSignalReady || !activeAlias) return;
+    if (!isActive && !isPendingWord && !isWordGranted) return;
+
+    void sendPrivateSignal({
+      type: isPendingWord ? 'REQUEST_WORD' : 'ACTIVE_STATE',
+      alias: activeAlias,
+      speakerState: isWordGranted ? 'GRANTED' : isPendingWord ? 'REQUESTED' : 'LISTENER',
+    });
+  }, [activeAlias, isActive, isPendingWord, isWordGranted, keyRotationCount, privateSignalReady, sendPrivateSignal]);
 
   const handleStartAudio = useCallback(() => {
     void startRemoteAudio().then(() => setHasAudioStarted(true));
@@ -105,38 +168,61 @@ export default function LiveAudioAudienceContainer({
     setIsActive(false);
     setIsPendingWord(false);
     setIsWordGranted(false);
+    setActiveAlias(null);
+    setShowInterventionModal(false);
+    setShowPrivateMessageModal(false);
+    sendParticipantStatus('REVOKED', false, false);
     void unpublishMicrophone();
-  }, [unpublishMicrophone]);
+    clearPrivateState();
+  }, [clearPrivateState, sendParticipantStatus, unpublishMicrophone]);
 
   const handleSubmitAlias = useCallback(async (alias: string) => {
     setShowInterventionModal(false);
     setIsActive(true);
     setIsPendingWord(true);
+    setActiveAlias(alias);
+    sendParticipantStatus('REQUESTED', false, false);
     
     // Send encrypted signal to request word
     await sendPrivateSignal({
       type: 'REQUEST_WORD',
       alias,
     });
-  }, [sendPrivateSignal]);
+  }, [sendParticipantStatus, sendPrivateSignal]);
 
   const handleCancelRequest = useCallback(() => {
     setIsPendingWord(false);
+    sendParticipantStatus('LISTENER', false, false);
     // Send encrypted signal to cancel word request
     void sendPrivateSignal({
       type: 'CANCEL_REQUEST_WORD',
     });
-  }, [sendPrivateSignal]);
+  }, [sendParticipantStatus, sendPrivateSignal]);
+
+  const handleRequestWord = useCallback(() => {
+    setIsPendingWord(true);
+    sendParticipantStatus('REQUESTED', false, false);
+    void sendPrivateSignal({
+      type: 'REQUEST_WORD',
+      alias: activeAlias ?? undefined,
+    });
+  }, [activeAlias, sendParticipantStatus, sendPrivateSignal]);
 
   const handleToggleMicrophone = useCallback(() => {
     if (isMicrophoneActive) {
       void unpublishMicrophone();
+      sendParticipantStatus('GRANTED', false, true);
     } else {
       void publishMicrophone().catch((err) => {
         console.error("Failed to publish mic:", err);
       });
+      sendParticipantStatus('GRANTED', true, false);
     }
-  }, [isMicrophoneActive, publishMicrophone, unpublishMicrophone]);
+  }, [isMicrophoneActive, publishMicrophone, sendParticipantStatus, unpublishMicrophone]);
+
+  const handleRetryAudio = useCallback(() => {
+    void retryAudio();
+  }, [retryAudio]);
 
   const handleOpenMessage = useCallback(() => {
     setShowPrivateMessageModal(true);
@@ -172,9 +258,10 @@ export default function LiveAudioAudienceContainer({
           volume={volume}
           onVolumeChange={setVolume}
           onStartAudio={handleStartAudio}
+          onRetryAudio={handleRetryAudio}
           onJoinActive={handleJoinActive}
           onLeaveActive={handleLeaveActive}
-          onRequestWord={() => setIsPendingWord(true)}
+          onRequestWord={handleRequestWord}
           onCancelRequest={handleCancelRequest}
           onToggleMicrophone={handleToggleMicrophone}
           onOpenMessage={handleOpenMessage}
@@ -192,9 +279,10 @@ export default function LiveAudioAudienceContainer({
             volume={volume}
             onVolumeChange={setVolume}
             onStartAudio={handleStartAudio}
+            onRetryAudio={handleRetryAudio}
             onJoinActive={handleJoinActive}
             onLeaveActive={handleLeaveActive}
-            onRequestWord={() => setIsPendingWord(true)}
+            onRequestWord={handleRequestWord}
             onCancelRequest={handleCancelRequest}
             onToggleMicrophone={handleToggleMicrophone}
             onOpenMessage={handleOpenMessage}

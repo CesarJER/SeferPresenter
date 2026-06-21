@@ -1,6 +1,14 @@
 import React from 'react';
-import { Mic, MicOff, Hand, Wifi, WifiOff, Loader2 } from 'lucide-react';
-export type ParticipantStatus = 'talking' | 'permission-granted' | 'permission-requested' | 'connected' | 'reconnecting' | 'disconnected';
+import { Mic, MicOff, Hand, Wifi, WifiOff, Loader2, RotateCcw, CheckCircle2 } from 'lucide-react';
+export type ParticipantStatus =
+  | 'talking'
+  | 'permission-granted'
+  | 'permission-requested'
+  | 'connected'
+  | 'reconnecting'
+  | 'reconnected'
+  | 'reconnect-failed'
+  | 'disconnected';
 
 interface LiveAudioStatusBadgeProps {
   status: ParticipantStatus;
@@ -45,6 +53,22 @@ export const LiveAudioStatusBadge: React.FC<LiveAudioStatusBadgeProps> = ({ stat
     return (
       <div className={`flex items-center justify-center rounded-full bg-orange-500/20 p-1.5 ${className}`} title="Reconectando...">
         <Loader2 size={16} className="text-orange-400 animate-spin" />
+      </div>
+    );
+  }
+
+  if (status === 'reconnected') {
+    return (
+      <div className={`flex items-center justify-center rounded-full bg-emerald-500/20 p-1.5 ${className}`} title="Audio reconectado">
+        <CheckCircle2 size={16} className="text-emerald-400" />
+      </div>
+    );
+  }
+
+  if (status === 'reconnect-failed') {
+    return (
+      <div className={`flex items-center justify-center rounded-full bg-red-500/20 p-1.5 ${className}`} title="ReconexiÃ³n fallida">
+        <RotateCcw size={16} className="text-red-400" />
       </div>
     );
   }

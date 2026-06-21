@@ -125,9 +125,13 @@ authorization.
   session boundary, and restarts Control ownership with the oldest pending
   Control if one remains connected.
 - Audience disconnect keeps technical participant state in memory for
-  `SEFER_LIVE_AUDIO_REJOIN_GRACE_SECONDS` seconds, then removes the
-  `participantId`, speaker permission, mute state, and pending private-signal
-  rate window if the connection does not return.
+  `SEFER_LIVE_AUDIO_REJOIN_GRACE_SECONDS` seconds. If the participant returns
+  within the grace window, the same `participantId` can continue and the client
+  must renegotiate private crypto state. If the participant does not return, the
+  server emits a technical revoke/participant status update to presenter and
+  authorized Controls, removes the `participantId`, clears speaker permission
+  and mute state, and drops the pending private-signal rate window. A periodic
+  sweep also enforces this cleanup if an individual timeout is missed.
 
 Live Audio messages must use a dedicated handler in future phases. They must not
 be folded into presentation `SYNC_STATE`, audio playback `AudioState`, or the
@@ -160,6 +164,15 @@ subscription, exposes remote audio tracks, and opens the microphone only when
 `publishMicrophone()` is called after an explicit user action. `startRemoteAudio()`
 is exposed so UI can keep remote playback behind a browser/user gesture.
 
+Fase 5.11 hardens long sessions and mobile networks. `useLiveAudio.ts` refreshes
+tokens through `POST /api/livekit/refresh-token` with a two-minute safety margin,
+keeps the same ephemeral `participantId` on refresh, exposes reconnecting,
+reconnected, and prolonged reconnect-failure states, and stops all local tracks
+when microphone publication ends, the user disconnects, or the component
+unmounts. Audience clients stay listen-only until Control grants speaking and a
+user gesture publishes microphone audio; passive listeners do not publish LiveKit
+data.
+
 Fase 5.4 adds `server/livekit-server.mjs` for self-hosted LiveKit backend
 endpoints. It keeps participant, token, speaker, mute, and kick state in memory
 only. If `SEFER_LIVE_AUDIO_ENABLED=false` or any required `LIVEKIT_*` variable is
@@ -170,6 +183,11 @@ audio. Tokens include only ephemeral LiveKit identity and JSON metadata with the
 UUID `participantId`; no alias is included. Mutating moderation endpoints require
 an authorized WebSocket Control session from `server/ws-server.mjs`; audience
 requests are rejected with 403.
+
+`/api/livekit/refresh-token` reissues tokens for active in-memory participants
+and consults the WebSocket participant state so a granted audience speaker can
+receive microphone-only publish permission without changing `participantId` or
+recovering any private alias/message history.
 
 ## WebSocket Audio Timeline
 

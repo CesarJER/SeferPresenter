@@ -5,6 +5,8 @@ export type LiveAudioConnectionState =
   | 'connected'
   | 'connecting'
   | 'reconnecting'
+  | 'reconnected'
+  | 'reconnectFailed'
   | 'disconnected'
   | 'permissionDenied'
   | 'unavailable';

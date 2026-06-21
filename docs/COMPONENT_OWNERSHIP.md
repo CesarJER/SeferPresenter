@@ -73,7 +73,8 @@ Hooks:
   `useLiveAudioAvailability.ts` should own optional module availability
   (`enabled`, `disabled`, `misconfigured`, `unsupported`) without importing
   the LiveKit browser SDK; `useLiveAudio.ts` or `LiveAudioProvider.tsx` should own
-  LiveKit connection and track lifecycle; `usePrivateControlSignals.ts` owns
+  LiveKit connection, token refresh, reconnection/retry states, and track
+  lifecycle; `usePrivateControlSignals.ts` owns
   in-memory Web Crypto keys, `PRIVATE_CONTROL_SIGNAL`, key rotation, and
   secondary Control private-key transfer; `useControlAuthorization.ts` owns the
   client reflection of server-owned principal, pending, delegated authorization,

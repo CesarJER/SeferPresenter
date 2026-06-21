@@ -3,7 +3,12 @@ import http from 'node:http'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createLiveKitApi } from './livekit-server.mjs'
-import { createWsServer, getLiveAudioControlSnapshot, isLiveAudioControlAuthorized } from './ws-server.mjs'
+import {
+  createWsServer,
+  getLiveAudioControlSnapshot,
+  getLiveAudioParticipantState,
+  isLiveAudioControlAuthorized,
+} from './ws-server.mjs'
 import { isAuthRequired, hasValidBasicAuth } from './authUtils.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -569,6 +574,7 @@ server.on('close', () => {
 
 liveKitApi = createLiveKitApi({
   getLiveAudioControlSnapshot,
+  getLiveAudioParticipantState,
   isLiveAudioControlAuthorized,
 })
 

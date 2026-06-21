@@ -22,6 +22,8 @@ const LiveAudioPresenter: React.FC = () => {
 
   const badgeStatus: ParticipantStatus = 
     state === 'connected' ? 'connected' :
+    state === 'reconnected' ? 'reconnected' :
+    state === 'reconnectFailed' ? 'reconnect-failed' :
     (state === 'connecting' || state === 'reconnecting') ? 'reconnecting' : 'disconnected';
 
   return (

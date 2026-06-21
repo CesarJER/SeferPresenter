@@ -186,7 +186,8 @@ Endpoints:
   efimero. `audience` recibe permiso de solo suscripcion; `control` recibe
   permiso de publicar audio.
 - `POST /api/livekit/refresh-token`: renueva un token para un participante activo
-  en memoria.
+  en memoria antes de expirar, preservando `participantId` e identidad LiveKit
+  cuando el participante sigue dentro del margen de retorno.
 - `POST /api/livekit/grant-speak`, `revoke-speak`, `mute-participant`,
   `mute-all`, `kick-participant`: requieren `role: "control"` y un
   `controlSessionId` autorizado por WebSocket. `audience` recibe 403.

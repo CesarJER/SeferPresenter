@@ -34,7 +34,7 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
 - `useQuizAudio` - `src/hooks/useQuizAudio.ts`: quiz feedback sounds.
 - `scriptureNumerals` helpers - `src/hooks/scriptureNumerals.ts`: scripture numeral utilities.
 - [useLiveAudioAvailability](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/features/liveAudio/hooks/useLiveAudioAvailability.ts) - `src/features/liveAudio/hooks/useLiveAudioAvailability.ts`: optional LiveKit runtime availability check using `/api/livekit/status`, with module-level cache and no SDK import.
-- [useLiveAudio](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/features/liveAudio/hooks/useLiveAudio.ts) - `src/features/liveAudio/hooks/useLiveAudio.ts`: isolated LiveKit client lifecycle, token request, audio-only remote subscriptions, explicit remote playback start, manual microphone publish/unpublish, and cleanup.
+- [useLiveAudio](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/features/liveAudio/hooks/useLiveAudio.ts) - `src/features/liveAudio/hooks/useLiveAudio.ts`: isolated LiveKit client lifecycle, token request/refresh, reconnect/retry states, audio-only remote subscriptions, explicit remote playback start, manual microphone publish/unpublish, and local track cleanup.
 - [LiveAudioProvider](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/features/liveAudio/hooks/LiveAudioProvider.tsx) - `src/features/liveAudio/hooks/LiveAudioProvider.tsx`: optional context wrapper for sharing one Live Audio connection within a feature view.
 
 ## Components
@@ -86,17 +86,19 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
 - `src/hooks/useControlAuthorization.ts` - Fase 5.3 Control authorization
   lifecycle using existing WebSocket send/subscribe functions.
 - `server/ws-server.mjs` - WebSocket `/ws` server for audio timeline plus Fase
-  5.3-5.5 Control principal election, pending code TTL, authorization
+  5.3-5.11 Control principal election, pending code TTL, authorization
   decisions, ephemeral participant association, private-signal rate limiting,
-  public-key routing, private-signal routing, moderation filtering, cleanup
-  after audience rejoin grace, and succession.
+  public-key routing, private-signal routing, moderation filtering, guaranteed
+  cleanup after audience rejoin grace, participant snapshot lookup for token
+  refresh, and succession.
 - `makeSyncMessage` - `src/utils/syncProtocol.ts`: message envelope creation.
 - `server/local-server.mjs`: SSE/API mirroring for state, commands, media telemetry, quiz events, assets, persistence.
 - `server/ws-server.mjs`: WebSocket `/ws` server for F2 audio timeline messages.
-- `server/livekit-server.mjs`: optional Fase 5.4 LiveKit self-hosted status,
-  token, refresh-token, and moderation endpoints with memory-only state and no
-  top-level server SDK dependency. Tokens include ephemeral `participantId`
-  metadata and no alias.
+- `server/livekit-server.mjs`: optional Fase 5.4/5.11 LiveKit self-hosted
+  status, token, refresh-token, and moderation endpoints with memory-only state
+  and no top-level server SDK dependency. Tokens include ephemeral
+  `participantId` metadata and no alias; refresh keeps the same participant
+  identity while reflecting current speaker permission.
 - `server/timelineManager.mjs`: backend-owned audio timeline state and action reducer.
 
 ## Validation Modules
