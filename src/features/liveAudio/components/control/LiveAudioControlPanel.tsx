@@ -25,7 +25,6 @@ interface LiveAudioControlPanelProps {
   onRevoke: (id: string) => void;
   onMute: (id: string) => void;
   onKick: (id: string) => void;
-  onVolumeChange: (id: string, volume: number) => void;
   onMicrophoneConfigChange?: (id: string, config: { volume?: number; musicMode?: boolean }) => void;
   pendingWordCount: number;
 }
@@ -50,7 +49,6 @@ export const LiveAudioControlPanel: React.FC<LiveAudioControlPanelProps> = ({
   onRevoke,
   onMute,
   onKick,
-  onVolumeChange,
   onMicrophoneConfigChange,
   pendingWordCount
 }) => {
@@ -98,6 +96,7 @@ export const LiveAudioControlPanel: React.FC<LiveAudioControlPanelProps> = ({
               isControlAuthorized={isControlAuthorized}
               onGrant={onGrant}
               onKick={onKick}
+              onMicrophoneConfigChange={onMicrophoneConfigChange}
             />
             <LiveAudioSpeakers 
               participants={participants}
@@ -105,7 +104,6 @@ export const LiveAudioControlPanel: React.FC<LiveAudioControlPanelProps> = ({
               onRevoke={onRevoke}
               onMute={onMute}
               onKick={onKick}
-              onVolumeChange={onVolumeChange}
               onMicrophoneConfigChange={onMicrophoneConfigChange}
             />
             <LiveAudioListeners 
@@ -113,7 +111,7 @@ export const LiveAudioControlPanel: React.FC<LiveAudioControlPanelProps> = ({
               isControlAuthorized={isControlAuthorized}
               onGrant={onGrant}
               onKick={onKick}
-              onVolumeChange={onVolumeChange}
+              onMicrophoneConfigChange={onMicrophoneConfigChange}
             />
           </div>
         </div>
@@ -165,7 +163,7 @@ export const LiveAudioControlPanel: React.FC<LiveAudioControlPanelProps> = ({
                   <input
                     type="range"
                     min="0"
-                    max="300"
+                    max="100"
                     value={listenVolume}
                     onChange={(e) => onListenVolumeChange(parseInt(e.target.value, 10))}
                     className="w-32 h-1 -rotate-90 origin-center accent-blue-500 cursor-pointer"

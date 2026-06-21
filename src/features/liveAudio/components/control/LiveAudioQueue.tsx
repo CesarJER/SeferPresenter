@@ -7,13 +7,15 @@ interface LiveAudioQueueProps {
   isControlAuthorized: boolean;
   onGrant: (id: string) => void;
   onKick: (id: string) => void;
+  onMicrophoneConfigChange?: (id: string, config: { volume?: number; musicMode?: boolean }) => void;
 }
 
 export const LiveAudioQueue: React.FC<LiveAudioQueueProps> = ({
   participants,
   isControlAuthorized,
   onGrant,
-  onKick
+  onKick,
+  onMicrophoneConfigChange
 }) => {
   const queue = participants.filter(p => p.speakerState === 'REQUESTED' && !p.isKicked);
 
@@ -34,6 +36,7 @@ export const LiveAudioQueue: React.FC<LiveAudioQueueProps> = ({
             isControlAuthorized={isControlAuthorized}
             onGrant={onGrant}
             onKick={onKick}
+            onMicrophoneConfigChange={onMicrophoneConfigChange}
           />
         ))}
       </div>

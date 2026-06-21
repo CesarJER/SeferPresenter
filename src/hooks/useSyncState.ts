@@ -84,6 +84,7 @@ const liveAudioWsOnlyTypes = new Set([
   'LIVE_AUDIO_CONTROL_AUTHORIZATION_DECISION',
   'CONTROL_KEY_ROTATED',
   'PRIVATE_CONTROL_SIGNAL',
+  'LIVE_AUDIO_REQUEST_ALIASES',
 ]);
 
 const isLiveAudioWsOnlyType = (type: unknown): type is string =>

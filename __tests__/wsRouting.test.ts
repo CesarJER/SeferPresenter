@@ -99,6 +99,17 @@ const makePrivateSignal = (participantId: string, suffix = ''): WsMessage => ({
   createdAt: Date.now(),
 });
 
+const makeControlPrivateSignal = (participantId: string, suffix = ''): WsMessage => ({
+  type: 'PRIVATE_CONTROL_SIGNAL',
+  fromParticipantId: `control-session-${suffix || 'one'}`,
+  toParticipantId: participantId,
+  keyId: `key-${suffix || 'one'}`,
+  ephemeralPublicKey: Buffer.from(`control-public-${suffix || 'one'}`).toString('base64'),
+  ciphertext: Buffer.from(`control-ciphertext-${suffix || 'one'}`).toString('base64'),
+  nonce: Buffer.alloc(12, suffix.charCodeAt(0) || 2).toString('base64'),
+  createdAt: Date.now(),
+});
+
 describe('Live Audio WebSocket routing', () => {
   beforeEach(async () => {
     process.env.SEFER_REQUIRE_AUTH = 'false';
@@ -143,6 +154,70 @@ describe('Live Audio WebSocket routing', () => {
 
     expect(received.fromParticipantId).toBe(participantId);
     expect(pending.messages.some((message) => message.type === 'PRIVATE_CONTROL_SIGNAL')).toBe(false);
+  });
+
+  it('routes private control signals only to the target audience participant', async () => {
+    const control = await connectWs('control');
+    const audience = await connectWs('audience');
+    const observer = await connectWs('audience');
+    const participantId = randomUUID();
+    const observerParticipantId = randomUUID();
+
+    audience.send(makeParticipantStatus(participantId));
+    observer.send(makeParticipantStatus(observerParticipantId));
+    await waitFor(
+      control,
+      (message) => message.type === 'LIVE_AUDIO_PARTICIPANT_STATUS' && message.participantId === participantId,
+    );
+
+    control.send(makeControlPrivateSignal(participantId));
+
+    const received = await waitFor(
+      audience,
+      (message) => message.type === 'PRIVATE_CONTROL_SIGNAL' && message.toParticipantId === participantId,
+    );
+    await wait(100);
+
+    expect(received.toParticipantId).toBe(participantId);
+    expect(observer.messages.some((message) => message.type === 'PRIVATE_CONTROL_SIGNAL')).toBe(false);
+  });
+
+  it('blocks private control signals from pending controls', async () => {
+    const principal = await connectWs('control');
+    const pending = await connectWs('control');
+    const audience = await connectWs('audience');
+    const participantId = randomUUID();
+
+    await waitFor(principal, (message) => message.type === 'WELCOME');
+    await waitFor(pending, (message) => message.type === 'LIVE_AUDIO_CONTROL_AUTHORIZATION_STATE' && message.controlState === 'PENDING');
+    audience.send(makeParticipantStatus(participantId));
+
+    pending.send(makeControlPrivateSignal(participantId, 'pending'));
+
+    const error = await waitFor(
+      pending,
+      (message) => message.type === 'ERROR' && message.code === 'CONTROL_PENDING_FORBIDDEN',
+    );
+    await wait(100);
+
+    expect(String(error.message)).toContain('private signals');
+    expect(audience.messages.some((message) => message.type === 'PRIVATE_CONTROL_SIGNAL')).toBe(false);
+  });
+
+  it('routes empty alias requests from authorized controls to audience clients', async () => {
+    const control = await connectWs('control');
+    const audience = await connectWs('audience');
+
+    await waitFor(control, (message) => message.type === 'WELCOME');
+    control.send({
+      type: 'LIVE_AUDIO_REQUEST_ALIASES',
+      createdAt: Date.now(),
+    });
+
+    const request = await waitFor(audience, (message) => message.type === 'LIVE_AUDIO_REQUEST_ALIASES');
+
+    expect(request).not.toHaveProperty('alias');
+    expect(request).not.toHaveProperty('participantId');
   });
 
   it('replays the current control public key to audience clients that connect later', async () => {

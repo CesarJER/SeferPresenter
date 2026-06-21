@@ -11,14 +11,14 @@ export const LiveAudioTrackOutput: React.FC<LiveAudioTrackOutputProps> = ({ remo
 
   useEffect(() => {
     const audio = audioRef.current;
-    if (!audio || !remoteTrack.track) return;
+    if (!audio) return;
 
-    const stream = new MediaStream([remoteTrack.track]);
-    audio.srcObject = stream;
+    remoteTrack.attach(audio);
     return () => {
+      remoteTrack.detach(audio);
       audio.srcObject = null;
     };
-  }, [remoteTrack.track]);
+  }, [remoteTrack]);
 
   useEffect(() => {
     const volume = Math.max(0, Math.min(volumePercent, 100));
@@ -27,5 +27,5 @@ export const LiveAudioTrackOutput: React.FC<LiveAudioTrackOutputProps> = ({ remo
     }
   }, [volumePercent]);
 
-  return <audio ref={audioRef} playsInline style={{ display: 'none' }} />;
+  return <audio ref={audioRef} autoPlay playsInline style={{ display: 'none' }} />;
 };

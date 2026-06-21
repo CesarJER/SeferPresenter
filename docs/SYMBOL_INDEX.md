@@ -59,7 +59,7 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
   `src/features/liveAudio/components/audience/`, and
   `src/features/liveAudio/components/shared/`. Core legal components for
   `/proteccion-datos` may stay outside the LiveKit module.
-- `LiveAudioTrackOutput` - `src/features/liveAudio/components/shared/LiveAudioTrackOutput.tsx`: hidden remote-track audio renderer used by audience, presenter, and control; applies 0-300 playback gain for Live Audio tracks.
+- `LiveAudioTrackOutput` - `src/features/liveAudio/components/shared/LiveAudioTrackOutput.tsx`: hidden remote-track audio renderer used by audience, presenter, and control; attaches LiveKit tracks to native audio elements and applies browser-native 0-100 playback volume.
 - `QuizPresenterView` - `src/components/quiz/QuizPresenterView.tsx`: projected quiz view.
 - `QuizControllerView` - `src/components/quiz/QuizControllerView.tsx`: controller quiz controls/results.
 - `QuizAudienceView` - `src/components/quiz/QuizAudienceView.tsx`: audience quiz answer UI.
@@ -109,9 +109,9 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
 - `validateAudioSyncMaps` - `src/utils/validation.ts`: audio sync map validation.
 - `validateRemoteStatePayload` / `validateSyncMessage` - `src/utils/validation.ts`: remote state and sync message validation.
 - `isValidPrivateControlSignal` / `isValidEphemeralParticipantId` -
-  `src/utils/validation.ts`: Live Audio technical envelope and ephemeral UUID v4
-  validation. Backend runtime authorization must still bind IDs to live sessions
-  and roles.
+  `src/utils/validation.ts`: Live Audio technical envelope validation for
+  audience-to-control and control-to-audience private signals. Backend runtime
+  authorization must still bind IDs to live sessions and roles.
 - `isValidControlVerificationCode` - `src/utils/validation.ts`: verifies Fase
   5.3 Control authorization codes in `NNN-NNN` format.
 - `src/utils/cryptoUtils.ts`: Web Crypto helpers for ECDH P-256 session and

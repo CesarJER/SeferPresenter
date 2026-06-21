@@ -52,6 +52,7 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
   const [isVisible, setIsVisible] = useState(true);
   const [isVolumeOpen, setIsVolumeOpen] = useState(false);
   const hasAudioStartedRef = useRef(hasAudioStarted);
+  const panelRootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     hasAudioStartedRef.current = hasAudioStarted;
@@ -83,10 +84,12 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
     return () => clearTimeout(timeout);
   }, [isActive, isVisible]);
 
-  // Listen to outside clicks to toggle panel
+  // Close only the volume popover on outside clicks; panel visibility is not toggled by slider drags.
   useEffect(() => {
-    const handleGlobalClick = () => {
-      setIsVisible(v => !v);
+    const handleGlobalClick = (event: MouseEvent) => {
+      const target = event.target instanceof Node ? event.target : null;
+      if (target && panelRootRef.current?.contains(target)) return;
+      setIsVolumeOpen(false);
     };
     window.addEventListener('click', handleGlobalClick);
     return () => window.removeEventListener('click', handleGlobalClick);
@@ -132,7 +135,7 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
 
   if (!isActive) {
     return (
-      <div className={wrapperClass} onClick={handlePanelClick}>
+      <div ref={panelRootRef} className={wrapperClass} onClick={handlePanelClick}>
         <div className={panelClass}>
           {reconnectStatus}
           {!hasAudioStarted && (
@@ -152,7 +155,7 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
                 ? 'bg-gray-700 border-gray-600 text-gray-400 cursor-not-allowed'
                 : 'bg-yellow-500 hover:bg-yellow-400 border-yellow-300 text-black shadow-[0_0_15px_rgba(234,179,8,0.6)] animate-pulse'
             }`}
-            title={isParticipationBlocked ? "ParticipaciÃ³n bloqueada por Control" : "Participar"}
+            title={isParticipationBlocked ? "Participacion bloqueada por Control" : "Participar"}
           >
             <Hand className="w-5 h-5" />
             <span className="font-bold text-sm pr-1">Participa</span>
@@ -163,7 +166,7 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
   }
 
   return (
-    <div className={wrapperClass} onClick={handlePanelClick}>
+    <div ref={panelRootRef} className={wrapperClass} onClick={handlePanelClick}>
       <div className={`${panelClass} bg-gray-900/70 backdrop-blur-lg border border-white/10 px-2 rounded-2xl shadow-2xl`}>
         {reconnectStatus}
         
@@ -229,7 +232,7 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
                   <span className="text-[10px] text-gray-400 font-bold uppercase">Micro {Math.round(microphoneVolume)}%</span>
                   <input
                     type="range"
-                    min="0" max="200" step="5"
+                    min="0" max="300" step="5"
                     value={microphoneVolume}
                     onChange={e => onMicrophoneVolumeChange(parseFloat(e.target.value))}
                     className="w-24 h-2 accent-green-500 cursor-pointer"

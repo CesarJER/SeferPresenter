@@ -140,8 +140,10 @@ Live Audio state:
 - `LiveAudioAvailability`, role states, participant status, and encrypted private
   signal envelopes belong in `src/types/liveAudio.ts`.
 - LiveKit connection state, WebRTC tracks, microphone permission state,
-  per-participant playback volume, temporary aliases, and privacy notice
+  per-participant microphone boost, temporary aliases, and privacy notice
   checkbox state are session/local state owned by `src/features/liveAudio/`.
+  `LiveAudioRemoteTrack` may expose SDK-backed `attach`/`detach` callbacks, but
+  the LiveKit SDK import itself must stay inside `src/features/liveAudio/`.
   Fase 5.2 generated E2E keys are owned by
   `src/hooks/usePrivateControlSignals.ts` in memory only. Do not persist them in
   presentation files, localStorage, or sessionStorage.

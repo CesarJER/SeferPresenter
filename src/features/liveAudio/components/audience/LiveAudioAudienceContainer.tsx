@@ -71,30 +71,6 @@ export default function LiveAudioAudienceContainer({
     microphoneVolumePercent: microphoneVolume,
   });
 
-  // 2. Setup private signals
-  const { sendPrivateSignal, ready: privateSignalReady } = usePrivateControlSignals({
-    role: 'audience',
-    participantId: participantId || clientId,
-    sendMessage: wsSend,
-    subscribeToWsMessage,
-    transportReady: availability === 'enabled',
-    onControlKeyRotated: () => setKeyRotationCount((current) => current + 1),
-    onPrivateSignal: (signal) => {
-      const payload = signal.value as Record<string, unknown>;
-      if (payload.type === 'SET_MICROPHONE_CONFIG') {
-        if (typeof payload.volume === 'number') {
-          setMicrophoneVolume(payload.volume);
-        }
-        if (typeof payload.musicMode === 'boolean') {
-          setIsMusicMode(payload.musicMode);
-          // If already active, republishing is handled by LiveKit automatically or they might need to re-toggle?
-          // Since noise suppression is in localTrack creation, they actually need to re-publish if active.
-          // For simplicity we just set the state, user can toggle if they want, or we can force republish later if needed.
-        }
-      }
-    }
-  });
-
   const sendParticipantStatus = useCallback((speakerState: SpeakerState, options: ParticipantStatusOptions = {}) => {
     if (!participantId) return false;
     return wsSend('LIVE_AUDIO_PARTICIPANT_STATUS', {
@@ -112,18 +88,54 @@ export default function LiveAudioAudienceContainer({
     });
   }, [participantId, wsSend]);
 
+  // 2. Setup private signals
+  const { sendPrivateSignal, ready: privateSignalReady } = usePrivateControlSignals({
+    role: 'audience',
+    participantId: participantId || clientId,
+    sendMessage: wsSend,
+    subscribeToWsMessage,
+    transportReady: availability === 'enabled',
+    onControlKeyRotated: () => setKeyRotationCount((current) => current + 1),
+    onPrivateSignal: (signal) => {
+      const payload = signal.value as Record<string, unknown>;
+      if (payload.type === 'SET_MICROPHONE_CONFIG') {
+        if (typeof payload.volume === 'number') {
+          setMicrophoneVolume(payload.volume);
+        }
+        if (typeof payload.musicMode === 'boolean') {
+          const nextMusicMode = payload.musicMode;
+          setIsMusicMode(nextMusicMode);
+          if (isMicrophoneActive && nextMusicMode !== isMusicMode) {
+            void unpublishMicrophone()
+              .then(() => publishMicrophone({ musicMode: nextMusicMode }))
+              .then(() => sendParticipantStatus('GRANTED', {
+                canPublishAudio: true,
+                isMuted: false,
+                isActiveAudience: true,
+                isMicrophoneActive: true,
+              }))
+              .catch((err) => {
+                console.error('Failed to republish microphone with remote config:', err);
+              });
+          }
+        }
+      }
+    }
+  });
+
   // Listen for grant/revoke messages
   useEffect(() => {
     const unsubscribe = subscribeToWsMessage((type, payload) => {
       if (type === 'LIVE_AUDIO_REQUEST_ALIASES') {
-        if (participantId && activeAlias && wsSend) {
-          wsSend('LIVE_AUDIO_ALIAS', {
-            participantId,
-            alias: activeAlias
+        if (participantId && activeAlias) {
+          const speakerState = isWordGranted ? 'GRANTED' : (isPendingWord ? 'REQUESTED' : 'LISTENER');
+          void sendPrivateSignal({
+            type: isPendingWord ? 'REQUEST_WORD' : 'ACTIVE_STATE',
+            alias: activeAlias,
+            speakerState,
           });
-          // Also resend current status so the new control knows our state
           sendParticipantStatus(
-            isWordGranted ? 'GRANTED' : (isPendingWord ? 'REQUESTED' : 'LISTENER'),
+            speakerState,
             {
               canPublishAudio: isWordGranted,
               isMuted: !isMicrophoneActive,
@@ -205,7 +217,7 @@ export default function LiveAudioAudienceContainer({
     subscribeToWsMessage, 
     unpublishMicrophone,
     activeAlias,
-    wsSend,
+    sendPrivateSignal,
     isActive,
     isMicrophoneActive,
     isPendingWord,
@@ -378,12 +390,30 @@ export default function LiveAudioAudienceContainer({
   }, []);
 
   const handleSendPrivateMessage = useCallback(async (message: string) => {
-    await sendPrivateSignal({
+    if (!privateSignalReady) return false;
+    return sendPrivateSignal({
       type: 'PRIVATE_MESSAGE',
       text: message,
       alias: activeAlias ?? undefined,
     });
-  }, [activeAlias, sendPrivateSignal]);
+  }, [activeAlias, privateSignalReady, sendPrivateSignal]);
+
+  const handleMusicModeChange = useCallback((nextMusicMode: boolean) => {
+    setIsMusicMode(nextMusicMode);
+    if (!isMicrophoneActive || nextMusicMode === isMusicMode) return;
+
+    void unpublishMicrophone()
+      .then(() => publishMicrophone({ musicMode: nextMusicMode }))
+      .then(() => sendParticipantStatus('GRANTED', {
+        canPublishAudio: true,
+        isMuted: false,
+        isActiveAudience: true,
+        isMicrophoneActive: true,
+      }))
+      .catch((err) => {
+        console.error('Failed to republish microphone with music mode:', err);
+      });
+  }, [isMicrophoneActive, isMusicMode, publishMicrophone, sendParticipantStatus, unpublishMicrophone]);
 
   if (availability !== 'enabled') {
     return null;
@@ -417,7 +447,7 @@ export default function LiveAudioAudienceContainer({
           microphoneVolume={microphoneVolume}
           isMusicMode={isMusicMode}
           onMicrophoneVolumeChange={setMicrophoneVolume}
-          onMusicModeChange={setIsMusicMode}
+          onMusicModeChange={handleMusicModeChange}
           onStartAudio={handleStartAudio}
           onRetryAudio={handleRetryAudio}
           onJoinActive={handleJoinActive}
@@ -443,7 +473,7 @@ export default function LiveAudioAudienceContainer({
             microphoneVolume={microphoneVolume}
             isMusicMode={isMusicMode}
             onMicrophoneVolumeChange={setMicrophoneVolume}
-            onMusicModeChange={setIsMusicMode}
+            onMusicModeChange={handleMusicModeChange}
             onStartAudio={handleStartAudio}
             onRetryAudio={handleRetryAudio}
             onJoinActive={handleJoinActive}

@@ -174,6 +174,36 @@ describe('runtime validation', () => {
     expect(result.ok).toBe(true);
   });
 
+  it('accepts valid control-to-audience private control signals', () => {
+    expect(validateSyncMessage({
+      type: 'PRIVATE_CONTROL_SIGNAL',
+      fromParticipantId: 'control-session-1',
+      toParticipantId: '550e8400-e29b-41d4-a716-446655440000',
+      keyId: 'key-1',
+      ephemeralPublicKey: 'AQIDBA==',
+      ciphertext: 'SGVsbG8=',
+      nonce: 'AQIDBAUGBwgJCgsM',
+      createdAt: 123,
+    }).ok).toBe(true);
+
+    expect(isValidPrivateControlSignal({
+      type: 'PRIVATE_CONTROL_SIGNAL',
+      fromParticipantId: 'control-session-1',
+      toParticipantId: '550e8400-e29b-41d4-a716-446655440000',
+      keyId: 'key-1',
+      ephemeralPublicKey: 'AQIDBA==',
+      ciphertext: 'SGVsbG8=',
+      nonce: 'AQIDBAUGBwgJCgsM',
+    }, 'control')).toBe(true);
+  });
+
+  it('accepts empty live audio alias requests', () => {
+    expect(validateSyncMessage({
+      type: 'LIVE_AUDIO_REQUEST_ALIASES',
+      createdAt: Date.now(),
+    }).ok).toBe(true);
+  });
+
   it('validates ephemeral participant IDs as UUID v4 only', () => {
     expect(isValidEphemeralParticipantId('550e8400-e29b-41d4-a716-446655440000')).toBe(true);
     expect(isValidEphemeralParticipantId('550e8400-e29b-11d4-a716-446655440000')).toBe(false);
@@ -242,7 +272,7 @@ describe('runtime validation', () => {
     })).toBe(false);
   });
 
-  it('rejects private control signals from disallowed roles or oversized ciphertext', () => {
+  it('rejects malformed role-specific private control signals or oversized ciphertext', () => {
     expect(isValidPrivateControlSignal({
       type: 'PRIVATE_CONTROL_SIGNAL',
       fromParticipantId: '550e8400-e29b-41d4-a716-446655440000',
@@ -251,6 +281,16 @@ describe('runtime validation', () => {
       ciphertext: 'SGVsbG8=',
       nonce: 'AQIDBAUGBwgJCgsM',
     }, 'control')).toBe(false);
+
+    expect(isValidPrivateControlSignal({
+      type: 'PRIVATE_CONTROL_SIGNAL',
+      fromParticipantId: '550e8400-e29b-41d4-a716-446655440000',
+      toParticipantId: '550e8400-e29b-41d4-a716-446655440001',
+      keyId: 'key-1',
+      ephemeralPublicKey: 'AQIDBA==',
+      ciphertext: 'SGVsbG8=',
+      nonce: 'AQIDBAUGBwgJCgsM',
+    }, 'audience')).toBe(false);
 
     expect(isValidPrivateControlSignal({
       type: 'PRIVATE_CONTROL_SIGNAL',

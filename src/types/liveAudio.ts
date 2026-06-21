@@ -19,6 +19,8 @@ export type SpeakerState = 'LISTENER' | 'REQUESTED' | 'GRANTED' | 'MUTED' | 'REV
 export interface LiveAudioRemoteTrack {
   id: string;
   track: MediaStreamTrack;
+  attach: (element: HTMLMediaElement) => void;
+  detach: (element: HTMLMediaElement) => void;
   participantId: string | null;
   participantIdentity: string | null;
 }

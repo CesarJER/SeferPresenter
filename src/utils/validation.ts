@@ -41,7 +41,7 @@ const wsRoles = new Set(['presenter', 'control', 'audience', 'unknown']);
 const audioTimelineStatuses = new Set<AudioTimelineState['status']>(['idle', 'loading', 'playing', 'paused', 'ended']);
 const audioTimelineUpdatedBy = new Set<AudioTimelineState['updatedBy']>(['control', 'presenter', 'server']);
 const liveAudioParticipantRoles = new Set<LiveAudioParticipantRole>(['audience', 'control', 'presenter']);
-const liveAudioPrivateSignalSenderRoles = new Set<LiveAudioParticipantRole>(['audience']);
+const liveAudioPrivateSignalSenderRoles = new Set<LiveAudioParticipantRole>(['audience', 'control']);
 const liveAudioSpeakerStates = new Set(['LISTENER', 'REQUESTED', 'GRANTED', 'MUTED', 'REVOKED']);
 const liveAudioControlStates = new Set(['PRINCIPAL', 'PENDING', 'AUTHORIZED']);
 const liveAudioMessageTypes = new Set([
@@ -110,6 +110,22 @@ const validateParticipantId = (value: unknown, path: string, errors: string[]) =
   if (!isValidEphemeralParticipantId(value)) errors.push(`${path} debe ser UUID v4 efimero.`);
 };
 
+const validatePrivateSignalSenderId = (
+  value: unknown,
+  senderRole: LiveAudioParticipantRole | undefined,
+  hasParticipantTarget: boolean,
+  errors: string[],
+) => {
+  if (senderRole === 'control' || (senderRole === undefined && hasParticipantTarget)) {
+    if (typeof value !== 'string' || value.trim() === '') {
+      errors.push('PRIVATE_CONTROL_SIGNAL.fromParticipantId debe ser texto no vacio.');
+    }
+    return;
+  }
+
+  validateParticipantId(value, 'PRIVATE_CONTROL_SIGNAL.fromParticipantId', errors);
+};
+
 const validatePrivateControlSignalValue = (
   msg: unknown,
   senderRole?: LiveAudioParticipantRole,
@@ -121,12 +137,12 @@ const validatePrivateControlSignalValue = (
     if (!privateControlSignalAllowedKeys.has(key)) errors.push(`PRIVATE_CONTROL_SIGNAL.${key} no esta permitido.`);
   });
   if (msg.type !== 'PRIVATE_CONTROL_SIGNAL') errors.push('PRIVATE_CONTROL_SIGNAL.type no es valido.');
-  validateParticipantId(msg.fromParticipantId, 'PRIVATE_CONTROL_SIGNAL.fromParticipantId', errors);
+  validatePrivateSignalSenderId(msg.fromParticipantId, senderRole, msg.toParticipantId !== undefined, errors);
   if (msg.toControlSessionId !== undefined && typeof msg.toControlSessionId !== 'string') {
     errors.push('PRIVATE_CONTROL_SIGNAL.toControlSessionId debe ser texto.');
   }
-  if (msg.toParticipantId !== undefined && typeof msg.toParticipantId !== 'string') {
-    errors.push('PRIVATE_CONTROL_SIGNAL.toParticipantId debe ser texto.');
+  if (msg.toParticipantId !== undefined && !isValidEphemeralParticipantId(msg.toParticipantId)) {
+    errors.push('PRIVATE_CONTROL_SIGNAL.toParticipantId debe ser UUID v4 efimero.');
   }
   if (typeof msg.keyId !== 'string' || msg.keyId.trim() === '') errors.push('PRIVATE_CONTROL_SIGNAL.keyId debe ser texto no vacio.');
   if (!isValidBase64(msg.ephemeralPublicKey)) errors.push('PRIVATE_CONTROL_SIGNAL.ephemeralPublicKey debe ser base64.');
@@ -144,6 +160,12 @@ const validatePrivateControlSignalValue = (
 
   if (senderRole !== undefined && !liveAudioPrivateSignalSenderRoles.has(senderRole)) {
     errors.push('PRIVATE_CONTROL_SIGNAL no esta permitido para este rol.');
+  }
+  if (senderRole === 'audience' && msg.toParticipantId !== undefined) {
+    errors.push('PRIVATE_CONTROL_SIGNAL.toParticipantId no esta permitido desde audiencia.');
+  }
+  if (senderRole === 'control' && msg.toParticipantId === undefined) {
+    errors.push('PRIVATE_CONTROL_SIGNAL.toParticipantId es requerido desde control.');
   }
 
   return errors.length > 0 ? fail(errors) : ok(msg as unknown as PrivateControlSignalMessage);
@@ -643,6 +665,9 @@ const validateLiveAudioBroadcastMessage = (value: Record<string, unknown>): Vali
       if (value.reason !== undefined && value.reason !== 'CONTROL_ROTATION' && value.reason !== 'NO_AUTHORIZED_CONTROLS') {
         errors.push('reason no es valido.');
       }
+      validateOptionalCreatedAt(value, value.type, errors);
+      break;
+    case 'LIVE_AUDIO_REQUEST_ALIASES':
       validateOptionalCreatedAt(value, value.type, errors);
       break;
     default:

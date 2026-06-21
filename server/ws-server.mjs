@@ -407,7 +407,7 @@ const createWsServer = (httpServer, onFallbackMessage) => {
     })
   }
 
-  const routePrivateControlSignal = (msg) => {
+  const routePrivateControlSignalToControls = (msg) => {
     broadcast(msg, (meta) => {
       if (meta.role !== 'control') return false
       const control = liveAudioControls.get(meta.controlSessionId)
@@ -416,11 +416,25 @@ const createWsServer = (httpServer, onFallbackMessage) => {
     })
   }
 
-  const validatePrivateControlSignal = (msg) => {
+  const routePrivateControlSignalToParticipant = (msg) => {
+    broadcast(msg, (meta) => (
+      meta.role === 'audience' &&
+      meta.participantId === msg.toParticipantId
+    ))
+  }
+
+  const validatePrivateControlSignal = (msg, senderRole = 'audience') => {
     if (!msg || typeof msg !== 'object' || Array.isArray(msg)) return false
     if (msg.type !== 'PRIVATE_CONTROL_SIGNAL') return false
-    if (!isValidParticipantId(msg.fromParticipantId)) return false
+    if (senderRole === 'control') {
+      if (typeof msg.fromParticipantId !== 'string' || msg.fromParticipantId.trim() === '') return false
+    } else if (!isValidParticipantId(msg.fromParticipantId)) {
+      return false
+    }
     if (msg.toControlSessionId !== undefined && typeof msg.toControlSessionId !== 'string') return false
+    if (msg.toParticipantId !== undefined && !isValidParticipantId(msg.toParticipantId)) return false
+    if (senderRole === 'audience' && msg.toParticipantId !== undefined) return false
+    if (senderRole === 'control' && !isValidParticipantId(msg.toParticipantId)) return false
     if (typeof msg.keyId !== 'string' || msg.keyId.trim() === '') return false
     if (!isValidBase64(msg.ephemeralPublicKey)) return false
     if (!isValidBase64(msg.ciphertext)) return false
@@ -561,6 +575,18 @@ const createWsServer = (httpServer, onFallbackMessage) => {
     participant.privateSignalTimestamps.push(now)
     participant.updatedAt = now
     return true
+  }
+
+  const canAcceptControlPrivateSignal = (meta, msg) => {
+    const control = liveAudioControls.get(meta.controlSessionId)
+    if (!isControlAuthorized(control)) return false
+    const participant = liveAudioParticipants.get(msg.toParticipantId)
+    return Boolean(
+      participant &&
+      participant.role === 'audience' &&
+      participant.ws &&
+      participant.ws.readyState === WebSocket.OPEN
+    )
   }
 
   const makeReducedParticipantStatus = (msg) => ({
@@ -786,10 +812,22 @@ const createWsServer = (httpServer, onFallbackMessage) => {
         }
 
         case 'PRIVATE_CONTROL_SIGNAL':
-          if (meta.role !== 'audience') break
-          if (!validatePrivateControlSignal(msg)) break
-          if (!canAcceptPrivateSignal(meta, msg)) break
-          routePrivateControlSignal(msg)
+          if (meta.role === 'audience') {
+            if (!validatePrivateControlSignal(msg, 'audience')) break
+            if (!canAcceptPrivateSignal(meta, msg)) break
+            routePrivateControlSignalToControls(msg)
+            break
+          }
+          if (meta.role === 'control') {
+            const controlMeta = liveAudioControls.get(meta.controlSessionId)
+            if (!isControlAuthorized(controlMeta)) {
+              sendError(ws, 'CONTROL_PENDING_FORBIDDEN', 'Pending controls cannot send private signals')
+              break
+            }
+            if (!validatePrivateControlSignal(msg, 'control')) break
+            if (!canAcceptControlPrivateSignal(meta, msg)) break
+            routePrivateControlSignalToParticipant(msg)
+          }
           break
 
         case 'LIVE_AUDIO_PARTICIPANT_STATUS':

@@ -7,7 +7,7 @@ interface LiveAudioListenersProps {
   isControlAuthorized: boolean;
   onGrant: (id: string) => void;
   onKick: (id: string) => void;
-  onVolumeChange: (id: string, volume: number) => void;
+  onMicrophoneConfigChange?: (id: string, config: { volume?: number; musicMode?: boolean }) => void;
 }
 
 export const LiveAudioListeners: React.FC<LiveAudioListenersProps> = ({
@@ -15,7 +15,7 @@ export const LiveAudioListeners: React.FC<LiveAudioListenersProps> = ({
   isControlAuthorized,
   onGrant,
   onKick,
-  onVolumeChange
+  onMicrophoneConfigChange
 }) => {
   const listeners = participants.filter(
     p => (p.speakerState === 'LISTENER' && p.isActiveAudience && !p.isKicked) || p.isKicked,
@@ -38,7 +38,7 @@ export const LiveAudioListeners: React.FC<LiveAudioListenersProps> = ({
             isControlAuthorized={isControlAuthorized}
             onGrant={onGrant}
             onKick={onKick}
-            onVolumeChange={onVolumeChange}
+            onMicrophoneConfigChange={onMicrophoneConfigChange}
           />
         ))}
       </div>

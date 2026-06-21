@@ -76,7 +76,7 @@ const mapRoomState = (state: ConnectionState): LiveAudioConnectionState => {
   }
 };
 
-const getAudioTrack = (track: RemoteTrack): MediaStreamTrack | null => {
+const getAudioMediaTrack = (track: RemoteTrack): MediaStreamTrack | null => {
   if (track.kind !== Track.Kind.Audio) return null;
   return track.mediaStreamTrack;
 };
@@ -252,25 +252,35 @@ export const useLiveAudio = ({
     }, RECONNECT_FAILURE_MS);
   }, []);
 
-  const addRemoteTrack = useCallback((track: MediaStreamTrack, participant?: RemoteParticipant) => {
+  const addRemoteTrack = useCallback((track: RemoteTrack, participant?: RemoteParticipant) => {
+    const mediaStreamTrack = getAudioMediaTrack(track);
+    if (!mediaStreamTrack) return;
+
     const remoteTrack: LiveAudioRemoteTrack = {
-      id: track.id,
-      track,
+      id: mediaStreamTrack.id,
+      track: mediaStreamTrack,
+      attach: (element) => {
+        track.attach(element);
+      },
+      detach: (element) => {
+        track.detach(element);
+      },
       participantId: getRemoteParticipantId(participant),
       participantIdentity: participant?.identity ?? null,
     };
-    setRemoteTracks((current) => current.some((item) => item.id === track.id) ? current : [...current, remoteTrack]);
+    setRemoteTracks((current) => current.some((item) => item.id === mediaStreamTrack.id) ? current : [...current, remoteTrack]);
   }, []);
 
-  const removeRemoteTrack = useCallback((track: MediaStreamTrack) => {
-    setRemoteTracks((current) => current.filter((item) => item.id !== track.id));
+  const removeRemoteTrack = useCallback((track: RemoteTrack) => {
+    const mediaStreamTrack = getAudioMediaTrack(track);
+    if (!mediaStreamTrack) return;
+    setRemoteTracks((current) => current.filter((item) => item.id !== mediaStreamTrack.id));
   }, []);
 
   const subscribePublication = useCallback((publication: RemoteTrackPublication, participant?: RemoteParticipant) => {
     publication.setSubscribed(publication.kind === Track.Kind.Audio);
     if (publication.kind === Track.Kind.Audio && publication.track) {
-      const mediaTrack = getAudioTrack(publication.track);
-      if (mediaTrack) addRemoteTrack(mediaTrack, participant);
+      addRemoteTrack(publication.track, participant);
     }
   }, [addRemoteTrack]);
 
@@ -442,12 +452,10 @@ export const useLiveAudio = ({
       subscribePublication(publication, participant);
     };
     const handleTrackSubscribed = (track: RemoteTrack, _publication: RemoteTrackPublication, participant: RemoteParticipant) => {
-      const mediaTrack = getAudioTrack(track);
-      if (mediaTrack) addRemoteTrack(mediaTrack, participant);
+      addRemoteTrack(track, participant);
     };
     const handleTrackUnsubscribed = (track: RemoteTrack) => {
-      const mediaTrack = getAudioTrack(track);
-      if (mediaTrack) removeRemoteTrack(mediaTrack);
+      removeRemoteTrack(track);
     };
 
     room
@@ -555,12 +563,10 @@ export const useLiveAudio = ({
       })
       .on(RoomEvent.TrackPublished, subscribePublication)
       .on(RoomEvent.TrackSubscribed, (track: RemoteTrack, _publication: RemoteTrackPublication, participant: RemoteParticipant) => {
-        const mediaTrack = getAudioTrack(track);
-        if (mediaTrack) addRemoteTrack(mediaTrack, participant);
+        addRemoteTrack(track, participant);
       })
       .on(RoomEvent.TrackUnsubscribed, (track: RemoteTrack) => {
-        const mediaTrack = getAudioTrack(track);
-        if (mediaTrack) removeRemoteTrack(mediaTrack);
+        removeRemoteTrack(track);
       });
 
     try {

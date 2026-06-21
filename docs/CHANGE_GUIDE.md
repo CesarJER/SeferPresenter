@@ -73,8 +73,10 @@ Use these checklists before implementing future tasks.
   `SEFER_LIVE_AUDIO_ENABLED` as the backend/runtime availability flag. A false
   build flag should keep the base frontend free of static LiveKit SDK imports; a
   false runtime flag should keep existing presentation flows working.
-- Validate `PRIVATE_CONTROL_SIGNAL` in `src/utils/validation.ts` for UUID v4
-  participant IDs, base64 technical fields, ciphertext size, and caller role.
+- Validate `PRIVATE_CONTROL_SIGNAL` in `src/utils/validation.ts` for direction:
+  audience senders use UUID v4 `fromParticipantId`, Control senders require a
+  valid UUID v4 `toParticipantId`, and both directions validate base64
+  technical fields, ciphertext size, and caller role.
 - Use Web Crypto only for private moderation cryptography: ECDH P-256,
   `deriveKey` to AES-GCM 256, 12-byte random nonces, and base64 technical
   fields. Track used nonces in memory and reject replay.

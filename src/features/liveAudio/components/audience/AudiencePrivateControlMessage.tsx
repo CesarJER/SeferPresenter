@@ -3,7 +3,7 @@ import { X, Send } from 'lucide-react';
 
 interface AudiencePrivateControlMessageProps {
   onClose: () => void;
-  onSend: (message: string) => void;
+  onSend: (message: string) => boolean | Promise<boolean>;
 }
 
 export const AudiencePrivateControlMessage: React.FC<AudiencePrivateControlMessageProps> = ({
@@ -11,13 +11,26 @@ export const AudiencePrivateControlMessage: React.FC<AudiencePrivateControlMessa
   onSend,
 }) => {
   const [message, setMessage] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [isSending, setIsSending] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (message.trim()) {
-      onSend(message.trim());
+    const trimmed = message.trim();
+    if (!trimmed || isSending) return;
+
+    setError(null);
+    setIsSending(true);
+    try {
+      const sent = await onSend(trimmed);
+      if (!sent) {
+        setError('No se pudo enviar todavia. Espera unos segundos y vuelve a intentarlo.');
+        return;
+      }
       setMessage('');
       onClose();
+    } finally {
+      setIsSending(false);
     }
   };
 
@@ -44,11 +57,15 @@ export const AudiencePrivateControlMessage: React.FC<AudiencePrivateControlMessa
           <form id="message-form" onSubmit={handleSubmit}>
             <textarea
               value={message}
-              onChange={(e) => setMessage(e.target.value)}
+              onChange={(e) => {
+                setMessage(e.target.value);
+                setError(null);
+              }}
               placeholder="Escribe tu mensaje aquí..."
               className="w-full h-32 px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
               maxLength={500}
             />
+            {error && <p className="mt-2 text-xs text-red-300">{error}</p>}
           </form>
         </div>
 
@@ -63,11 +80,11 @@ export const AudiencePrivateControlMessage: React.FC<AudiencePrivateControlMessa
           <button
             type="submit"
             form="message-form"
-            disabled={!message.trim()}
+            disabled={!message.trim() || isSending}
             className="flex items-center gap-2 px-5 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-700 disabled:text-gray-500 text-white text-sm font-medium rounded-lg shadow-md transition-all"
           >
             <Send className="w-4 h-4" />
-            Enviar
+            {isSending ? 'Enviando' : 'Enviar'}
           </button>
         </div>
       </div>

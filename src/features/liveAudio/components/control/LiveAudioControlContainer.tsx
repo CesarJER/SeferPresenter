@@ -50,6 +50,7 @@ const sanitizeAlias = (value: unknown): string | null => {
 };
 
 const clampVolume = (volume: number) => Math.max(0, Math.min(volume, 300));
+const clampListenVolume = (volume: number) => Math.max(0, Math.min(volume, 100));
 
 export default function LiveAudioControlContainer({
   isControlAuthorized,
@@ -67,7 +68,6 @@ export default function LiveAudioControlContainer({
   const [isModeratorMusicMode, setIsModeratorMusicMode] = useState(false);
   const [participantsMap, setParticipantsMap] = useState<Record<string, LiveAudioParticipantStatusMessage>>({});
   const [participantAliases, setParticipantAliases] = useState<Record<string, string>>({});
-  const [participantVolumes, setParticipantVolumes] = useState<Record<string, number>>({});
   const [participantEphemeralKeys, setParticipantEphemeralKeys] = useState<Record<string, string>>({});
   const [participantMicrophoneConfigs, setParticipantMicrophoneConfigs] = useState<Record<string, { volume: number; musicMode: boolean }>>({});
   const [connectionCounts, setConnectionCounts] = useState<LiveAudioConnectionCountsMessage | null>(null);
@@ -200,12 +200,11 @@ export default function LiveAudioControlContainer({
           isMicrophoneActive,
           isActiveAudience,
           isKicked,
-          volume: participantVolumes[p.participantId] ?? 100,
           microphoneVolume: participantMicrophoneConfigs[p.participantId]?.volume ?? 100,
           isMusicMode: participantMicrophoneConfigs[p.participantId]?.musicMode ?? false,
         };
       })
-  ), [participantAliases, participantVolumes, participantMicrophoneConfigs, participantsMap]);
+  ), [participantAliases, participantMicrophoneConfigs, participantsMap]);
 
   const activeUsers = participants.filter(p => p.isActiveAudience && !p.isKicked).length;
   const pendingWordCount = participants.filter(p => p.speakerState === 'REQUESTED' && !p.isKicked).length;
@@ -224,6 +223,17 @@ export default function LiveAudioControlContainer({
       await unpublishMicrophone();
     }
   }, [isModeratorMuted, isModeratorMusicMode, publishMicrophone, unpublishMicrophone]);
+
+  const handleModeratorMusicModeChange = useCallback((nextMusicMode: boolean) => {
+    setIsModeratorMusicMode(nextMusicMode);
+    if (!isMicrophoneActive || nextMusicMode === isModeratorMusicMode) return;
+
+    void unpublishMicrophone()
+      .then(() => publishMicrophone({ musicMode: nextMusicMode }))
+      .catch((err) => {
+        console.error('Failed to republish moderator microphone with music mode:', err);
+      });
+  }, [isMicrophoneActive, isModeratorMusicMode, publishMicrophone, unpublishMicrophone]);
 
   const sendModerationMessage = useCallback((endpoint: ModerationEndpoint, pid?: string) => {
     if (!wsSend) return false;
@@ -312,10 +322,6 @@ export default function LiveAudioControlContainer({
     targets.forEach(p => void doModerationAction('grant-speak', p.participantId));
   }, [doModerationAction, participants]);
 
-  const handleParticipantVolumeChange = useCallback((id: string, volume: number) => {
-    setParticipantVolumes(prev => ({ ...prev, [id]: clampVolume(volume) }));
-  }, []);
-
   const handleParticipantMicrophoneConfigChange = useCallback((id: string, config: { volume?: number; musicMode?: boolean }) => {
     setParticipantMicrophoneConfigs(prev => {
       const current = prev[id] || { volume: 100, musicMode: false };
@@ -344,17 +350,13 @@ export default function LiveAudioControlContainer({
 
   return (
     <>
-      {remoteTracks.map((remoteTrack) => {
-        const participantVolume = remoteTrack.participantId ? participantVolumes[remoteTrack.participantId] ?? 100 : 100;
-        const effectiveVolume = clampVolume((listenVolume * participantVolume) / 100);
-        return (
-          <LiveAudioTrackOutput
-            key={remoteTrack.id}
-            remoteTrack={remoteTrack}
-            volumePercent={effectiveVolume}
-          />
-        );
-      })}
+      {remoteTracks.map((remoteTrack) => (
+        <LiveAudioTrackOutput
+          key={remoteTrack.id}
+          remoteTrack={remoteTrack}
+          volumePercent={listenVolume}
+        />
+      ))}
 
       {portalTarget && createPortal(
         <div className="relative">
@@ -396,11 +398,11 @@ export default function LiveAudioControlContainer({
         onStartListening={handleStartListening}
         onToggleModeratorMic={handleToggleModeratorMic}
         listenVolume={listenVolume}
-        onListenVolumeChange={(volume) => setListenVolume(clampVolume(volume))}
+        onListenVolumeChange={(volume) => setListenVolume(clampListenVolume(volume))}
         microphoneVolume={microphoneVolume}
         onMicrophoneVolumeChange={(volume) => setMicrophoneVolume(clampVolume(volume))}
         isModeratorMusicMode={isModeratorMusicMode}
-        onModeratorMusicModeChange={setIsModeratorMusicMode}
+        onModeratorMusicModeChange={handleModeratorMusicModeChange}
         participants={participants}
         isControlAuthorized={isControlAuthorized}
         onMuteAll={handleMuteAll}
@@ -409,7 +411,6 @@ export default function LiveAudioControlContainer({
         onRevoke={(id) => void doModerationAction('revoke-speak', id)}
         onMute={(id) => void doModerationAction('mute-participant', id)}
         onKick={(id) => void doModerationAction('kick-participant', id)}
-        onVolumeChange={handleParticipantVolumeChange}
         onMicrophoneConfigChange={handleParticipantMicrophoneConfigChange}
         pendingWordCount={pendingWordCount}
       />

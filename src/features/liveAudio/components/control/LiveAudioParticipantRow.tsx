@@ -11,7 +11,6 @@ export interface LiveAudioParticipant {
   isMicrophoneActive: boolean;
   isActiveAudience: boolean;
   isKicked: boolean;
-  volume: number;
   microphoneVolume?: number;
   isMusicMode?: boolean;
 }
@@ -23,8 +22,10 @@ interface LiveAudioParticipantRowProps {
   onRevoke?: (id: string) => void;
   onMute?: (id: string) => void;
   onKick?: (id: string) => void;
-  onVolumeChange?: (id: string, volume: number) => void;
-  onMicrophoneConfigChange?: (id: string, config: { volume?: number; musicMode?: boolean }) => void;
+  onMicrophoneConfigChange?: (
+    id: string,
+    config: { volume?: number; musicMode?: boolean }
+  ) => void;
 }
 
 export const LiveAudioParticipantRow: React.FC<LiveAudioParticipantRowProps> = ({
@@ -34,18 +35,23 @@ export const LiveAudioParticipantRow: React.FC<LiveAudioParticipantRowProps> = (
   onRevoke,
   onMute,
   onKick,
-  onVolumeChange,
   onMicrophoneConfigChange,
 }) => {
   const [isVolumeOpen, setIsVolumeOpen] = useState(false);
-  const [isMicConfigOpen, setIsMicConfigOpen] = useState(false);
+
   const isRequested = participant.speakerState === 'REQUESTED' && !participant.isKicked;
   const isGranted = participant.speakerState === 'GRANTED' && !participant.isKicked;
-  const isListener = participant.speakerState === 'LISTENER' && participant.isActiveAudience && !participant.isKicked;
-  const hasOpenMicrophone = isGranted && participant.isMicrophoneActive && !participant.isMuted;
-  const canGrant = Boolean(onGrant && (isRequested || isListener || participant.isKicked));
+  const isListener =
+    participant.speakerState === 'LISTENER' &&
+    participant.isActiveAudience &&
+    !participant.isKicked;
+
+  const hasOpenMicrophone =
+    isGranted && participant.isMicrophoneActive && !participant.isMuted;
+
+  const volume = participant.microphoneVolume ?? 100;
   const displayAlias = participant.alias.trim() || 'Sin nick';
-  const displayName = isControlAuthorized ? displayAlias : 'Usuario anonimo';
+  const displayName = isControlAuthorized ? displayAlias : 'Usuario anónimo';
 
   const badgeStatus: ParticipantStatus = participant.isKicked
     ? 'kicked'
@@ -61,128 +67,130 @@ export const LiveAudioParticipantRow: React.FC<LiveAudioParticipantRowProps> = (
     <div className="flex items-center justify-between p-2 hover:bg-gray-800 border-b border-gray-800 last:border-0 transition-colors group">
       <div className="flex min-w-0 items-center gap-3">
         <LiveAudioStatusBadge status={badgeStatus} isMuted={participant.isMuted} />
-        <span className={`truncate font-medium ${isControlAuthorized ? 'text-gray-200' : 'text-gray-500 italic'}`}>
+
+        <span
+          className={`truncate font-medium ${isControlAuthorized ? 'text-gray-200' : 'text-gray-500 italic'
+            }`}
+        >
           {displayName}
         </span>
       </div>
 
       <div className="flex items-center gap-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
-        {canGrant && (
+        {isRequested && onGrant && (
           <button
-            onClick={() => onGrant?.(participant.participantId)}
+            onClick={() => onGrant(participant.participantId)}
             className="flex items-center gap-1 bg-green-600 hover:bg-green-500 text-white px-2 py-1 rounded text-xs"
-            title={isRequested ? 'Conceder palabra' : 'Permitir microfono'}
+            title="Conceder palabra"
           >
-            {isRequested ? <Hand size={14} /> : <MessageSquare size={14} />}
-            <span className="hidden sm:inline">{isRequested ? 'Aprobar' : 'Permitir'}</span>
+            <Hand size={14} />
+            <span className="hidden sm:inline">Aprobar</span>
           </button>
         )}
 
-        {hasOpenMicrophone && onMute && (
+        {isListener && onGrant && (
+          <button
+            onClick={() => onGrant(participant.participantId)}
+            className="flex items-center gap-1 bg-gray-700 hover:bg-gray-600 text-white px-2 py-1 rounded text-xs"
+            title="Permitir micrófono"
+          >
+            <MessageSquare size={14} />
+            <span className="hidden sm:inline">Permitir</span>
+          </button>
+        )}
+
+        {isGranted && onMute && (
           <button
             onClick={() => onMute(participant.participantId)}
-            className="flex items-center gap-1 px-2 py-1 rounded text-xs bg-red-600 hover:bg-red-500 text-white"
-            title="Silenciar micro"
+            className={`flex items-center gap-1 px-2 py-1 rounded text-xs ${hasOpenMicrophone
+                ? 'bg-red-600 hover:bg-red-500 text-white'
+                : 'bg-gray-600 text-gray-300'
+              }`}
+            title={hasOpenMicrophone ? 'Silenciar track' : 'Micro cerrado o silenciado'}
           >
-            <MicOff size={14} /> <span className="hidden sm:inline">Silenciar</span>
-          </button>
-        )}
-
-        {isGranted && !hasOpenMicrophone && (
-          <button
-            disabled
-            className="flex items-center gap-1 px-2 py-1 rounded text-xs bg-gray-700 text-gray-300 cursor-default"
-            title="Orador activo con micro cerrado"
-          >
-            <MicOff size={14} /> <span className="hidden sm:inline">Silenciado</span>
+            <MicOff size={14} />
+            <span className="hidden sm:inline">
+              {hasOpenMicrophone ? 'Silenciar' : 'Silenciado'}
+            </span>
           </button>
         )}
 
         {isGranted && onRevoke && (
           <button
             onClick={() => {
-              if (window.confirm(`Revocar la palabra a ${displayName}?`)) {
+              if (window.confirm(`¿Revocar la palabra a ${displayName}?`)) {
                 onRevoke(participant.participantId);
               }
             }}
             className="flex items-center gap-1 bg-gray-700 hover:bg-gray-600 text-white px-2 py-1 rounded text-xs"
             title="Revocar palabra"
           >
-            <X size={14} className="opacity-60" /> <span className="hidden sm:inline">Revocar</span>
+            <X size={14} className="opacity-50" />
+            <span className="hidden sm:inline">Revocar</span>
           </button>
         )}
 
-        {onVolumeChange && (
+        {onMicrophoneConfigChange && !participant.isKicked && (
           <div className="relative flex items-center">
             <button
               onClick={() => setIsVolumeOpen(!isVolumeOpen)}
-              className={`flex items-center gap-1 p-1 rounded transition-colors ${
-                isVolumeOpen ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white hover:bg-gray-700'
-              }`}
-              title="Ajustar volumen"
+              className={`flex items-center gap-1 p-1 rounded transition-colors ${isVolumeOpen
+                  ? 'bg-blue-600 text-white'
+                  : 'text-gray-400 hover:text-white hover:bg-gray-700'
+                }`}
+              title="Ajustar micro remoto"
             >
               <Volume2 size={16} />
-              <span className="text-[10px] w-8 text-left">{participant.volume}%</span>
+              <span className="text-[10px] w-8 text-left">{volume}%</span>
             </button>
+
             {isVolumeOpen && (
-              <div className="absolute right-8 top-1/2 -translate-y-1/2 bg-gray-800 border border-gray-700 p-2 rounded shadow-xl flex items-center gap-2 z-[100] min-w-32">
-                <span className="text-xs font-semibold text-gray-300 w-8">{participant.volume}%</span>
+              <div className="absolute right-8 top-1/2 -translate-y-1/2 bg-gray-800 border border-gray-700 p-2 rounded shadow-xl flex items-center gap-2 z-[100] min-w-48">
+                <span className="text-xs font-semibold text-gray-300 w-10">
+                  {volume}%
+                </span>
+
                 <input
                   type="range"
                   min="0"
                   max="300"
-                  value={participant.volume}
-                  onChange={(e) => onVolumeChange(participant.participantId, parseInt(e.target.value, 10))}
+                  step="5"
+                  value={volume}
+                  onChange={(e) =>
+                    onMicrophoneConfigChange(participant.participantId, {
+                      volume: parseInt(e.target.value, 10),
+                    })
+                  }
                   className="w-24 accent-blue-500 cursor-pointer"
                 />
-                <button onClick={() => setIsVolumeOpen(false)} className="text-gray-500 hover:text-white transition-colors">
+
+                <label
+                  className={`flex items-center justify-center gap-1 px-2 py-1 rounded cursor-pointer text-[10px] ${participant.isMusicMode
+                      ? 'bg-purple-600 text-white'
+                      : 'bg-gray-900 text-gray-300 hover:bg-gray-700'
+                    }`}
+                  title="Modo música"
+                >
+                  <input
+                    type="checkbox"
+                    checked={participant.isMusicMode ?? false}
+                    onChange={(e) =>
+                      onMicrophoneConfigChange(participant.participantId, {
+                        musicMode: e.target.checked,
+                      })
+                    }
+                    className="hidden"
+                  />
+                  <span>🎵</span>
+                </label>
+
+                <button
+                  onClick={() => setIsVolumeOpen(false)}
+                  className="text-gray-500 hover:text-white transition-colors"
+                  title="Cerrar"
+                >
                   <X size={14} />
                 </button>
-              </div>
-            )}
-          </div>
-        )}
-
-        {hasOpenMicrophone && onMicrophoneConfigChange && (
-          <div className="relative flex items-center">
-            <button
-              onClick={() => setIsMicConfigOpen(!isMicConfigOpen)}
-              className={`flex items-center gap-1 p-1 rounded transition-colors ${
-                isMicConfigOpen ? 'bg-green-600 text-white' : 'text-gray-400 hover:text-white hover:bg-gray-700'
-              }`}
-              title="Ajustar micrófono remoto"
-            >
-              <MicOff size={16} className="hidden" /> {/* Para mantener alineación si se necesita */}
-              <span className="text-[10px] w-8 text-left">{participant.microphoneVolume ?? 100}%</span>
-            </button>
-            {isMicConfigOpen && (
-              <div className="absolute right-8 top-1/2 -translate-y-1/2 bg-gray-800 border border-gray-700 p-3 rounded shadow-xl flex flex-col items-center gap-2 z-[100] min-w-32">
-                <div className="flex w-full justify-between items-start mb-1">
-                  <label className="flex items-center gap-1 cursor-pointer bg-gray-900 px-2 py-1 rounded" title="Modo Música">
-                    <input 
-                      type="checkbox" 
-                      checked={participant.isMusicMode ?? false} 
-                      onChange={(e) => onMicrophoneConfigChange(participant.participantId, { musicMode: e.target.checked })} 
-                      className="accent-purple-500 w-3 h-3"
-                    />
-                    <span className="text-[10px]">🎵 Modo Música</span>
-                  </label>
-                  <button onClick={() => setIsMicConfigOpen(false)} className="text-gray-500 hover:text-white transition-colors ml-2 mt-1">
-                    <X size={14} />
-                  </button>
-                </div>
-                <div className="flex flex-col gap-1 items-center w-full">
-                  <span className="text-[10px] font-semibold text-gray-300">Micro {participant.microphoneVolume ?? 100}%</span>
-                  <input
-                    type="range"
-                    min="0"
-                    max="200"
-                    step="5"
-                    value={participant.microphoneVolume ?? 100}
-                    onChange={(e) => onMicrophoneConfigChange(participant.participantId, { volume: parseInt(e.target.value, 10) })}
-                    className="w-full accent-green-500 cursor-pointer"
-                  />
-                </div>
               </div>
             )}
           </div>
@@ -191,7 +199,7 @@ export const LiveAudioParticipantRow: React.FC<LiveAudioParticipantRowProps> = (
         {onKick && (
           <button
             onClick={() => {
-              if (window.confirm(`Expulsar a ${displayName}?`)) {
+              if (window.confirm(`¿Expulsar a ${displayName}?`)) {
                 onKick(participant.participantId);
               }
             }}

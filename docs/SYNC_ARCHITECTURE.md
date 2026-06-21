@@ -79,14 +79,18 @@ in `BroadcastMessage` as a separate family:
   seconds and defaulting to 90.
 - `CONTROL_KEY_ROTATED`: announces that clients must negotiate against a new
   Control public key.
-- `PRIVATE_CONTROL_SIGNAL`: encrypted Audience-to-Control container with only
-  technical routing fields and ciphertext.
+- `PRIVATE_CONTROL_SIGNAL`: encrypted bidirectional private container with only
+  technical routing fields and ciphertext. Audience uses it for aliases,
+  hand-state refreshes, and private messages to authorized Controls; authorized
+  Controls use it for targeted microphone configuration to a specific audience
+  participant.
 
 `PRIVATE_CONTROL_SIGNAL` has the exact public envelope:
 
 - `type`
 - `fromParticipantId`
 - optional `toControlSessionId`
+- optional `toParticipantId`
 - `keyId`
 - `ephemeralPublicKey`
 - `ciphertext`
@@ -97,6 +101,9 @@ Audience clients encrypt private moderation payloads with ECDH P-256 plus
 AES-GCM 256. Each message uses a fresh 12-byte AES-GCM nonce. Control keeps a
 per-session nonce replay guard in memory and clears it when the Control key
 rotates; historical messages are not recovered after `CONTROL_KEY_ROTATED`.
+When Control sends a private signal back to Audience, it targets
+`toParticipantId` and derives the shared key from the audience ephemeral public
+key captured from that participant's previous private signal.
 
 The server must only route `PRIVATE_CONTROL_SIGNAL`. It must not decrypt,
 persist, log, or semantically inspect aliases, private text, keys, or ciphertext
@@ -116,13 +123,20 @@ authorization.
   presenter and authorized Controls; audience clients do not receive a full
   participant list.
 - `PENDING` Controls do not receive `PRIVATE_CONTROL_SIGNAL`.
-- `PENDING` Controls cannot send moderation messages such as grant, mute, or
-  kick; the server returns an `ERROR`.
+- `PENDING` Controls cannot send private signals or moderation messages such as
+  grant, mute, or kick; the server returns an `ERROR`.
 - Authorized Controls can publish the current Control public key and can send
   moderation actions by `participantId`; those actions update only memory state,
   are routed to presenter/authorized Controls, and are also delivered to the
   affected audience participant so its local microphone state can react. They
   are not folded into `SYNC_STATE`.
+- Authorized Controls can send `PRIVATE_CONTROL_SIGNAL` only with a valid
+  `toParticipantId`; the server routes it solely to the active WebSocket bound
+  to that audience participant and does not inspect the ciphertext.
+- `LIVE_AUDIO_REQUEST_ALIASES` is an empty public doorbell from authorized
+  Controls to audience clients. Audience responses must travel back as encrypted
+  `PRIVATE_CONTROL_SIGNAL` payloads such as `ACTIVE_STATE` or `REQUEST_WORD`,
+  never as clear-text alias messages.
 - The WebSocket server keeps the current authorized Control public key in memory
   and replays it to audience clients that connect later, so nicknames and
   private messages can be encrypted even when Control was already open.

@@ -127,9 +127,10 @@ Canales principales:
 
 La audiencia muestra la misma imagen viva del presenter, sin controles de navegacion ni apertura del panel de control.
 
-`PRIVATE_CONTROL_SIGNAL` es un contenedor tecnico cifrado para futuras senales
-privadas hacia Control. No contiene alias ni consentimiento en claro, y el
-servidor debe limitarse a validar/rutear sin descifrar ni persistir contenido.
+`PRIVATE_CONTROL_SIGNAL` es un contenedor tecnico cifrado para senales privadas
+entre Audience y controles autorizados. No contiene alias, mensajes ni
+configuracion de micro en claro, y el servidor debe limitarse a validar/rutear
+sin descifrar ni persistir contenido.
 La capa E2E simplificada usa Web Crypto: Control publica una clave publica ECDH
 P-256, Audience cifra con una clave AES-GCM 256 derivada y un nonce aleatorio de
 12 bytes por mensaje, y las claves privadas quedan solo en memoria del cliente.
