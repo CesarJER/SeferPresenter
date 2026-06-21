@@ -59,6 +59,7 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
   `src/features/liveAudio/components/audience/`, and
   `src/features/liveAudio/components/shared/`. Core legal components for
   `/proteccion-datos` may stay outside the LiveKit module.
+- `LiveAudioTrackOutput` - `src/features/liveAudio/components/shared/LiveAudioTrackOutput.tsx`: hidden remote-track audio renderer used by audience, presenter, and control; applies 0-300 playback gain for Live Audio tracks.
 - `QuizPresenterView` - `src/components/quiz/QuizPresenterView.tsx`: projected quiz view.
 - `QuizControllerView` - `src/components/quiz/QuizControllerView.tsx`: controller quiz controls/results.
 - `QuizAudienceView` - `src/components/quiz/QuizAudienceView.tsx`: audience quiz answer UI.
@@ -88,9 +89,10 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
 - `server/ws-server.mjs` - WebSocket `/ws` server for audio timeline plus Fase
   5.3-5.11 Control principal election, pending code TTL, authorization
   decisions, ephemeral participant association, private-signal rate limiting,
-  public-key routing, private-signal routing, moderation filtering, guaranteed
-  cleanup after audience rejoin grace, participant snapshot lookup for token
-  refresh, and succession.
+  public-key routing, private-signal routing, moderation filtering, WebSocket
+  connection counts, kicked-participant state, targeted audience moderation
+  delivery, guaranteed cleanup after audience rejoin grace, participant
+  snapshot lookup for token refresh, and succession.
 - `makeSyncMessage` - `src/utils/syncProtocol.ts`: message envelope creation.
 - `server/local-server.mjs`: SSE/API mirroring for state, commands, media telemetry, quiz events, assets, persistence.
 - `server/ws-server.mjs`: WebSocket `/ws` server for F2 audio timeline messages.
@@ -98,7 +100,7 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
   status, token, refresh-token, and moderation endpoints with memory-only state
   and no top-level server SDK dependency. Tokens include ephemeral
   `participantId` metadata and no alias; refresh keeps the same participant
-  identity while reflecting current speaker permission.
+  identity while reflecting current speaker permission and muted speaker state.
 - `server/timelineManager.mjs`: backend-owned audio timeline state and action reducer.
 
 ## Validation Modules
@@ -124,7 +126,8 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
 - `BroadcastMessage`, `DisplayTelemetryState`, `AudiencePublicState` - `src/types/sync.ts`.
 - `LiveAudioAvailability`, `LiveAudioConnectionState`,
   `LiveAudioTokenResponse`, `ControlPrincipalState`, `ControlSecondaryState`,
-  `SpeakerState`, `LiveAudioParticipantStatusMessage`,
+  `SpeakerState`, `LiveAudioRemoteTrack`,
+  `LiveAudioParticipantStatusMessage`, `LiveAudioConnectionCountsMessage`,
   `LiveAudioGrantSpeakMessage`, `LiveAudioRevokeSpeakMessage`,
   `LiveAudioMuteParticipantMessage`, `LiveAudioMuteAllMessage`,
   `LiveAudioKickParticipantMessage`, `LiveAudioControlPublicKeyMessage`,

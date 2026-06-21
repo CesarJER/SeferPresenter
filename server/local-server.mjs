@@ -233,7 +233,7 @@ const isProtectedPath = (url, method) => {
   if (!isAuthRequired()) return false
   if (url.pathname.startsWith('/audience') || url.pathname === '/proteccion-datos') return false
   if (url.pathname === '/control' || url.pathname === '/audio-editor' || url.pathname === '/presenter' || url.pathname === '/') return true
-  if (url.pathname === '/api/livekit/token' || url.pathname === '/api/livekit/refresh-token') return false
+  if (url.pathname.startsWith('/api/livekit/')) return false
   if (url.pathname.startsWith('/api/') && method !== 'GET') return true
   return false
 }
@@ -515,6 +515,12 @@ const handleStatic = (req, res, url) => {
 
   if (candidate.startsWith(staticDir) && fs.existsSync(candidate) && fs.statSync(candidate).isFile()) {
     serveFile(res, candidate)
+    return true
+  }
+
+  const publicCandidate = path.resolve(publicDir, cleanPath.slice(1))
+  if (publicCandidate.startsWith(publicDir) && fs.existsSync(publicCandidate) && fs.statSync(publicCandidate).isFile()) {
+    serveFile(res, publicCandidate)
     return true
   }
 

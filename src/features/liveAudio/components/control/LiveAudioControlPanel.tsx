@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Users, UserCheck, Mic, MicOff, Volume2, ChevronUp, ChevronDown, ShieldAlert } from 'lucide-react';
+import { Users, UserCheck, Mic, MicOff, Volume2, VolumeX, ChevronUp, ChevronDown, ShieldAlert } from 'lucide-react';
 import { LiveAudioQueue } from './LiveAudioQueue';
 import { LiveAudioSpeakers } from './LiveAudioSpeakers';
 import { LiveAudioListeners } from './LiveAudioListeners';
@@ -9,9 +9,12 @@ interface LiveAudioControlPanelProps {
   totalAudience: number;
   activeUsers: number;
   isModeratorMuted: boolean;
+  onStartListening: () => void;
   onToggleModeratorMic: () => void;
-  moderatorVolume: number;
-  onModeratorVolumeChange: (volume: number) => void;
+  listenVolume: number;
+  onListenVolumeChange: (volume: number) => void;
+  microphoneVolume: number;
+  onMicrophoneVolumeChange: (volume: number) => void;
   participants: LiveAudioParticipant[];
   isControlAuthorized: boolean;
   onMuteAll: () => void;
@@ -28,9 +31,12 @@ export const LiveAudioControlPanel: React.FC<LiveAudioControlPanelProps> = ({
   totalAudience,
   activeUsers,
   isModeratorMuted,
+  onStartListening,
   onToggleModeratorMic,
-  moderatorVolume,
-  onModeratorVolumeChange,
+  listenVolume,
+  onListenVolumeChange,
+  microphoneVolume,
+  onMicrophoneVolumeChange,
   participants,
   isControlAuthorized,
   onMuteAll,
@@ -43,7 +49,8 @@ export const LiveAudioControlPanel: React.FC<LiveAudioControlPanelProps> = ({
   pendingWordCount
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
-  const [isModVolOpen, setIsModVolOpen] = useState(false);
+  const [isListenVolOpen, setIsListenVolOpen] = useState(false);
+  const [isMicVolOpen, setIsMicVolOpen] = useState(false);
 
   return (
     <div className="fixed bottom-0 right-0 md:bottom-4 md:right-4 w-full md:w-[400px] flex flex-col z-40">
@@ -127,7 +134,41 @@ export const LiveAudioControlPanel: React.FC<LiveAudioControlPanelProps> = ({
 
         {/* Moderator Controls */}
         <div className="flex items-center gap-2">
-          <button 
+          <div className="relative flex items-center">
+            <button
+              onClick={() => {
+                onStartListening();
+                setIsListenVolOpen(!isListenVolOpen);
+              }}
+              className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors shadow-lg ${
+                listenVolume === 0 ? 'bg-gray-700 text-gray-400' : 'bg-gray-900 text-blue-200 border border-gray-700'
+              }`}
+              title="Regular volumen de escucha"
+            >
+              {listenVolume === 0 ? <VolumeX size={16} /> : <Volume2 size={16} />}
+            </button>
+
+            {isListenVolOpen && (
+              <div
+                className="absolute bottom-full mb-2 -left-6 bg-gray-800 border border-gray-700 p-3 rounded shadow-xl flex flex-col items-center gap-2 z-[100]"
+                onClick={e => e.stopPropagation()}
+              >
+                <span className="text-xs font-semibold text-gray-300">{listenVolume}%</span>
+                <div className="h-32 w-8 flex items-center justify-center">
+                  <input
+                    type="range"
+                    min="0"
+                    max="300"
+                    value={listenVolume}
+                    onChange={(e) => onListenVolumeChange(parseInt(e.target.value, 10))}
+                    className="w-32 h-1 -rotate-90 origin-center accent-blue-500 cursor-pointer"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+
+          <button
             onClick={onToggleModeratorMic}
             className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors shadow-lg
               ${isModeratorMuted ? 'bg-gray-600 text-gray-300' : 'bg-blue-600 text-white'}`}
@@ -135,24 +176,27 @@ export const LiveAudioControlPanel: React.FC<LiveAudioControlPanelProps> = ({
           >
             {isModeratorMuted ? <MicOff size={20} /> : <Mic size={20} />}
           </button>
-          
-          <div className="relative flex items-center bg-gray-900 border border-gray-700 rounded px-2 h-10 cursor-pointer" onClick={() => setIsModVolOpen(!isModVolOpen)}>
-            <Volume2 size={16} className="text-gray-400 mr-1" />
-            <span className="text-white text-xs w-8 text-center font-semibold">{moderatorVolume}%</span>
-            
-            {isModVolOpen && (
-              <div 
+
+          <div
+            className="relative flex items-center bg-gray-900 border border-gray-700 rounded px-2 h-10 cursor-pointer"
+            onClick={() => setIsMicVolOpen(!isMicVolOpen)}
+            title="Regular volumen de salida de tu micro"
+          >
+            <span className="text-white text-xs w-10 text-center font-semibold">{microphoneVolume}%</span>
+
+            {isMicVolOpen && (
+              <div
                 className="absolute bottom-full mb-2 -right-4 bg-gray-800 border border-gray-700 p-3 rounded shadow-xl flex flex-col items-center gap-2 z-[100]"
                 onClick={e => e.stopPropagation()}
               >
-                <span className="text-xs font-semibold text-gray-300">{moderatorVolume}%</span>
+                <span className="text-xs font-semibold text-gray-300">{microphoneVolume}%</span>
                 <div className="h-32 w-8 flex items-center justify-center">
-                  <input 
-                    type="range" 
-                    min="0" 
-                    max="300" 
-                    value={moderatorVolume}
-                    onChange={(e) => onModeratorVolumeChange(parseInt(e.target.value, 10))}
+                  <input
+                    type="range"
+                    min="0"
+                    max="300"
+                    value={microphoneVolume}
+                    onChange={(e) => onMicrophoneVolumeChange(parseInt(e.target.value, 10))}
                     className="w-32 h-1 -rotate-90 origin-center accent-blue-500 cursor-pointer"
                   />
                 </div>

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { AudienceLiveAudioPanel } from './AudienceLiveAudioPanel';
 import { AudienceInterventionModal } from './AudienceInterventionModal';
@@ -6,6 +6,7 @@ import { AudiencePrivateControlMessage } from './AudiencePrivateControlMessage';
 import { useLiveAudio } from '../../hooks/useLiveAudio';
 import { usePrivateControlSignals } from '../../../../hooks/usePrivateControlSignals';
 import type { LiveAudioAvailability, SpeakerState } from '../../../../types/liveAudio';
+import { LiveAudioTrackOutput } from '../shared/LiveAudioTrackOutput';
 
 interface LiveAudioAudienceContainerProps {
   availability: LiveAudioAvailability;
@@ -14,20 +15,13 @@ interface LiveAudioAudienceContainerProps {
   clientId: string; // Used as fallback or session identifier if needed
 }
 
-const AudioRenderer = ({ track, volume }: { track: MediaStreamTrack, volume: number }) => {
-  const audioRef = useRef<HTMLAudioElement>(null);
-  useEffect(() => {
-    if (audioRef.current && !audioRef.current.srcObject) {
-      audioRef.current.srcObject = new MediaStream([track]);
-    }
-  }, [track]);
-  useEffect(() => {
-    if (audioRef.current) {
-      audioRef.current.volume = volume;
-    }
-  }, [volume]);
-  return <audio ref={audioRef} autoPlay playsInline />;
-};
+interface ParticipantStatusOptions {
+  canPublishAudio?: boolean;
+  isMuted?: boolean;
+  isActiveAudience?: boolean;
+  isMicrophoneActive?: boolean;
+  isKicked?: boolean;
+}
 
 export default function LiveAudioAudienceContainer({
   availability,
@@ -38,6 +32,7 @@ export default function LiveAudioAudienceContainer({
   const [isActive, setIsActive] = useState(false);
   const [isPendingWord, setIsPendingWord] = useState(false);
   const [isWordGranted, setIsWordGranted] = useState(false);
+  const [isKicked, setIsKicked] = useState(false);
   const [activeAlias, setActiveAlias] = useState<string | null>(null);
   const [keyRotationCount, setKeyRotationCount] = useState(0);
   
@@ -74,7 +69,7 @@ export default function LiveAudioAudienceContainer({
   });
 
   // 2. Setup private signals
-  const { sendPrivateSignal, clearPrivateState, ready: privateSignalReady } = usePrivateControlSignals({
+  const { sendPrivateSignal, ready: privateSignalReady } = usePrivateControlSignals({
     role: 'audience',
     participantId: participantId || clientId,
     sendMessage: wsSend,
@@ -83,7 +78,7 @@ export default function LiveAudioAudienceContainer({
     onControlKeyRotated: () => setKeyRotationCount((current) => current + 1),
   });
 
-  const sendParticipantStatus = useCallback((speakerState: SpeakerState, canPublishAudio = false, isMuted = false) => {
+  const sendParticipantStatus = useCallback((speakerState: SpeakerState, options: ParticipantStatusOptions = {}) => {
     if (!participantId) return false;
     return wsSend('LIVE_AUDIO_PARTICIPANT_STATUS', {
       type: 'LIVE_AUDIO_PARTICIPANT_STATUS',
@@ -91,8 +86,11 @@ export default function LiveAudioAudienceContainer({
       role: 'audience',
       speakerState,
       canSubscribe: true,
-      canPublishAudio,
-      isMuted,
+      canPublishAudio: options.canPublishAudio ?? false,
+      isMuted: options.isMuted ?? true,
+      isActiveAudience: options.isActiveAudience ?? false,
+      isMicrophoneActive: options.isMicrophoneActive ?? false,
+      isKicked: options.isKicked ?? false,
       updatedAt: Date.now(),
     });
   }, [participantId, wsSend]);
@@ -101,38 +99,105 @@ export default function LiveAudioAudienceContainer({
   useEffect(() => {
     const unsubscribe = subscribeToWsMessage((type, payload) => {
       if (type === 'LIVE_AUDIO_GRANT_SPEAK' && payload.participantId === participantId) {
+        setIsActive(true);
         setIsWordGranted(true);
         setIsPendingWord(false);
-        sendParticipantStatus('GRANTED', true, false);
+        setIsKicked(false);
+        sendParticipantStatus('GRANTED', {
+          canPublishAudio: true,
+          isMuted: true,
+          isActiveAudience: true,
+          isMicrophoneActive: false,
+          isKicked: false,
+        });
       } else if (type === 'LIVE_AUDIO_REVOKE_SPEAK' && payload.participantId === participantId) {
         setIsWordGranted(false);
+        setIsPendingWord(false);
+        setIsActive(true);
         void unpublishMicrophone();
-        sendParticipantStatus('REVOKED', false, false);
+        sendParticipantStatus('LISTENER', {
+          canPublishAudio: false,
+          isMuted: true,
+          isActiveAudience: true,
+          isMicrophoneActive: false,
+        });
       } else if (type === 'LIVE_AUDIO_MUTE_PARTICIPANT' && payload.participantId === participantId) {
+        setIsActive(true);
+        setIsWordGranted(true);
+        setIsPendingWord(false);
         void unpublishMicrophone();
-        sendParticipantStatus('MUTED', false, true);
+        sendParticipantStatus('GRANTED', {
+          canPublishAudio: true,
+          isMuted: true,
+          isActiveAudience: true,
+          isMicrophoneActive: false,
+        });
+      } else if (type === 'LIVE_AUDIO_MUTE_ALL') {
+        const excluded = Array.isArray(payload.excludeParticipantIds) ? payload.excludeParticipantIds : [];
+        if (!participantId || excluded.includes(participantId)) return;
+        if (!isWordGranted) return;
+        setIsActive(true);
+        setIsWordGranted(true);
+        setIsPendingWord(false);
+        void unpublishMicrophone();
+        sendParticipantStatus('GRANTED', {
+          canPublishAudio: true,
+          isMuted: true,
+          isActiveAudience: true,
+          isMicrophoneActive: false,
+        });
       } else if (type === 'LIVE_AUDIO_KICK_PARTICIPANT' && payload.participantId === participantId) {
         setIsActive(false);
         setIsPendingWord(false);
         setIsWordGranted(false);
+        setIsKicked(true);
         setActiveAlias(null);
         void unpublishMicrophone();
-        clearPrivateState();
+        sendParticipantStatus('REVOKED', {
+          canPublishAudio: false,
+          isMuted: true,
+          isActiveAudience: false,
+          isMicrophoneActive: false,
+          isKicked: true,
+        });
       }
     });
     return unsubscribe;
-  }, [clearPrivateState, participantId, sendParticipantStatus, subscribeToWsMessage, unpublishMicrophone]);
+  }, [isWordGranted, participantId, sendParticipantStatus, subscribeToWsMessage, unpublishMicrophone]);
 
   useEffect(() => {
     if (!participantId) return;
     if (!isActive) {
-      sendParticipantStatus('LISTENER', false, false);
+      sendParticipantStatus('REVOKED', {
+        canPublishAudio: false,
+        isMuted: true,
+        isActiveAudience: false,
+        isMicrophoneActive: false,
+        isKicked,
+      });
     } else if (isWordGranted) {
-      sendParticipantStatus('GRANTED', true, false);
+      sendParticipantStatus('GRANTED', {
+        canPublishAudio: true,
+        isMuted: !isMicrophoneActive,
+        isActiveAudience: true,
+        isMicrophoneActive,
+      });
     } else if (isPendingWord) {
-      sendParticipantStatus('REQUESTED', false, false);
+      sendParticipantStatus('REQUESTED', {
+        canPublishAudio: false,
+        isMuted: true,
+        isActiveAudience: true,
+        isMicrophoneActive: false,
+      });
+    } else {
+      sendParticipantStatus('LISTENER', {
+        canPublishAudio: false,
+        isMuted: true,
+        isActiveAudience: true,
+        isMicrophoneActive: false,
+      });
     }
-  }, [isActive, isPendingWord, isWordGranted, participantId, sendParticipantStatus]);
+  }, [isActive, isKicked, isMicrophoneActive, isPendingWord, isWordGranted, participantId, sendParticipantStatus]);
 
   useEffect(() => {
     if (liveKitState !== 'reconnectFailed') return;
@@ -146,7 +211,7 @@ export default function LiveAudioAudienceContainer({
   }, [isActive, isPendingWord, isWordGranted, liveKitState, sendPrivateSignal]);
 
   useEffect(() => {
-    if (keyRotationCount === 0 || !privateSignalReady || !activeAlias) return;
+    if (!privateSignalReady || !activeAlias) return;
     if (!isActive && !isPendingWord && !isWordGranted) return;
 
     void sendPrivateSignal({
@@ -161,62 +226,99 @@ export default function LiveAudioAudienceContainer({
   }, [startRemoteAudio]);
 
   const handleJoinActive = useCallback(() => {
+    if (isKicked) return;
     setShowInterventionModal(true);
-  }, []);
+  }, [isKicked]);
 
   const handleLeaveActive = useCallback(() => {
     setIsActive(false);
     setIsPendingWord(false);
     setIsWordGranted(false);
+    setIsKicked(false);
     setActiveAlias(null);
     setShowInterventionModal(false);
     setShowPrivateMessageModal(false);
-    sendParticipantStatus('REVOKED', false, false);
+    sendParticipantStatus('REVOKED', {
+      canPublishAudio: false,
+      isMuted: true,
+      isActiveAudience: false,
+      isMicrophoneActive: false,
+      isKicked: false,
+    });
     void unpublishMicrophone();
-    clearPrivateState();
-  }, [clearPrivateState, sendParticipantStatus, unpublishMicrophone]);
+  }, [sendParticipantStatus, unpublishMicrophone]);
 
   const handleSubmitAlias = useCallback(async (alias: string) => {
     setShowInterventionModal(false);
     setIsActive(true);
-    setIsPendingWord(true);
+    setIsPendingWord(false);
+    setIsWordGranted(false);
+    setIsKicked(false);
     setActiveAlias(alias);
-    sendParticipantStatus('REQUESTED', false, false);
+    sendParticipantStatus('LISTENER', {
+      canPublishAudio: false,
+      isMuted: true,
+      isActiveAudience: true,
+      isMicrophoneActive: false,
+      isKicked: false,
+    });
     
-    // Send encrypted signal to request word
     await sendPrivateSignal({
-      type: 'REQUEST_WORD',
+      type: 'ACTIVE_STATE',
       alias,
+      speakerState: 'LISTENER',
     });
   }, [sendParticipantStatus, sendPrivateSignal]);
 
   const handleCancelRequest = useCallback(() => {
     setIsPendingWord(false);
-    sendParticipantStatus('LISTENER', false, false);
-    // Send encrypted signal to cancel word request
+    sendParticipantStatus('LISTENER', {
+      canPublishAudio: false,
+      isMuted: true,
+      isActiveAudience: true,
+      isMicrophoneActive: false,
+    });
     void sendPrivateSignal({
       type: 'CANCEL_REQUEST_WORD',
-    });
-  }, [sendParticipantStatus, sendPrivateSignal]);
-
-  const handleRequestWord = useCallback(() => {
-    setIsPendingWord(true);
-    sendParticipantStatus('REQUESTED', false, false);
-    void sendPrivateSignal({
-      type: 'REQUEST_WORD',
       alias: activeAlias ?? undefined,
     });
   }, [activeAlias, sendParticipantStatus, sendPrivateSignal]);
 
+  const handleRequestWord = useCallback(() => {
+    if (isKicked) return;
+    setIsPendingWord(true);
+    sendParticipantStatus('REQUESTED', {
+      canPublishAudio: false,
+      isMuted: true,
+      isActiveAudience: true,
+      isMicrophoneActive: false,
+    });
+    void sendPrivateSignal({
+      type: 'REQUEST_WORD',
+      alias: activeAlias ?? undefined,
+    });
+  }, [activeAlias, isKicked, sendParticipantStatus, sendPrivateSignal]);
+
   const handleToggleMicrophone = useCallback(() => {
     if (isMicrophoneActive) {
       void unpublishMicrophone();
-      sendParticipantStatus('GRANTED', false, true);
-    } else {
-      void publishMicrophone().catch((err) => {
-        console.error("Failed to publish mic:", err);
+      sendParticipantStatus('GRANTED', {
+        canPublishAudio: true,
+        isMuted: true,
+        isActiveAudience: true,
+        isMicrophoneActive: false,
       });
-      sendParticipantStatus('GRANTED', true, false);
+    } else {
+      void publishMicrophone()
+        .then(() => sendParticipantStatus('GRANTED', {
+          canPublishAudio: true,
+          isMuted: false,
+          isActiveAudience: true,
+          isMicrophoneActive: true,
+        }))
+        .catch((err) => {
+          console.error("Failed to publish mic:", err);
+        });
     }
   }, [isMicrophoneActive, publishMicrophone, sendParticipantStatus, unpublishMicrophone]);
 
@@ -232,8 +334,9 @@ export default function LiveAudioAudienceContainer({
     await sendPrivateSignal({
       type: 'PRIVATE_MESSAGE',
       text: message,
+      alias: activeAlias ?? undefined,
     });
-  }, [sendPrivateSignal]);
+  }, [activeAlias, sendPrivateSignal]);
 
   if (availability !== 'enabled') {
     return null;
@@ -241,7 +344,13 @@ export default function LiveAudioAudienceContainer({
 
   return (
     <>
-      {remoteTracks.map(t => <AudioRenderer key={t.id} track={t} volume={volume} />)}
+      {remoteTracks.map((remoteTrack) => (
+        <LiveAudioTrackOutput
+          key={remoteTrack.id}
+          remoteTrack={remoteTrack}
+          volumePercent={volume * 100}
+        />
+      ))}
 
       {isMicrophoneActive && (
         <div className="fixed inset-0 z-40 pointer-events-none border-[6px] md:border-[10px] border-blue-500/80 rounded-xl transition-all shadow-[inset_0_0_30px_rgba(59,130,246,0.6)]"></div>
@@ -255,6 +364,7 @@ export default function LiveAudioAudienceContainer({
           hasAudioStarted={hasAudioStarted}
           isPendingWord={isPendingWord}
           isWordGranted={isWordGranted}
+          isParticipationBlocked={isKicked}
           volume={volume}
           onVolumeChange={setVolume}
           onStartAudio={handleStartAudio}
@@ -276,6 +386,7 @@ export default function LiveAudioAudienceContainer({
             hasAudioStarted={hasAudioStarted}
             isPendingWord={isPendingWord}
             isWordGranted={isWordGranted}
+            isParticipationBlocked={isKicked}
             volume={volume}
             onVolumeChange={setVolume}
             onStartAudio={handleStartAudio}

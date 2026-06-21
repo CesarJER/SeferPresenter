@@ -7,6 +7,7 @@ const wsClients = new Map()
 const roles = new Set(['presenter', 'control', 'audience', 'unknown'])
 const liveAudioControls = new Map()
 const liveAudioParticipants = new Map()
+let liveAudioControlPublicKeyMessage = null
 const PRIVATE_CONTROL_SIGNAL_MAX_CIPHERTEXT_BYTES = 4096
 const PRIVATE_CONTROL_SIGNAL_RATE_LIMIT = 5
 const PRIVATE_CONTROL_SIGNAL_RATE_WINDOW_MS = 60_000
@@ -117,6 +118,9 @@ const getLiveAudioParticipantSnapshot = () => ({
     canSubscribe: participant.canSubscribe,
     canPublishAudio: participant.canPublishAudio,
     isMuted: participant.isMuted,
+    isActiveAudience: participant.isActiveAudience,
+    isMicrophoneActive: participant.isMicrophoneActive,
+    isKicked: participant.isKicked,
     connected: Boolean(participant.ws && participant.ws.readyState === WebSocket.OPEN),
     disconnectedAt: participant.disconnectedAt,
     updatedAt: participant.updatedAt,
@@ -133,6 +137,9 @@ const getLiveAudioParticipantState = (participantId) => {
     canSubscribe: participant.canSubscribe,
     canPublishAudio: participant.canPublishAudio,
     isMuted: participant.isMuted,
+    isActiveAudience: participant.isActiveAudience,
+    isMicrophoneActive: participant.isMicrophoneActive,
+    isKicked: participant.isKicked,
     connected: Boolean(participant.ws && participant.ws.readyState === WebSocket.OPEN),
     disconnectedAt: participant.disconnectedAt,
     updatedAt: participant.updatedAt,
@@ -149,6 +156,7 @@ const resetWsServerStateForTests = () => {
   wsClients.clear()
   liveAudioControls.clear()
   liveAudioParticipants.clear()
+  liveAudioControlPublicKeyMessage = null
 }
 
 const createWsServer = (httpServer, onFallbackMessage) => {
@@ -179,6 +187,33 @@ const createWsServer = (httpServer, onFallbackMessage) => {
       wsClients.delete(client)
       return false
     }
+  }
+
+  const makeConnectionCountsMessage = () => {
+    const counts = {
+      audienceConnections: 0,
+      controlConnections: 0,
+      presenterConnections: 0,
+    }
+
+    for (const [client, meta] of wsClients) {
+      if (client.readyState !== WebSocket.OPEN) continue
+      if (meta.role === 'audience') counts.audienceConnections += 1
+      if (meta.role === 'control') counts.controlConnections += 1
+      if (meta.role === 'presenter') counts.presenterConnections += 1
+    }
+
+    return {
+      type: 'LIVE_AUDIO_CONNECTION_COUNTS',
+      totalConnections: counts.audienceConnections + counts.controlConnections + counts.presenterConnections,
+      ...counts,
+      updatedAt: Date.now(),
+    }
+  }
+
+  const broadcastConnectionCounts = () => {
+    const message = makeConnectionCountsMessage()
+    broadcast(message, (meta) => meta.role === 'presenter' || meta.role === 'control')
   }
 
   const sendError = (client, code, message) => {
@@ -215,6 +250,7 @@ const createWsServer = (httpServer, onFallbackMessage) => {
   }
 
   const resetPrivateControlSession = () => {
+    liveAudioControlPublicKeyMessage = null
     broadcast({
       type: 'CONTROL_KEY_ROTATED',
       keyId: `server-reset-${Date.now()}`,
@@ -403,6 +439,9 @@ const createWsServer = (httpServer, onFallbackMessage) => {
     if (typeof msg.canSubscribe !== 'boolean') return false
     if (typeof msg.canPublishAudio !== 'boolean') return false
     if (msg.isMuted !== undefined && typeof msg.isMuted !== 'boolean') return false
+    if (msg.isActiveAudience !== undefined && typeof msg.isActiveAudience !== 'boolean') return false
+    if (msg.isMicrophoneActive !== undefined && typeof msg.isMicrophoneActive !== 'boolean') return false
+    if (msg.isKicked !== undefined && typeof msg.isKicked !== 'boolean') return false
     if (msg.updatedAt !== undefined && (typeof msg.updatedAt !== 'number' || !Number.isFinite(msg.updatedAt))) return false
     return msg.alias === undefined
   }
@@ -421,15 +460,29 @@ const createWsServer = (httpServer, onFallbackMessage) => {
     }
 
     const now = Date.now()
+    const isKicked = existing?.isKicked === true || status.isKicked === true
+    const speakerState = isKicked
+      ? 'REVOKED'
+      : typeof status.speakerState === 'string'
+        ? status.speakerState
+        : existing?.speakerState || 'LISTENER'
+    const isMicrophoneActive = isKicked
+      ? false
+      : typeof status.isMicrophoneActive === 'boolean'
+        ? status.isMicrophoneActive
+        : existing?.isMicrophoneActive ?? false
     const participant = {
       participantId,
       role: meta.role,
       clientId: meta.clientId,
       ws: meta.ws,
-      speakerState: typeof status.speakerState === 'string' ? status.speakerState : existing?.speakerState || 'LISTENER',
+      speakerState,
       canSubscribe: typeof status.canSubscribe === 'boolean' ? status.canSubscribe : existing?.canSubscribe ?? true,
-      canPublishAudio: typeof status.canPublishAudio === 'boolean' ? status.canPublishAudio : existing?.canPublishAudio ?? false,
-      isMuted: typeof status.isMuted === 'boolean' ? status.isMuted : existing?.isMuted ?? false,
+      canPublishAudio: isKicked ? false : typeof status.canPublishAudio === 'boolean' ? status.canPublishAudio : existing?.canPublishAudio ?? false,
+      isMuted: isKicked ? true : typeof status.isMuted === 'boolean' ? status.isMuted : existing?.isMuted ?? false,
+      isActiveAudience: isKicked ? false : typeof status.isActiveAudience === 'boolean' ? status.isActiveAudience : existing?.isActiveAudience ?? false,
+      isMicrophoneActive,
+      isKicked,
       connectedAt: existing?.connectedAt || now,
       updatedAt: now,
       disconnectedAt: undefined,
@@ -464,12 +517,16 @@ const createWsServer = (httpServer, onFallbackMessage) => {
       ...makeReducedParticipantStatus(current),
       speakerState: 'REVOKED',
       canPublishAudio: false,
-      isMuted: false,
+      isMuted: true,
+      isActiveAudience: false,
+      isMicrophoneActive: false,
       updatedAt: Date.now(),
     }
     current.speakerState = 'REVOKED'
     current.canPublishAudio = false
-    current.isMuted = false
+    current.isMuted = true
+    current.isActiveAudience = false
+    current.isMicrophoneActive = false
     routeParticipantStatus(releasedStatus)
     broadcast({
       type: 'LIVE_AUDIO_REVOKE_SPEAK',
@@ -514,6 +571,9 @@ const createWsServer = (httpServer, onFallbackMessage) => {
     canSubscribe: msg.canSubscribe,
     canPublishAudio: msg.canPublishAudio,
     isMuted: msg.isMuted,
+    isActiveAudience: msg.isActiveAudience,
+    isMicrophoneActive: msg.isMicrophoneActive,
+    isKicked: msg.isKicked,
     updatedAt: msg.updatedAt || Date.now(),
   })
 
@@ -550,22 +610,58 @@ const createWsServer = (httpServer, onFallbackMessage) => {
 
     switch (msg.type) {
       case 'LIVE_AUDIO_GRANT_SPEAK':
-        update(msg.participantId, { speakerState: 'GRANTED', canPublishAudio: true, isMuted: false })
+        update(msg.participantId, {
+          speakerState: 'GRANTED',
+          canPublishAudio: true,
+          isMuted: true,
+          isActiveAudience: true,
+          isMicrophoneActive: false,
+          isKicked: false,
+        })
         break
       case 'LIVE_AUDIO_REVOKE_SPEAK':
-        update(msg.participantId, { speakerState: 'REVOKED', canPublishAudio: false })
+        update(msg.participantId, {
+          speakerState: 'LISTENER',
+          canPublishAudio: false,
+          isMuted: true,
+          isActiveAudience: true,
+          isMicrophoneActive: false,
+          isKicked: false,
+        })
         break
       case 'LIVE_AUDIO_MUTE_PARTICIPANT':
-        update(msg.participantId, { speakerState: 'MUTED', isMuted: true, canPublishAudio: false })
+        update(msg.participantId, {
+          speakerState: 'GRANTED',
+          isMuted: true,
+          canPublishAudio: true,
+          isActiveAudience: true,
+          isMicrophoneActive: false,
+          isKicked: false,
+        })
         break
       case 'LIVE_AUDIO_KICK_PARTICIPANT':
-        update(msg.participantId, { speakerState: 'REVOKED', canPublishAudio: false })
+        update(msg.participantId, {
+          speakerState: 'REVOKED',
+          canPublishAudio: false,
+          isMuted: true,
+          isActiveAudience: false,
+          isMicrophoneActive: false,
+          isKicked: true,
+        })
         break
       case 'LIVE_AUDIO_MUTE_ALL': {
         const excluded = new Set(msg.excludeParticipantIds || [])
         for (const participant of liveAudioParticipants.values()) {
           if (participant.role !== 'audience' || excluded.has(participant.participantId)) continue
-          update(participant.participantId, { speakerState: 'MUTED', isMuted: true, canPublishAudio: false })
+          if (participant.speakerState !== 'GRANTED') continue
+          update(participant.participantId, {
+            speakerState: 'GRANTED',
+            isMuted: true,
+            canPublishAudio: true,
+            isActiveAudience: true,
+            isMicrophoneActive: false,
+            isKicked: false,
+          })
         }
         break
       }
@@ -576,11 +672,29 @@ const createWsServer = (httpServer, onFallbackMessage) => {
 
   const routeControlPublicKey = (msg, issuer) => {
     if (!isControlAuthorized(issuer)) return
-    broadcast(msg, (targetMeta) => {
+    liveAudioControlPublicKeyMessage = {
+      ...msg,
+      controlSessionId: issuer.controlSessionId,
+      createdAt: msg.createdAt || Date.now(),
+    }
+    broadcast(liveAudioControlPublicKeyMessage, (targetMeta) => {
       if (targetMeta.role === 'audience') return true
       if (targetMeta.role !== 'control') return false
       return isControlAuthorized(liveAudioControls.get(targetMeta.controlSessionId))
     })
+  }
+
+  const canReceiveModerationMessage = (targetMeta, msg) => {
+    if (targetMeta.role === 'presenter') return true
+    if (targetMeta.role === 'control') {
+      return isControlAuthorized(liveAudioControls.get(targetMeta.controlSessionId))
+    }
+    if (targetMeta.role !== 'audience' || !targetMeta.participantId) return false
+    if (msg.type === 'LIVE_AUDIO_MUTE_ALL') {
+      const excluded = new Set(msg.excludeParticipantIds || [])
+      return !excluded.has(targetMeta.participantId)
+    }
+    return msg.participantId === targetMeta.participantId
   }
 
   wss.on('connection', (ws, req) => {
@@ -617,10 +731,15 @@ const createWsServer = (httpServer, onFallbackMessage) => {
       controlSessionId: control?.controlSessionId,
       controlState: control?.controlState,
     }))
+    broadcastConnectionCounts()
 
     if (control) {
       sendAuthorizationState(control)
       broadcastAuthorizationState()
+    }
+
+    if (role === 'audience' && liveAudioControlPublicKeyMessage) {
+      sendJson(ws, liveAudioControlPublicKeyMessage)
     }
 
     if (role !== 'audience') {
@@ -676,8 +795,11 @@ const createWsServer = (httpServer, onFallbackMessage) => {
         case 'LIVE_AUDIO_PARTICIPANT_STATUS':
           if (meta.role !== 'audience') break
           if (!validateParticipantStatus(msg, 'audience')) break
-          if (!bindParticipantToConnection(meta, msg.participantId, msg)) break
-          routeParticipantStatus(msg)
+          {
+            const participant = bindParticipantToConnection(meta, msg.participantId, msg)
+            if (!participant) break
+            routeParticipantStatus(participant)
+          }
           break
 
         case 'LIVE_AUDIO_CONTROL_AUTHORIZATION_DECISION':
@@ -740,11 +862,7 @@ const createWsServer = (httpServer, onFallbackMessage) => {
             break
           }
           applyModerationState(msg)
-          broadcast(msg, (targetMeta) => {
-            if (targetMeta.role === 'presenter') return true
-            if (targetMeta.role !== 'control') return false
-            return isControlAuthorized(liveAudioControls.get(targetMeta.controlSessionId))
-          })
+          broadcast(msg, (targetMeta) => canReceiveModerationMessage(targetMeta, msg))
           break
         }
 
@@ -760,6 +878,7 @@ const createWsServer = (httpServer, onFallbackMessage) => {
         removeControl(meta.controlSessionId)
       }
       releaseParticipantConnection(meta)
+      broadcastConnectionCounts()
     })
     ws.on('error', () => {
       const meta = wsClients.get(ws)
@@ -768,6 +887,7 @@ const createWsServer = (httpServer, onFallbackMessage) => {
         removeControl(meta.controlSessionId)
       }
       releaseParticipantConnection(meta)
+      broadcastConnectionCounts()
     })
   })
 

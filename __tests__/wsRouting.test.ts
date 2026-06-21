@@ -145,6 +145,27 @@ describe('Live Audio WebSocket routing', () => {
     expect(pending.messages.some((message) => message.type === 'PRIVATE_CONTROL_SIGNAL')).toBe(false);
   });
 
+  it('replays the current control public key to audience clients that connect later', async () => {
+    const control = await connectWs('control');
+    const welcome = await waitFor(control, (message) => message.type === 'WELCOME');
+
+    control.send({
+      type: 'LIVE_AUDIO_CONTROL_PUBLIC_KEY',
+      controlSessionId: String(welcome.controlSessionId),
+      keyId: 'control-key-one',
+      publicKey: Buffer.from('control-public-key-one').toString('base64'),
+      createdAt: Date.now(),
+    });
+
+    const audience = await connectWs('audience');
+    const key = await waitFor(
+      audience,
+      (message) => message.type === 'LIVE_AUDIO_CONTROL_PUBLIC_KEY' && message.keyId === 'control-key-one',
+    );
+
+    expect(key.publicKey).toBe(Buffer.from('control-public-key-one').toString('base64'));
+  });
+
   it('does not echo participant status lists to audience clients', async () => {
     const presenter = await connectWs('presenter');
     const sender = await connectWs('audience');
@@ -176,6 +197,102 @@ describe('Live Audio WebSocket routing', () => {
     await wait(100);
 
     expect(control.messages.some((message) => message.type === 'LIVE_AUDIO_GRANT_SPEAK')).toBe(false);
+  });
+
+  it('broadcasts total live audio websocket connection counts to control and presenter', async () => {
+    const presenter = await connectWs('presenter');
+    const control = await connectWs('control');
+    const audience = await connectWs('audience');
+
+    const controlCounts = await waitFor(
+      control,
+      (message) => message.type === 'LIVE_AUDIO_CONNECTION_COUNTS' && message.totalConnections === 3,
+    );
+    const presenterCounts = await waitFor(
+      presenter,
+      (message) => message.type === 'LIVE_AUDIO_CONNECTION_COUNTS' && message.totalConnections === 3,
+    );
+    await wait(100);
+
+    expect(controlCounts.audienceConnections).toBe(1);
+    expect(controlCounts.controlConnections).toBe(1);
+    expect(controlCounts.presenterConnections).toBe(1);
+    expect(presenterCounts.totalConnections).toBe(3);
+    expect(audience.messages.some((message) => message.type === 'LIVE_AUDIO_CONNECTION_COUNTS')).toBe(false);
+  });
+
+  it('routes control moderation actions to the target audience participant', async () => {
+    const control = await connectWs('control');
+    const audience = await connectWs('audience');
+    const observer = await connectWs('audience');
+    const participantId = randomUUID();
+    const observerParticipantId = randomUUID();
+
+    audience.send(makeParticipantStatus(participantId));
+    observer.send(makeParticipantStatus(observerParticipantId));
+    await waitFor(
+      control,
+      (message) => message.type === 'LIVE_AUDIO_PARTICIPANT_STATUS' && message.participantId === participantId,
+    );
+
+    control.send({
+      type: 'LIVE_AUDIO_GRANT_SPEAK',
+      participantId,
+      createdAt: Date.now(),
+    });
+
+    const grant = await waitFor(
+      audience,
+      (message) => message.type === 'LIVE_AUDIO_GRANT_SPEAK' && message.participantId === participantId,
+    );
+    await wait(100);
+
+    expect(grant.participantId).toBe(participantId);
+    expect(observer.messages.some((message) => message.type === 'LIVE_AUDIO_GRANT_SPEAK')).toBe(false);
+  });
+
+  it('keeps kicked participants passive until control grants them again', async () => {
+    const control = await connectWs('control');
+    const audience = await connectWs('audience');
+    const participantId = randomUUID();
+
+    audience.send({
+      ...makeParticipantStatus(participantId),
+      isActiveAudience: true,
+      speakerState: 'REQUESTED',
+    });
+    await waitFor(
+      control,
+      (message) => message.type === 'LIVE_AUDIO_PARTICIPANT_STATUS' && message.participantId === participantId,
+    );
+
+    control.send({
+      type: 'LIVE_AUDIO_KICK_PARTICIPANT',
+      participantId,
+      createdAt: Date.now(),
+    });
+    await waitFor(
+      control,
+      (message) =>
+        message.type === 'LIVE_AUDIO_PARTICIPANT_STATUS' &&
+        message.participantId === participantId &&
+        message.isKicked === true,
+    );
+
+    audience.send({
+      ...makeParticipantStatus(participantId),
+      speakerState: 'REQUESTED',
+      isActiveAudience: true,
+      isKicked: false,
+    });
+    await wait(100);
+
+    const snapshot = getLiveAudioParticipantSnapshot().participants.find(
+      (participant) => participant.participantId === participantId,
+    );
+    expect(snapshot?.speakerState).toBe('REVOKED');
+    expect(snapshot?.isActiveAudience).toBe(false);
+    expect(snapshot?.isKicked).toBe(true);
   });
 
   it('rate-limits private control signals to five messages per minute per participant', async () => {

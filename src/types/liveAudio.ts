@@ -16,6 +16,13 @@ export type ControlSecondaryState = 'PENDING' | 'AUTHORIZED';
 export type LiveAudioControlState = ControlPrincipalState | ControlSecondaryState;
 export type SpeakerState = 'LISTENER' | 'REQUESTED' | 'GRANTED' | 'MUTED' | 'REVOKED';
 
+export interface LiveAudioRemoteTrack {
+  id: string;
+  track: MediaStreamTrack;
+  participantId: string | null;
+  participantIdentity: string | null;
+}
+
 export interface PendingControlAuthorization {
   controlSessionId: string;
   verificationCode: string;
@@ -32,6 +39,18 @@ export interface LiveAudioParticipantStatusMessage {
   canSubscribe: boolean;
   canPublishAudio: boolean;
   isMuted?: boolean;
+  isActiveAudience?: boolean;
+  isMicrophoneActive?: boolean;
+  isKicked?: boolean;
+  updatedAt?: number;
+}
+
+export interface LiveAudioConnectionCountsMessage {
+  type: 'LIVE_AUDIO_CONNECTION_COUNTS';
+  totalConnections: number;
+  audienceConnections: number;
+  controlConnections: number;
+  presenterConnections: number;
   updatedAt?: number;
 }
 
@@ -154,6 +173,7 @@ export interface LiveAudioTokenResponse {
 
 export type LiveAudioBroadcastMessage =
   | LiveAudioParticipantStatusMessage
+  | LiveAudioConnectionCountsMessage
   | LiveAudioGrantSpeakMessage
   | LiveAudioRevokeSpeakMessage
   | LiveAudioMuteParticipantMessage

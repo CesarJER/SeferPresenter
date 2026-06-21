@@ -71,6 +71,7 @@ const areJsonEqual = (left: unknown, right: unknown) => JSON.stringify(left ?? n
 
 const liveAudioWsOnlyTypes = new Set([
   'LIVE_AUDIO_PARTICIPANT_STATUS',
+  'LIVE_AUDIO_CONNECTION_COUNTS',
   'LIVE_AUDIO_GRANT_SPEAK',
   'LIVE_AUDIO_REVOKE_SPEAK',
   'LIVE_AUDIO_MUTE_PARTICIPANT',

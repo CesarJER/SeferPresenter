@@ -46,6 +46,7 @@ const liveAudioSpeakerStates = new Set(['LISTENER', 'REQUESTED', 'GRANTED', 'MUT
 const liveAudioControlStates = new Set(['PRINCIPAL', 'PENDING', 'AUTHORIZED']);
 const liveAudioMessageTypes = new Set([
   'LIVE_AUDIO_PARTICIPANT_STATUS',
+  'LIVE_AUDIO_CONNECTION_COUNTS',
   'LIVE_AUDIO_GRANT_SPEAK',
   'LIVE_AUDIO_REVOKE_SPEAK',
   'LIVE_AUDIO_MUTE_PARTICIPANT',
@@ -514,6 +515,24 @@ const validateLiveAudioBroadcastMessage = (value: Record<string, unknown>): Vali
       if (typeof value.canSubscribe !== 'boolean') errors.push('canSubscribe debe ser booleano.');
       if (typeof value.canPublishAudio !== 'boolean') errors.push('canPublishAudio debe ser booleano.');
       if (!isBooleanOrUndefined(value.isMuted)) errors.push('isMuted debe ser booleano.');
+      if (!isBooleanOrUndefined(value.isActiveAudience)) errors.push('isActiveAudience debe ser booleano.');
+      if (!isBooleanOrUndefined(value.isMicrophoneActive)) errors.push('isMicrophoneActive debe ser booleano.');
+      if (!isBooleanOrUndefined(value.isKicked)) errors.push('isKicked debe ser booleano.');
+      if (value.updatedAt !== undefined && !isFiniteNumber(value.updatedAt)) errors.push('updatedAt debe ser numero.');
+      break;
+    case 'LIVE_AUDIO_CONNECTION_COUNTS':
+      if (!Number.isInteger(value.totalConnections) || (value.totalConnections as number) < 0) {
+        errors.push('totalConnections debe ser entero >= 0.');
+      }
+      if (!Number.isInteger(value.audienceConnections) || (value.audienceConnections as number) < 0) {
+        errors.push('audienceConnections debe ser entero >= 0.');
+      }
+      if (!Number.isInteger(value.controlConnections) || (value.controlConnections as number) < 0) {
+        errors.push('controlConnections debe ser entero >= 0.');
+      }
+      if (!Number.isInteger(value.presenterConnections) || (value.presenterConnections as number) < 0) {
+        errors.push('presenterConnections debe ser entero >= 0.');
+      }
       if (value.updatedAt !== undefined && !isFiniteNumber(value.updatedAt)) errors.push('updatedAt debe ser numero.');
       break;
     case 'LIVE_AUDIO_GRANT_SPEAK':

@@ -6,14 +6,17 @@ import {
   RoomEvent,
   Track,
   type LocalAudioTrack,
+  type AudioProcessorOptions,
   type RemoteParticipant,
   type RemoteTrack,
   type RemoteTrackPublication,
+  type TrackProcessor,
 } from 'livekit-client';
 import type {
   LiveAudioAvailability,
   LiveAudioConnectionState,
   LiveAudioParticipantRole,
+  LiveAudioRemoteTrack,
   LiveAudioTokenResponse,
 } from '../../../types/liveAudio';
 import { useLiveAudioAvailability } from './useLiveAudioAvailability';
@@ -22,12 +25,13 @@ interface UseLiveAudioOptions {
   role: LiveAudioParticipantRole;
   roomSession?: string;
   autoConnect?: boolean;
+  microphoneVolumePercent?: number;
 }
 
 interface UseLiveAudioResult {
   state: LiveAudioConnectionState;
   availability: LiveAudioAvailability;
-  remoteTracks: MediaStreamTrack[];
+  remoteTracks: LiveAudioRemoteTrack[];
   participantId: string | null;
   participantIdentity: string | null;
   isMicrophoneActive: boolean;
@@ -44,6 +48,15 @@ const RECONNECTED_VISIBLE_MS = 3_000;
 
 const canRolePublish = (role: LiveAudioParticipantRole) =>
   role === 'audience' || role === 'control' || role === 'presenter';
+
+const clampVolumePercent = (value: number) => Math.max(0, Math.min(value, 300));
+
+const createBrowserAudioContext = (): AudioContext | null => {
+  const AudioContextConstructor =
+    window.AudioContext ||
+    (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+  return AudioContextConstructor ? new AudioContextConstructor() : null;
+};
 
 const isPermissionDeniedError = (error: unknown) =>
   error instanceof DOMException && (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError');
@@ -66,6 +79,63 @@ const mapRoomState = (state: ConnectionState): LiveAudioConnectionState => {
 const getAudioTrack = (track: RemoteTrack): MediaStreamTrack | null => {
   if (track.kind !== Track.Kind.Audio) return null;
   return track.mediaStreamTrack;
+};
+
+const getRemoteParticipantId = (participant?: RemoteParticipant): string | null => {
+  if (!participant) return null;
+  if (participant.metadata) {
+    try {
+      const metadata = JSON.parse(participant.metadata) as { participantId?: unknown };
+      if (typeof metadata.participantId === 'string') return metadata.participantId;
+    } catch {
+      // Fall back to identity parsing below.
+    }
+  }
+
+  const match = /^(audience|control|presenter)-(.+)$/.exec(participant.identity);
+  return match?.[2] ?? null;
+};
+
+const createMicrophoneGainProcessor = (
+  volumePercentRef: MutableRefObject<number>,
+  gainNodeRef: MutableRefObject<GainNode | null>,
+): TrackProcessor<Track.Kind.Audio, AudioProcessorOptions> => {
+  let source: MediaStreamAudioSourceNode | null = null;
+  let gain: GainNode | null = null;
+  let destination: MediaStreamAudioDestinationNode | null = null;
+
+  const destroy = async () => {
+    source?.disconnect();
+    gain?.disconnect();
+    source = null;
+    gain = null;
+    destination?.stream.getTracks().forEach((track) => track.stop());
+    destination = null;
+    gainNodeRef.current = null;
+    processor.processedTrack = undefined;
+  };
+
+  const processor: TrackProcessor<Track.Kind.Audio, AudioProcessorOptions> = {
+    name: 'sefer-microphone-gain',
+    processedTrack: undefined,
+    async init(options) {
+      source = options.audioContext.createMediaStreamSource(new MediaStream([options.track]));
+      gain = options.audioContext.createGain();
+      gain.gain.value = clampVolumePercent(volumePercentRef.current) / 100;
+      destination = options.audioContext.createMediaStreamDestination();
+      source.connect(gain);
+      gain.connect(destination);
+      processor.processedTrack = destination.stream.getAudioTracks()[0];
+      gainNodeRef.current = gain;
+    },
+    async restart(options) {
+      await destroy();
+      await processor.init(options);
+    },
+    destroy,
+  };
+
+  return processor;
 };
 
 const requestToken = async (role: LiveAudioParticipantRole, roomSession?: string) => {
@@ -101,10 +171,11 @@ export const useLiveAudio = ({
   role,
   roomSession,
   autoConnect = true,
+  microphoneVolumePercent = 100,
 }: UseLiveAudioOptions): UseLiveAudioResult => {
   const { availability } = useLiveAudioAvailability();
   const [state, setState] = useState<LiveAudioConnectionState>('disconnected');
-  const [remoteTracks, setRemoteTracks] = useState<MediaStreamTrack[]>([]);
+  const [remoteTracks, setRemoteTracks] = useState<LiveAudioRemoteTrack[]>([]);
   const [participantId, setParticipantId] = useState<string | null>(null);
   const [participantIdentity, setParticipantIdentity] = useState<string | null>(null);
   const [isMicrophoneActive, setIsMicrophoneActive] = useState(false);
@@ -117,11 +188,22 @@ export const useLiveAudio = ({
   const reconnectedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const tokenRef = useRef<LiveAudioTokenResponse | null>(null);
   const participantIdRef = useRef<string | null>(null);
+  const retryAudioRef = useRef<() => Promise<void>>(async () => {});
   const userDisconnectedRef = useRef(false);
+  const microphoneVolumePercentRef = useRef(clampVolumePercent(microphoneVolumePercent));
+  const microphoneGainNodeRef = useRef<GainNode | null>(null);
+  const microphoneAudioContextRef = useRef<AudioContext | null>(null);
+  const microphoneProcessorRef = useRef<TrackProcessor<Track.Kind.Audio, AudioProcessorOptions> | null>(null);
 
   useEffect(() => {
     participantIdRef.current = participantId;
   }, [participantId]);
+
+  useEffect(() => {
+    const volume = clampVolumePercent(microphoneVolumePercent);
+    microphoneVolumePercentRef.current = volume;
+    if (microphoneGainNodeRef.current) microphoneGainNodeRef.current.gain.value = volume / 100;
+  }, [microphoneVolumePercent]);
 
   const clearTimer = (timerRef: MutableRefObject<ReturnType<typeof setTimeout> | null>) => {
     if (timerRef.current === null) return;
@@ -133,6 +215,17 @@ export const useLiveAudio = ({
     clearTimer(refreshTimerRef);
     clearTimer(reconnectFailureTimerRef);
     clearTimer(reconnectedTimerRef);
+  }, []);
+
+  const clearMicrophoneProcessor = useCallback(() => {
+    const processor = microphoneProcessorRef.current;
+    microphoneProcessorRef.current = null;
+    microphoneGainNodeRef.current = null;
+    if (processor) void processor.destroy().catch(() => undefined);
+
+    const context = microphoneAudioContextRef.current;
+    microphoneAudioContextRef.current = null;
+    if (context && context.state !== 'closed') void context.close().catch(() => undefined);
   }, []);
 
   const setConnectedState = useCallback((nextState: LiveAudioConnectionState) => {
@@ -159,25 +252,31 @@ export const useLiveAudio = ({
     }, RECONNECT_FAILURE_MS);
   }, []);
 
-  const addRemoteTrack = useCallback((track: MediaStreamTrack) => {
-    setRemoteTracks((current) => current.some((item) => item.id === track.id) ? current : [...current, track]);
+  const addRemoteTrack = useCallback((track: MediaStreamTrack, participant?: RemoteParticipant) => {
+    const remoteTrack: LiveAudioRemoteTrack = {
+      id: track.id,
+      track,
+      participantId: getRemoteParticipantId(participant),
+      participantIdentity: participant?.identity ?? null,
+    };
+    setRemoteTracks((current) => current.some((item) => item.id === track.id) ? current : [...current, remoteTrack]);
   }, []);
 
   const removeRemoteTrack = useCallback((track: MediaStreamTrack) => {
     setRemoteTracks((current) => current.filter((item) => item.id !== track.id));
   }, []);
 
-  const subscribePublication = useCallback((publication: RemoteTrackPublication) => {
+  const subscribePublication = useCallback((publication: RemoteTrackPublication, participant?: RemoteParticipant) => {
     publication.setSubscribed(publication.kind === Track.Kind.Audio);
     if (publication.kind === Track.Kind.Audio && publication.track) {
       const mediaTrack = getAudioTrack(publication.track);
-      if (mediaTrack) addRemoteTrack(mediaTrack);
+      if (mediaTrack) addRemoteTrack(mediaTrack, participant);
     }
   }, [addRemoteTrack]);
 
   const subscribeExistingAudio = useCallback((room: Room) => {
     room.remoteParticipants.forEach((participant: RemoteParticipant) => {
-      participant.trackPublications.forEach((publication) => subscribePublication(publication));
+      participant.trackPublications.forEach((publication) => subscribePublication(publication, participant));
     });
   }, [subscribePublication]);
 
@@ -196,9 +295,10 @@ export const useLiveAudio = ({
       }
     } finally {
       stopAllLocalTracks(room, localTrack);
+      clearMicrophoneProcessor();
       setIsMicrophoneActive(false);
     }
-  }, []);
+  }, [clearMicrophoneProcessor]);
 
   const disconnect = useCallback(() => {
     userDisconnectedRef.current = true;
@@ -207,6 +307,7 @@ export const useLiveAudio = ({
     const room = roomRef.current;
     void unpublishMicrophone();
     stopAllLocalTracks(room, localAudioTrackRef.current);
+    clearMicrophoneProcessor();
     localAudioTrackRef.current = null;
     roomRef.current = null;
     tokenRef.current = null;
@@ -219,7 +320,7 @@ export const useLiveAudio = ({
       room.removeAllListeners();
       void room.disconnect(true);
     }
-  }, [availability, clearLifecycleTimers, unpublishMicrophone]);
+  }, [availability, clearLifecycleTimers, clearMicrophoneProcessor, unpublishMicrophone]);
 
   const scheduleTokenRefresh = useCallback((tokenResponse: LiveAudioTokenResponse, runId: number) => {
     clearTimer(refreshTimerRef);
@@ -249,7 +350,7 @@ export const useLiveAudio = ({
     if (!canRolePublish(role)) {
       throw new Error('This Live Audio role cannot publish microphone audio');
     }
-    const room = roomRef.current;
+    let room = roomRef.current;
     if (!room || room.state !== ConnectionState.Connected) {
       throw new Error('Live Audio room is not connected');
     }
@@ -257,14 +358,29 @@ export const useLiveAudio = ({
 
     try {
       const activeParticipantId = participantIdRef.current;
-      if (role === 'audience' && activeParticipantId) {
-        const nextToken = await refreshToken(activeParticipantId);
-        if (nextToken.participantId !== activeParticipantId) {
-          throw new Error('Live Audio token refresh returned a different participant');
+      if (role === 'audience' && activeParticipantId && room.localParticipant.permissions?.canPublish !== true) {
+        await retryAudioRef.current();
+        room = roomRef.current;
+        if (!room || room.state !== ConnectionState.Connected) {
+          throw new Error('Live Audio room is not connected after permission refresh');
         }
-        tokenRef.current = nextToken;
       }
       const localTrack = await createLocalAudioTrack();
+      const audioContext = createBrowserAudioContext();
+      if (audioContext) {
+        try {
+          localTrack.setAudioContext(audioContext);
+          const processor = createMicrophoneGainProcessor(microphoneVolumePercentRef, microphoneGainNodeRef);
+          await localTrack.setProcessor(processor);
+          microphoneAudioContextRef.current = audioContext;
+          microphoneProcessorRef.current = processor;
+        } catch {
+          if (audioContext.state !== 'closed') void audioContext.close().catch(() => undefined);
+          microphoneGainNodeRef.current = null;
+          microphoneAudioContextRef.current = null;
+          microphoneProcessorRef.current = null;
+        }
+      }
       await room.localParticipant.publishTrack(localTrack, {
         source: Track.Source.Microphone,
         name: 'microphone',
@@ -318,12 +434,12 @@ export const useLiveAudio = ({
       }
       setState(mappedState);
     };
-    const handleTrackPublished = (publication: RemoteTrackPublication) => {
-      subscribePublication(publication);
+    const handleTrackPublished = (publication: RemoteTrackPublication, participant: RemoteParticipant) => {
+      subscribePublication(publication, participant);
     };
-    const handleTrackSubscribed = (track: RemoteTrack) => {
+    const handleTrackSubscribed = (track: RemoteTrack, _publication: RemoteTrackPublication, participant: RemoteParticipant) => {
       const mediaTrack = getAudioTrack(track);
-      if (mediaTrack) addRemoteTrack(mediaTrack);
+      if (mediaTrack) addRemoteTrack(mediaTrack, participant);
     };
     const handleTrackUnsubscribed = (track: RemoteTrack) => {
       const mediaTrack = getAudioTrack(track);
@@ -372,6 +488,7 @@ export const useLiveAudio = ({
       room.removeAllListeners();
       void unpublishMicrophone();
       stopAllLocalTracks(room, localAudioTrackRef.current);
+      clearMicrophoneProcessor();
       localAudioTrackRef.current = null;
       void room.disconnect(true);
       setRemoteTracks([]);
@@ -380,6 +497,7 @@ export const useLiveAudio = ({
     addRemoteTrack,
     autoConnect,
     availability,
+    clearMicrophoneProcessor,
     disconnect,
     removeRemoteTrack,
     role,
@@ -402,6 +520,7 @@ export const useLiveAudio = ({
     const previousRoom = roomRef.current;
     void unpublishMicrophone();
     stopAllLocalTracks(previousRoom, localAudioTrackRef.current);
+    clearMicrophoneProcessor();
     localAudioTrackRef.current = null;
     previousRoom?.removeAllListeners();
     await previousRoom?.disconnect(true);
@@ -431,9 +550,9 @@ export const useLiveAudio = ({
         setState(mappedState);
       })
       .on(RoomEvent.TrackPublished, subscribePublication)
-      .on(RoomEvent.TrackSubscribed, (track: RemoteTrack) => {
+      .on(RoomEvent.TrackSubscribed, (track: RemoteTrack, _publication: RemoteTrackPublication, participant: RemoteParticipant) => {
         const mediaTrack = getAudioTrack(track);
-        if (mediaTrack) addRemoteTrack(mediaTrack);
+        if (mediaTrack) addRemoteTrack(mediaTrack, participant);
       })
       .on(RoomEvent.TrackUnsubscribed, (track: RemoteTrack) => {
         const mediaTrack = getAudioTrack(track);
@@ -459,6 +578,7 @@ export const useLiveAudio = ({
     }
   }, [
     addRemoteTrack,
+    clearMicrophoneProcessor,
     clearLifecycleTimers,
     removeRemoteTrack,
     role,
@@ -470,6 +590,10 @@ export const useLiveAudio = ({
     subscribePublication,
     unpublishMicrophone,
   ]);
+
+  useEffect(() => {
+    retryAudioRef.current = retryAudio;
+  }, [retryAudio]);
 
   return useMemo(() => ({
     state,

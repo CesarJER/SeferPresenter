@@ -1,0 +1,15 @@
+.git
+.gitignore
+node_modules
+dist
+coverage
+.vite
+.cache
+*.log
+npm-debug.log*
+
+audio_sync.json
+
+public/audio
+public/backgrounds
+public/videos

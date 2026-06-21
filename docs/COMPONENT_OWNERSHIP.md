@@ -47,14 +47,16 @@ Shared:
 - `src/components/shared/SlideVisualizer.tsx`
 - `src/components/shared/CustomSearchSelect.tsx`
 - `src/components/shared/FormatLegend.tsx`
-- Proposed Live Audio shared widgets such as `LiveAudioStatusBadge.tsx`,
-  `LiveAudioNotice.tsx`, `CollapsiblePrivacyNotice.tsx`,
-  `LiveAudioAliasInput.tsx`, and `ControlVerificationCode.tsx` belong under
-  `src/features/liveAudio/components/shared/` when implemented. Core legal
-  affordances such as `DataProtectionLink.tsx` and `DataProtectionPage.tsx` can
-  live outside the LiveKit module so `/proteccion-datos` remains available even
-  when `VITE_SEFER_LIVE_AUDIO_BUILD=false`. Privacy notice checkboxes must
-  remain local UI state and must not emit consent records.
+- Live Audio shared widgets such as `LiveAudioStatusBadge.tsx` and
+  `LiveAudioTrackOutput.tsx` belong under
+  `src/features/liveAudio/components/shared/`. Future `LiveAudioNotice.tsx`,
+  `CollapsiblePrivacyNotice.tsx`, `LiveAudioAliasInput.tsx`, and
+  `ControlVerificationCode.tsx` should also stay there when implemented. Core
+  legal affordances such as `DataProtectionLink.tsx` and
+  `DataProtectionPage.tsx` can live outside the LiveKit module so
+  `/proteccion-datos` remains available even when
+  `VITE_SEFER_LIVE_AUDIO_BUILD=false`. Privacy notice checkboxes must remain
+  local UI state and must not emit consent records.
 
 Hooks:
 
@@ -138,8 +140,9 @@ Live Audio state:
 - `LiveAudioAvailability`, role states, participant status, and encrypted private
   signal envelopes belong in `src/types/liveAudio.ts`.
 - LiveKit connection state, WebRTC tracks, microphone permission state,
-  temporary aliases, and privacy notice checkbox state are session/local state
-  owned by `src/features/liveAudio/`. Fase 5.2 generated E2E keys are owned by
+  per-participant playback volume, temporary aliases, and privacy notice
+  checkbox state are session/local state owned by `src/features/liveAudio/`.
+  Fase 5.2 generated E2E keys are owned by
   `src/hooks/usePrivateControlSignals.ts` in memory only. Do not persist them in
   presentation files, localStorage, or sessionStorage.
 - Live Audio must not modify `AudioState`, `AudioTimelineState`, or presenter

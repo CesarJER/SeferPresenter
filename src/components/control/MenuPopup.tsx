@@ -76,6 +76,9 @@ interface MenuPopupProps {
   controlAuthorization?: { role: string; verificationCode?: string; pendingControls?: PendingControlAuthorization[]; };
   onApproveControlRequest?: (sessionId: string) => void;
   onRejectControlRequest?: (sessionId: string) => void;
+  wsSend?: (type: string, payload?: unknown) => boolean;
+  subscribeToWsMessage?: (handler: (type: string, payload: Record<string, unknown>) => void) => () => void;
+  controlSessionId?: string | null;
 }
 
 const isTitleSlide = (slide: Slide) =>
@@ -148,6 +151,9 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
   controlAuthorization,
   onApproveControlRequest,
   onRejectControlRequest,
+  wsSend,
+  subscribeToWsMessage,
+  controlSessionId,
 }) => {
   const controllerAnswers = useControllerAnswers();
   // ────────────────────────────────────────────────────────────────
@@ -1882,10 +1888,12 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
       <Suspense fallback={null}>
         <LiveAudioControlContainer 
           isControlAuthorized={controlAuthorization?.role === 'principal' || controlAuthorization?.role === 'delegated'}
-          totalAudience={0}
           authorizationRequests={controlAuthorization?.pendingControls || []}
           onApproveRequest={onApproveControlRequest}
           onRejectRequest={onRejectControlRequest}
+          wsSend={wsSend}
+          subscribeToWsMessage={subscribeToWsMessage}
+          controlSessionId={controlSessionId}
         />
       </Suspense>
     </div>

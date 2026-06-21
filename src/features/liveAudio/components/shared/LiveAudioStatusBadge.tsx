@@ -1,9 +1,10 @@
 import React from 'react';
-import { Mic, MicOff, Hand, Wifi, WifiOff, Loader2, RotateCcw, CheckCircle2 } from 'lucide-react';
+import { Mic, MicOff, Hand, Wifi, WifiOff, Loader2, RotateCcw, CheckCircle2, XCircle } from 'lucide-react';
 export type ParticipantStatus =
   | 'talking'
   | 'permission-granted'
   | 'permission-requested'
+  | 'kicked'
   | 'connected'
   | 'reconnecting'
   | 'reconnected'
@@ -37,6 +38,14 @@ export const LiveAudioStatusBadge: React.FC<LiveAudioStatusBadgeProps> = ({ stat
     return (
       <div className={`flex items-center justify-center rounded-full bg-yellow-500/20 p-1.5 ${className}`} title="Mano levantada">
         <Hand size={16} className="text-yellow-400" />
+      </div>
+    );
+  }
+
+  if (status === 'kicked') {
+    return (
+      <div className={`flex items-center justify-center rounded-full bg-red-500/20 p-1.5 ${className}`} title="Expulsado">
+        <XCircle size={16} className="text-red-400" />
       </div>
     );
   }

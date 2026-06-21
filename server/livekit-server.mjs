@@ -100,10 +100,12 @@ const getRoomName = (config, roomSession) => {
   return safeSession ? `${config.roomName}-${safeSession}` : config.roomName
 }
 
-const canAudiencePublish = (participantId, existingParticipant) =>
-  Boolean(participantId && roomState.speakers.has(participantId)) ||
-  existingParticipant?.speakerState === 'GRANTED' ||
-  existingParticipant?.canPublish === true
+const canAudiencePublish = (participantId, existingParticipant) => {
+  if (participantId && roomState.kicked.has(participantId)) return false
+  return Boolean(participantId && roomState.speakers.has(participantId)) ||
+    existingParticipant?.speakerState === 'GRANTED' ||
+    existingParticipant?.canPublish === true
+}
 
 const getVideoGrant = (role, room, config, participantId, existingParticipant) => {
   if (role === 'audience') {
@@ -236,10 +238,11 @@ const cleanupExpiredState = () => {
   }
 
   for (const [participantId, participant] of participants) {
-    if (participant.expiresAt + graceMs < now || roomState.kicked.has(participantId)) {
+    if (participant.expiresAt + graceMs < now) {
       participants.delete(participantId)
       roomState.speakers.delete(participantId)
       roomState.muted.delete(participantId)
+      roomState.kicked.delete(participantId)
     }
   }
 }
@@ -261,7 +264,7 @@ const handleToken = async ({ req, res, readBody, sendJson }) => {
   return true
 }
 
-const handleRefreshToken = async ({ req, res, readBody, sendJson }) => {
+const handleRefreshToken = async ({ req, res, readBody, sendJson, controlApi }) => {
   if (!requireConfigured(res, sendJson)) return true
   const body = await readJson(req, readBody)
   if (!isValidParticipantId(body.participantId)) {
@@ -277,8 +280,12 @@ const handleRefreshToken = async ({ req, res, readBody, sendJson }) => {
     existingParticipant.canSubscribe = wsParticipant.canSubscribe
     if (wsParticipant.speakerState === 'GRANTED' || wsParticipant.canPublishAudio) {
       roomState.speakers.add(body.participantId)
-      roomState.muted.delete(body.participantId)
-    } else if (wsParticipant.speakerState === 'REVOKED' || wsParticipant.speakerState === 'MUTED') {
+      if (wsParticipant.isMuted) {
+        roomState.muted.add(body.participantId)
+      } else {
+        roomState.muted.delete(body.participantId)
+      }
+    } else if (wsParticipant.speakerState === 'REVOKED' || wsParticipant.speakerState === 'MUTED' || wsParticipant.speakerState === 'LISTENER') {
       roomState.speakers.delete(body.participantId)
       if (wsParticipant.speakerState === 'MUTED') roomState.muted.add(body.participantId)
     }
@@ -306,8 +313,10 @@ const handleModeration = async ({ req, res, url, readBody, sendJson, controlApi 
   if (url.pathname === '/api/livekit/mute-all') {
     for (const [participantId, participant] of participants) {
       if (participant.role === 'control') continue
+      if (participant.speakerState !== 'GRANTED') continue
+      roomState.speakers.add(participantId)
       roomState.muted.add(participantId)
-      participant.speakerState = 'MUTED'
+      participant.speakerState = 'GRANTED'
       participant.lastSeenAt = Date.now()
     }
     sendJson(res, 200, { success: true })
@@ -317,24 +326,26 @@ const handleModeration = async ({ req, res, url, readBody, sendJson, controlApi 
   const participantId = body.participantId
   const actions = {
     '/api/livekit/grant-speak': (participant) => {
+      roomState.kicked.delete(participant.participantId)
       roomState.speakers.add(participant.participantId)
-      roomState.muted.delete(participant.participantId)
+      roomState.muted.add(participant.participantId)
       participant.speakerState = 'GRANTED'
     },
     '/api/livekit/revoke-speak': (participant) => {
       roomState.speakers.delete(participant.participantId)
-      participant.speakerState = 'REVOKED'
+      roomState.muted.delete(participant.participantId)
+      participant.speakerState = 'LISTENER'
     },
     '/api/livekit/mute-participant': (participant) => {
+      roomState.speakers.add(participant.participantId)
       roomState.muted.add(participant.participantId)
-      participant.speakerState = 'MUTED'
+      participant.speakerState = 'GRANTED'
     },
     '/api/livekit/kick-participant': (participant) => {
       roomState.kicked.add(participant.participantId)
       roomState.speakers.delete(participant.participantId)
       roomState.muted.delete(participant.participantId)
-      participants.delete(participant.participantId)
-      return false
+      participant.speakerState = 'REVOKED'
     },
   }
 
@@ -384,7 +395,7 @@ export const createLiveKitApi = (controlApi) => {
         }
 
         if (url.pathname === '/api/livekit/refresh-token' && req.method === 'POST') {
-          return await handleRefreshToken({ req, res, readBody, sendJson })
+          return await handleRefreshToken({ req, res, readBody, sendJson, controlApi })
         }
 
         if (mutatingPaths.has(url.pathname) && req.method === 'POST') {

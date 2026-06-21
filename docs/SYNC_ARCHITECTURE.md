@@ -51,7 +51,12 @@ Live Audio message contracts live in `src/types/liveAudio.ts` and are included
 in `BroadcastMessage` as a separate family:
 
 - `LIVE_AUDIO_PARTICIPANT_STATUS`: technical participant state by ephemeral
-  `participantId`, role, speaker state, and publish/subscribe capability.
+  `participantId`, role, speaker state, publish/subscribe capability, active
+  audience flag, microphone-open flag, mute flag, and kicked flag. It does not
+  carry aliases in clear text.
+- `LIVE_AUDIO_CONNECTION_COUNTS`: server-owned WebSocket counts for total
+  connected presenter/control/audience clients. Control uses this for the total
+  audience indicator so passive listeners are included.
 - `LIVE_AUDIO_GRANT_SPEAK`, `LIVE_AUDIO_REVOKE_SPEAK`: Control-authorized
   speaker permission changes by `participantId`.
 - `LIVE_AUDIO_MUTE_PARTICIPANT`, `LIVE_AUDIO_MUTE_ALL`,
@@ -114,8 +119,18 @@ authorization.
 - `PENDING` Controls cannot send moderation messages such as grant, mute, or
   kick; the server returns an `ERROR`.
 - Authorized Controls can publish the current Control public key and can send
-  moderation actions by `participantId`; those actions update only memory state
-  and are routed to presenter/authorized Controls, not into `SYNC_STATE`.
+  moderation actions by `participantId`; those actions update only memory state,
+  are routed to presenter/authorized Controls, and are also delivered to the
+  affected audience participant so its local microphone state can react. They
+  are not folded into `SYNC_STATE`.
+- The WebSocket server keeps the current authorized Control public key in memory
+  and replays it to audience clients that connect later, so nicknames and
+  private messages can be encrypted even when Control was already open.
+- Moderation state transitions are intentionally explicit: grant moves queued
+  or active-muted audience to `GRANTED` with microphone closed; mute keeps the
+  participant `GRANTED` but closes the microphone; revoke moves a speaker back
+  to active-muted `LISTENER`; kick moves the participant to passive `REVOKED`
+  with `isKicked=true` until Control grants again.
 - `allowDelegatedModerators` is controlled by
   `SEFER_LIVE_AUDIO_ALLOW_DELEGATED_MODERATORS` and defaults to true. When false,
   only the principal Control may authorize pending Controls.

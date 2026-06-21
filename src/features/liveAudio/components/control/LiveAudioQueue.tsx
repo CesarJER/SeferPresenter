@@ -15,7 +15,7 @@ export const LiveAudioQueue: React.FC<LiveAudioQueueProps> = ({
   onGrant,
   onKick
 }) => {
-  const queue = participants.filter(p => p.speakerState === 'REQUESTED');
+  const queue = participants.filter(p => p.speakerState === 'REQUESTED' && !p.isKicked);
 
   if (queue.length === 0) {
     return null;

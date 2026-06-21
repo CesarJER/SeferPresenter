@@ -213,7 +213,7 @@ export function usePrivateControlSignals(options: UsePrivateControlSignalsOption
     const message = makeSyncMessage({
       type: 'PRIVATE_CONTROL_SIGNAL' as const,
       fromParticipantId: participantId,
-      toControlSessionId: signalOptions.toControlSessionId ?? controlSessionId,
+      ...(signalOptions.toControlSessionId ? { toControlSessionId: signalOptions.toControlSessionId } : {}),
       keyId: activeKeyId,
       ephemeralPublicKey,
       ciphertext: encrypted.ciphertext,
@@ -222,7 +222,7 @@ export function usePrivateControlSignals(options: UsePrivateControlSignalsOption
     });
 
     return sendMessageRef.current(message.type, message);
-  }, [controlSessionId, participantId, role]);
+  }, [participantId, role]);
 
   const requestControlAuthorization = useCallback(async (verificationCode: string): Promise<boolean> => {
     if (role !== 'control' || !transportReady) return false;

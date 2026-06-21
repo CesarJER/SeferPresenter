@@ -1,64 +1,337 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import { Bell } from 'lucide-react';
 import { LiveAudioControlPanel } from './LiveAudioControlPanel';
 import { PrivateControlInbox, type PrivateMessage } from './PrivateControlInbox';
 import type { LiveAudioParticipant } from './LiveAudioParticipantRow';
-import type { PendingControlAuthorization } from '../../../../types/liveAudio';
-import { Bell } from 'lucide-react';
+import type {
+  LiveAudioConnectionCountsMessage,
+  LiveAudioParticipantStatusMessage,
+  PendingControlAuthorization,
+} from '../../../../types/liveAudio';
 import { useLiveAudioAvailability } from '../../hooks/useLiveAudioAvailability';
+import { useLiveAudio } from '../../hooks/useLiveAudio';
+import { usePrivateControlSignals, type DecryptedPrivateControlSignal } from '../../../../hooks/usePrivateControlSignals';
+import { LiveAudioTrackOutput } from '../shared/LiveAudioTrackOutput';
+
+type ModerationEndpoint =
+  | 'grant-speak'
+  | 'revoke-speak'
+  | 'mute-participant'
+  | 'mute-all'
+  | 'kick-participant';
 
 export interface LiveAudioControlContainerProps {
   isControlAuthorized: boolean;
-  totalAudience: number;
   authorizationRequests?: PendingControlAuthorization[];
   onApproveRequest?: (sessionId: string) => void;
   onRejectRequest?: (sessionId: string) => void;
+  wsSend?: (type: string, payload?: unknown) => boolean;
+  subscribeToWsMessage?: (handler: (type: string, payload: Record<string, unknown>) => void) => () => void;
+  controlSessionId?: string | null;
 }
+
+const getSignalRecord = (signal: DecryptedPrivateControlSignal): Record<string, unknown> => {
+  if (signal.value && typeof signal.value === 'object' && !Array.isArray(signal.value)) {
+    return signal.value as Record<string, unknown>;
+  }
+  try {
+    const parsed = JSON.parse(signal.plaintext) as unknown;
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as Record<string, unknown> : {};
+  } catch {
+    return {};
+  }
+};
+
+const sanitizeAlias = (value: unknown): string | null => {
+  if (typeof value !== 'string') return null;
+  const alias = value.trim().slice(0, 80);
+  return alias || null;
+};
+
+const clampVolume = (volume: number) => Math.max(0, Math.min(volume, 300));
 
 export default function LiveAudioControlContainer({
   isControlAuthorized,
-  totalAudience,
   authorizationRequests = [],
-  onApproveRequest = () => {},
-  onRejectRequest = () => {}
+  onApproveRequest = () => { },
+  onRejectRequest = () => { },
+  wsSend,
+  subscribeToWsMessage,
+  controlSessionId,
 }: LiveAudioControlContainerProps) {
   const [isInboxOpen, setIsInboxOpen] = useState(false);
   const [isModeratorMuted, setIsModeratorMuted] = useState(true);
-  const [moderatorVolume, setModeratorVolume] = useState(100);
+  const [listenVolume, setListenVolume] = useState(100);
+  const [microphoneVolume, setMicrophoneVolume] = useState(100);
+  const [participantsMap, setParticipantsMap] = useState<Record<string, LiveAudioParticipantStatusMessage>>({});
+  const [participantAliases, setParticipantAliases] = useState<Record<string, string>>({});
+  const [participantVolumes, setParticipantVolumes] = useState<Record<string, number>>({});
+  const [connectionCounts, setConnectionCounts] = useState<LiveAudioConnectionCountsMessage | null>(null);
+  const [messages, setMessages] = useState<PrivateMessage[]>([]);
+  const participantAliasesRef = useRef(participantAliases);
+
   const { availability } = useLiveAudioAvailability();
+
+  const {
+    publishMicrophone,
+    unpublishMicrophone,
+    isMicrophoneActive,
+    participantId,
+    remoteTracks,
+    startRemoteAudio,
+  } = useLiveAudio({
+    role: 'control',
+    autoConnect: availability === 'enabled' && isControlAuthorized,
+    microphoneVolumePercent: microphoneVolume,
+  });
+
+  useEffect(() => {
+    participantAliasesRef.current = participantAliases;
+  }, [participantAliases]);
+
+  useEffect(() => {
+    setIsModeratorMuted(!isMicrophoneActive);
+  }, [isMicrophoneActive]);
+
+  useEffect(() => {
+    if (!subscribeToWsMessage) return;
+    const unsubscribe = subscribeToWsMessage((type, payload) => {
+      if (type === 'LIVE_AUDIO_PARTICIPANT_STATUS') {
+        const msg = payload as unknown as LiveAudioParticipantStatusMessage;
+        setParticipantsMap(prev => ({ ...prev, [msg.participantId]: msg }));
+        return;
+      }
+
+      if (type === 'LIVE_AUDIO_KICK_PARTICIPANT') {
+        const kickedParticipantId = typeof payload.participantId === 'string' ? payload.participantId : null;
+        if (!kickedParticipantId) return;
+        setParticipantsMap(prev => {
+          const existing = prev[kickedParticipantId];
+          if (!existing) return prev;
+          return {
+            ...prev,
+            [kickedParticipantId]: {
+              ...existing,
+              speakerState: 'REVOKED',
+              canPublishAudio: false,
+              isMuted: true,
+              isActiveAudience: false,
+              isMicrophoneActive: false,
+              isKicked: true,
+              updatedAt: Date.now(),
+            },
+          };
+        });
+        return;
+      }
+
+      if (type === 'LIVE_AUDIO_CONNECTION_COUNTS') {
+        setConnectionCounts(payload as unknown as LiveAudioConnectionCountsMessage);
+      }
+    });
+    return unsubscribe;
+  }, [subscribeToWsMessage]);
+
+  const handlePrivateSignal = useCallback((signal: DecryptedPrivateControlSignal) => {
+    const data = getSignalRecord(signal);
+    const alias = sanitizeAlias(data.alias);
+    if (alias) {
+      setParticipantAliases(prev => ({ ...prev, [signal.fromParticipantId]: alias }));
+    }
+
+    const signalType = typeof data.type === 'string' ? data.type : '';
+    const content = typeof data.text === 'string'
+      ? data.text.trim()
+      : typeof data.content === 'string'
+        ? data.content.trim()
+        : '';
+
+    if ((signalType === 'PRIVATE_MESSAGE' || signalType === 'message') && content) {
+      const fromAlias = alias || participantAliasesRef.current[signal.fromParticipantId] || 'Sin nick';
+      setMessages(prev => [...prev, {
+        id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        fromAlias,
+        content,
+        timestamp: Date.now(),
+      }]);
+    }
+  }, []);
+
+  usePrivateControlSignals({
+    role: 'control',
+    participantId: participantId || controlSessionId || 'control',
+    controlSessionId: controlSessionId || undefined,
+    sendMessage: wsSend || (() => false),
+    subscribeToWsMessage: subscribeToWsMessage || (() => () => { }),
+    transportReady: Boolean(isControlAuthorized && wsSend && subscribeToWsMessage),
+    onPrivateSignal: handlePrivateSignal,
+  });
+
+  const participants: LiveAudioParticipant[] = useMemo(() => (
+    Object.values(participantsMap)
+      .filter(p => p.role === 'audience')
+      .map(p => {
+        const alias = participantAliases[p.participantId] || '';
+        const isKicked = p.isKicked === true;
+        const isActiveAudience = !isKicked && (
+          p.isActiveAudience === true ||
+          (Boolean(alias) && p.speakerState !== 'REVOKED')
+        );
+        const isMicrophoneActive = p.isMicrophoneActive ?? (p.speakerState === 'GRANTED' && p.isMuted === false);
+        return {
+          participantId: p.participantId,
+          alias: alias || 'Sin nick',
+          speakerState: p.speakerState,
+          isMuted: p.isMuted ?? !isMicrophoneActive,
+          isMicrophoneActive,
+          isActiveAudience,
+          isKicked,
+          volume: participantVolumes[p.participantId] ?? 100,
+        };
+      })
+  ), [participantAliases, participantVolumes, participantsMap]);
+
+  const activeUsers = participants.filter(p => p.isActiveAudience && !p.isKicked).length;
+  const pendingWordCount = participants.filter(p => p.speakerState === 'REQUESTED' && !p.isKicked).length;
+  const totalAudience = connectionCounts?.totalConnections ?? participants.length;
+
+  const handleStartListening = useCallback(() => {
+    void startRemoteAudio().catch((err) => {
+      console.warn('LiveAudioControl: Failed to start remote audio:', err);
+    });
+  }, [startRemoteAudio]);
+
+  const handleToggleModeratorMic = useCallback(async () => {
+    if (isModeratorMuted) {
+      await publishMicrophone();
+    } else {
+      await unpublishMicrophone();
+    }
+  }, [isModeratorMuted, publishMicrophone, unpublishMicrophone]);
+
+  const sendModerationMessage = useCallback((endpoint: ModerationEndpoint, pid?: string) => {
+    if (!wsSend) return false;
+
+    const base = {
+      issuedByParticipantId: participantId || undefined,
+      createdAt: Date.now(),
+    };
+
+    switch (endpoint) {
+      case 'grant-speak':
+        if (!pid) return false;
+        return wsSend('LIVE_AUDIO_GRANT_SPEAK', {
+          type: 'LIVE_AUDIO_GRANT_SPEAK',
+          participantId: pid,
+          ...base,
+        });
+      case 'revoke-speak':
+        if (!pid) return false;
+        return wsSend('LIVE_AUDIO_REVOKE_SPEAK', {
+          type: 'LIVE_AUDIO_REVOKE_SPEAK',
+          participantId: pid,
+          ...base,
+        });
+      case 'mute-participant':
+        if (!pid) return false;
+        return wsSend('LIVE_AUDIO_MUTE_PARTICIPANT', {
+          type: 'LIVE_AUDIO_MUTE_PARTICIPANT',
+          participantId: pid,
+          ...base,
+        });
+      case 'mute-all':
+        return wsSend('LIVE_AUDIO_MUTE_ALL', {
+          type: 'LIVE_AUDIO_MUTE_ALL',
+          ...base,
+        });
+      case 'kick-participant':
+        if (!pid) return false;
+        return wsSend('LIVE_AUDIO_KICK_PARTICIPANT', {
+          type: 'LIVE_AUDIO_KICK_PARTICIPANT',
+          participantId: pid,
+          ...base,
+        });
+      default:
+        return false;
+    }
+  }, [participantId, wsSend]);
+
+  const doModerationAction = useCallback(async (endpoint: ModerationEndpoint, pid?: string) => {
+    if (!controlSessionId) return;
+    try {
+      const response = await fetch(`/api/livekit/${endpoint}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          role: 'control',
+          controlSessionId,
+          participantId: pid,
+        }),
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      sendModerationMessage(endpoint, pid);
+    } catch (err) {
+      console.error(`Error in moderation action ${endpoint}`, err);
+    }
+  }, [controlSessionId, sendModerationMessage]);
+
+  const handleMuteAll = useCallback(() => {
+    const openSpeakers = participants.filter(p => p.speakerState === 'GRANTED' && p.isMicrophoneActive && !p.isMuted);
+    if (openSpeakers.length > 0) {
+      openSpeakers.forEach(p => void doModerationAction('mute-participant', p.participantId));
+      return;
+    }
+
+    participants
+      .filter(p => p.speakerState === 'GRANTED' && !p.isKicked)
+      .forEach(p => void doModerationAction('revoke-speak', p.participantId));
+  }, [doModerationAction, participants]);
+
+  const handleGrantAll = useCallback(() => {
+    const queued = participants.filter(p => p.speakerState === 'REQUESTED' && !p.isKicked);
+    const targets = queued.length > 0
+      ? queued
+      : participants.filter(p => p.speakerState === 'LISTENER' && p.isActiveAudience && !p.isKicked);
+
+    targets.forEach(p => void doModerationAction('grant-speak', p.participantId));
+  }, [doModerationAction, participants]);
+
+  const handleParticipantVolumeChange = useCallback((id: string, volume: number) => {
+    setParticipantVolumes(prev => ({ ...prev, [id]: clampVolume(volume) }));
+  }, []);
 
   if (availability !== 'enabled') {
     return null;
   }
 
-  // In production, this container will use LiveKit hooks to get participants and messages.
-  // For now, we render empty lists since we haven't integrated the LiveKit backend yet.
-  const participants: LiveAudioParticipant[] = [];
-  const messages: PrivateMessage[] = [];
-  const activeUsers = 0;
-  const pendingWordCount = 0;
-
-  const handleToggleModeratorMic = () => {
-    setIsModeratorMuted(!isModeratorMuted);
-  };
-
   const portalTarget = document.getElementById('live-audio-inbox-portal-target');
-
   const hasUnread = messages.length > 0 || authorizationRequests.length > 0;
 
   return (
     <>
+      {remoteTracks.map((remoteTrack) => {
+        const participantVolume = remoteTrack.participantId ? participantVolumes[remoteTrack.participantId] ?? 100 : 100;
+        const effectiveVolume = clampVolume((listenVolume * participantVolume) / 100);
+        return (
+          <LiveAudioTrackOutput
+            key={remoteTrack.id}
+            remoteTrack={remoteTrack}
+            volumePercent={effectiveVolume}
+          />
+        );
+      })}
+
       {portalTarget && createPortal(
         <div className="relative">
           <button
             onClick={() => setIsInboxOpen(!isInboxOpen)}
-            className={`flex items-center justify-center p-2 text-xs font-semibold rounded border transition-all cursor-pointer ${
-              hasUnread 
+            className={`flex items-center justify-center p-2 text-xs font-semibold rounded border transition-all cursor-pointer ${hasUnread
                 ? 'bg-red-600 border-red-500 text-white animate-pulse'
-                : isInboxOpen 
+                : isInboxOpen
                   ? 'bg-blue-600 border-blue-500 text-white'
                   : 'bg-gray-800 border-gray-700 hover:bg-gray-700 text-gray-300 hover:text-white'
-            }`}
+              }`}
             title="Bandeja Privada"
           >
             <Bell size={14} />
@@ -68,7 +341,7 @@ export default function LiveAudioControlContainer({
               </span>
             )}
           </button>
-          
+
           <PrivateControlInbox
             isOpen={isInboxOpen}
             isControlAuthorized={isControlAuthorized}
@@ -76,7 +349,7 @@ export default function LiveAudioControlContainer({
             authorizationRequests={authorizationRequests}
             onApproveRequest={onApproveRequest}
             onRejectRequest={onRejectRequest}
-            onDismissMessage={() => {}}
+            onDismissMessage={(id) => setMessages(prev => prev.filter(m => m.id !== id))}
           />
         </div>,
         portalTarget
@@ -86,18 +359,21 @@ export default function LiveAudioControlContainer({
         totalAudience={totalAudience}
         activeUsers={activeUsers}
         isModeratorMuted={isModeratorMuted}
+        onStartListening={handleStartListening}
         onToggleModeratorMic={handleToggleModeratorMic}
-        moderatorVolume={moderatorVolume}
-        onModeratorVolumeChange={setModeratorVolume}
+        listenVolume={listenVolume}
+        onListenVolumeChange={(volume) => setListenVolume(clampVolume(volume))}
+        microphoneVolume={microphoneVolume}
+        onMicrophoneVolumeChange={(volume) => setMicrophoneVolume(clampVolume(volume))}
         participants={participants}
         isControlAuthorized={isControlAuthorized}
-        onMuteAll={() => {}}
-        onGrantAllQueue={() => {}}
-        onGrant={() => {}}
-        onRevoke={() => {}}
-        onMute={() => {}}
-        onKick={() => {}}
-        onVolumeChange={() => {}}
+        onMuteAll={handleMuteAll}
+        onGrantAllQueue={handleGrantAll}
+        onGrant={(id) => void doModerationAction('grant-speak', id)}
+        onRevoke={(id) => void doModerationAction('revoke-speak', id)}
+        onMute={(id) => void doModerationAction('mute-participant', id)}
+        onKick={(id) => void doModerationAction('kick-participant', id)}
+        onVolumeChange={handleParticipantVolumeChange}
         pendingWordCount={pendingWordCount}
       />
     </>

@@ -9,6 +9,7 @@ interface AudienceLiveAudioPanelProps {
   hasAudioStarted: boolean;
   isPendingWord: boolean;
   isWordGranted: boolean;
+  isParticipationBlocked: boolean;
   volume: number;
   onVolumeChange: (vol: number) => void;
   onStartAudio: () => void;
@@ -28,6 +29,7 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
   hasAudioStarted,
   isPendingWord,
   isWordGranted,
+  isParticipationBlocked,
   volume,
   onVolumeChange,
   onStartAudio,
@@ -40,6 +42,7 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
   onOpenMessage,
 }) => {
   const [isVisible, setIsVisible] = useState(true);
+  const [isVolumeOpen, setIsVolumeOpen] = useState(false);
 
   const hasAudioStartedRef = React.useRef(hasAudioStarted);
   useEffect(() => {
@@ -135,8 +138,13 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
           )}
           <button
             onClick={onJoinActive}
-            className="flex items-center gap-2 h-full bg-yellow-500 hover:bg-yellow-400 border border-yellow-300 text-black px-4 rounded-full shadow-[0_0_15px_rgba(234,179,8,0.6)] backdrop-blur-md transition-all animate-pulse"
-            title="Participar"
+            disabled={isParticipationBlocked}
+            className={`flex items-center gap-2 h-full border px-4 rounded-full backdrop-blur-md transition-all ${
+              isParticipationBlocked
+                ? 'bg-gray-700 border-gray-600 text-gray-400 cursor-not-allowed'
+                : 'bg-yellow-500 hover:bg-yellow-400 border-yellow-300 text-black shadow-[0_0_15px_rgba(234,179,8,0.6)] animate-pulse'
+            }`}
+            title={isParticipationBlocked ? "ParticipaciÃ³n bloqueada por Control" : "Participar"}
           >
             <Hand className="w-5 h-5" />
             <span className="font-bold text-sm pr-1">Participa</span>
@@ -185,19 +193,27 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
           <MessageSquare className="w-6 h-6" />
         </button>
 
-        <div className="group relative flex items-center justify-center p-3 rounded-xl bg-gray-700 text-gray-300 hover:bg-gray-600 transition-colors cursor-pointer">
+        <div
+          className="relative flex items-center justify-center p-3 rounded-xl bg-gray-700 text-gray-300 hover:bg-gray-600 transition-colors cursor-pointer"
+          onClick={() => setIsVolumeOpen((current) => !current)}
+        >
           {volume === 0 ? <VolumeX className="w-6 h-6" /> : <Volume2 className="w-6 h-6" />}
           
-          <div className="absolute bottom-full mb-3 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto transition-opacity bg-gray-800 p-3 rounded-xl shadow-xl border border-gray-700">
-            <input 
-              type="range" 
-              min="0" max="1" step="0.05" 
-              value={volume} 
-              onChange={e => onVolumeChange(parseFloat(e.target.value))} 
-              className="w-24 h-2 accent-blue-500 cursor-pointer"
-              title="Volumen del audio en vivo"
-            />
-          </div>
+          {isVolumeOpen && (
+            <div
+              className="absolute bottom-full mb-3 left-1/2 -translate-x-1/2 bg-gray-800 p-3 rounded-xl shadow-xl border border-gray-700"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <input
+                type="range"
+                min="0" max="1" step="0.05"
+                value={volume}
+                onChange={e => onVolumeChange(parseFloat(e.target.value))}
+                className="w-24 h-2 accent-blue-500 cursor-pointer"
+                title="Volumen del audio en vivo"
+              />
+            </div>
+          )}
         </div>
 
         <div className="w-[1px] h-8 bg-white/20 mx-1"></div>

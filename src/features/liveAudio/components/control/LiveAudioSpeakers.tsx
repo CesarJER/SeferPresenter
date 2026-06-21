@@ -19,7 +19,7 @@ export const LiveAudioSpeakers: React.FC<LiveAudioSpeakersProps> = ({
   onKick,
   onVolumeChange
 }) => {
-  const speakers = participants.filter(p => p.speakerState === 'GRANTED');
+  const speakers = participants.filter(p => p.speakerState === 'GRANTED' && !p.isKicked);
 
   if (speakers.length === 0) {
     return (

@@ -336,6 +336,9 @@ function ControlApp() {
         }}
         onApproveControlRequest={controlAuthorization.approveControl}
         onRejectControlRequest={controlAuthorization.rejectControl}
+        wsSend={wsSend}
+        subscribeToWsMessage={subscribeToWsMessage}
+        controlSessionId={controlAuthorization.controlSessionId}
       />
       <div className="absolute bottom-2 left-2 z-50">
         <DataProtectionLink />
