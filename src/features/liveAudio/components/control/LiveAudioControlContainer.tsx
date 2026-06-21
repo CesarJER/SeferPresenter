@@ -13,6 +13,7 @@ import { useLiveAudioAvailability } from '../../hooks/useLiveAudioAvailability';
 import { useLiveAudio } from '../../hooks/useLiveAudio';
 import { usePrivateControlSignals, type DecryptedPrivateControlSignal } from '../../../../hooks/usePrivateControlSignals';
 import { LiveAudioTrackOutput } from '../shared/LiveAudioTrackOutput';
+import { getAudienceParticipantsNeedingAliasRequest } from '../../utils/liveAudioAliasRequests';
 
 type ModerationEndpoint =
   | 'grant-speak'
@@ -73,6 +74,7 @@ export default function LiveAudioControlContainer({
   const [connectionCounts, setConnectionCounts] = useState<LiveAudioConnectionCountsMessage | null>(null);
   const [messages, setMessages] = useState<PrivateMessage[]>([]);
   const participantAliasesRef = useRef(participantAliases);
+  const aliasRequestSignatureRef = useRef('');
 
   const { availability } = useLiveAudioAvailability();
 
@@ -176,10 +178,18 @@ export default function LiveAudioControlContainer({
   });
 
   useEffect(() => {
-    if (privateSignalsReady) {
+    if (!privateSignalsReady) return;
+
+    const unresolvedAudienceIds = getAudienceParticipantsNeedingAliasRequest(participantsMap, participantAliases);
+
+    const signature = unresolvedAudienceIds.join('|');
+    if (signature === aliasRequestSignatureRef.current) return;
+    aliasRequestSignatureRef.current = signature;
+
+    if (unresolvedAudienceIds.length > 0) {
       void requestAliases();
     }
-  }, [privateSignalsReady, requestAliases]);
+  }, [participantAliases, participantsMap, privateSignalsReady, requestAliases]);
 
   const participants: LiveAudioParticipant[] = useMemo(() => (
     Object.values(participantsMap)

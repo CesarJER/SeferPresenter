@@ -3,7 +3,6 @@ import { createRoot } from 'react-dom/client';
 import './index.css';
 
 import MenuPopup from './components/control/MenuPopup';
-import defaultPresentations from '../presentations.json';
 import { DataProtectionLink } from './components/shared/DataProtectionLink';
 import { LiveAudioControlAuthorization } from './components/control/LiveAudioControlAuthorization';
 
@@ -100,12 +99,12 @@ function ControlApp() {
           setPresentations(validation.value.map(normalizePresentation));
         } else {
           console.error("Invalid presentations payload", validation.errors);
-          setPresentations((defaultPresentations as Presentation[]).map(normalizePresentation));
+          setPresentations([]);
         }
       })
       .catch(err => {
         console.error("Error loading presentations", err);
-        setPresentations((defaultPresentations as Presentation[]).map(normalizePresentation));
+        setPresentations([]);
       });
     fetch('/api/audio')
       .then(res => res.json())

@@ -724,6 +724,11 @@ const createWsServer = (httpServer, onFallbackMessage) => {
   }
 
   wss.on('connection', (ws, req) => {
+    ws.isAlive = true
+    ws.on('pong', () => {
+      ws.isAlive = true
+    })
+
     const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`)
     const role = makeRole(url.searchParams.get('role') || 'unknown')
 
@@ -988,7 +993,19 @@ const createWsServer = (httpServer, onFallbackMessage) => {
   })
 
   const heartbeat = setInterval(() => {
-    for (const [client] of wsClients) {
+    for (const [client, meta] of wsClients) {
+      if (client.isAlive === false) {
+        wsClients.delete(client)
+        if (meta?.role === 'control' && meta.controlSessionId) {
+          removeControl(meta.controlSessionId)
+        }
+        releaseParticipantConnection(meta)
+        broadcastConnectionCounts()
+        client.terminate()
+        continue
+      }
+      
+      client.isAlive = false
       if (client.readyState === WebSocket.OPEN) {
         try {
           client.ping()

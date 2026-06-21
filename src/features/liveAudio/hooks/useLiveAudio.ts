@@ -399,7 +399,7 @@ export const useLiveAudio = ({
         source: Track.Source.Microphone,
         name: 'microphone',
         dtx: true,
-        red: false,
+        red: true,
       });
       localAudioTrackRef.current = localTrack;
       setIsMicrophoneActive(true);

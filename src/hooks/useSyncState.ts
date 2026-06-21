@@ -197,15 +197,23 @@ export function useSyncState(props: UseSyncStateProps) {
   const onAudioTimelineStateRef = useRef(onAudioTimelineState);
   useEffect(() => { onAudioTimelineStateRef.current = onAudioTimelineState; }, [onAudioTimelineState]);
 
+  const lastKeyMessageRef = useRef<{type: string, payload: Record<string, unknown>} | null>(null);
   const wsMessageSubscribersRef = useRef<Set<(type: string, payload: Record<string, unknown>) => void>>(new Set());
+  
   const subscribeToWsMessage = useCallback((handler: (type: string, payload: Record<string, unknown>) => void) => {
     wsMessageSubscribersRef.current.add(handler);
+    if (lastKeyMessageRef.current) {
+      handler(lastKeyMessageRef.current.type, lastKeyMessageRef.current.payload);
+    }
     return () => {
       wsMessageSubscribersRef.current.delete(handler);
     };
   }, []);
 
   const handleWsMessage = useCallback((type: string, payload: Record<string, unknown>) => {
+    if (type === 'LIVE_AUDIO_CONTROL_PUBLIC_KEY' || type === 'CONTROL_KEY_ROTATED') {
+      lastKeyMessageRef.current = { type, payload };
+    }
     wsMessageSubscribersRef.current.forEach(handler => handler(type, payload));
     
     if (type === 'WELCOME') {

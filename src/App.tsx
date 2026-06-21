@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import PresenterScreen from './components/presenter/PresenterScreen';
 import SeferReaderScreen from './components/presenter/SeferReaderScreen';
 import DataProtectionPage from './components/shared/DataProtectionPage';
-import defaultPresentations from '../presentations.json';
 import { Music } from 'lucide-react';
 
 import type { AudioState, AudioSyncMap, AudioTimelineState } from './types/audio';
@@ -268,12 +267,12 @@ function App() {
           setPresentations(validation.value.map(normalizePresentation));
         } else {
           console.error("Invalid presentations payload", validation.errors);
-          setPresentations((defaultPresentations as Presentation[]).map(normalizePresentation));
+          setPresentations([]);
         }
       })
       .catch(err => {
         console.error("Error loading presentations", err);
-        setPresentations((defaultPresentations as Presentation[]).map(normalizePresentation));
+        setPresentations([]);
       });
     fetch('/api/audio-sync')
       .then(res => res.json())
