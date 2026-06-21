@@ -1,10 +1,14 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, Suspense } from 'react';
 import { isImageMedia } from '../../utils/mediaUtils';
 import type { Slide, VideoState } from '../../types/presentation';
 import type { QuizOptionId, QuizSubslide, QuizTimerState } from '../../types/quiz';
 import { AnimatePresence, motion } from 'framer-motion';
 import AutoResizeText from '../shared/AutoResizeText';
 import { QuizPresenterView } from '../quiz/QuizPresenterView';
+
+const LiveAudioPresenter = import.meta.env.VITE_SEFER_LIVE_AUDIO_BUILD !== 'false'
+  ? React.lazy(() => import('../../features/liveAudio/components/presenter/LiveAudioPresenter'))
+  : null;
 
 interface PresenterScreenProps {
   background: string;
@@ -445,6 +449,12 @@ const PresenterScreen: React.FC<PresenterScreenProps> = ({
             )}
           </div>
         </div>
+      )}
+
+      {LiveAudioPresenter && (
+        <Suspense fallback={null}>
+          <LiveAudioPresenter />
+        </Suspense>
       )}
     </div>
   );

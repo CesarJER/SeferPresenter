@@ -263,6 +263,16 @@ Controller UI state:
 - Panel toggles.
 - Temporary local previews.
 
+## Quiz Privacy and Identity (Phase 5)
+
+Quiz answers and personal scoring are fundamentally anonymous and decoupled from Live Audio identity. The architecture enforces the following privacy rules:
+
+- **Local Storage:** Individual answers and scoring remain on the audience member's device (`sessionStorage`). The server does not receive or persist individual, nominal answers linked to a profile.
+- **Separate Session IDs:** The quiz module generates its own ephemeral `sessionId` on first interaction. This ID is strictly separated from the LiveKit `participantId`. The quiz hook (`useQuizAnswers`) does not share state with `useLiveAudio` or `usePrivateControlSignals`.
+- **Aggregated Results:** The controller receives aggregated session scores and answers to calculate overall ranges and statistics for the results slide. The controller does not project nominal rankings, aliases, or performance history.
+- **No Participant Profiling:** There is no historical performance tracking by participant. Aggregated session scores are ephemeral and disappear when the quiz session is cleared or the browser tab is closed.
+- **Special Activities:** Any future activity (like a named contest) that requires deviating from this anonymous aggregated model must not be implemented in the base MVP and requires explicit documentation and user consent flows prior to participation.
+
 Synchronization protocol:
 
 - Typed state and commands in `src/types/sync.ts`.
