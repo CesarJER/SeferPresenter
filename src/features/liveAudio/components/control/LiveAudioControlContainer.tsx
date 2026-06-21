@@ -70,6 +70,7 @@ const snapshotParticipantToStatus = (
   isKicked: participant.isKicked,
   microphonePermissionState: participant.microphonePermissionState,
   microphoneTrackState: participant.microphoneTrackState,
+  connected: participant.connected,
   updatedAt: participant.updatedAt,
 });
 
@@ -262,7 +263,7 @@ export default function LiveAudioControlContainer({
 
   const participants: LiveAudioParticipant[] = useMemo(() => (
     Object.values(participantsMap)
-      .filter(p => p.role === 'audience')
+      .filter(p => p.role === 'audience' && p.connected !== false)
       .map(p => {
         const alias = participantAliases[p.participantId] || '';
         const isKicked = p.isKicked === true;

@@ -167,6 +167,7 @@ const stopAllLocalTracks = (room: Room | null, localAudioTrack: LocalAudioTrack 
   localAudioTrack?.stop();
 };
 
+
 export const useLiveAudio = ({
   role,
   roomSession,
@@ -183,6 +184,7 @@ export const useLiveAudio = ({
   const roomRef = useRef<Room | null>(null);
   const localAudioTrackRef = useRef<LocalAudioTrack | null>(null);
   const connectionRunRef = useRef(0);
+  const isConnectingRef = useRef(false);
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reconnectFailureTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reconnectedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -404,7 +406,10 @@ export const useLiveAudio = ({
       localAudioTrackRef.current = localTrack;
       setIsMicrophoneActive(true);
     } catch (error) {
-      if (isPermissionDeniedError(error)) setState('permissionDenied');
+      if (isPermissionDeniedError(error)) {
+        console.log(`[LIVEKIT] livekit:microphone:permission-denied`);
+        setState('permissionDenied');
+      }
       throw error;
     }
   }, [role]);
@@ -470,9 +475,12 @@ export const useLiveAudio = ({
       });
 
     const connect = async () => {
+      if (isConnectingRef.current || room.state === ConnectionState.Connected) return;
+      isConnectingRef.current = true;
       setState('connecting');
       try {
         const existingParticipantId = participantIdRef.current;
+        console.log(`[LIVEKIT] livekit:connect:start role=${role}`);
         const tokenResponse = existingParticipantId
           ? await refreshToken(existingParticipantId)
           : await requestToken(role, roomSession);
@@ -482,12 +490,43 @@ export const useLiveAudio = ({
         setParticipantIdentity(tokenResponse.participantIdentity);
         await room.connect(tokenResponse.livekitUrl, tokenResponse.token, { autoSubscribe: false });
         if (cancelled || connectionRunRef.current !== runId) return;
+        console.log(`[LIVEKIT] livekit:connect:success`);
         subscribeExistingAudio(room);
         scheduleTokenRefresh(tokenResponse, runId);
         setConnectedState('connected');
-      } catch {
+      } catch (err) {
         if (cancelled || connectionRunRef.current !== runId) return;
+        const errMsg = err instanceof Error ? err.message : String(err);
+        console.log(`[LIVEKIT] livekit:connect:fail error=${errMsg}`);
+        if (errMsg.toLowerCase().includes('invalid token') || errMsg.toLowerCase().includes('expired') || errMsg.toLowerCase().includes('unauthorized')) {
+          console.log(`[LIVEKIT] livekit:invalid-token:retry discarding token and retrying once...`);
+          tokenRef.current = null;
+          setParticipantId(null);
+          setParticipantIdentity(null);
+          participantIdRef.current = null;
+          
+          try {
+            const tokenResponse = await requestToken(role, roomSession);
+            if (cancelled || connectionRunRef.current !== runId) return;
+            tokenRef.current = tokenResponse;
+            setParticipantId(tokenResponse.participantId);
+            setParticipantIdentity(tokenResponse.participantIdentity);
+            await room.connect(tokenResponse.livekitUrl, tokenResponse.token, { autoSubscribe: false });
+            if (cancelled || connectionRunRef.current !== runId) return;
+            console.log(`[LIVEKIT] livekit:connect:success (retry)`);
+            subscribeExistingAudio(room);
+            scheduleTokenRefresh(tokenResponse, runId);
+            setConnectedState('connected');
+            return;
+          } catch (retryErr) {
+            if (cancelled || connectionRunRef.current !== runId) return;
+            const retryErrMsg = retryErr instanceof Error ? retryErr.message : String(retryErr);
+            console.log(`[LIVEKIT] livekit:connect:fail error=${retryErrMsg} (retry)`);
+          }
+        }
         setState(participantIdRef.current ? 'reconnectFailed' : 'unavailable');
+      } finally {
+        isConnectingRef.current = false;
       }
     };
 
@@ -570,7 +609,9 @@ export const useLiveAudio = ({
       });
 
     try {
+      isConnectingRef.current = true;
       const activeParticipantId = participantIdRef.current;
+      console.log(`[LIVEKIT] livekit:connect:start role=${role} (retryAudio)`);
       const tokenResponse = activeParticipantId
         ? await refreshToken(activeParticipantId)
         : await requestToken(role, roomSession);
@@ -580,11 +621,16 @@ export const useLiveAudio = ({
       setParticipantIdentity(tokenResponse.participantIdentity);
       await room.connect(tokenResponse.livekitUrl, tokenResponse.token, { autoSubscribe: false });
       if (connectionRunRef.current !== runId) return;
+      console.log(`[LIVEKIT] livekit:connect:success`);
       subscribeExistingAudio(room);
       scheduleTokenRefresh(tokenResponse, runId);
       setConnectedState('connected');
-    } catch {
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      console.log(`[LIVEKIT] livekit:connect:fail error=${errMsg}`);
       if (connectionRunRef.current === runId) setState('reconnectFailed');
+    } finally {
+      isConnectingRef.current = false;
     }
   }, [
     addRemoteTrack,

@@ -768,6 +768,12 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
     clearTimeout(participant.cleanupTimer)
     participant.cleanupTimer = setTimeout(() => cleanupExpiredParticipant(meta.participantId), getRejoinGraceMs())
     participant.cleanupTimer.unref?.()
+
+    broadcast({
+      ...makeReducedParticipantStatus(participant),
+      connected: false,
+      updatedAt: Date.now(),
+    }, (targetMeta) => isControlAuthorized(liveAudioControls.get(targetMeta.controlSessionId)))
   }
 
   const cleanupExpiredParticipant = (participantId) => {

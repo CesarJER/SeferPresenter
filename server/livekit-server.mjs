@@ -174,6 +174,8 @@ const issueToken = ({ role, roomSession, existingParticipant }) => {
   participants.set(participantId, participant)
   issuedTokens.set(token, { participantId, expiresAt })
 
+  console.log(`[LIVEKIT] livekit:token:issued role=${role} participantId=${participantId} identity=${participantIdentity}`)
+
   return {
     ok: true,
     value: {
@@ -297,6 +299,8 @@ const handleRefreshToken = async ({ req, res, readBody, sendJson, controlApi }) 
     existingParticipant,
   })
 
+  console.log(`[LIVEKIT] livekit:token:refresh role=${existingParticipant.role} participantId=${body.participantId}`)
+
   sendJson(res, 200, result.value)
   return true
 }
@@ -320,6 +324,7 @@ const handleModeration = async ({ req, res, url, readBody, sendJson, controlApi 
       participant.speakerState = 'GRANTED'
       participant.lastSeenAt = Date.now()
     }
+    console.log(`[LIVEKIT] origin=control action=mute-all`)
     sendJson(res, 200, { success: true })
     return true
   }
@@ -365,6 +370,8 @@ const handleModeration = async ({ req, res, url, readBody, sendJson, controlApi 
     sendJson(res, result.status, { error: result.error })
     return true
   }
+
+  console.log(`[LIVEKIT] origin=control action=${url.pathname.replace('/api/livekit/', '')} participantId=${participantId}`)
 
   sendJson(res, 200, { success: true })
   return true

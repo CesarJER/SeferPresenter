@@ -57,6 +57,7 @@ export interface LiveAudioParticipantStatusMessage {
   isActiveAudience?: boolean;
   isMicrophoneActive?: boolean;
   isKicked?: boolean;
+  connected?: boolean;
   updatedAt?: number;
 }
 
