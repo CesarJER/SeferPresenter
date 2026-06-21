@@ -17,6 +17,7 @@ import { CustomSearchSelect } from '../shared/CustomSearchSelect';
 import type { AudioState, AudioSyncMap } from '../../types/audio';
 import type { QuizOptionId, QuizSubslide, QuizTimerState } from '../../types/quiz';
 import type { PendingControlAuthorization } from '../../types/liveAudio';
+import type { RemoteCommandPayload } from '../../types/sync';
 
 const LiveAudioControlContainer = lazy(() => import('../../features/liveAudio/components/control/LiveAudioControlContainer'));
 import { useControllerAnswers } from '../../hooks/useQuizAnswers';
@@ -44,8 +45,11 @@ interface MenuPopupProps {
   onSelectPresentation: (p: Presentation, slideIdx?: number, targetVerse?: string) => void;
   onSelectSlide: (idx: number) => void;
   onImport: (imported: Presentation[]) => void;
+  isMediaMaster?: boolean;
   videoState?: VideoState | null;
   onVideoStateChange?: (state: VideoState | null) => void;
+  emitVideoTelemetry?: (state: VideoState) => void;
+  emitCommand?: (payload: RemoteCommandPayload) => void;
   appMode?: AppMode;
   scriptureState?: ScriptureNavState | null;
   onToggleAppMode?: (mode: AppMode) => void;
@@ -120,8 +124,11 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
   onSelectPresentation,
   onSelectSlide,
   onImport,
+  isMediaMaster,
   videoState = null,
   onVideoStateChange = () => { },
+  emitVideoTelemetry,
+  emitCommand,
   appMode = 'slides',
   scriptureState = null,
   onToggleAppMode = () => { },
@@ -1725,6 +1732,9 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
             scriptureState={resolvedScriptureState || scriptureState}
             quizSubslide={activeSlide?.type === 'quiz' ? quizSubslides[quizCurrentSubslideIndex] : undefined}
             videoState={videoState}
+            isMediaMaster={isMediaMaster}
+            emitVideoTelemetry={emitVideoTelemetry}
+            emitCommand={emitCommand}
           >
             {activeSlide?.type === 'quiz' && activeSlide.quizData && quizTimerState && (() => {
               const allQuizData = currentPresentation?.slides

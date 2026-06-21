@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { AudioState, AudioSyncMap, AudioTimelineState } from '../types/audio';
 import type { AppMode, Presentation, ScriptureNavState, VideoState } from '../types/presentation';
 import type { QuizSyncState } from '../types/quiz';
@@ -226,9 +226,19 @@ export function useSyncState(props: UseSyncStateProps) {
     wsMessageSubscribersRef.current.forEach(handler => handler(type, payload));
     
     if (type === 'WELCOME') {
+      controlSessionIdRef.current = payload.controlSessionId as string | undefined;
       wsSendRef.current('SERVER_TIME_PING', { clientSentAtMs: Date.now() });
       return;
     }
+    
+    if (type === 'MEDIA_MASTER_STATUS') {
+      const msg = payload as Record<string, unknown>;
+      const masterControlSessionId = msg.masterControlSessionId as string | null;
+      const isMaster = !!masterControlSessionId && masterControlSessionId === controlSessionIdRef.current;
+      setIsMediaMaster(isMaster);
+      return;
+    }
+
     if (type === 'AUDIO_TIMELINE_STATE') {
       const validation = validateSyncMessage(payload);
       if (!validation.ok || !validation.value) return;
@@ -245,6 +255,9 @@ export function useSyncState(props: UseSyncStateProps) {
   });
   const wsSendRef = useRef(wsSend);
   useEffect(() => { wsSendRef.current = wsSend; }, [wsSend]);
+
+  const [isMediaMaster, setIsMediaMaster] = useState(false);
+  const controlSessionIdRef = useRef<string | undefined>(undefined);
 
   // ── Persist to localStorage ───────────────────────────────────────
   const persistState = useCallback((
@@ -711,5 +724,5 @@ export function useSyncState(props: UseSyncStateProps) {
     clientIdRef, isPresenterMode, videoStateRef
   ]);
 
-  return { channel, syncState, emitCommand, persistState, emitAudioTelemetry, emitVideoTelemetry, emitDisplayTelemetry, wsStatus, wsSend, subscribeToWsMessage };
+  return { channel, syncState, emitCommand, persistState, emitAudioTelemetry, emitVideoTelemetry, emitDisplayTelemetry, wsStatus, wsSend, subscribeToWsMessage, isMediaMaster };
 }

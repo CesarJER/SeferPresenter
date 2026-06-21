@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { ChevronDown, ChevronUp, Eye } from 'lucide-react';
 import type { Slide, ScriptureNavState, AppMode, VideoState } from '../../types/presentation';
 import type { QuizSubslide } from '../../types/quiz';
+import type { RemoteCommandPayload } from '../../types/sync';
 import { sanitizeSlideHtml } from '../../utils/hebrewText';
 import { findScriptureRange } from '../../utils/scriptureLookup';
 import { isImageMedia } from '../../utils/mediaUtils';
@@ -13,6 +14,10 @@ interface SlideVisualizerProps {
   quizSubslide?: QuizSubslide;
   children?: React.ReactNode;
   videoState?: VideoState | null;
+  onVideoStateChange?: (state: VideoState | null) => void;
+  isMediaMaster?: boolean;
+  emitVideoTelemetry?: (state: VideoState) => void;
+  emitCommand?: (payload: RemoteCommandPayload) => void;
 }
 
 const containsHebrew = (text: string): boolean => {
@@ -26,16 +31,83 @@ const SlideVisualizer: React.FC<SlideVisualizerProps> = ({
   quizSubslide,
   children,
   videoState,
+  isMediaMaster,
+  emitVideoTelemetry,
+  emitCommand,
 }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [quizVerseLines, setQuizVerseLines] = useState<string[]>([]);
   const videoRef = React.useRef<HTMLVideoElement>(null);
 
-  // Sync preview video with presenter video state
+  // Sync preview video with presenter video state OR act as media master
   useEffect(() => {
-    if (!videoRef.current || !videoState || slide?.type !== 'media') return;
+    if (!videoRef.current || slide?.type !== 'media') return;
 
     const vid = videoRef.current;
+
+    // --- Media Master Mode ---
+    if (isMediaMaster) {
+      if (vid.paused) {
+        vid.play().catch(() => {});
+      }
+
+      const emitTelemetry = () => {
+        if (!emitVideoTelemetry) return;
+        emitVideoTelemetry({
+          isPlaying: !vid.paused,
+          currentTime: vid.currentTime,
+          duration: Number.isFinite(vid.duration) ? vid.duration : 0,
+          volume: vid.volume,
+          speed: vid.playbackRate,
+          loop: vid.loop,
+          mediaSrc: slide.mediaSrc || null,
+          startTime: slide.mediaStart,
+          endTime: slide.mediaEnd,
+          lastUpdatedBy: 'projection',
+          timestamp: Date.now()
+        });
+      };
+
+      let intervalId = setInterval(() => {
+        if (!vid) return;
+
+        const startTime = slide.mediaStart ?? 0;
+        const endTime = slide.mediaEnd;
+
+        if (endTime && vid.currentTime >= endTime) {
+          if (slide.mediaLoop !== false) {
+            vid.currentTime = startTime;
+            vid.play().catch(() => {});
+          } else {
+            vid.pause();
+          }
+        } else if (vid.currentTime < startTime) {
+          vid.currentTime = startTime;
+        }
+
+        emitTelemetry();
+      }, 250);
+
+      const handleEnded = () => {
+        emitTelemetry();
+      };
+
+      vid.addEventListener('play', emitTelemetry);
+      vid.addEventListener('pause', emitTelemetry);
+      vid.addEventListener('seeked', emitTelemetry);
+      vid.addEventListener('ended', handleEnded);
+
+      return () => {
+        clearInterval(intervalId);
+        vid.removeEventListener('play', emitTelemetry);
+        vid.removeEventListener('pause', emitTelemetry);
+        vid.removeEventListener('seeked', emitTelemetry);
+        vid.removeEventListener('ended', handleEnded);
+      };
+    }
+
+    // --- Slave Mode (Follow videoState) ---
+    if (!videoState) return;
     
     if (vid.playbackRate !== (videoState.speed ?? 1.0)) {
       vid.playbackRate = videoState.speed ?? 1.0;
@@ -54,7 +126,7 @@ const SlideVisualizer: React.FC<SlideVisualizerProps> = ({
     } else if (!videoState.isPlaying && !vid.paused) {
       vid.pause();
     }
-  }, [videoState, slide]);
+  }, [videoState, slide, isMediaMaster, emitVideoTelemetry, emitCommand]);
 
   // Auto expand when switching to scripture mode
   useEffect(() => {
@@ -176,7 +248,18 @@ const SlideVisualizer: React.FC<SlideVisualizerProps> = ({
             <img src={slide.mediaSrc} className={`absolute inset-0 w-full h-full object-contain z-0`} alt="" />
           )}
           {slide?.type === 'media' && slide.mediaSrc && !isImageMedia(slide.mediaSrc) && (
-            <video ref={videoRef} src={slide.mediaSrc} muted playsInline className={`absolute inset-0 w-full h-full object-contain z-0`} />
+            <video 
+              ref={videoRef} 
+              src={slide.mediaSrc} 
+              muted={!isMediaMaster} 
+              playsInline 
+              className={`absolute inset-0 w-full h-full object-contain z-0`} 
+              onLoadedMetadata={() => {
+                if (isMediaMaster && videoRef.current) {
+                  videoRef.current.volume = slide.mediaVolume ?? 1.0;
+                }
+              }}
+            />
           )}
 
           <div className="relative z-10">

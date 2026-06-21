@@ -136,6 +136,18 @@ const hasActivePresenter = () => {
   return false
 }
 
+const broadcastMediaMasterStatus = () => {
+  const hasPresenter = hasActivePresenter()
+  const principal = findPrincipalControl()
+  const masterControlSessionId = (!hasPresenter && principal) ? principal.controlSessionId : null
+  
+  broadcastWs({
+    type: 'MEDIA_MASTER_STATUS',
+    masterControlSessionId,
+    hasActivePresenter: hasPresenter
+  }, (meta) => meta.role === 'control')
+}
+
 const broadcastWs = (message, filter) => {
   const data = JSON.stringify(message)
   for (const [client, meta] of wsClients) {
@@ -236,6 +248,7 @@ const createWsServer = (httpServer, onFallbackMessage) => {
   const broadcastConnectionCounts = () => {
     const message = makeConnectionCountsMessage()
     broadcast(message, (meta) => meta.role === 'presenter' || meta.role === 'control')
+    broadcastMediaMasterStatus()
   }
 
   const sendError = (client, code, message) => {
@@ -269,6 +282,7 @@ const createWsServer = (httpServer, onFallbackMessage) => {
     for (const control of liveAudioControls.values()) {
       sendAuthorizationState(control)
     }
+    broadcastMediaMasterStatus()
   }
 
   const resetPrivateControlSession = () => {

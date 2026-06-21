@@ -6,7 +6,7 @@ import MenuPopup from './components/control/MenuPopup';
 import { DataProtectionLink } from './components/shared/DataProtectionLink';
 import { LiveAudioControlAuthorization } from './components/control/LiveAudioControlAuthorization';
 
-import type { AudioState, AudioSyncMap } from './types/audio';
+import type { AudioState, AudioSyncMap, AudioTimelineState } from './types/audio';
 import { DEFAULT_AUDIO_STATE } from './types/audio';
 import type { AppMode, Presentation, ScriptureNavState, VideoState } from './types/presentation';
 import type { QuizSyncState } from './types/quiz';
@@ -19,6 +19,9 @@ import {
 import { useSyncState } from './hooks/useSyncState';
 import { useControlAuthorization } from './hooks/useControlAuthorization';
 import { useBackgroundResolver } from './hooks/useBackgroundResolver';
+import { useServerClock } from './hooks/useServerClock';
+import { useAudioTimeline } from './hooks/useAudioTimeline';
+import { useAudioTimelineApplicator } from './hooks/useAudioTimelineApplicator';
 import { validateAudioSyncMaps, validatePresentationList } from './utils/validation';
 import { generateQuizSubslides } from './utils/quizUtils';
 import { generatePresentationSteps } from './utils/navigationUtils';
@@ -40,6 +43,7 @@ function ControlApp() {
   const [videoState, setVideoState] = useState<VideoState | null>(null);
 
   const [audioState, setAudioState] = useState<AudioState>(DEFAULT_AUDIO_STATE);
+  const [audioTimeline, setAudioTimeline] = useState<AudioTimelineState | null>(null);
   const [audioSyncMaps, setAudioSyncMaps] = useState<AudioSyncMap[]>([]);
   const [availableAudioFiles, setAvailableAudioFiles] = useState<string[]>([]);
 
@@ -59,6 +63,7 @@ function ControlApp() {
   const scriptureStateRef = useRef<ScriptureNavState | null>(scriptureState);
   const quizStateRef = useRef<QuizSyncState | null>(quizState);
   const clientIdRef = useRef(makeClientId());
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const steps = useMemo(() => {
     return currentPresentation ? generatePresentationSteps(currentPresentation) : [];
@@ -123,7 +128,7 @@ function ControlApp() {
       .catch(err => console.error("Error loading audio sync maps", err));
   }, []);
 
-  const { emitCommand, channel, wsStatus, wsSend, subscribeToWsMessage } = useSyncState({
+  const { emitCommand, channel, wsStatus, wsSend, subscribeToWsMessage, isMediaMaster, emitVideoTelemetry } = useSyncState({
     isControlMode: true,
     isPresenterMode: false,
     clientIdRef,
@@ -150,7 +155,12 @@ function ControlApp() {
     setAudioState,
     setAudioSyncMaps,
     setQuizState,
+    onAudioTimelineState: setAudioTimeline,
   });
+
+  const { serverNow } = useServerClock(wsSend, wsStatus, subscribeToWsMessage);
+  useAudioTimeline(audioTimeline, serverNow, wsSend);
+  useAudioTimelineApplicator(audioRef, audioTimeline, serverNow);
 
   const controlAuthorization = useControlAuthorization({
     wsStatus,
@@ -244,6 +254,7 @@ function ControlApp() {
   return (
     <div id="section-app-control-mode" className="w-full h-dvh bg-gray-900 overflow-hidden relative">
       <MenuPopup
+        isMediaMaster={isMediaMaster}
         presentations={presentations}
         backgrounds={backgrounds}
         currentPresentation={currentPresentation}
@@ -273,6 +284,8 @@ function ControlApp() {
         }}
         videoState={videoState}
         onVideoStateChange={(s) => emitCommand({ command: 'VIDEO_STATE_CHANGE', state: s })}
+        emitVideoTelemetry={emitVideoTelemetry}
+        emitCommand={emitCommand}
         audioState={audioState}
         audioSyncMaps={audioSyncMaps}
         availableAudioFiles={availableAudioFiles}
@@ -355,6 +368,9 @@ function ControlApp() {
       <div className="absolute top-2 right-2 z-50">
         <LiveAudioControlAuthorization authorization={controlAuthorization} />
       </div>
+
+      {/* Hidden audio element for karaoke and music sync */}
+      <audio ref={audioRef} muted={!isMediaMaster} preload="auto" style={{ display: 'none' }} />
     </div>
   );
 }
