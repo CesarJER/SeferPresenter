@@ -220,11 +220,21 @@ function AudienceApp() {
   );
 }
 
+import DataProtectionPage from './components/shared/DataProtectionPage';
+
 const rootElement = document.getElementById('root');
 if (rootElement) {
-  createRoot(rootElement).render(
-    <React.StrictMode>
-      <AudienceApp />
-    </React.StrictMode>
-  );
+  if (window.location.pathname === '/proteccion-datos') {
+    createRoot(rootElement).render(
+      <React.StrictMode>
+        <DataProtectionPage />
+      </React.StrictMode>
+    );
+  } else {
+    createRoot(rootElement).render(
+      <React.StrictMode>
+        <AudienceApp />
+      </React.StrictMode>
+    );
+  }
 }
