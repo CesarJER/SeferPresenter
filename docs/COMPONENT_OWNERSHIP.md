@@ -44,6 +44,7 @@ Shared:
 - `src/components/shared/SlideVisualizer.tsx`
 - `src/components/shared/CustomSearchSelect.tsx`
 - `src/components/shared/FormatLegend.tsx`
+- `src/components/shared/PwaRestartButton.tsx`: shared confirmed PWA reload action for installable audience/control shells; it must not clear localStorage or session state.
 - Live Audio shared widgets such as `LiveAudioStatusBadge.tsx` and
   `LiveAudioTrackOutput.tsx` belong under
   `src/features/liveAudio/components/shared/`. Future `LiveAudioNotice.tsx`,
@@ -91,6 +92,7 @@ Library/sync/validation:
 - `src/utils/validation.ts`: runtime validation.
 - `src/utils/cryptoUtils.ts`: pure Web Crypto helpers for ECDH P-256,
   AES-GCM 256, base64 encoding, and nonce replay protection.
+- `src/utils/pwaUpdate.ts`: PWA service-worker registration and update/reload helpers for route-specific shells.
 - `src/utils/normalizePresentation.ts`: persistence/path normalization.
 - `src/utils/syncProtocol.ts`: sync message construction.
 - `server/projection-state-reducer.mjs`: pure projection-state reducer used by

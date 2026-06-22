@@ -6,5 +6,13 @@
   "display": "standalone",
   "background_color": "#07111f",
   "theme_color": "#07111f",
-  "description": "Audiencia movil sincronizada para SeferPresenter"
+  "description": "Audiencia movil sincronizada para SeferPresenter",
+  "icons": [
+    {
+      "src": "/logo.svg",
+      "sizes": "641x641",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
 }

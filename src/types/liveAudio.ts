@@ -20,6 +20,14 @@ export type LiveAudioConnectionState =
   | 'permissionDenied'
   | 'unavailable';
 
+export interface LiveAudioMicrophoneDiagnostics {
+  secureContext: boolean;
+  mediaDevicesAvailable: boolean;
+  permissionState: PermissionState | 'unsupported' | 'unknown';
+  lastErrorName: string | null;
+  lastErrorMessage: string | null;
+}
+
 export type ControlPrincipalState = 'PRINCIPAL';
 export type ControlSecondaryState = 'PENDING' | 'AUTHORIZED';
 export type LiveAudioControlState = ControlPrincipalState | ControlSecondaryState;

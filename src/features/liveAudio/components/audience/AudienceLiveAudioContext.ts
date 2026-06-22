@@ -1,5 +1,5 @@
 import { createContext, useContext } from 'react';
-import type { LiveAudioConnectionState, LiveAudioAvailability } from '../../../../types/liveAudio';
+import type { LiveAudioConnectionState, LiveAudioAvailability, LiveAudioMicrophoneDiagnostics } from '../../../../types/liveAudio';
 
 export interface AudienceLiveAudioContextValue {
   state: LiveAudioConnectionState;
@@ -24,6 +24,7 @@ export interface AudienceLiveAudioContextValue {
   onToggleMicrophone: () => void;
   onOpenMessage: () => void;
   availability: LiveAudioAvailability;
+  microphoneDiagnostics?: LiveAudioMicrophoneDiagnostics;
 }
 
 export const AudienceLiveAudioContext = createContext<AudienceLiveAudioContextValue | null>(null);

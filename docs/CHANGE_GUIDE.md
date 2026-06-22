@@ -110,6 +110,9 @@ Use these checklists before implementing future tasks.
   history in operational snapshots.
 - Do not use localStorage, sessionStorage, backend endpoints, or server state for
   private keys.
+- Do not request microphone permission on page load. Request it only from a user
+  gesture and surface `secureContext`, `mediaDevices`, permission state when
+  supported, and `getUserMedia` error name/message in the audio UI.
 - Do not touch `src/App.tsx`, `AudioState`, or `AudioTimelineState` for
   contract-only phases.
 - Update `docs/SYNC_ARCHITECTURE.md`, `docs/AI_PROJECT_MAP.md`,
@@ -142,6 +145,22 @@ Use these checklists before implementing future tasks.
 - Mention any untested behavior.
 - Update docs if ownership, sync, state categories, route structure, slide types, validation, backend endpoints, or navigation-critical symbols changed.
 - Summarize changed files in the final response.
+
+## When Editing PWA Or Service Worker
+
+- Keep `/audience` and `/control` manifests scoped to their own routes.
+- Use `public/logo.svg` as the primary PWA icon source. If a browser requires a
+  fallback, use a real asset such as `launcher/logo.ico`; do not generate
+  replacement artwork casually.
+- Never cache live endpoints: `/api/*`, SSE endpoints, `/ws`, `/rtc/*`,
+  LiveKit/tokens, or token-bearing URLs.
+- Never precache large videos or audio. Control may read video metadata for
+  editor/catalog duration fields, but Audience should not mass-download
+  presenter backgrounds or videos.
+- Audience/control shell should be network-first with cached fallback so normal
+  deploys do not leave stale incompatible shells.
+- PWA restart/update actions may activate a waiting service worker and reload,
+  but must not clear nick, quiz answers, localStorage, or persistent local state.
 
 ## Documentation Update Triggers
 

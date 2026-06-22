@@ -454,6 +454,7 @@ export const SlideRow: React.FC<SlideRowProps> = ({
                                             loop
                                             muted
                                             playsInline
+                                            preload="metadata"
                                             className="absolute inset-0 h-full w-full object-cover opacity-60"
                                           />
                                         ) : (

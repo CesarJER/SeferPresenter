@@ -84,16 +84,35 @@ npm run start:local
 
 Con `SEFER_REQUIRE_AUTH=true`, `/control`, `/audio-editor` y endpoints mutantes bajo `/api` quedan protegidos con Basic Auth.
 
-## Audiencia PWA
+## PWA de audiencia y control
 
-La PWA aplica solo a `/audience`. Cachea:
+`/audience` y `/control` pueden instalarse como PWA con manifests separados:
+`public/manifest.webmanifest` mantiene `start_url` y `scope` en `/audience`,
+y `public/control-manifest.webmanifest` mantiene `start_url` y `scope` en
+`/control`. Ambos usan el logo real `public/logo.svg` como icono.
 
-- shell minimo de audiencia;
+El service worker `public/audience-sw.js` sirve ambos scopes. Cachea:
+
+- shell minimo de audiencia/control con estrategia network-first;
 - `metadata.json`;
 - TSV biblicos bajo demanda;
 - assets extra listados manualmente en `public/audience-cache-assets.txt`.
 
-El archivo `public/audience-cache-assets.txt` acepta una ruta publica por linea y comentarios con `#`. No cachea videos ni audios pesados salvo que se incluyan explicitamente.
+El archivo `public/audience-cache-assets.txt` acepta una ruta publica por linea y comentarios con `#`. No cachea endpoints vivos (`/api/*`, SSE, `/ws`, `/rtc/*`, LiveKit/tokens) ni videos/audios pesados. Si hay una actualizacion de service worker esperando, el boton de reinicio de la PWA la activa antes de recargar, sin borrar nick, respuestas de quiz ni estado local persistente.
+
+### Diagnostico de permisos de microfono
+
+La PWA no solicita microfono al cargar ni desde el service worker. El panel de
+audio en vivo muestra diagnostico cuando aplica: `secureContext`,
+`mediaDevices`, estado de permiso si el navegador soporta
+`navigator.permissions`, y `error.name`/`error.message` si falla la peticion
+manual del microfono.
+
+El mensaje del navegador "Este sitio web no te puede pedir permisos" suele
+aparecer por estas causas: no usar HTTPS o localhost, estar dentro de un iframe
+sin `allow="microphone"`, una `Permissions-Policy` que bloquea microfono,
+permiso bloqueado en la configuracion del sitio, PWA instalada con contexto
+antiguo/inseguro, o pedir microfono fuera de un gesto del usuario.
 
 ## Arquitectura
 

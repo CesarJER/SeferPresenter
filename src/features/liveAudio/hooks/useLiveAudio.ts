@@ -15,6 +15,7 @@ import {
 import type {
   LiveAudioAvailability,
   LiveAudioConnectionState,
+  LiveAudioMicrophoneDiagnostics,
   LiveAudioParticipantRole,
   LiveAudioRemoteTrack,
   LiveAudioTokenResponse,
@@ -40,6 +41,7 @@ interface UseLiveAudioResult {
   unpublishMicrophone: () => Promise<void>;
   retryAudio: () => Promise<void>;
   disconnect: () => void;
+  microphoneDiagnostics: LiveAudioMicrophoneDiagnostics;
 }
 
 const TOKEN_REFRESH_MARGIN_MS = 2 * 60_000;
@@ -60,6 +62,20 @@ const createBrowserAudioContext = (): AudioContext | null => {
 
 const isPermissionDeniedError = (error: unknown) =>
   error instanceof DOMException && (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError');
+
+const getErrorName = (error: unknown) =>
+  error instanceof Error ? error.name : typeof error === 'object' && error && 'name' in error ? String(error.name) : 'Error';
+
+const getErrorMessage = (error: unknown) =>
+  error instanceof Error ? error.message : String(error);
+
+const makeInitialMicrophoneDiagnostics = (): LiveAudioMicrophoneDiagnostics => ({
+  secureContext: typeof window !== 'undefined' ? window.isSecureContext : false,
+  mediaDevicesAvailable: typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia,
+  permissionState: 'unknown',
+  lastErrorName: null,
+  lastErrorMessage: null,
+});
 
 const mapRoomState = (state: ConnectionState): LiveAudioConnectionState => {
   switch (state) {
@@ -180,6 +196,7 @@ export const useLiveAudio = ({
   const [participantId, setParticipantId] = useState<string | null>(null);
   const [participantIdentity, setParticipantIdentity] = useState<string | null>(null);
   const [isMicrophoneActive, setIsMicrophoneActive] = useState(false);
+  const [microphoneDiagnostics, setMicrophoneDiagnostics] = useState<LiveAudioMicrophoneDiagnostics>(makeInitialMicrophoneDiagnostics);
 
   const roomRef = useRef<Room | null>(null);
   const localAudioTrackRef = useRef<LocalAudioTrack | null>(null);
@@ -200,6 +217,57 @@ export const useLiveAudio = ({
   useEffect(() => {
     participantIdRef.current = participantId;
   }, [participantId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    let permissionStatus: PermissionStatus | null = null;
+    let permissionChangeHandler: (() => void) | null = null;
+
+    setMicrophoneDiagnostics((current) => ({
+      ...current,
+      secureContext: window.isSecureContext,
+      mediaDevicesAvailable: !!navigator.mediaDevices?.getUserMedia,
+    }));
+
+    if (!navigator.permissions?.query) {
+      setMicrophoneDiagnostics((current) => ({
+        ...current,
+        permissionState: 'unsupported',
+      }));
+      return;
+    }
+
+    navigator.permissions
+      .query({ name: 'microphone' as PermissionName })
+      .then((status) => {
+        if (cancelled) return;
+        permissionStatus = status;
+        const updateState = () => {
+          setMicrophoneDiagnostics((current) => ({
+            ...current,
+            permissionState: status.state,
+          }));
+        };
+        permissionChangeHandler = updateState;
+        updateState();
+        status.addEventListener('change', updateState);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setMicrophoneDiagnostics((current) => ({
+            ...current,
+            permissionState: 'unsupported',
+          }));
+        }
+      });
+
+    return () => {
+      cancelled = true;
+      if (permissionStatus && permissionChangeHandler) {
+        permissionStatus.removeEventListener('change', permissionChangeHandler);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     const volume = clampVolumePercent(microphoneVolumePercent);
@@ -405,7 +473,18 @@ export const useLiveAudio = ({
       });
       localAudioTrackRef.current = localTrack;
       setIsMicrophoneActive(true);
+      setMicrophoneDiagnostics((current) => ({
+        ...current,
+        lastErrorName: null,
+        lastErrorMessage: null,
+      }));
     } catch (error) {
+      setMicrophoneDiagnostics((current) => ({
+        ...current,
+        permissionState: isPermissionDeniedError(error) ? 'denied' : current.permissionState,
+        lastErrorName: getErrorName(error),
+        lastErrorMessage: getErrorMessage(error),
+      }));
       if (isPermissionDeniedError(error)) {
         console.log(`[LIVEKIT] livekit:microphone:permission-denied`);
         setState('permissionDenied');
@@ -663,6 +742,7 @@ export const useLiveAudio = ({
     unpublishMicrophone,
     retryAudio,
     disconnect,
+    microphoneDiagnostics,
   }), [
     availability,
     disconnect,
@@ -675,5 +755,6 @@ export const useLiveAudio = ({
     startRemoteAudio,
     state,
     unpublishMicrophone,
+    microphoneDiagnostics,
   ]);
 };

@@ -7,9 +7,11 @@ import { useQuizTimer } from './hooks/useQuizTimer';
 import { generateQuizSubslides, calcMaxBaseCentipunts } from './utils/quizUtils';
 import { makeClientId } from './utils/normalizePresentation';
 import { DataProtectionLink } from './components/shared/DataProtectionLink';
+import { PwaRestartButton } from './components/shared/PwaRestartButton';
 import { useLiveAudioAvailability } from './features/liveAudio/hooks/useLiveAudioAvailability';
 import { useAudienceAudioPlayback } from './hooks/useAudienceAudioPlayback';
 import { useAudienceSession } from './hooks/useAudienceSession';
+import { registerScopedServiceWorker } from './utils/pwaUpdate';
 
 import type { AppMode, Presentation, ScriptureNavState, VideoState } from './types/presentation';
 import type { QuizSyncState } from './types/quiz';
@@ -45,6 +47,10 @@ function AudienceApp() {
   const scriptureStateRef = useRef<ScriptureNavState | null>(scriptureState);
   const quizStateRef = useRef<QuizSyncState | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    void registerScopedServiceWorker('/audience');
+  }, []);
 
   useAudienceAudioPlayback({
     audioState,
@@ -202,10 +208,13 @@ function AudienceApp() {
       </React.Suspense>
       
       {/* Hidden audio element for audience audio sync */}
-      <audio ref={audioRef} preload="auto" style={{ display: 'none' }} />
+      <audio ref={audioRef} preload="none" style={{ display: 'none' }} />
 
       <div className="fixed bottom-2 right-2 z-50 opacity-50 hover:opacity-100 transition-opacity">
         <DataProtectionLink className="text-[10px] text-white/70 hover:text-white flex items-center gap-1" />
+      </div>
+      <div className="fixed bottom-2 left-2 z-50 opacity-60 hover:opacity-100 transition-opacity">
+        <PwaRestartButton />
       </div>
     </>
   );

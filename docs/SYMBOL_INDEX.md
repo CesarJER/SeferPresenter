@@ -13,6 +13,9 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
 - `src/main-audience.tsx` - placeholder mode-specific root for audience mode in the MPA split.
 - `src/main-control.tsx` - standalone React root for control mode; orchestrates control state and sync wiring without presenter/media elements.
 - `vite.config.ts` - Vite multi-entry input configuration.
+- `public/audience-sw.js` - shared PWA service worker for `/audience` and `/control`, versioned as `1.1.0` with testable cache exclusion helpers.
+- `public/manifest.webmanifest` - Audience PWA manifest scoped to `/audience` and using `public/logo.svg`.
+- `public/control-manifest.webmanifest` - Control PWA manifest scoped to `/control` and using `public/logo.svg`.
 
 ## Hooks
 
@@ -55,6 +58,7 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
 - `SeferFlowView` - `src/components/presenter/SeferFlowView.tsx`: scripture flow visual.
 - `VerseSidebar` - `src/components/presenter/VerseSidebar.tsx`: verse sidebar visual.
 - `AudienceScreen` - `src/components/audience/AudienceScreen.tsx`: audience route projection/quiz selection.
+- `PwaRestartButton` - `src/components/shared/PwaRestartButton.tsx`: confirmed reload/update action for installed audience/control PWAs.
 - Proposed Live Audio components - future optional runtime components under
   `src/features/liveAudio/components/control/`,
   `src/features/liveAudio/components/audience/`, and
@@ -157,3 +161,4 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
 - `parseMediaSlideString` - `src/utils/mediaUtils.ts`: media slide parsing.
 - `transliterateText` - `src/utils/transliterate.ts`: transliteration helper.
 - `sanitizeHtml` / `sanitizeSlideHtml` / niqqud helpers - `src/utils/hebrewText.ts`: slide HTML sanitizing and Hebrew text cleanup.
+- `registerScopedServiceWorker` / `restartPwaApp` - `src/utils/pwaUpdate.ts`: route-scoped PWA service-worker registration and update-aware reload without clearing local state.

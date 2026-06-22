@@ -15,6 +15,9 @@ Fast map for agents. Use real paths only; this repo does not currently have
 - `src/main-audio-editor.tsx`: standalone audio editor React root; loads presentations, audio files, and audio sync maps from local APIs.
 - `src/main-audience.tsx`: placeholder mode-specific React entry for the MPA split.
 - `src/main-control.tsx`: standalone control React root; loads the control panel tree without presenter dependencies.
+- `public/audience-sw.js`: shared PWA service worker for `/audience` and `/control` scopes, with network-first shells and no caching for live endpoints or large media.
+- `public/manifest.webmanifest`: Audience PWA manifest scoped to `/audience`.
+- `public/control-manifest.webmanifest`: Control PWA manifest scoped to `/control`.
 - `src/App.tsx`: route detection, top-level state, synchronization wiring, command dispatch, mode rendering.
 - `README.md`: human overview, routes, scripts, backend endpoints, verification.
 - `server/local-server.mjs`: local backend, static serving, SSE, persistence endpoints, auth gate, and WebSocket attachment.
@@ -34,6 +37,7 @@ Fast map for agents. Use real paths only; this repo does not currently have
 - `src/components/shared/`: reusable UI widgets such as auto-resizing text/input and slide previews.
 - `src/hooks/`: stateful behavior for sync, background resolution, media playback, keyboard, URL sync, quiz, Sefer reader, scripture navigation, and the Fase 5.2 crypto-only `usePrivateControlSignals.ts` hook. LiveKit runtime hooks should still live under `src/features/liveAudio/hooks/` when implemented.
 - `src/utils/`: validation, normalization, sync message construction, quiz parsing/scoring, scripture parsing/lookup, media helpers, and Web Crypto helpers.
+- `src/utils/pwaUpdate.ts`: shared service-worker registration and confirmed PWA reload/update activation helpers.
 - `server/projection-state-reducer.mjs`: projection-state command reducer shared by backend runtime and Vitest.
 - `src/types/`: shared contracts for presentations, sync, audio, quiz, and transliteration.
 - `src/types/liveAudio.ts`: LiveKit-ready but optional Live Audio message contracts, kept separate from presentation sync state.

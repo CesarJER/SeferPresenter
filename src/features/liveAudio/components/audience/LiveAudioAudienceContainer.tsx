@@ -82,6 +82,7 @@ export default function LiveAudioAudienceContainer({
     publishMicrophone,
     unpublishMicrophone,
     retryAudio,
+    microphoneDiagnostics,
   } = useLiveAudio({
     role: 'audience',
     autoConnect: availability === 'enabled',
@@ -504,6 +505,7 @@ export default function LiveAudioAudienceContainer({
     onToggleMicrophone: handleToggleMicrophone,
     onOpenMessage: handleOpenMessage,
     availability,
+    microphoneDiagnostics,
   };
 
   return (

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Mic, MicOff, Hand, MessageSquare, LogOut, Volume2, VolumeX, Play, RotateCcw, CheckCircle2, Loader2 } from 'lucide-react';
-import type { LiveAudioConnectionState } from '../../../../types/liveAudio';
+import type { LiveAudioConnectionState, LiveAudioMicrophoneDiagnostics } from '../../../../types/liveAudio';
 
 interface AudienceLiveAudioPanelProps {
   state: LiveAudioConnectionState;
@@ -24,6 +24,7 @@ interface AudienceLiveAudioPanelProps {
   onCancelRequest: () => void;
   onToggleMicrophone: () => void;
   onOpenMessage: () => void;
+  microphoneDiagnostics?: LiveAudioMicrophoneDiagnostics;
   variant?: 'overlay' | 'inline';
 }
 
@@ -49,6 +50,7 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
   onCancelRequest,
   onToggleMicrophone,
   onOpenMessage,
+  microphoneDiagnostics,
   variant = 'overlay',
 }) => {
   const [isVisible, setIsVisibleState] = useState<boolean>(() => {
@@ -220,6 +222,30 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
   */
 
   const panelClass = "h-[7vh] min-h-14 max-h-20 flex items-center gap-1.5 sm:gap-2 pointer-events-auto";
+  const diagnostics = microphoneDiagnostics ? (
+    <div className="absolute bottom-full left-1/2 mb-2 w-[min(92vw,22rem)] -translate-x-1/2 rounded-md border border-white/10 bg-gray-950/95 px-3 py-2 text-[10px] leading-4 text-gray-300 shadow-xl">
+      <div className="grid grid-cols-[auto_1fr] gap-x-2">
+        <span className="text-gray-500">secureContext</span>
+        <span>{microphoneDiagnostics.secureContext ? 'true' : 'false'}</span>
+        <span className="text-gray-500">mediaDevices</span>
+        <span>{microphoneDiagnostics.mediaDevicesAvailable ? 'disponible' : 'no disponible'}</span>
+        <span className="text-gray-500">permission</span>
+        <span>{microphoneDiagnostics.permissionState}</span>
+        {microphoneDiagnostics.lastErrorName && (
+          <>
+            <span className="text-gray-500">error.name</span>
+            <span>{microphoneDiagnostics.lastErrorName}</span>
+          </>
+        )}
+        {microphoneDiagnostics.lastErrorMessage && (
+          <>
+            <span className="text-gray-500">error.message</span>
+            <span>{microphoneDiagnostics.lastErrorMessage}</span>
+          </>
+        )}
+      </div>
+    </div>
+  ) : null;
   const reconnectStatus = state === 'reconnecting'
     ? (
       <div className="flex items-center gap-2 h-full bg-orange-600/90 text-white px-3 rounded-full shadow-lg backdrop-blur-sm">
@@ -279,7 +305,8 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
 
   return (
     <div ref={panelRootRef} className={wrapperClass} onClick={handlePanelClick}>
-      <div className={`${panelClass} bg-gray-900/70 backdrop-blur-lg border border-white/10 px-2 rounded-2xl shadow-2xl`}>
+      <div className={`${panelClass} relative bg-gray-900/70 backdrop-blur-lg border border-white/10 px-2 rounded-2xl shadow-2xl`}>
+        {diagnostics}
         {reconnectStatus}
 
         {isWordGranted ? (

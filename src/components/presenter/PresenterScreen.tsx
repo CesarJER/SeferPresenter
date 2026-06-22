@@ -285,6 +285,7 @@ const PresenterScreen: React.FC<PresenterScreenProps> = ({
                   loop
                   muted
                   playsInline
+                  preload="metadata"
                   className="absolute inset-0 h-full w-full object-cover"
                 />
               ) : (
@@ -310,6 +311,7 @@ const PresenterScreen: React.FC<PresenterScreenProps> = ({
                 autoPlay
                 loop={slide.mediaLoop !== false}
                 playsInline
+                preload="metadata"
                 className={`absolute inset-0 h-full w-full object-${slide.mediaFit || 'cover'} z-10`}
               />
             )

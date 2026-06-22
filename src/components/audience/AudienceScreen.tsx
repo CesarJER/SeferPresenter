@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from 'react';
+import { useCallback } from 'react';
 import type { AppMode, ScriptureNavState, Slide, VideoState } from '../../types/presentation';
 import type { QuizSubslide, QuizTimerState } from '../../types/quiz';
 import { useAudienceAnswers } from '../../hooks/useQuizAnswers';
@@ -41,13 +41,6 @@ const AudienceScreen = ({
 
   const liveAudio = useAudienceLiveAudio();
 
-  useEffect(() => {
-    if (!('serviceWorker' in navigator)) return;
-    navigator.serviceWorker
-      .register('/audience-sw.js', { scope: '/audience' })
-      .catch((err) => console.error('Audience service worker registration failed', err));
-  }, []);
-
   const handleFullscreen = useCallback(() => {
     if (!document.fullscreenElement) {
       document.documentElement.requestFullscreen().catch(err => {
@@ -85,6 +78,7 @@ const AudienceScreen = ({
       onCancelRequest={liveAudio.onCancelRequest}
       onToggleMicrophone={liveAudio.onToggleMicrophone}
       onOpenMessage={liveAudio.onOpenMessage}
+      microphoneDiagnostics={liveAudio.microphoneDiagnostics}
       variant="inline"
     />
   ) : null;

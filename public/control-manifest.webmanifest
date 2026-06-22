@@ -1,0 +1,18 @@
+{
+  "name": "SeferPresenter Control",
+  "short_name": "Sefer Control",
+  "start_url": "/control",
+  "scope": "/control",
+  "display": "standalone",
+  "background_color": "#e5aa1a",
+  "theme_color": "#e5aa1a",
+  "description": "Control local sincronizado para SeferPresenter",
+  "icons": [
+    {
+      "src": "/logo.svg",
+      "sizes": "641x641",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
