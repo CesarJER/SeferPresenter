@@ -223,7 +223,7 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
 
   const panelClass = "h-[7vh] min-h-14 max-h-20 flex items-center gap-1.5 sm:gap-2 pointer-events-auto";
   const diagnostics = microphoneDiagnostics ? (
-    <div className="absolute bottom-full left-1/2 mb-2 w-[min(92vw,22rem)] -translate-x-1/2 rounded-md border border-white/10 bg-gray-950/95 px-3 py-2 text-[10px] leading-4 text-gray-300 shadow-xl">
+    <div className="hidden absolute bottom-full left-1/2 mb-2 w-[min(92vw,22rem)] -translate-x-1/2 rounded-md border border-white/10 bg-gray-950/95 px-3 py-2 text-[10px] leading-4 text-gray-300 shadow-xl">
       <div className="grid grid-cols-[auto_1fr] gap-x-2">
         <span className="text-gray-500">secureContext</span>
         <span>{microphoneDiagnostics.secureContext ? 'true' : 'false'}</span>
