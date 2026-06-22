@@ -191,8 +191,16 @@ const broadcast = (body) => {
   writeSseSet(audienceClients, audienceBody)
 }
 
-const broadcastQuizAnswer = (body) => {
-  writeSseSet(quizClients, body)
+const broadcastQuizAnswer = (body, parsed) => {
+  const type = parsed?.type
+  const isSensitive = type === 'QUIZ_ANSWER' || type === 'QUIZ_FINAL_SCORE'
+
+  for (const client of quizClients) {
+    if (isSensitive && !client.isControl) {
+      continue
+    }
+    writeSse(quizClients, client, body)
+  }
 }
 
 const scoreBucketForCentipunts = (value) => {
@@ -372,7 +380,7 @@ const deriveAudienceState = (state) => {
 
 const isProtectedPath = (url, method) => {
   if (!isAuthRequired()) return false
-  if (url.pathname.startsWith('/audience') || url.pathname === '/proteccion-datos' || url.pathname === '/') return false
+  if (url.pathname.startsWith('/audience') || url.pathname === '/proteccion-datos' || url.pathname === '/' || url.pathname === '/api/quiz-answer') return false
   if (url.pathname === '/control' || url.pathname === '/audio-editor' || url.pathname === '/presenter') return true
   if (url.pathname.startsWith('/api/livekit/')) return false
   if (url.pathname.startsWith('/api/') && method !== 'GET') return true
@@ -441,6 +449,7 @@ const handleApi = async (req, res, url) => {
       'Cache-Control': 'no-cache',
       Connection: 'keep-alive',
     })
+    res.isControl = hasValidBasicAuth(req) || !isAuthRequired()
     registerSseClient(quizClients, res)
     return true
   }
@@ -450,7 +459,7 @@ const handleApi = async (req, res, url) => {
       const body = await readBody(req)
       const parsed = JSON.parse(body)
       updateQuizAggregate(parsed)
-      broadcastQuizAnswer(body)
+      broadcastQuizAnswer(body, parsed)
       sendJson(res, 200, { success: true })
     } catch (err) {
       sendJson(res, 400, { error: err.message || 'Invalid JSON' })

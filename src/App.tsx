@@ -43,6 +43,7 @@ function App() {
   const isAudienceMode = false;
   const isPresenterMode = true;
   const storedPresenterState = loadStoredPresenterState();
+  const isMediaMasterRef = useRef(false);
 
   const [presentations, setPresentations] = useState<Presentation[]>([]);
   const [currentPresentation, setCurrentPresentation] = useState<Presentation | null>(storedPresenterState?.presentation ?? null);
@@ -97,6 +98,7 @@ function App() {
   );
   const [quizCurrentSubslideIndex, setQuizCurrentSubslideIndex] = useState(0);
   const [quizPresenterDemoSelection, setQuizPresenterDemoSelection] = useState<QuizOptionId | null>(null);
+  const [incomingFeedbackSound, setIncomingFeedbackSound] = useState<QuizSyncState['feedbackSound']>(null);
   const quizTimer = useQuizTimer({
     timerSeconds: activeQuizData?.timerSeconds ?? 30,
   });
@@ -201,6 +203,8 @@ function App() {
     isPresenterOrControl: !isAudienceMode && !isControlMode,
     timerStatus: quizTimer.timerState.status,
     isQuestionSubslide: quizSubslides[quizCurrentSubslideIndex]?.kind === 'pregunta',
+    feedbackSound: incomingFeedbackSound,
+    isMediaMaster: isMediaMasterRef.current,
   });
   const maxBaseCentipunts = useMemo(() => {
     if (!currentPresentation) return 0;
@@ -227,6 +231,7 @@ function App() {
       quizStateRef.current = null;
       setQuizCurrentSubslideIndex(0);
       setQuizPresenterDemoSelection(null);
+      setIncomingFeedbackSound(null);
       quizTimer.resetTimer((activeQuizData?.timerSeconds ?? 30) * 1000);
       return;
     }
@@ -239,7 +244,8 @@ function App() {
     setQuizCurrentSubslideIndex(rawIndex);
     quizTimer.setTimerState(state.timerState);
     setQuizPresenterDemoSelection(activeSlide ? state.presenterDemoSelection?.[activeSlide.id] ?? fallbackSelection : fallbackSelection);
-  }, [activeQuizData?.timerSeconds, activeSlide, quizTimer.resetTimer, quizTimer.setTimerState]);
+    setIncomingFeedbackSound(state.feedbackSound ?? null);
+  }, [activeQuizData?.timerSeconds, activeSlide, quizTimer.resetTimer, quizTimer.setTimerState, setIncomingFeedbackSound]);
 
   useEffect(() => {
     currentPresentationRef.current = currentPresentation;
@@ -393,7 +399,7 @@ function App() {
     }
   }, [quizTimer, activeQuizData, quizAudio]);
 
-  const { syncState, emitCommand, emitAudioTelemetry, emitVideoTelemetry, emitDisplayTelemetry, wsStatus, wsSend, subscribeToWsMessage } = useSyncState({
+  const { syncState, emitCommand, emitAudioTelemetry, emitVideoTelemetry, emitDisplayTelemetry, wsStatus, wsSend, subscribeToWsMessage, isMediaMaster } = useSyncState({
     isControlMode, isPresenterMode, onRemoteCommand: handleRemoteCommand, clientIdRef,
     currentPresentationRef, currentSlideIndexRef, currentStepIndexRef, backgroundLockRef,
     lockedBackgroundValueRef, userSelectedBackgroundRef, videoStateRef,
@@ -404,6 +410,7 @@ function App() {
     setQuizState: applyRemoteQuizState,
     onAudioTimelineState: setAudioTimeline,
   });
+  isMediaMasterRef.current = isMediaMaster;
 
   const { serverNow } = useServerClock(wsSend, wsStatus, subscribeToWsMessage);
   useAudioTimeline(audioTimeline, serverNow, wsSend);

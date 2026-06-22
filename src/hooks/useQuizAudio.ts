@@ -37,8 +37,16 @@ export function useQuizAudio(options: {
   isPresenterOrControl: boolean;
   timerStatus: QuizTimerStatus;
   isQuestionSubslide?: boolean;
+  feedbackSound?: { type: 'applause' | 'mal' | 'bip'; timestamp: number } | null;
+  isMediaMaster?: boolean;
 }): UseQuizAudioReturn {
-  const { isPresenterOrControl, timerStatus, isQuestionSubslide = true } = options;
+  const {
+    isPresenterOrControl,
+    timerStatus,
+    isQuestionSubslide = true,
+    feedbackSound,
+    isMediaMaster = false,
+  } = options;
 
   const bgAudioRef = useRef<HTMLAudioElement | null>(null);
   const fxAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -108,6 +116,27 @@ export function useQuizAudio(options: {
       }
     });
   }, [isPresenterOrControl]);
+
+  // ── Synced feedback sound trigger ─────────────────────────────────
+  const lastTimestampRef = useRef<number>(0);
+
+  useEffect(() => {
+    if (!isPresenterOrControl || !feedbackSound) return;
+    // The Media Master plays feedback sounds immediately on user action/command,
+    // rather than reacting to its own synced state updates.
+    if (isMediaMaster) return;
+
+    if (feedbackSound.timestamp > lastTimestampRef.current) {
+      lastTimestampRef.current = feedbackSound.timestamp;
+      if (feedbackSound.type === 'applause') {
+        playFx(SOUNDS.aplausos);
+      } else if (feedbackSound.type === 'mal') {
+        playFx(SOUNDS.mal);
+      } else if (feedbackSound.type === 'bip') {
+        playFx(SOUNDS.bip);
+      }
+    }
+  }, [feedbackSound, isPresenterOrControl, isMediaMaster, playFx]);
 
   const playApplause = useCallback(() => playFx(SOUNDS.aplausos), [playFx]);
   const playMal = useCallback(() => playFx(SOUNDS.mal), [playFx]);

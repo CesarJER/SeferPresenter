@@ -314,7 +314,7 @@ Backend-owned or backend-mirrored pieces:
 - `/api/display-telemetry`
 - `/api/presentations`
 - `/api/audio-sync`
-- `/api/quiz-answer` and `/api/quiz-events`
+- `/api/quiz-answer` and `/api/quiz-events` (POST is unauthenticated to allow audience submissions, whereas GET `/api/quiz-events` filters individual answers and scores to only broadcast them to authenticated control panel connections)
 - `/api/audience/state` and `/api/audience/events`
 - `/ws` for backend-owned audio timeline messages only
 - `/api/livekit/status`, `/api/livekit/token`, `/api/livekit/refresh-token`,

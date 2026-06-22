@@ -322,12 +322,22 @@ const findQuizStepIndex = (presentation, slideIndex, subslideIndex) =>
     step.slideIndex === slideIndex && step.type === 'quiz' && step.subslideIndex === subslideIndex
   );
 
-const selectQuizSubslide = (state, index) => updateQuizState(state, (quizState, activeSlide) => {
+const selectQuizSubslide = (state, index, now = Date.now()) => updateQuizState(state, (quizState, activeSlide) => {
   const subslides = generateQuizSubslides(activeSlide.quizData);
   const safeIndex = Math.max(0, Math.min(index, Math.max(0, subslides.length - 1)));
-  const nextTimerState = subslides[safeIndex]?.kind === 'respuesta'
-    ? { ...quizState.timerState, status: 'completed' }
-    : quizState.timerState;
+  
+  let nextTimerState = quizState.timerState;
+  if (subslides[safeIndex]?.kind === 'respuesta') {
+    nextTimerState = { ...quizState.timerState, status: 'completed' };
+  } else if (subslides[safeIndex]?.kind === 'pregunta' && quizState.timerState.status !== 'running') {
+    nextTimerState = {
+      ...quizState.timerState,
+      status: 'running',
+      timerStartedAt: now,
+      pausedRemainingMs: null,
+    };
+  }
+
   const stepIndex = findQuizStepIndex(state.presentation, state.slideIndex, safeIndex);
   state.stepIndex = stepIndex >= 0 ? stepIndex : state.stepIndex;
   return {
@@ -451,7 +461,7 @@ export const reduceProjectionCommand = (currentState, payload, metadata = {}) =>
           appMode: 'slides',
           videoState: null,
         };
-        return makeOk(selectQuizSubslide(next, step.subslideIndex));
+        return makeOk(selectQuizSubslide(next, step.subslideIndex, now));
       }
 
       const slide = getSlides(state.presentation)[step.slideIndex] || null;
@@ -676,24 +686,49 @@ export const reduceProjectionCommand = (currentState, payload, metadata = {}) =>
         ...quizState,
         timerState: { ...getQuizTimerState(state), status: 'completed' },
       }));
-      return makeOk(answerIndex >= 0 ? selectQuizSubslide(next, answerIndex) : next);
+      return makeOk(answerIndex >= 0 ? selectQuizSubslide(next, answerIndex, now) : next);
     }
 
     case 'QUIZ_SELECT_SUBSLIDE':
-      return makeOk(selectQuizSubslide(state, payload.index));
+      return makeOk(selectQuizSubslide(state, payload.index, now));
 
     case 'QUIZ_DEMO_SELECT':
-      return makeOk(updateQuizState(state, (quizState, activeSlide) => ({
+      return makeOk(updateQuizState(state, (quizState, activeSlide) => {
+        const optionId = payload.optionId;
+        const selected = activeSlide?.quizData?.options?.find(o => o.id === optionId);
+        const feedbackType = selected ? (selected.isCorrect ? 'applause' : 'mal') : null;
+        return {
+          ...quizState,
+          presenterDemoSelection: {
+            ...(quizState.presenterDemoSelection ?? {}),
+            [activeSlide.id]: optionId,
+          },
+          ...(feedbackType ? {
+            feedbackSound: {
+              type: feedbackType,
+              timestamp: now,
+            }
+          } : {}),
+        };
+      }));
+
+    case 'QUIZ_PLAY_APPLAUSE':
+      return makeOk(updateQuizState(state, (quizState) => ({
         ...quizState,
-        presenterDemoSelection: {
-          ...(quizState.presenterDemoSelection ?? {}),
-          [activeSlide.id]: payload.optionId,
+        feedbackSound: {
+          type: 'applause',
+          timestamp: now,
         },
       })));
 
-    case 'QUIZ_PLAY_APPLAUSE':
     case 'QUIZ_PLAY_MAL':
-      return makeOk(state);
+      return makeOk(updateQuizState(state, (quizState) => ({
+        ...quizState,
+        feedbackSound: {
+          type: 'mal',
+          timestamp: now,
+        },
+      })));
 
     case 'RESET_STATE':
       return makeOk({

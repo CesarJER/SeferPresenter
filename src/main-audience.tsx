@@ -11,6 +11,7 @@ import { PwaRestartButton } from './components/shared/PwaRestartButton';
 import { useLiveAudioAvailability } from './features/liveAudio/hooks/useLiveAudioAvailability';
 import { useAudienceAudioPlayback } from './hooks/useAudienceAudioPlayback';
 import { useAudienceSession } from './hooks/useAudienceSession';
+import { useQuizAudio } from './hooks/useQuizAudio';
 import { registerScopedServiceWorker } from './utils/pwaUpdate';
 
 import type { AppMode, Presentation, ScriptureNavState, VideoState } from './types/presentation';
@@ -75,6 +76,7 @@ function AudienceApp() {
   ]);
 
   const [quizCurrentSubslideIndex, setQuizCurrentSubslideIndex] = useState(0);
+  const [quizState, setQuizState] = useState<QuizSyncState | null>(null);
   const quizTimer = useQuizTimer({ timerSeconds: 30 }); // Initialized dummy
 
   const activeSlide = currentPresentation && currentSlideIndex >= 0 ? currentPresentation.slides[currentSlideIndex] : null;
@@ -83,6 +85,7 @@ function AudienceApp() {
 
   const applyRemoteQuizState = (state: QuizSyncState | null) => {
     quizStateRef.current = state;
+    setQuizState(state);
     if (!state) {
       setQuizCurrentSubslideIndex(0);
       quizTimer.resetTimer((activeQuizData?.timerSeconds ?? 30) * 1000);
@@ -92,6 +95,14 @@ function AudienceApp() {
     setQuizCurrentSubslideIndex(rawIndex);
     quizTimer.setTimerState(state.timerState);
   };
+
+  useQuizAudio({
+    isPresenterOrControl: true, // Play quiz sounds on audience devices too
+    timerStatus: quizTimer.timerState.status,
+    isQuestionSubslide: quizSubslides[quizCurrentSubslideIndex]?.kind === 'pregunta',
+    feedbackSound: quizState?.feedbackSound,
+    isMediaMaster: false,
+  });
 
   const { wsSend, subscribeToWsMessage } = useSyncState({
     isControlMode: false,

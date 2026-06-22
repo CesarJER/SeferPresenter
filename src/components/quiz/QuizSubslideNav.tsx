@@ -7,7 +7,7 @@
 
 import React from 'react';
 import type { QuizSubslide } from '../../types/quiz';
-import { BookOpen, HelpCircle, CheckSquare, BookMarked, Trophy } from 'lucide-react';
+import { BookOpen, HelpCircle, CheckSquare, BookMarked, Trophy, ChevronLeft, ChevronRight } from 'lucide-react';
 
 interface QuizSubslideNavProps {
   subslides: QuizSubslide[];
@@ -32,6 +32,21 @@ export const QuizSubslideNav: React.FC<QuizSubslideNavProps> = ({
 }) => {
   return (
     <div className="flex flex-wrap items-center gap-1 rounded-lg bg-black/30 px-2 py-1.5 backdrop-blur-sm">
+      <button
+        type="button"
+        disabled={!isInteractive || currentIndex === 0}
+        onClick={() => isInteractive && onSelect?.(currentIndex - 1)}
+        className={[
+          'flex items-center justify-center rounded-md p-1 text-white/50 transition-all duration-150',
+          !isInteractive || currentIndex === 0
+            ? 'opacity-30 cursor-not-allowed'
+            : 'hover:bg-white/10 hover:text-white cursor-pointer'
+        ].join(' ')}
+        title="Anterior"
+      >
+        <ChevronLeft size={12} />
+      </button>
+
       {subslides.map((sub, idx) => {
         const isActive = idx === currentIndex;
         const isPast = idx < currentIndex;
@@ -59,6 +74,21 @@ export const QuizSubslideNav: React.FC<QuizSubslideNavProps> = ({
           </button>
         );
       })}
+
+      <button
+        type="button"
+        disabled={!isInteractive || currentIndex === subslides.length - 1}
+        onClick={() => isInteractive && onSelect?.(currentIndex + 1)}
+        className={[
+          'flex items-center justify-center rounded-md p-1 text-white/50 transition-all duration-150',
+          !isInteractive || currentIndex === subslides.length - 1
+            ? 'opacity-30 cursor-not-allowed'
+            : 'hover:bg-white/10 hover:text-white cursor-pointer'
+        ].join(' ')}
+        title="Siguiente"
+      >
+        <ChevronRight size={12} />
+      </button>
     </div>
   );
 };

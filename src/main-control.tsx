@@ -233,17 +233,18 @@ function ControlApp() {
         const p = currentPresentationRef.current;
         if (!p) return;
         e.preventDefault();
-        const nextIdx = Math.min(currentSlideIndexRef.current + 1, p.slides.length - 1);
-        if (nextIdx > currentSlideIndexRef.current) {
-          emitCommand({ command: 'SELECT_PRESENTATION_AND_SLIDE', presentation: p, slideIndex: nextIdx, direction: 'forward' });
+        const stepsList = generatePresentationSteps(p);
+        const nextStepIdx = Math.min(currentStepIndexRef.current + 1, stepsList.length - 1);
+        if (nextStepIdx > currentStepIndexRef.current) {
+          emitCommand({ command: 'SELECT_STEP', stepIndex: nextStepIdx });
         }
       } else if (e.key === 'ArrowLeft') {
         const p = currentPresentationRef.current;
         if (!p) return;
         e.preventDefault();
-        const prevIdx = Math.max(currentSlideIndexRef.current - 1, 0);
-        if (prevIdx < currentSlideIndexRef.current) {
-          emitCommand({ command: 'SELECT_PRESENTATION_AND_SLIDE', presentation: p, slideIndex: prevIdx, direction: 'backward' });
+        const prevStepIdx = Math.max(currentStepIndexRef.current - 1, 0);
+        if (prevStepIdx < currentStepIndexRef.current) {
+          emitCommand({ command: 'SELECT_STEP', stepIndex: prevStepIdx });
         }
       }
     };
