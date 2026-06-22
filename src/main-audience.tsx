@@ -171,29 +171,34 @@ function AudienceApp() {
     return calcMaxBaseCentipunts(allQuizData);
   }, [currentPresentation]);
 
+  const audienceScreenElement = (
+    <AudienceScreen
+      appMode={appMode}
+      background={activeBackground}
+      fontScale={currentPresentation?.fontScale ?? 1}
+      presentationTitle={currentPresentation?.title || ''}
+      scriptureState={quizScriptureState || scriptureState}
+      slide={activePresenterSlide}
+      videoState={videoState}
+      quizSubslides={quizSubslides}
+      quizCurrentSubslideIndex={quizCurrentSubslideIndex}
+      quizTimerState={quizTimer.timerState}
+      quizMaxBaseCentipunts={maxBaseCentipunts}
+    />
+  );
+
   return (
     <>
-      <AudienceScreen
-        appMode={appMode}
-        background={activeBackground}
-        fontScale={currentPresentation?.fontScale ?? 1}
-        presentationTitle={currentPresentation?.title || ''}
-        scriptureState={quizScriptureState || scriptureState}
-        slide={activePresenterSlide}
-        videoState={videoState}
-        quizSubslides={quizSubslides}
-        quizCurrentSubslideIndex={quizCurrentSubslideIndex}
-        quizTimerState={quizTimer.timerState}
-        quizMaxBaseCentipunts={maxBaseCentipunts}
-      />
-      <React.Suspense fallback={null}>
+      <React.Suspense fallback={audienceScreenElement}>
         <LiveAudioContainer
           availability={liveAudioAvailability.availability}
           wsSend={wsSend}
           subscribeToWsMessage={subscribeToWsMessage}
           clientId={clientIdRef.current}
           audienceSession={audienceSession}
-        />
+        >
+          {audienceScreenElement}
+        </LiveAudioContainer>
       </React.Suspense>
       
       {/* Hidden audio element for audience audio sync */}

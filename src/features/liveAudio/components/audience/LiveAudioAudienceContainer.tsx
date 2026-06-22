@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { createPortal } from 'react-dom';
-import { AudienceLiveAudioPanel } from './AudienceLiveAudioPanel';
+import type { ReactNode } from 'react';
 import { AudienceInterventionModal } from './AudienceInterventionModal';
 import { AudiencePrivateControlMessage } from './AudiencePrivateControlMessage';
 import { useLiveAudio } from '../../hooks/useLiveAudio';
@@ -13,6 +12,12 @@ import type {
 } from '../../../../types/liveAudio';
 import { LiveAudioTrackOutput } from '../shared/LiveAudioTrackOutput';
 import type { useAudienceSession } from '../../../../hooks/useAudienceSession';
+import {
+  AudienceLiveAudioContext,
+  type AudienceLiveAudioContextValue,
+} from './AudienceLiveAudioContext';
+
+export { AudienceLiveAudioContext, type AudienceLiveAudioContextValue };
 
 interface LiveAudioAudienceContainerProps {
   availability: LiveAudioAvailability;
@@ -20,6 +25,7 @@ interface LiveAudioAudienceContainerProps {
   subscribeToWsMessage: (handler: (type: string, payload: Record<string, unknown>) => void) => () => void;
   clientId: string; // Used as fallback or session identifier if needed
   audienceSession: ReturnType<typeof useAudienceSession>;
+  children?: ReactNode;
 }
 
 interface ParticipantStatusOptions {
@@ -37,7 +43,8 @@ export default function LiveAudioAudienceContainer({
   wsSend,
   subscribeToWsMessage,
   clientId,
-  audienceSession
+  audienceSession,
+  children
 }: LiveAudioAudienceContainerProps) {
   const [isActive, setIsActive] = useState(false);
   const [isPendingWord, setIsPendingWord] = useState(false);
@@ -471,11 +478,38 @@ export default function LiveAudioAudienceContainer({
   }, [isMicrophoneActive, isMusicMode, publishMicrophone, sendParticipantStatus, unpublishMicrophone]);
 
   if (availability !== 'enabled') {
-    return null;
+    return <>{children}</>;
   }
 
+  const contextValue: AudienceLiveAudioContextValue = {
+    state: liveKitState,
+    isActive,
+    isMicrophoneActive,
+    hasAudioStarted,
+    isPendingWord,
+    isWordGranted,
+    isParticipationBlocked: isKicked,
+    volume,
+    onVolumeChange: setVolume,
+    microphoneVolume,
+    isMusicMode,
+    onMicrophoneVolumeChange: setMicrophoneVolume,
+    onMusicModeChange: handleMusicModeChange,
+    onStartAudio: handleStartAudio,
+    onRetryAudio: handleRetryAudio,
+    onJoinActive: handleJoinActive,
+    onLeaveActive: handleLeaveActive,
+    onRequestWord: handleRequestWord,
+    onCancelRequest: handleCancelRequest,
+    onToggleMicrophone: handleToggleMicrophone,
+    onOpenMessage: handleOpenMessage,
+    availability,
+  };
+
   return (
-    <>
+    <AudienceLiveAudioContext.Provider value={contextValue}>
+      {children}
+
       {remoteTracks.map((remoteTrack) => (
         <LiveAudioTrackOutput
           key={remoteTrack.id}
@@ -486,59 +520,6 @@ export default function LiveAudioAudienceContainer({
 
       {isMicrophoneActive && (
         <div className="fixed inset-0 z-40 pointer-events-none border-[6px] md:border-[10px] border-blue-500/80 rounded-xl transition-all shadow-[inset_0_0_30px_rgba(59,130,246,0.6)]"></div>
-      )}
-
-      {portalTarget ? createPortal(
-        <AudienceLiveAudioPanel
-          state={liveKitState}
-          isActive={isActive}
-          isMicrophoneActive={isMicrophoneActive}
-          hasAudioStarted={hasAudioStarted}
-          isPendingWord={isPendingWord}
-          isWordGranted={isWordGranted}
-          isParticipationBlocked={isKicked}
-          volume={volume}
-          onVolumeChange={setVolume}
-          microphoneVolume={microphoneVolume}
-          isMusicMode={isMusicMode}
-          onMicrophoneVolumeChange={setMicrophoneVolume}
-          onMusicModeChange={handleMusicModeChange}
-          onStartAudio={handleStartAudio}
-          onRetryAudio={handleRetryAudio}
-          onJoinActive={handleJoinActive}
-          onLeaveActive={handleLeaveActive}
-          onRequestWord={handleRequestWord}
-          onCancelRequest={handleCancelRequest}
-          onToggleMicrophone={handleToggleMicrophone}
-          onOpenMessage={handleOpenMessage}
-        />,
-        portalTarget
-      ) : (
-        <div className="pointer-events-auto">
-          <AudienceLiveAudioPanel
-            state={liveKitState}
-            isActive={isActive}
-            isMicrophoneActive={isMicrophoneActive}
-            hasAudioStarted={hasAudioStarted}
-            isPendingWord={isPendingWord}
-            isWordGranted={isWordGranted}
-            isParticipationBlocked={isKicked}
-            volume={volume}
-            onVolumeChange={setVolume}
-            microphoneVolume={microphoneVolume}
-            isMusicMode={isMusicMode}
-            onMicrophoneVolumeChange={setMicrophoneVolume}
-            onMusicModeChange={handleMusicModeChange}
-            onStartAudio={handleStartAudio}
-            onRetryAudio={handleRetryAudio}
-            onJoinActive={handleJoinActive}
-            onLeaveActive={handleLeaveActive}
-            onRequestWord={handleRequestWord}
-            onCancelRequest={handleCancelRequest}
-            onToggleMicrophone={handleToggleMicrophone}
-            onOpenMessage={handleOpenMessage}
-          />
-        </div>
       )}
 
       {showInterventionModal && (
@@ -554,6 +535,6 @@ export default function LiveAudioAudienceContainer({
           onSend={handleSendPrivateMessage}
         />
       )}
-    </>
+    </AudienceLiveAudioContext.Provider>
   );
 }

@@ -38,6 +38,7 @@ interface QuizAudienceViewProps {
   onSaveScore?: (score: QuizQuestionScore) => void;
   onSendFinalScore?: (rank: number) => void;
   maxBaseCentipunts?: number;
+  liveAudioPanel?: React.ReactNode;
 }
 
 const OPTION_LETTERS = ['A', 'B', 'C', 'D'];
@@ -60,6 +61,7 @@ export const QuizAudienceView: React.FC<QuizAudienceViewProps> = ({
   onSaveScore,
   onSendFinalScore,
   maxBaseCentipunts,
+  liveAudioPanel,
 }) => {
   const currentSubslide = subslides[currentSubslideIndex];
   const displayOptions = getDisplayOptions(quizData, slide.id);
@@ -328,6 +330,7 @@ export const QuizAudienceView: React.FC<QuizAudienceViewProps> = ({
                 </button>
               </div>
             )}
+
           </motion.div>
         </AnimatePresence>
       )}
@@ -412,6 +415,13 @@ export const QuizAudienceView: React.FC<QuizAudienceViewProps> = ({
           profile={profile}
           totalScore={totalScore}
         />
+      )}
+
+      {/* Render the live audio panel at the bottom of the container by default */}
+      {liveAudioPanel && (
+        <div className="mt-auto pt-4 flex justify-center w-full">
+          {liveAudioPanel}
+        </div>
       )}
     </div>
   );

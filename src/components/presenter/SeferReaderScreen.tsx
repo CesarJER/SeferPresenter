@@ -14,6 +14,7 @@ interface SeferReaderScreenProps {
   onVerseSelected: (payload: SeferOnlineRefPayload) => void;
   onBoundaryReached?: (direction: 'next' | 'previous') => void;
   onLogoClick?: () => void;
+  liveAudioPanel?: React.ReactNode;
 }
 
 export const SeferReaderScreen: React.FC<SeferReaderScreenProps> = ({
@@ -21,6 +22,7 @@ export const SeferReaderScreen: React.FC<SeferReaderScreenProps> = ({
   onVerseSelected,
   onBoundaryReached,
   onLogoClick,
+  liveAudioPanel,
 }) => {
   const [metadata, setMetadata] = useState<AppMetadata>({});
   const [data, setData] = useState<VerseData[]>([]);
@@ -331,7 +333,7 @@ export const SeferReaderScreen: React.FC<SeferReaderScreenProps> = ({
         navLabel={spanishNavLabel}
       />
 
-      <div className="flex-1 flex flex-col overflow-hidden min-w-0">
+      <div className="flex-1 flex flex-col overflow-hidden min-w-0 relative">
         <div className="flex-none h-12 md:h-16 border-b border-amber-900/20 bg-[#f7e7b6]/95 px-4 py-2 shadow-sm flex items-center justify-between gap-3">
           <div className="w-8" />
           <div className="flex-1 h-full min-w-0">
@@ -357,7 +359,7 @@ export const SeferReaderScreen: React.FC<SeferReaderScreenProps> = ({
             <div className="w-8" />
           )}
         </div>
-        <div className="flex-1 overflow-y-auto flex flex-col justify-start px-4 md:px-8 scrollable-container touch-pan-y">
+        <div className="flex-1 overflow-y-auto flex flex-col justify-start px-4 md:px-8 scrollable-container touch-pan-y pb-24">
           <SeferFlowView
             groupedVerses={groupedVerses}
             selectedVerseIdx={selectedVerseIdx}
@@ -369,6 +371,11 @@ export const SeferReaderScreen: React.FC<SeferReaderScreenProps> = ({
             hebrewFontSize={activeHebrewFontSize}
           />
         </div>
+        {liveAudioPanel && (
+          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-[60] pointer-events-auto flex justify-center w-full max-w-full px-4">
+            {liveAudioPanel}
+          </div>
+        )}
       </div>
     </main>
   );

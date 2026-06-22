@@ -116,7 +116,7 @@ const SlideVisualizer: React.FC<SlideVisualizerProps> = ({
       });
     };
 
-    let intervalId = setInterval(() => {
+    const intervalId = setInterval(() => {
       if (!vid) return;
 
       const startTime = slide.mediaStart ?? 0;

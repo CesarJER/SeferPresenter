@@ -35,10 +35,7 @@ Presenter-only:
 Audience:
 
 - `src/components/audience/AudienceScreen.tsx`: audience route selection between projection, Sefer reader, and quiz answer UI.
-- Proposed Live Audio audience UI should live in
-  `src/features/liveAudio/components/audience/`. It may request
-  listening/speaking after explicit user action, but audience mode remains
-  read-only for presentation controls.
+- Live Audio audience UI lives in `src/features/liveAudio/components/audience/`. It exposes `AudienceLiveAudioContext` (managed by `LiveAudioAudienceContainer`) to share state and controls. Sub-views like `PresenterScreen`, `SeferReaderScreen`, and `QuizAudienceView` receive the rendered `<AudienceLiveAudioPanel />` as a prop (`liveAudioPanel`) to display it contextually without portals. Audience mode remains read-only for presentation controls.
 
 Shared:
 

@@ -5,6 +5,8 @@ import { useAudienceAnswers } from '../../hooks/useQuizAnswers';
 import PresenterScreen from '../presenter/PresenterScreen';
 import SeferReaderScreen from '../presenter/SeferReaderScreen';
 import { QuizAudienceView } from '../quiz/QuizAudienceView';
+import { useAudienceLiveAudio } from '../../features/liveAudio/components/audience/AudienceLiveAudioContext';
+import { AudienceLiveAudioPanel } from '../../features/liveAudio/components/audience/AudienceLiveAudioPanel';
 
 interface AudienceScreenProps {
   appMode: AppMode;
@@ -37,6 +39,8 @@ const AudienceScreen = ({
   const activeSubslide = quizSubslides[quizCurrentSubslideIndex];
   const isCitaVerse = activeSubslide?.kind === 'cita-verse';
 
+  const liveAudio = useAudienceLiveAudio();
+
   useEffect(() => {
     if (!('serviceWorker' in navigator)) return;
     navigator.serviceWorker
@@ -58,6 +62,33 @@ const AudienceScreen = ({
 
   const ignoreVideoState = useCallback(() => {}, []);
 
+  const liveAudioPanel = liveAudio ? (
+    <AudienceLiveAudioPanel
+      state={liveAudio.state}
+      isActive={liveAudio.isActive}
+      isMicrophoneActive={liveAudio.isMicrophoneActive}
+      hasAudioStarted={liveAudio.hasAudioStarted}
+      isPendingWord={liveAudio.isPendingWord}
+      isWordGranted={liveAudio.isWordGranted}
+      isParticipationBlocked={liveAudio.isParticipationBlocked}
+      volume={liveAudio.volume}
+      onVolumeChange={liveAudio.onVolumeChange}
+      microphoneVolume={liveAudio.microphoneVolume}
+      isMusicMode={liveAudio.isMusicMode}
+      onMicrophoneVolumeChange={liveAudio.onMicrophoneVolumeChange}
+      onMusicModeChange={liveAudio.onMusicModeChange}
+      onStartAudio={liveAudio.onStartAudio}
+      onRetryAudio={liveAudio.onRetryAudio}
+      onJoinActive={liveAudio.onJoinActive}
+      onLeaveActive={liveAudio.onLeaveActive}
+      onRequestWord={liveAudio.onRequestWord}
+      onCancelRequest={liveAudio.onCancelRequest}
+      onToggleMicrophone={liveAudio.onToggleMicrophone}
+      onOpenMessage={liveAudio.onOpenMessage}
+      variant="inline"
+    />
+  ) : null;
+
   if (isCitaVerse && scriptureState) {
     return (
       <div className="pointer-events-none h-dvh w-dvw select-none overflow-hidden bg-black">
@@ -65,6 +96,7 @@ const AudienceScreen = ({
           scriptureState={scriptureState}
           onVerseSelected={() => {}}
           onLogoClick={handleFullscreen}
+          liveAudioPanel={liveAudioPanel}
         />
       </div>
     );
@@ -92,6 +124,7 @@ const AudienceScreen = ({
           onSaveScore={(score) => audienceAnswers.saveScore(slide.id, score)}
           onSendFinalScore={audienceAnswers.sendFinalScore}
           maxBaseCentipunts={quizMaxBaseCentipunts}
+          liveAudioPanel={liveAudioPanel}
         />
       </div>
     );
@@ -104,6 +137,7 @@ const AudienceScreen = ({
           scriptureState={scriptureState}
           onVerseSelected={() => {}}
           onLogoClick={handleFullscreen}
+          liveAudioPanel={liveAudioPanel}
         />
       </div>
     );
@@ -122,6 +156,7 @@ const AudienceScreen = ({
         quizSubslides={quizSubslides}
         quizCurrentSubslideIndex={quizCurrentSubslideIndex}
         quizTimerState={quizTimerState}
+        liveAudioPanel={liveAudioPanel}
       />
     </div>
   );

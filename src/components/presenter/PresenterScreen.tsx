@@ -1,14 +1,10 @@
-import React, { useEffect, useState, useRef, Suspense } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { isImageMedia } from '../../utils/mediaUtils';
 import type { Slide, VideoState } from '../../types/presentation';
 import type { QuizOptionId, QuizSubslide, QuizTimerState } from '../../types/quiz';
 import { AnimatePresence, motion } from 'framer-motion';
 import AutoResizeText from '../shared/AutoResizeText';
 import { QuizPresenterView } from '../quiz/QuizPresenterView';
-
-const LiveAudioPresenter = import.meta.env.VITE_SEFER_LIVE_AUDIO_BUILD !== 'false'
-  ? React.lazy(() => import('../../features/liveAudio/components/presenter/LiveAudioPresenter'))
-  : null;
 
 interface PresenterScreenProps {
   background: string;
@@ -24,6 +20,7 @@ interface PresenterScreenProps {
   quizTimerState?: QuizTimerState;
   quizPresenterDemoSelection?: QuizOptionId | null;
   quizMaxBaseCentipunts?: number;
+  liveAudioPanel?: React.ReactNode;
 }
 
 const PresenterScreen: React.FC<PresenterScreenProps> = ({
@@ -39,6 +36,7 @@ const PresenterScreen: React.FC<PresenterScreenProps> = ({
   quizTimerState,
   quizPresenterDemoSelection = null,
   quizMaxBaseCentipunts = 0,
+  liveAudioPanel,
 }) => {
   const [videoElement, setVideoElement] = useState<HTMLVideoElement | null>(null);
 
@@ -444,17 +442,13 @@ const PresenterScreen: React.FC<PresenterScreenProps> = ({
             </div>
 
             {/* Injected Audio Panel from Audience Screen */}
-            {!isResultsSlide && (
-              <div id="audience-audio-portal" className="flex items-end justify-center fixed bottom-[4vh] left-1/2 -translate-x-1/2 md:static md:translate-x-0 md:bottom-auto md:left-auto w-full md:w-auto z-[60] pointer-events-none"></div>
+            {!isResultsSlide && liveAudioPanel && (
+              <div className="flex items-end justify-center fixed bottom-[4vh] left-1/2 -translate-x-1/2 md:static md:translate-x-0 md:bottom-auto md:left-auto w-full md:w-auto z-[60] pointer-events-auto">
+                {liveAudioPanel}
+              </div>
             )}
           </div>
         </div>
-      )}
-
-      {LiveAudioPresenter && (
-        <Suspense fallback={null}>
-          <LiveAudioPresenter />
-        </Suspense>
       )}
     </div>
   );

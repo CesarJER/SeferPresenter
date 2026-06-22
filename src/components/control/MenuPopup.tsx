@@ -177,6 +177,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
 
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isMusicPanelOpen, setIsMusicPanelOpen] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [resolvedScriptureState, setResolvedScriptureState] = useState<any>(null);
 
   const [showResetConfirm, setShowResetConfirm] = useState(false);

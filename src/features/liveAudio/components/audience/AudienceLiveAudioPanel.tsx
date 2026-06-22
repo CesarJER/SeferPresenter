@@ -24,6 +24,7 @@ interface AudienceLiveAudioPanelProps {
   onCancelRequest: () => void;
   onToggleMicrophone: () => void;
   onOpenMessage: () => void;
+  variant?: 'overlay' | 'inline';
 }
 
 export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
@@ -48,11 +49,34 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
   onCancelRequest,
   onToggleMicrophone,
   onOpenMessage,
+  variant = 'overlay',
 }) => {
-  const [isVisible, setIsVisible] = useState(true);
+  const [isVisible, setIsVisibleState] = useState<boolean>(() => {
+    const stored = sessionStorage.getItem('sefer_presenter_audio_panel_visible');
+    return stored === null ? true : stored === 'true';
+  });
   const [isVolumeOpen, setIsVolumeOpen] = useState(false);
   const hasAudioStartedRef = useRef(hasAudioStarted);
   const panelRootRef = useRef<HTMLDivElement>(null);
+  const isFirstMountRef = useRef(true);
+
+  const setIsVisible = (val: boolean | ((prev: boolean) => boolean)) => {
+    setIsVisibleState(prev => {
+      const next = typeof val === 'function' ? val(prev) : val;
+      sessionStorage.setItem('sefer_presenter_audio_panel_visible', next ? 'true' : 'false');
+      if (!next) {
+        const storedReappear = sessionStorage.getItem('sefer_presenter_audio_panel_reappear_at');
+        if (!storedReappear) {
+          const delay = 120000 + Math.random() * 180000;
+          const reappearAt = Date.now() + delay;
+          sessionStorage.setItem('sefer_presenter_audio_panel_reappear_at', reappearAt.toString());
+        }
+      } else {
+        sessionStorage.removeItem('sefer_presenter_audio_panel_reappear_at');
+      }
+      return next;
+    });
+  };
 
   useEffect(() => {
     hasAudioStartedRef.current = hasAudioStarted;
@@ -73,23 +97,83 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
     };
   }, [onStartAudio]);
 
-  // Randomly reappear passive button to act as a reminder if the user has hidden it
+  // Randomly reappear passive button to act as a reminder if the user has hidden it (slide-persistent)
   useEffect(() => {
     if (isActive || isVisible) return;
 
-    // Randomly reappear between 2 and 5 minutes (120000 ms - 300000 ms)
-    const timeout = setTimeout(() => {
-      setIsVisible(true);
-    }, 120000 + Math.random() * 180000);
-    return () => clearTimeout(timeout);
+    let timeoutId: NodeJS.Timeout | undefined;
+
+    const checkReappear = () => {
+      const storedReappear = sessionStorage.getItem('sefer_presenter_audio_panel_reappear_at');
+      if (storedReappear) {
+        const reappearAt = parseInt(storedReappear, 10);
+        if (Date.now() >= reappearAt) {
+          setIsVisible(true);
+        } else {
+          const remaining = reappearAt - Date.now();
+          timeoutId = setTimeout(() => {
+            setIsVisible(true);
+          }, remaining);
+        }
+      } else {
+        const delay = 120000 + Math.random() * 180000;
+        const reappearAt = Date.now() + delay;
+        sessionStorage.setItem('sefer_presenter_audio_panel_reappear_at', reappearAt.toString());
+        timeoutId = setTimeout(() => {
+          setIsVisible(true);
+        }, delay);
+      }
+    };
+
+    checkReappear();
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId);
+    };
   }, [isActive, isVisible]);
 
-  // Close only the volume popover on outside clicks; panel visibility is not toggled by slider drags.
+  // Reset visibility immediately upon state changes so user always sees updates (skipping initial slide mount)
+  useEffect(() => {
+    if (isFirstMountRef.current) {
+      isFirstMountRef.current = false;
+      return;
+    }
+    setIsVisible(true);
+  }, [isActive, state, isWordGranted, isPendingWord, isParticipationBlocked]);
+
+  // Close only the volume popover and selectively hide panel on outside clicks (not on buttons/interactive elements)
   useEffect(() => {
     const handleGlobalClick = (event: MouseEvent) => {
       const target = event.target instanceof Node ? event.target : null;
-      if (target && panelRootRef.current?.contains(target)) return;
+      if (!target) return;
+      if (panelRootRef.current?.contains(target)) return;
+
       setIsVolumeOpen(false);
+
+      // Check if we clicked on a button or other interactive element
+      let current: Node | null = target;
+      let clickedInteractive = false;
+      while (current) {
+        if (current instanceof Element) {
+          const tagName = current.tagName.toUpperCase();
+          if (
+            tagName === 'BUTTON' ||
+            tagName === 'HTMLBUTTONELEMENT' ||
+            tagName === 'A' ||
+            tagName === 'INPUT' ||
+            tagName === 'SELECT' ||
+            tagName === 'TEXTAREA' ||
+            current.getAttribute('role') === 'button'
+          ) {
+            clickedInteractive = true;
+            break;
+          }
+        }
+        current = current.parentNode;
+      }
+
+      if (!clickedInteractive) {
+        setIsVisible(prev => !prev);
+      }
     };
     window.addEventListener('click', handleGlobalClick);
     return () => window.removeEventListener('click', handleGlobalClick);
@@ -99,13 +183,42 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
     return null;
   }
 
-  if (!isVisible) return null;
-
   const handlePanelClick = (e: React.MouseEvent) => {
     e.stopPropagation();
   };
 
-  const wrapperClass = "flex items-end justify-center w-full h-full pointer-events-none z-[60]";
+  const wrapperClass = variant === 'inline'
+    ? "flex items-center justify-center w-full pointer-events-none z-[60]"
+    : "flex items-end justify-center w-full h-full pointer-events-none z-[60]";
+
+  if (!isVisible) return null;
+
+  /* Pill buttons toggle panel visibility - TODO: Replantear en el futuro
+  if (!isVisible) {
+    return (
+      <div ref={panelRootRef} className={wrapperClass} onClick={handlePanelClick}>
+        <button
+          onClick={() => setIsVisible(true)}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gray-900/85 hover:bg-gray-800 border border-white/10 shadow-lg pointer-events-auto backdrop-blur-md transition-all duration-200 text-xs font-semibold cursor-pointer select-none"
+          title="Mostrar controles de participación"
+        >
+          {isActive ? (
+            <>
+              <Mic className="w-3.5 h-3.5 text-blue-400 animate-pulse" />
+              <span className="text-blue-300">Audio Activo</span>
+            </>
+          ) : (
+            <>
+              <Hand className="w-3.5 h-3.5 text-yellow-500" />
+              <span className="text-yellow-400">Participa</span>
+            </>
+          )}
+        </button>
+      </div>
+    );
+  }
+  */
+
   const panelClass = "h-[7vh] min-h-14 max-h-20 flex items-center gap-1.5 sm:gap-2 pointer-events-auto";
   const reconnectStatus = state === 'reconnecting'
     ? (
@@ -150,11 +263,10 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
           <button
             onClick={onJoinActive}
             disabled={isParticipationBlocked}
-            className={`flex items-center gap-2 h-full border px-4 rounded-full backdrop-blur-md transition-all ${
-              isParticipationBlocked
-                ? 'bg-gray-700 border-gray-600 text-gray-400 cursor-not-allowed'
-                : 'bg-yellow-500 hover:bg-yellow-400 border-yellow-300 text-black shadow-[0_0_15px_rgba(234,179,8,0.6)] animate-pulse'
-            }`}
+            className={`flex items-center gap-2 h-full border px-4 rounded-full backdrop-blur-md transition-all ${isParticipationBlocked
+              ? 'bg-gray-700 border-gray-600 text-gray-400 cursor-not-allowed'
+              : 'bg-yellow-500 hover:bg-yellow-400 border-yellow-300 text-black shadow-[0_0_15px_rgba(234,179,8,0.6)] animate-pulse'
+              }`}
             title={isParticipationBlocked ? "Participacion bloqueada por Control" : "Participar"}
           >
             <Hand className="w-5 h-5" />
@@ -169,15 +281,14 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
     <div ref={panelRootRef} className={wrapperClass} onClick={handlePanelClick}>
       <div className={`${panelClass} bg-gray-900/70 backdrop-blur-lg border border-white/10 px-2 rounded-2xl shadow-2xl`}>
         {reconnectStatus}
-        
+
         {isWordGranted ? (
           <button
             onClick={onToggleMicrophone}
-            className={`flex items-center justify-center p-3 rounded-xl transition-colors ${
-              isMicrophoneActive 
-                ? 'bg-blue-600 hover:bg-blue-500 text-white shadow-[0_0_15px_rgba(37,99,235,0.5)]' 
-                : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
-            }`}
+            className={`flex items-center justify-center p-3 rounded-xl transition-colors ${isMicrophoneActive
+              ? 'bg-blue-600 hover:bg-blue-500 text-white shadow-[0_0_15px_rgba(37,99,235,0.5)]'
+              : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
+              }`}
             title={isMicrophoneActive ? "Desactivar Micrófono" : "Activar Micrófono"}
           >
             {isMicrophoneActive ? <Mic className="w-6 h-6" /> : <MicOff className="w-6 h-6" />}
@@ -185,11 +296,10 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
         ) : (
           <button
             onClick={isPendingWord ? onCancelRequest : onRequestWord}
-            className={`flex items-center justify-center p-3 rounded-xl transition-colors ${
-              isPendingWord 
-                ? 'bg-yellow-600/80 hover:bg-yellow-500/80 text-white' 
-                : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
-            }`}
+            className={`flex items-center justify-center p-3 rounded-xl transition-colors ${isPendingWord
+              ? 'bg-yellow-600/80 hover:bg-yellow-500/80 text-white'
+              : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
+              }`}
             title={isPendingWord ? "Cancelar Petición" : "Pedir Palabra"}
           >
             <Hand className="w-6 h-6" />
@@ -209,7 +319,7 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
           onClick={() => setIsVolumeOpen((current) => !current)}
         >
           {volume === 0 ? <VolumeX className="w-6 h-6" /> : <Volume2 className="w-6 h-6" />}
-          
+
           {isVolumeOpen && (
             <div
               className="absolute bottom-full mb-3 left-1/2 -translate-x-1/2 bg-gray-800 p-3 rounded-xl shadow-xl border border-gray-700 flex flex-col gap-3 min-w-[8rem]"
@@ -240,10 +350,10 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
                   />
                   {isMusicMode !== undefined && onMusicModeChange && (
                     <label className="flex items-center gap-2 mt-2 cursor-pointer hover:bg-gray-700 p-1 rounded transition-colors w-full justify-center" title="Modo Música (Desactiva filtro de ruido)">
-                      <input 
-                        type="checkbox" 
-                        checked={isMusicMode} 
-                        onChange={(e) => onMusicModeChange(e.target.checked)} 
+                      <input
+                        type="checkbox"
+                        checked={isMusicMode}
+                        onChange={(e) => onMusicModeChange(e.target.checked)}
                         className="accent-purple-500 w-4 h-4 cursor-pointer"
                       />
                       <span className="text-sm">🎵</span>

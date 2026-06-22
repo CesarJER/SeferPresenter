@@ -1,8 +1,12 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef, Suspense, lazy } from 'react';
 import PresenterScreen from './components/presenter/PresenterScreen';
 import SeferReaderScreen from './components/presenter/SeferReaderScreen';
 import DataProtectionPage from './components/shared/DataProtectionPage';
 import { Music } from 'lucide-react';
+
+const LiveAudioPresenter = import.meta.env.VITE_SEFER_LIVE_AUDIO_BUILD !== 'false'
+  ? lazy(() => import('./features/liveAudio/components/presenter/LiveAudioPresenter'))
+  : null;
 
 import type { AudioState, AudioSyncMap, AudioTimelineState } from './types/audio';
 import { DEFAULT_AUDIO_STATE } from './types/audio';
@@ -839,6 +843,11 @@ function App() {
           <Music size={13} className="animate-pulse text-white" />
           <span>Haga clic para habilitar sonido</span>
         </div>
+      )}
+      {LiveAudioPresenter && (
+        <Suspense fallback={null}>
+          <LiveAudioPresenter />
+        </Suspense>
       )}
     </div>
   );
