@@ -25,6 +25,7 @@ Fast map for agents. Use real paths only; this repo does not currently have
 - `server/livekit-server.mjs`: optional self-hosted LiveKit token and moderation endpoints with memory-only state.
 - `server/timelineManager.mjs`: isolated audio timeline state and action reducer.
 - `server/projection-state-reducer.mjs`: pure backend-consumable reducer for supported projection `REMOTE_COMMAND` payloads into canonical `SYNC_STATE` state.
+- `server/authUtils.mjs`: shared utility checking if basic authentication is required or valid under `SEFER_REQUIRE_AUTH` and `SEFER_CONTROL_PASSWORD`.
 - `src/types/liveAudio.ts`: optional Live Audio protocol contracts and role state types; no LiveKit connection code.
 - `vite.config.ts`: Vite config, development proxy, and multi-entry build inputs.
 

@@ -27,15 +27,22 @@ client sets, and failed SSE writes are dropped from future broadcasts.
 Main message types live in `src/types/sync.ts`:
 
 - `SYNC_STATE`: full state needed to initialize or resynchronize clients.
-- `REMOTE_COMMAND`: operator intent sent from control to the backend reducer
-  (commands should send explicit desired state, not simple toggles, to avoid
-  split-brain).
+- `REMOTE_COMMAND`: operator intent sent from control to the backend reducer.
 - `AUDIO_TELEMETRY`: lightweight audio playback updates.
 - `VIDEO_TELEMETRY`: lightweight video playback updates.
 - `DISPLAY_TELEMETRY`: background lock/override updates.
 - `AUDIO_SYNC_MAPS_UPDATE`: audio cue map updates.
 - `REQUEST_STATE`: clients ask for a fresh backend snapshot; clients also fetch
   `/api/state` directly on startup.
+- `WELCOME`: sent by the server upon WebSocket connection, providing client ID, role, server time, and presentation session ID.
+- `PRESENTATION_SESSION_ROTATED`: announces a new presentation session ID, which forces clients to update/sync.
+- `SERVER_TIME_PING` / `SERVER_TIME_PONG`: round-trip clock sync messages for estimating client-to-server clock offset.
+- `AUDIO_TIMELINE_ACTION`: control action dispatched to the server audio timeline.
+- `AUDIO_TIMELINE_STATE`: server-broadcasted timeline playback status.
+- `AUDIO_PRESENTATION_CLOCK`: periodic message containing the current estimated position of the audio playback.
+- `AUDIENCE_STATE_UPDATE`: client-facing read-only presentation/scripture state for the audience view.
+- `MEDIA_MASTER_STATUS`: server-broadcasted status determining if the current control client is the media master (e.g. when there is no active presenter).
+- `ERROR`: technical error code and message.
 - Live Audio family: optional LiveKit-ready technical messages that stay
   outside `SYNC_STATE` and existing `REMOTE_COMMAND` payloads.
 
@@ -316,6 +323,9 @@ Backend-owned or backend-mirrored pieces:
 - `/api/audio-sync`
 - `/api/quiz-answer` and `/api/quiz-events` (POST is unauthenticated to allow audience submissions, whereas GET `/api/quiz-events` filters individual answers and scores to only broadcast them to authenticated control panel connections)
 - `/api/audience/state` and `/api/audience/events`
+- `/api/backgrounds` (lists all available image and video background files)
+- `/api/audio` (lists all available audio tracks)
+- `/api/audience-cache-assets` (returns the list of static assets to be cached by the PWA)
 - `/ws` for backend-owned audio timeline messages only
 - `/api/livekit/status`, `/api/livekit/token`, `/api/livekit/refresh-token`,
   and `/api/livekit/*` moderation endpoints for optional Live Audio state in

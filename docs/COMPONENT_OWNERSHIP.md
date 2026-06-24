@@ -14,6 +14,7 @@ Control-only:
 - `src/components/control/AudioPanel.tsx`: audio track/sync controls.
 - `src/components/control/MediaControls.tsx`: video playback controls.
 - `src/components/control/SeferControlPanel.tsx` and `SeferControlPanelMini.tsx`: sacred-text controls.
+- `src/components/control/ScriptureRangeEditor.tsx`: control-side scripture reference range selector.
 - Proposed Live Audio controls: `LiveAudioControlPanel.tsx`,
   `LiveAudioControlAuthorization.tsx`, `LiveAudioQueue.tsx`,
   `LiveAudioSpeakers.tsx`, `LiveAudioParticipantRow.tsx`, and
@@ -44,6 +45,8 @@ Shared:
 - `src/components/shared/SlideVisualizer.tsx`
 - `src/components/shared/CustomSearchSelect.tsx`
 - `src/components/shared/FormatLegend.tsx`
+- `src/components/shared/DataProtectionLink.tsx`
+- `src/components/shared/DataProtectionPage.tsx`
 - `src/components/shared/PwaRestartButton.tsx`: shared confirmed PWA reload action for installable audience/control shells; it must not clear localStorage or session state.
 - Live Audio shared widgets such as `LiveAudioStatusBadge.tsx` and
   `LiveAudioTrackOutput.tsx` belong under
@@ -63,6 +66,9 @@ Hooks:
 - [useServerClock.ts](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useServerClock.ts): WebSocket server clock offset and RTT estimation.
 - [useAudioTimeline.ts](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useAudioTimeline.ts): local audio timeline tracking, status estimation, action dispatching over WebSocket.
 - [useAudioTimelineApplicator.ts](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useAudioTimelineApplicator.ts): applying timeline changes (source, status, volume, rate) to presenter's audio element.
+- [useAudienceAudioPlayback.ts](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useAudienceAudioPlayback.ts): syncs presenter audio state to the audience device.
+- [useSeferControlLogic.ts](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useSeferControlLogic.ts): stateful logic for the sacred text reader operator interface.
+- [useResizablePanel.ts](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useResizablePanel.ts): pointer-drag resizing behavior for sidebar panels.
 - [useScriptureNavigation.ts](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useScriptureNavigation.ts): slide/scripture/manual Sefer mode transitions.
 - [useSeferReader.ts](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useSeferReader.ts): book/chapter/verse reader state and loading.
 - [useBackgroundResolver.ts](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useBackgroundResolver.ts): active background and lock/override behavior.
@@ -95,6 +101,9 @@ Library/sync/validation:
 - `src/utils/pwaUpdate.ts`: PWA service-worker registration and update/reload helpers for route-specific shells.
 - `src/utils/normalizePresentation.ts`: persistence/path normalization.
 - `src/utils/syncProtocol.ts`: sync message construction.
+- `src/utils/audioTimeline.ts`: client timeline manipulation and status estimation helpers.
+- `src/utils/navigationUtils.ts`: step generators for slide navigation.
+- `src/utils/mediaUtils.ts`: serializers and parsers for media slide parameters.
 - `server/projection-state-reducer.mjs`: pure projection-state reducer used by
   the backend to turn supported Control `REMOTE_COMMAND` payloads into
   canonical `SYNC_STATE`.
@@ -102,6 +111,7 @@ Library/sync/validation:
 - `src/utils/scriptureLookup.ts`, `scriptureParser.ts`, `metadataCache.ts`: sacred text data.
 - `server/timelineManager.mjs`: backend-owned audio timeline state; keep separate from presenter `currentState`.
 - `server/ws-server.mjs`: WebSocket transport for the backend-owned audio timeline.
+- `server/authUtils.mjs`: backend basic authentication helpers.
 
 ## State Categories
 

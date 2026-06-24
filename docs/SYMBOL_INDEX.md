@@ -24,6 +24,9 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
 - [useServerClock](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useServerClock.ts) - `src/hooks/useServerClock.ts`: WebSocket server clock offset and RTT estimation from `SERVER_TIME_PING` / `SERVER_TIME_PONG`.
 - [useAudioTimeline](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useAudioTimeline.ts) - `src/hooks/useAudioTimeline.ts`: local audio timeline tracking, status estimation, action dispatching over WebSocket.
 - [useAudioTimelineApplicator](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useAudioTimelineApplicator.ts) - `src/hooks/useAudioTimelineApplicator.ts`: applies audio timeline changes (source, status, volume, rate) to the presenter's HTML audio element.
+- [useAudienceAudioPlayback](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useAudienceAudioPlayback.ts) - `src/hooks/useAudienceAudioPlayback.ts`: synchronizes HTML audio element playback, current time, and volume on the audience device based on presentation audio telemetry.
+- [useSeferControlLogic](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useSeferControlLogic.ts) - `src/hooks/useSeferControlLogic.ts`: orchestrates the full or mini scripture navigation control UI logic, including verse selection, page navigation, boundary checks, and font adjustments.
+- [useResizablePanel](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useResizablePanel.ts) - `src/hooks/useResizablePanel.ts`: controls dragging and resizing behavior for side/layout panels (e.g. Sefer reader layout), adapting size based on viewport orientation.
 - [usePrivateControlSignals](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/usePrivateControlSignals.ts) - `src/hooks/usePrivateControlSignals.ts`: Fase 5.2 crypto-only private moderation signaling with in-memory ECDH P-256 keys, AES-GCM private signals, nonce replay rejection, key rotation, and secondary Control key transfer.
 - [useControlAuthorization](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useControlAuthorization.ts) - `src/hooks/useControlAuthorization.ts`: Fase 5.3 Control principal/secondary state, pending verification-code countdown, delegated approval/rejection commands, and succession reflection over WebSocket.
 - `useBackgroundResolver` - `src/hooks/useBackgroundResolver.ts`: active background, lock, and override behavior.
@@ -53,6 +56,7 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
 - `MediaControls` - `src/components/control/MediaControls.tsx`: video controls.
 - `SeferControlPanel` - `src/components/control/SeferControlPanel.tsx`: full Sefer control panel.
 - `SeferControlPanelMini` - `src/components/control/SeferControlPanelMini.tsx`: compact scripture controls.
+- [ScriptureRangeEditor](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/components/control/ScriptureRangeEditor.tsx) - `src/components/control/ScriptureRangeEditor.tsx`: control-side range editor used for slide reference selection.
 - `PresenterScreen` - `src/components/presenter/PresenterScreen.tsx`: projected slide/video/quiz rendering.
 - `SeferReaderScreen` - `src/components/presenter/SeferReaderScreen.tsx`: projected scripture reader.
 - `SeferFlowView` - `src/components/presenter/SeferFlowView.tsx`: scripture flow visual.
@@ -69,10 +73,18 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
 - `QuizControllerView` - `src/components/quiz/QuizControllerView.tsx`: controller quiz controls/results.
 - `QuizAudienceView` - `src/components/quiz/QuizAudienceView.tsx`: audience quiz answer UI.
 - `QuizSlideEditor` - `src/components/quiz/QuizSlideEditor.tsx`: quiz editing UI.
+- [QuizResultsView](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/components/quiz/QuizResultsView.tsx) - `src/components/quiz/QuizResultsView.tsx`: quiz results chart/statistics dashboard.
+- [QuizSubslideNav](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/components/quiz/QuizSubslideNav.tsx) - `src/components/quiz/QuizSubslideNav.tsx`: navigation toolbar to select active subslides within quiz projection.
+- [QuizTimerDisplay](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/components/quiz/QuizTimerDisplay.tsx) - `src/components/quiz/QuizTimerDisplay.tsx`: visual timer indicator with ring animations and adjusting tools.
 - `LiveAudioControlAuthorization` - `src/components/control/LiveAudioControlAuthorization.tsx`: compact Fase 5.3 Control principal/pending authorization panel.
 - `ControlVerificationCode` - `src/components/shared/ControlVerificationCode.tsx`: short verification-code display with countdown.
 - `SlideVisualizer` - `src/components/shared/SlideVisualizer.tsx`: control-side preview.
 - `AutoResizeText` - `src/components/shared/AutoResizeText.tsx`: projected responsive text.
+- [AutoResizeInput](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/components/shared/AutoResizeInput.tsx) - `src/components/shared/AutoResizeInput.tsx`: auto-resizing text input.
+- [CustomSearchSelect](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/components/shared/CustomSearchSelect.tsx) - `src/components/shared/CustomSearchSelect.tsx`: combobox widget.
+- [DataProtectionLink](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/components/shared/DataProtectionLink.tsx) - `src/components/shared/DataProtectionLink.tsx`: shared data protection link.
+- [DataProtectionPage](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/components/shared/DataProtectionPage.tsx) - `src/components/shared/DataProtectionPage.tsx`: standalone data protection terms page.
+- [FormatLegend](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/components/shared/FormatLegend.tsx) - `src/components/shared/FormatLegend.tsx`: slide editor styling guide legend.
 
 ## Sync Modules
 
@@ -111,6 +123,7 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
   `participantId` metadata and no alias; refresh keeps the same participant
   identity while reflecting current speaker permission and muted speaker state.
 - `server/timelineManager.mjs`: backend-owned audio timeline state and action reducer.
+- [server/authUtils.mjs](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/server/authUtils.mjs) - `server/authUtils.mjs`: server-side authentication helpers based on `SEFER_REQUIRE_AUTH` and `SEFER_CONTROL_PASSWORD`.
 
 ## Validation Modules
 
@@ -152,6 +165,7 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
 - `parseVerses` - `src/utils/scriptureParser.ts`: TSV scripture parsing.
 - `getScriptureChapterVerses` / `materializeScriptureSlides` - `src/utils/scriptureLookup.ts`: scripture lookup and slide materialization.
 - `scripts/generate-verses.js`: generated `public/books/*.tsv` and `public/metadata.json`.
+- [navigationUtils](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/utils/navigationUtils.ts) - `src/utils/navigationUtils.ts`: sequential linear step generation for presentations.
 
 ## Utilities
 
@@ -162,3 +176,4 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
 - `transliterateText` - `src/utils/transliterate.ts`: transliteration helper.
 - `sanitizeHtml` / `sanitizeSlideHtml` / niqqud helpers - `src/utils/hebrewText.ts`: slide HTML sanitizing and Hebrew text cleanup.
 - `registerScopedServiceWorker` / `restartPwaApp` - `src/utils/pwaUpdate.ts`: route-scoped PWA service-worker registration and update-aware reload without clearing local state.
+- [audioTimeline](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/utils/audioTimeline.ts) - `src/utils/audioTimeline.ts`: timeline calculations, actions application, and client clock offset estimations.

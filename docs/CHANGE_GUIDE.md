@@ -118,7 +118,7 @@ Use these checklists before implementing future tasks.
 - Update `docs/SYNC_ARCHITECTURE.md`, `docs/AI_PROJECT_MAP.md`,
   `docs/COMPONENT_OWNERSHIP.md`, `docs/SYMBOL_INDEX.md`, and `README.md` when
   Live Audio entry points, ownership, routing, or protocol shape changes.
-- **Fase 5 verification checklist:** refer to `legacy/implementation_plan/FASE_5_CHECKLIST_OPERATIVO.md` for full operational tests (token refresh, E2E moderation, cryptography, privacy, and modular build requirements). Ensure no `console.log` leaks ciphertext, alias, or keys, and no persistent nominal tracking exists.
+- **Fase 5 verification checklist:** refer to the manual verification checklist in `README.md` for full operational tests (token refresh, E2E moderation, cryptography, privacy, and modular build requirements). Ensure no `console.log` leaks ciphertext, alias, or keys, and no persistent nominal tracking exists.
 
 ## When Editing Validation/Import/Export
 
