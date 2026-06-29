@@ -161,9 +161,14 @@ const readJsonFile = (filePath, fallback) => {
 }
 
 const writeJsonAtomic = (filePath, value) => {
-  const tmpPath = `${filePath}.${process.pid}.tmp`
-  fs.writeFileSync(tmpPath, JSON.stringify(value, null, 2), 'utf-8')
-  fs.renameSync(tmpPath, filePath)
+  // Crear una copia de seguridad (.bak) antes de sobrescribir, por si hay un corte de luz.
+  // Mantenemos el writeFileSync directo para no romper el inodo de Docker.
+  const backupPath = `${filePath}.bak`
+  if (fs.existsSync(filePath)) {
+    fs.copyFileSync(filePath, backupPath)
+  }
+  
+  fs.writeFileSync(filePath, JSON.stringify(value, null, 2), 'utf-8')
 }
 
 const walkAssets = (directories, matcher) => {

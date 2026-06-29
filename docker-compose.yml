@@ -45,20 +45,31 @@ services:
     container_name: sefer-presenter-redis
     restart: unless-stopped
     command: redis-server --save "" --appendonly no
+    mem_limit: 512m
 
   livekit:
     image: livekit/livekit-server:latest
     container_name: sefer-presenter-livekit
     restart: unless-stopped
-    command: --node-ip=${LIVEKIT_NODE_IP:-127.0.0.1}
+    entrypoint: /bin/sh -c "export NODE_IP=$$(wget -qO- http://ifconfig.me/ip) && exec /livekit-server"
     environment:
       - "LIVEKIT_KEYS=${LIVEKIT_API_KEY:-devkey}: ${LIVEKIT_API_SECRET:-secret}"
-      - LIVEKIT_REDIS_ADDRESS=redis:6379
+      - "REDIS_HOST=redis:6379"
+      - "UDP_PORT=50000-50050"
     ports:
-      - "7881:7881"
+      - "7880:7880/tcp"
       - "50000-50050:50000-50050/udp"
+    mem_limit: 4g
+    memswap_limit: 4g
+    cpus: "8"
     depends_on:
       - redis
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:7880/alive" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
 volumes:
   caddy_data:

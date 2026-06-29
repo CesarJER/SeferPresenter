@@ -274,7 +274,7 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
 
   if (!isActive) {
     return (
-      <div ref={panelRootRef} className={wrapperClass} onClick={handlePanelClick}>
+      <div ref={panelRootRef} className={wrapperClass} onClick={handlePanelClick} id="audience-bottom-panel">
         <div className={panelClass}>
           {reconnectStatus}
           {!hasAudioStarted && (
