@@ -28,6 +28,7 @@
         "livekit-client": "^2.19.2",
         "lucide-react": "^1.16.0",
         "papaparse": "^5.5.2",
+        "qrcode.react": "^4.2.0",
         "react": "^19.2.6",
         "react-dom": "^19.2.6",
         "ws": "^8.21.0"

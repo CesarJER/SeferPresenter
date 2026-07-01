@@ -8,6 +8,7 @@ import { QuizAudienceView } from '../quiz/QuizAudienceView';
 import { useAudienceLiveAudio } from '../../features/liveAudio/components/audience/AudienceLiveAudioContext';
 import { AudienceLiveAudioPanel } from '../../features/liveAudio/components/audience/AudienceLiveAudioPanel';
 import { PwaRestartButton } from '../shared/PwaRestartButton';
+import AudienceTvCallToAction from './AudienceTvCallToAction';
 
 interface AudienceScreenProps {
   appMode: AppMode;
@@ -40,6 +41,9 @@ const AudienceScreen = ({
   const activeSubslide = quizSubslides[quizCurrentSubslideIndex];
   const isCitaVerse = activeSubslide?.kind === 'cita-verse';
 
+  const isTvMode = new URLSearchParams(window.location.search).get('tv') === '1';
+  const domain = import.meta.env.VITE_DOMAIN || window.location.host;
+
   const liveAudio = useAudienceLiveAudio();
 
   const handleFullscreen = useCallback(() => {
@@ -56,7 +60,7 @@ const AudienceScreen = ({
 
   const ignoreVideoState = useCallback(() => {}, []);
 
-  const liveAudioPanel = liveAudio ? (
+  const liveAudioPanel = liveAudio && !isTvMode ? (
     <AudienceLiveAudioPanel
       state={liveAudio.state}
       isActive={liveAudio.isActive}
@@ -86,18 +90,21 @@ const AudienceScreen = ({
 
   if (isCitaVerse && scriptureState) {
     return (
-      <div className="pointer-events-none h-dvh w-dvw select-none overflow-hidden bg-black">
-        <SeferReaderScreen
-          scriptureState={scriptureState}
-          onVerseSelected={() => {}}
-          onLogoClick={handleFullscreen}
-          liveAudioPanel={liveAudioPanel}
-        />
+      <div className="pointer-events-none flex flex-col h-dvh w-dvw select-none overflow-hidden bg-black">
+        <div className="flex-1 relative min-h-0">
+          <SeferReaderScreen
+            scriptureState={scriptureState}
+            onVerseSelected={() => {}}
+            onLogoClick={handleFullscreen}
+            liveAudioPanel={liveAudioPanel}
+          />
+        </div>
+        {isTvMode && <AudienceTvCallToAction domain={domain} />}
       </div>
     );
   }
 
-  if (slide?.type === 'quiz' && slide.quizData && quizTimerState && !isCitaVerse) {
+  if (slide?.type === 'quiz' && slide.quizData && quizTimerState && !isCitaVerse && !isTvMode) {
     const answer = audienceAnswers.getAnswer(slide.id);
     return (
       <div className="h-dvh w-dvw overflow-hidden bg-black">
@@ -127,38 +134,44 @@ const AudienceScreen = ({
 
   if ((appMode === 'seferManual' || (appMode === 'scripture' && scriptureState?.scriptureKind !== 'tanaj')) && scriptureState) {
     return (
-      <div className="pointer-events-none h-dvh w-dvw select-none overflow-hidden bg-black">
-        <SeferReaderScreen
-          scriptureState={scriptureState}
-          onVerseSelected={() => {}}
-          onLogoClick={handleFullscreen}
-          liveAudioPanel={liveAudioPanel}
-        />
+      <div className="pointer-events-none flex flex-col h-dvh w-dvw select-none overflow-hidden bg-black">
+        <div className="flex-1 relative min-h-0">
+          <SeferReaderScreen
+            scriptureState={scriptureState}
+            onVerseSelected={() => {}}
+            onLogoClick={handleFullscreen}
+            liveAudioPanel={liveAudioPanel}
+          />
+        </div>
+        {isTvMode && <AudienceTvCallToAction domain={domain} />}
       </div>
     );
   }
 
   return (
-    <div className="pointer-events-none h-dvh w-dvw select-none overflow-hidden bg-black">
-      <PresenterScreen
-        background={background}
-        slide={slide}
-        presentationTitle={presentationTitle}
-        fontScale={fontScale}
-        onLogoClick={handleFullscreen}
-        videoState={videoState}
-        onVideoStateChange={ignoreVideoState}
-        quizSubslides={quizSubslides}
-        quizCurrentSubslideIndex={quizCurrentSubslideIndex}
-        quizTimerState={quizTimerState}
-        liveAudioPanel={liveAudioPanel}
-      />
+    <div className="pointer-events-none flex flex-col h-dvh w-dvw select-none overflow-hidden bg-black">
+      <div className="flex-1 relative min-h-0">
+        <PresenterScreen
+          background={background}
+          slide={slide}
+          presentationTitle={presentationTitle}
+          fontScale={fontScale}
+          onLogoClick={handleFullscreen}
+          videoState={videoState}
+          onVideoStateChange={ignoreVideoState}
+          quizSubslides={quizSubslides}
+          quizCurrentSubslideIndex={quizCurrentSubslideIndex}
+          quizTimerState={quizTimerState}
+          liveAudioPanel={liveAudioPanel}
+        />
+      </div>
       <div className="fixed bottom-2 left-2 z-50 pointer-events-auto opacity-60 hover:opacity-100 transition-opacity">
         <PwaRestartButton
           connectionState={liveAudio?.state}
           connectionQuality={liveAudio?.connectionQuality}
         />
       </div>
+      {isTvMode && <AudienceTvCallToAction domain={domain} />}
     </div>
   );
 };
