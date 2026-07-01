@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react';
 import {
   ConnectionState,
+  ConnectionQuality,
   createLocalAudioTrack,
+  type Participant,
   Room,
   RoomEvent,
   Track,
@@ -15,6 +17,7 @@ import {
 import type {
   LiveAudioAvailability,
   LiveAudioConnectionState,
+  LiveAudioConnectionQuality,
   LiveAudioMicrophoneDiagnostics,
   LiveAudioParticipantRole,
   LiveAudioRemoteTrack,
@@ -31,6 +34,7 @@ interface UseLiveAudioOptions {
 
 interface UseLiveAudioResult {
   state: LiveAudioConnectionState;
+  connectionQuality: LiveAudioConnectionQuality;
   availability: LiveAudioAvailability;
   remoteTracks: LiveAudioRemoteTrack[];
   participantId: string | null;
@@ -89,6 +93,21 @@ const mapRoomState = (state: ConnectionState): LiveAudioConnectionState => {
     case ConnectionState.Disconnected:
     default:
       return 'disconnected';
+  }
+};
+
+const mapConnectionQuality = (quality: ConnectionQuality): LiveAudioConnectionQuality => {
+  switch (quality) {
+    case ConnectionQuality.Excellent:
+      return 'excellent';
+    case ConnectionQuality.Good:
+      return 'good';
+    case ConnectionQuality.Poor:
+      return 'poor';
+    case ConnectionQuality.Lost:
+      return 'lost';
+    default:
+      return 'unknown';
   }
 };
 
@@ -192,6 +211,7 @@ export const useLiveAudio = ({
 }: UseLiveAudioOptions): UseLiveAudioResult => {
   const { availability } = useLiveAudioAvailability();
   const [state, setState] = useState<LiveAudioConnectionState>('disconnected');
+  const [connectionQuality, setConnectionQuality] = useState<LiveAudioConnectionQuality>('unknown');
   const [remoteTracks, setRemoteTracks] = useState<LiveAudioRemoteTrack[]>([]);
   const [participantId, setParticipantId] = useState<string | null>(null);
   const [participantIdentity, setParticipantIdentity] = useState<string | null>(null);
@@ -395,6 +415,7 @@ export const useLiveAudio = ({
     setRemoteTracks([]);
     setParticipantId(null);
     setParticipantIdentity(null);
+    setConnectionQuality('unknown');
     setState(availability === 'enabled' ? 'disconnected' : 'unavailable');
     if (room) {
       room.removeAllListeners();
@@ -532,6 +553,11 @@ export const useLiveAudio = ({
       }
       setState(mappedState);
     };
+    const handleConnectionQualityChanged = (quality: ConnectionQuality, participant: Participant) => {
+      if (connectionRunRef.current !== runId) return;
+      if (participant.sid !== room.localParticipant.sid) return;
+      setConnectionQuality(mapConnectionQuality(quality));
+    };
     const handleTrackPublished = (publication: RemoteTrackPublication, participant: RemoteParticipant) => {
       subscribePublication(publication, participant);
     };
@@ -544,6 +570,7 @@ export const useLiveAudio = ({
 
     room
       .on(RoomEvent.ConnectionStateChanged, handleConnectionStateChanged)
+      .on(RoomEvent.ConnectionQualityChanged, handleConnectionQualityChanged)
       .on(RoomEvent.TrackPublished, handleTrackPublished)
       .on(RoomEvent.TrackSubscribed, handleTrackSubscribed)
       .on(RoomEvent.TrackUnsubscribed, handleTrackUnsubscribed)
@@ -572,6 +599,7 @@ export const useLiveAudio = ({
         console.log(`[LIVEKIT] livekit:connect:success`);
         subscribeExistingAudio(room);
         scheduleTokenRefresh(tokenResponse, runId);
+        setConnectionQuality(mapConnectionQuality(room.localParticipant.connectionQuality));
         setConnectedState('connected');
       } catch (err) {
         if (cancelled || connectionRunRef.current !== runId) return;
@@ -595,6 +623,7 @@ export const useLiveAudio = ({
             console.log(`[LIVEKIT] livekit:connect:success (retry)`);
             subscribeExistingAudio(room);
             scheduleTokenRefresh(tokenResponse, runId);
+            setConnectionQuality(mapConnectionQuality(room.localParticipant.connectionQuality));
             setConnectedState('connected');
             return;
           } catch (retryErr) {
@@ -679,6 +708,11 @@ export const useLiveAudio = ({
         }
         setState(mappedState);
       })
+      .on(RoomEvent.ConnectionQualityChanged, (quality: ConnectionQuality, participant) => {
+        if (connectionRunRef.current !== runId) return;
+        if (participant.sid !== room.localParticipant.sid) return;
+        setConnectionQuality(mapConnectionQuality(quality));
+      })
       .on(RoomEvent.TrackPublished, subscribePublication)
       .on(RoomEvent.TrackSubscribed, (track: RemoteTrack, _publication: RemoteTrackPublication, participant: RemoteParticipant) => {
         addRemoteTrack(track, participant);
@@ -703,6 +737,7 @@ export const useLiveAudio = ({
       console.log(`[LIVEKIT] livekit:connect:success`);
       subscribeExistingAudio(room);
       scheduleTokenRefresh(tokenResponse, runId);
+      setConnectionQuality(mapConnectionQuality(room.localParticipant.connectionQuality));
       setConnectedState('connected');
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err);
@@ -732,6 +767,7 @@ export const useLiveAudio = ({
 
   return useMemo(() => ({
     state,
+    connectionQuality,
     availability,
     remoteTracks,
     participantId,
@@ -747,6 +783,7 @@ export const useLiveAudio = ({
     availability,
     disconnect,
     isMicrophoneActive,
+    connectionQuality,
     participantId,
     participantIdentity,
     publishMicrophone,

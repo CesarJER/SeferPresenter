@@ -203,7 +203,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
     }
   };
 
-    const handleOpenAudioEditor = () => {
+  const handleOpenAudioEditor = () => {
     const width = 1100;
     const height = 800;
     const left = (window.screen.width - width) / 2;
@@ -231,8 +231,8 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
   const [editorMode, setEditorMode] = useState<'list' | 'edit'>('list');
   const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
   // Local video state for scrubbing (prevents slider fighting telemetry)
-  
-  
+
+
 
   // Store loaded durations of videos to clamp row-level duration editor inputs
   const [videoDurations, setVideoDurations] = useState<Record<string, number>>({});
@@ -291,9 +291,9 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
     });
   }, [slides, backgrounds]);
 
-  
 
-  
+
+
 
   // ────────────────────────────────────────────────────────────────
   // Handlers
@@ -1428,16 +1428,16 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
             type="button"
             onClick={() => setIsMusicPanelOpen(!isMusicPanelOpen)}
             className={`flex items-center justify-center p-2 text-xs font-semibold rounded border transition-all cursor-pointer ${isMusicPanelOpen
-                ? 'bg-orange-600 border-orange-500 text-white font-bold'
-                : audioState.volume === 0
-                  ? 'bg-red-600 border-red-500 text-white font-bold animate-pulse'
-                  : !audioState.isPlaying || !audioState.audioSrc
-                    ? 'bg-gray-800 border-gray-700 hover:bg-gray-700 text-gray-300 hover:text-white'
-                    : audioState.syncMode === 'unilateral'
-                      ? 'bg-sky-600 border-sky-500 text-white font-bold'
-                      : audioState.syncMode === 'bilateral'
-                        ? 'bg-emerald-600 border-emerald-500 text-white font-bold'
-                        : 'bg-orange-600 border-orange-500 text-white font-bold'
+              ? 'bg-orange-600 border-orange-500 text-white font-bold'
+              : audioState.volume === 0
+                ? 'bg-red-600 border-red-500 text-white font-bold animate-pulse'
+                : !audioState.isPlaying || !audioState.audioSrc
+                  ? 'bg-gray-800 border-gray-700 hover:bg-gray-700 text-gray-300 hover:text-white'
+                  : audioState.syncMode === 'unilateral'
+                    ? 'bg-sky-600 border-sky-500 text-white font-bold'
+                    : audioState.syncMode === 'bilateral'
+                      ? 'bg-emerald-600 border-emerald-500 text-white font-bold'
+                      : 'bg-orange-600 border-orange-500 text-white font-bold'
               }`}
             title={isMusicPanelOpen ? "Cerrar panel de música" : "Abrir panel de música y sincronización"}
           >
@@ -1468,8 +1468,8 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
             type="button"
             onClick={() => onToggleAppMode && onToggleAppMode(appMode === 'seferManual' ? 'slides' : 'seferManual')}
             className={`flex items-center justify-center p-2 text-xs font-semibold rounded border transition-all cursor-pointer ${appMode === 'seferManual'
-                ? 'bg-yellow-600 border-yellow-500 text-white font-bold'
-                : 'bg-gray-800 border-gray-700 hover:bg-gray-700 text-gray-300 hover:text-white'
+              ? 'bg-yellow-600 border-yellow-500 text-white font-bold'
+              : 'bg-gray-800 border-gray-700 hover:bg-gray-700 text-gray-300 hover:text-white'
               }`}
             title={appMode === 'seferManual' ? "Volver a la diapositiva" : "Activar Sefer manual"}
           >
@@ -1689,31 +1689,31 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                         }
                       }
                       return (
-                      <QuizControllerView
-                        slide={activeSlide}
-                        quizData={activeSlide.quizData}
-                        subslides={quizSubslides}
-                        currentSubslideIndex={quizCurrentSubslideIndex}
-                        onSubslideSelect={onQuizSubslideSelect}
-                        timerState={quizTimerState}
-                        onStartTimer={onQuizStartTimer}
-                        onPauseTimer={onQuizPauseTimer}
-                        onResumeTimer={onQuizResumeTimer}
-                        onResetTimer={onQuizResetTimer}
-                        onComplete={onQuizComplete}
-                        presenterDemoSelection={quizPresenterDemoSelection}
-                        onDemoSelect={onQuizDemoSelect}
-                        submittedCount={controllerAnswers.getSubmittedCount(activeSlide.id)}
-                        onPlayApplause={onQuizPlayApplause}
-                        onPlayMal={onQuizPlayMal}
-                        optionCounts={optionCounts}
-                        onClearAnswers={() => controllerAnswers.clearSlideAnswers(activeSlide.id)}
-                        rangeStats={controllerAnswers.calcRangeStats(activeSlide.quizData.resultProfiles || [], maxBaseCentipunts)}
-                        totalSessions={Object.keys(controllerAnswers.sessions).length}
-                        maxBaseCentipunts={maxBaseCentipunts}
-                        renderMode="top"
-                        onAdjustTimer={onQuizAdjustTimer}
-                      />
+                        <QuizControllerView
+                          slide={activeSlide}
+                          quizData={activeSlide.quizData}
+                          subslides={quizSubslides}
+                          currentSubslideIndex={quizCurrentSubslideIndex}
+                          onSubslideSelect={onQuizSubslideSelect}
+                          timerState={quizTimerState}
+                          onStartTimer={onQuizStartTimer}
+                          onPauseTimer={onQuizPauseTimer}
+                          onResumeTimer={onQuizResumeTimer}
+                          onResetTimer={onQuizResetTimer}
+                          onComplete={onQuizComplete}
+                          presenterDemoSelection={quizPresenterDemoSelection}
+                          onDemoSelect={onQuizDemoSelect}
+                          submittedCount={controllerAnswers.getSubmittedCount(activeSlide.id)}
+                          onPlayApplause={onQuizPlayApplause}
+                          onPlayMal={onQuizPlayMal}
+                          optionCounts={optionCounts}
+                          onClearAnswers={() => controllerAnswers.clearSlideAnswers(activeSlide.id)}
+                          rangeStats={controllerAnswers.calcRangeStats(activeSlide.quizData.resultProfiles || [], maxBaseCentipunts)}
+                          totalSessions={Object.keys(controllerAnswers.sessions).length}
+                          maxBaseCentipunts={maxBaseCentipunts}
+                          renderMode="top"
+                          onAdjustTimer={onQuizAdjustTimer}
+                        />
                       );
                     })()}
                   </div>
@@ -1757,31 +1757,31 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                 }
               }
               return (
-              <QuizControllerView
-                slide={activeSlide}
-                quizData={activeSlide.quizData}
-                subslides={quizSubslides}
-                currentSubslideIndex={quizCurrentSubslideIndex}
-                onSubslideSelect={onQuizSubslideSelect}
-                timerState={quizTimerState}
-                onStartTimer={onQuizStartTimer}
-                onPauseTimer={onQuizPauseTimer}
-                onResumeTimer={onQuizResumeTimer}
-                onResetTimer={onQuizResetTimer}
-                onComplete={onQuizComplete}
-                presenterDemoSelection={quizPresenterDemoSelection}
-                onDemoSelect={onQuizDemoSelect}
-                submittedCount={controllerAnswers.getSubmittedCount(activeSlide.id)}
-                onPlayApplause={onQuizPlayApplause}
-                onPlayMal={onQuizPlayMal}
-                optionCounts={optionCounts}
-                onClearAnswers={() => controllerAnswers.clearSlideAnswers(activeSlide.id)}
-                rangeStats={controllerAnswers.calcRangeStats(activeSlide.quizData.resultProfiles || [], maxBaseCentipunts)}
-                totalSessions={Object.keys(controllerAnswers.sessions).length}
-                maxBaseCentipunts={maxBaseCentipunts}
-                renderMode="bottom"
-                onAdjustTimer={onQuizAdjustTimer}
-              />
+                <QuizControllerView
+                  slide={activeSlide}
+                  quizData={activeSlide.quizData}
+                  subslides={quizSubslides}
+                  currentSubslideIndex={quizCurrentSubslideIndex}
+                  onSubslideSelect={onQuizSubslideSelect}
+                  timerState={quizTimerState}
+                  onStartTimer={onQuizStartTimer}
+                  onPauseTimer={onQuizPauseTimer}
+                  onResumeTimer={onQuizResumeTimer}
+                  onResetTimer={onQuizResetTimer}
+                  onComplete={onQuizComplete}
+                  presenterDemoSelection={quizPresenterDemoSelection}
+                  onDemoSelect={onQuizDemoSelect}
+                  submittedCount={controllerAnswers.getSubmittedCount(activeSlide.id)}
+                  onPlayApplause={onQuizPlayApplause}
+                  onPlayMal={onQuizPlayMal}
+                  optionCounts={optionCounts}
+                  onClearAnswers={() => controllerAnswers.clearSlideAnswers(activeSlide.id)}
+                  rangeStats={controllerAnswers.calcRangeStats(activeSlide.quizData.resultProfiles || [], maxBaseCentipunts)}
+                  totalSessions={Object.keys(controllerAnswers.sessions).length}
+                  maxBaseCentipunts={maxBaseCentipunts}
+                  renderMode="bottom"
+                  onAdjustTimer={onQuizAdjustTimer}
+                />
               );
             })()}
           </SlideVisualizer>
@@ -1855,12 +1855,12 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                 handleMoveDown={handleMoveDown}
                 handleDeleteSlide={handleDeleteSlide}
                 handleChangeSlideType={handleChangeSlideType}
-                
+
                 handleAddSlide={handleAddSlide}
                 handleAddMediaSlide={handleAddMediaSlide}
                 handleAddQuizSlide={handleAddQuizSlide}
                 handleTransliterate={handleTransliterate}
-              />            )}
+              />)}
           </div>
         </div>
       </div>
@@ -1913,7 +1913,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
 
       {/* Live Audio Control Container */}
       <Suspense fallback={null}>
-        <LiveAudioControlContainer 
+        <LiveAudioControlContainer
           isControlAuthorized={controlAuthorization?.role === 'principal' || controlAuthorization?.role === 'delegated'}
           authorizationRequests={controlAuthorization?.pendingControls || []}
           onApproveRequest={onApproveControlRequest}

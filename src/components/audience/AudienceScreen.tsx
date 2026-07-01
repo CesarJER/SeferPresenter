@@ -7,6 +7,7 @@ import SeferReaderScreen from '../presenter/SeferReaderScreen';
 import { QuizAudienceView } from '../quiz/QuizAudienceView';
 import { useAudienceLiveAudio } from '../../features/liveAudio/components/audience/AudienceLiveAudioContext';
 import { AudienceLiveAudioPanel } from '../../features/liveAudio/components/audience/AudienceLiveAudioPanel';
+import { PwaRestartButton } from '../shared/PwaRestartButton';
 
 interface AudienceScreenProps {
   appMode: AppMode;
@@ -152,6 +153,12 @@ const AudienceScreen = ({
         quizTimerState={quizTimerState}
         liveAudioPanel={liveAudioPanel}
       />
+      <div className="fixed bottom-2 left-2 z-50 pointer-events-auto opacity-60 hover:opacity-100 transition-opacity">
+        <PwaRestartButton
+          connectionState={liveAudio?.state}
+          connectionQuality={liveAudio?.connectionQuality}
+        />
+      </div>
     </div>
   );
 };

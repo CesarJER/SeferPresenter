@@ -1,10 +1,10 @@
 import React, { useEffect } from 'react';
 import { useLiveAudio } from '../../hooks/useLiveAudio';
-import { LiveAudioStatusBadge, type ParticipantStatus } from '../shared/LiveAudioStatusBadge';
+import { PwaRestartButton } from '../../../../components/shared/PwaRestartButton';
 import { LiveAudioTrackOutput } from '../shared/LiveAudioTrackOutput';
 
 const LiveAudioPresenter: React.FC = () => {
-  const { availability, state, remoteTracks, startRemoteAudio } = useLiveAudio({
+  const { availability, state, connectionQuality, remoteTracks, startRemoteAudio } = useLiveAudio({
     role: 'presenter',
     autoConnect: true,
   });
@@ -17,19 +17,14 @@ const LiveAudioPresenter: React.FC = () => {
     }
   }, [state, startRemoteAudio]);
 
-  if (availability !== 'enabled') {
-    return null;
-  }
-
-  const badgeStatus: ParticipantStatus =
-    state === 'connected' ? 'connected' :
-    state === 'reconnected' ? 'reconnected' :
-    state === 'reconnectFailed' ? 'reconnect-failed' :
-    (state === 'connecting' || state === 'reconnecting') ? 'reconnecting' : 'disconnected';
+  const connectionState = availability === 'enabled' ? state : undefined;
+  const signalQuality = availability === 'enabled' ? connectionQuality : undefined;
 
   return (
     <div className="absolute bottom-[2vh] left-[2vw] z-50 pointer-events-none opacity-40">
-      <LiveAudioStatusBadge status={badgeStatus} isMuted={true} />
+      <div className="pointer-events-auto">
+        <PwaRestartButton connectionState={connectionState} connectionQuality={signalQuality} />
+      </div>
       {remoteTracks.map((remoteTrack) => (
         <LiveAudioTrackOutput key={remoteTrack.id} remoteTrack={remoteTrack} volumePercent={100} />
       ))}

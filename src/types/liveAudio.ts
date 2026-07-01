@@ -1,4 +1,10 @@
 export type LiveAudioAvailability = 'enabled' | 'disabled' | 'misconfigured' | 'unsupported';
+export type LiveAudioConnectionQuality =
+  | 'excellent'
+  | 'good'
+  | 'poor'
+  | 'lost'
+  | 'unknown';
 
 export type LiveAudioParticipantRole = 'audience' | 'control' | 'presenter';
 export type LiveAudioOperationalRole = 'pasivo' | 'activo' | 'cola' | 'orador' | 'control' | 'presenter';

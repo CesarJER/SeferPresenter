@@ -17,7 +17,7 @@ export const LiveAudioAliasInput: React.FC<LiveAudioAliasInputProps> = ({ alias,
         type="text"
         value={alias}
         onChange={(e) => onChange(e.target.value.slice(0, 50))}
-        placeholder="Ej. Juan Pérez"
+        placeholder="Ej. Shalom, Daniel, Raquel, Vida de Paz..."
         disabled={disabled}
         className="px-3 py-2 bg-gray-900 border border-gray-700 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50"
         maxLength={50}

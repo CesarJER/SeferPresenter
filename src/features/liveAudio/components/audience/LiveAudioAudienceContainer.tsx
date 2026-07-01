@@ -75,6 +75,7 @@ export default function LiveAudioAudienceContainer({
   // 1. Connect to LiveKit as a passive listener
   const {
     state: liveKitState,
+    connectionQuality,
     remoteTracks,
     participantId,
     isMicrophoneActive,
@@ -484,6 +485,7 @@ export default function LiveAudioAudienceContainer({
 
   const contextValue: AudienceLiveAudioContextValue = {
     state: liveKitState,
+    connectionQuality,
     isActive,
     isMicrophoneActive,
     hasAudioStarted,

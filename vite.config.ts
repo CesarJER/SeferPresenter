@@ -6,7 +6,7 @@ import { resolve } from 'node:path'
 export default defineConfig({
   test: {
     environment: 'node',
-    include: ['__tests__/**/*.test.ts'],
+    include: ['__tests__/**/*.test.*'],
   },
   plugins: [react()],
   build: {

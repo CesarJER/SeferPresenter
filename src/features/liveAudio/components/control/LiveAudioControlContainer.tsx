@@ -4,6 +4,7 @@ import { Bell } from 'lucide-react';
 import { LiveAudioControlPanel } from './LiveAudioControlPanel';
 import { PrivateControlInbox, type PrivateMessage } from './PrivateControlInbox';
 import type { LiveAudioParticipant } from './LiveAudioParticipantRow';
+import { PwaRestartButton } from '../../../../components/shared/PwaRestartButton';
 import type {
   LiveAudioConnectionCountsMessage,
   LiveAudioOperationalSnapshot,
@@ -100,6 +101,8 @@ export default function LiveAudioControlContainer({
   const { availability } = useLiveAudioAvailability();
 
   const {
+    state,
+    connectionQuality,
     publishMicrophone,
     unpublishMicrophone,
     isMicrophoneActive,
@@ -214,7 +217,7 @@ export default function LiveAudioControlContainer({
         createdAt: Date.now(),
       });
     }
-    
+
     if (signal.ephemeralPublicKey) {
       setParticipantEphemeralKeys(prev => ({ ...prev, [signal.fromParticipantId]: signal.ephemeralPublicKey! }));
     }
@@ -415,7 +418,7 @@ export default function LiveAudioControlContainer({
       const next = { ...current };
       if (config.volume !== undefined) next.volume = clampVolume(config.volume);
       if (config.musicMode !== undefined) next.musicMode = config.musicMode;
-      
+
       const targetPublicKey = participantEphemeralKeys[id];
       if (targetPublicKey) {
         void sendPrivateSignalToParticipant(id, targetPublicKey, {
@@ -446,24 +449,28 @@ export default function LiveAudioControlContainer({
       ))}
 
       {portalTarget && createPortal(
-        <div className="relative">
-          <button
-            onClick={() => setIsInboxOpen(!isInboxOpen)}
-            className={`flex items-center justify-center p-2 text-xs font-semibold rounded border transition-all cursor-pointer ${hasUnread
+        <div className="flex items-center gap-2">
+          <PwaRestartButton controlMenu={true} connectionState={state} connectionQuality={connectionQuality} />
+
+          <div className="relative">
+            <button
+              onClick={() => setIsInboxOpen(!isInboxOpen)}
+              className={`flex items-center justify-center p-2 text-xs font-semibold rounded border transition-all cursor-pointer ${hasUnread
                 ? 'bg-red-600 border-red-500 text-white animate-pulse'
                 : isInboxOpen
                   ? 'bg-blue-600 border-blue-500 text-white'
                   : 'bg-gray-800 border-gray-700 hover:bg-gray-700 text-gray-300 hover:text-white'
-              }`}
-            title="Bandeja Privada"
-          >
-            <Bell size={14} />
-            {hasUnread && (
-              <span className="absolute -top-1 -right-1 bg-white text-red-600 text-[10px] font-bold px-1 rounded-full">
-                {messages.length + authorizationRequests.length}
-              </span>
-            )}
-          </button>
+                }`}
+              title="Bandeja Privada"
+            >
+              <Bell size={14} />
+              {hasUnread && (
+                <span className="absolute -top-1 -right-1 bg-white text-red-600 text-[10px] font-bold px-1 rounded-full">
+                  {messages.length + authorizationRequests.length}
+                </span>
+              )}
+            </button>
+          </div>
 
           <PrivateControlInbox
             isOpen={isInboxOpen}

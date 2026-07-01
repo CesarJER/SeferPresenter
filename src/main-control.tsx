@@ -6,6 +6,7 @@ import MenuPopup from './components/control/MenuPopup';
 import { DataProtectionLink } from './components/shared/DataProtectionLink';
 import { PwaRestartButton } from './components/shared/PwaRestartButton';
 import { LiveAudioControlAuthorization } from './components/control/LiveAudioControlAuthorization';
+import { useLiveAudioAvailability } from './features/liveAudio/hooks/useLiveAudioAvailability';
 
 import type { AudioState, AudioSyncMap, AudioTimelineState } from './types/audio';
 import { DEFAULT_AUDIO_STATE } from './types/audio';
@@ -200,6 +201,7 @@ function ControlApp() {
     sendMessage: wsSend,
     subscribeToWsMessage,
   });
+  const liveAudioAvailability = useLiveAudioAvailability();
 
   const { getActiveBackground } = useBackgroundResolver({
     currentPresentation, currentSlideIndex, backgroundLock,
@@ -419,9 +421,11 @@ function ControlApp() {
       <div className="absolute bottom-2 left-2 z-50">
         <DataProtectionLink />
       </div>
-      <div className="absolute bottom-2 right-2 z-50">
-        <PwaRestartButton className="border-gray-700 bg-gray-950/70 text-gray-300 hover:bg-gray-900 hover:text-white" />
-      </div>
+      {liveAudioAvailability.availability !== 'enabled' && (
+        <div className="absolute bottom-2 right-2 z-50">
+          <PwaRestartButton className="border-gray-700 bg-gray-950/70 text-gray-300 hover:bg-gray-900 hover:text-white" />
+        </div>
+      )}
       <div className="absolute top-2 right-2 z-50">
         <LiveAudioControlAuthorization authorization={controlAuthorization} />
       </div>
