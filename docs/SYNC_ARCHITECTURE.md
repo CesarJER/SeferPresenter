@@ -126,6 +126,45 @@ content. Runtime backend checks must still bind `participantId` to an active
 WebSocket/session and authorized role; UUID format validation alone is not
 authorization.
 
+### Participantes Activos Visibles (E2E)
+
+Active audience participants may voluntarily share their alias with other active
+participants. The user preference is `isAliasVisibleToActiveParticipants`, saved
+in `localStorage` as `sefer-audience-alias-visible` alongside
+`sefer-audience-nick`; logout, session rotation, kick, and remove reset it to
+false. `VITE_SEFER_ACTIVE_ALIAS_VISIBLE_BY_DEFAULT=false` keeps the checkbox
+off unless explicitly configured otherwise.
+
+The readable list is never computed or broadcast by the server. Audience sends
+its active profile to authorized Control in clear via
+`LIVE_AUDIO_ACTIVE_PARTICIPANT_PROFILE`; that profile contains the current alias,
+the user's sharing preference, and the audience public key that Control needs
+to encrypt the visible list back to that participant. Control patches only the
+technical preference and operational alias into `LIVE_AUDIO_SNAPSHOT_PATCH`,
+computes the visible A-Z list with `computeVisibleActiveParticipants`, and sends
+`{ type: 'VISIBLE_ACTIVE_PARTICIPANTS', participants, updatedAt }` back as a
+targeted encrypted private signal to each active viewer whose
+`canViewActiveParticipants` flag is true. Only the list payload is encrypted;
+authorization changes travel as clear technical WebSocket messages.
+
+The server owns only technical fields in memory and snapshots:
+`isAliasVisibleToActiveParticipants`, `canViewActiveParticipants`,
+`isAliasHiddenByControl`, and `activeListPublicKey`. Control may grant/revoke
+list-view permission with `LIVE_AUDIO_SET_ACTIVE_LIST_VIEW_PERMISSION`; the
+server confirms that state to the target audience client with clear
+`LIVE_AUDIO_ACTIVE_LIST_VIEW_PERMISSION`. Control may put a consenting
+participant into incognito mode with `LIVE_AUDIO_SET_ALIAS_SHARED_VISIBILITY`,
+and may use `LIVE_AUDIO_REMOVE_ACTIVE_PARTICIPANT` only on kicked participants.
+Remove is not the same as block: kick keeps `isKicked=true`, while remove clears
+kicked state, clears active-list flags and alias overlay, and lets the
+participant join again with a clean alias.
+
+`SEFER_ACTIVE_ALIAS_MODERATION_DEFAULT_VISIBLE=true` means consenting users are
+not hidden by Control by default. When the principal Control changes,
+`CONTROL_KEY_ROTATED` causes Audience to re-signal aliases/preferences; the new
+principal receives the operational snapshot and redistributes the current list.
+Control uses `lastSentListRef` to avoid re-sending unchanged visible lists.
+
 `server/ws-server.mjs` filters Live Audio messages by Control state:
 
 - Audience WebSocket clients may send only `SERVER_TIME_PING`, their own

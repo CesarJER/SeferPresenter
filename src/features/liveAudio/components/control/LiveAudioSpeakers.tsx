@@ -9,6 +9,9 @@ interface LiveAudioSpeakersProps {
   onMute: (id: string) => void;
   onKick: (id: string) => void;
   onRescue?: (id: string) => void;
+  onSetAliasSharedVisibility?: (id: string, hidden: boolean) => void;
+  onSetActiveListViewPermission?: (id: string, canView: boolean) => void;
+  onRemove?: (id: string) => void;
   onMicrophoneConfigChange?: (id: string, config: { volume?: number; musicMode?: boolean }) => void;
 }
 
@@ -19,6 +22,9 @@ export const LiveAudioSpeakers: React.FC<LiveAudioSpeakersProps> = ({
   onMute,
   onKick,
   onRescue,
+  onSetAliasSharedVisibility,
+  onSetActiveListViewPermission,
+  onRemove,
   onMicrophoneConfigChange
 }) => {
   const speakers = participants.filter(p => p.speakerState === 'GRANTED' && !p.isKicked);
@@ -46,6 +52,9 @@ export const LiveAudioSpeakers: React.FC<LiveAudioSpeakersProps> = ({
             onMute={onMute}
             onKick={onKick}
             onRescue={onRescue}
+            onSetAliasSharedVisibility={onSetAliasSharedVisibility}
+            onSetActiveListViewPermission={onSetActiveListViewPermission}
+            onRemove={onRemove}
             onMicrophoneConfigChange={onMicrophoneConfigChange}
           />
         ))}

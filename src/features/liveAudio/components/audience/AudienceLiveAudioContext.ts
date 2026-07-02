@@ -29,6 +29,10 @@ export interface AudienceLiveAudioContextValue {
   onCancelRequest: () => void;
   onToggleMicrophone: () => void;
   onOpenMessage: () => void;
+  isAliasVisibleToOthers: boolean;
+  onAliasVisibilityChange: (checked: boolean) => void;
+  canViewActiveParticipants: boolean;
+  visibleParticipants: string[];
   availability: LiveAudioAvailability;
   microphoneDiagnostics?: LiveAudioMicrophoneDiagnostics;
 }

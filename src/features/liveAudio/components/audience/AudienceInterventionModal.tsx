@@ -5,20 +5,23 @@ import { X } from 'lucide-react';
 
 interface AudienceInterventionModalProps {
   onClose: () => void;
-  onSubmit: (alias: string) => void;
+  defaultAliasVisible?: boolean;
+  onSubmit: (alias: string, isAliasVisible: boolean) => void;
 }
 
 export const AudienceInterventionModal: React.FC<AudienceInterventionModalProps> = ({
   onClose,
+  defaultAliasVisible,
   onSubmit,
 }) => {
   const [alias, setAlias] = useState('');
   const [isAgreed, setIsAgreed] = useState(false);
+  const [isAliasVisible, setIsAliasVisible] = useState(defaultAliasVisible ?? false);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (isAgreed && alias.trim()) {
-      onSubmit(alias.trim());
+      onSubmit(alias.trim(), isAliasVisible);
     }
   };
 
@@ -44,6 +47,17 @@ export const AudienceInterventionModal: React.FC<AudienceInterventionModalProps>
           {isAgreed && (
             <form id="intervention-form" onSubmit={handleSubmit} className="animate-in fade-in slide-in-from-bottom-2 duration-300">
               <LiveAudioAliasInput alias={alias} onChange={setAlias} />
+              <label className="flex items-center gap-2 mt-4 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={isAliasVisible}
+                  onChange={(event) => setIsAliasVisible(event.target.checked)}
+                  className="w-4 h-4 accent-blue-500 cursor-pointer"
+                />
+                <span className="text-sm text-gray-300">
+                  Mostrar mi alias a otros participantes activos
+                </span>
+              </label>
             </form>
           )}
         </div>

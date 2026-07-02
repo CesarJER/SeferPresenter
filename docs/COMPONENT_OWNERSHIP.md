@@ -36,7 +36,7 @@ Presenter-only:
 Audience:
 
 - `src/components/audience/AudienceScreen.tsx`: audience route selection between projection, Sefer reader, and quiz answer UI.
-- Live Audio audience UI lives in `src/features/liveAudio/components/audience/`. It exposes `AudienceLiveAudioContext` (managed by `LiveAudioAudienceContainer`) to share state and controls. Sub-views like `PresenterScreen`, `SeferReaderScreen`, and `QuizAudienceView` receive the rendered `<AudienceLiveAudioPanel />` as a prop (`liveAudioPanel`) to display it contextually without portals. Audience mode remains read-only for presentation controls.
+- Live Audio audience UI lives in `src/features/liveAudio/components/audience/`. It exposes `AudienceLiveAudioContext` (managed by `LiveAudioAudienceContainer`) to share state and controls. `AudienceLiveAudioPanel.tsx` owns the active-audience controls, while `ActiveParticipantsPanel.tsx` owns the local alias-sharing checkbox and the Control-authorized visible alias list. Sub-views like `PresenterScreen`, `SeferReaderScreen`, and `QuizAudienceView` receive the rendered `<AudienceLiveAudioPanel />` as a prop (`liveAudioPanel`) to display it contextually without portals. Audience mode remains read-only for presentation controls.
 
 Shared:
 
@@ -157,6 +157,12 @@ Live Audio state:
 - LiveKit connection state, WebRTC tracks, microphone permission state,
   per-participant microphone boost, temporary aliases, and privacy notice
   checkbox state are session/local state owned by `src/features/liveAudio/`.
+  Active participant list visibility is split deliberately: Audience owns its
+  local `isAliasVisibleToActiveParticipants` preference through
+  `useAudienceSession`, Audience publishes alias plus active-list public key in
+  `LIVE_AUDIO_ACTIVE_PARTICIPANT_PROFILE`, Control owns visible alias-list
+  computation and encrypted list distribution, and `server/ws-server.mjs` owns
+  only the technical moderation fields.
   `LiveAudioRemoteTrack` may expose SDK-backed `attach`/`detach` callbacks, but
   the LiveKit SDK import itself must stay inside `src/features/liveAudio/`.
   Fase 5.2 generated E2E keys are owned by

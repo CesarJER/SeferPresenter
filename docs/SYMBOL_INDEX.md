@@ -62,6 +62,7 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
 - `SeferFlowView` - `src/components/presenter/SeferFlowView.tsx`: scripture flow visual.
 - `VerseSidebar` - `src/components/presenter/VerseSidebar.tsx`: verse sidebar visual.
 - `AudienceScreen` - `src/components/audience/AudienceScreen.tsx`: audience route projection/quiz selection.
+- `ActiveParticipantsPanel` - `src/features/liveAudio/components/audience/ActiveParticipantsPanel.tsx`: audience-side alias-sharing checkbox and authorized visible participant list.
 - `PwaRestartButton` - `src/components/shared/PwaRestartButton.tsx`: confirmed reload/update action for installed audience/control PWAs.
 - Proposed Live Audio components - future optional runtime components under
   `src/features/liveAudio/components/control/`,
@@ -77,6 +78,8 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
 - [QuizSubslideNav](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/components/quiz/QuizSubslideNav.tsx) - `src/components/quiz/QuizSubslideNav.tsx`: navigation toolbar to select active subslides within quiz projection.
 - [QuizTimerDisplay](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/components/quiz/QuizTimerDisplay.tsx) - `src/components/quiz/QuizTimerDisplay.tsx`: visual timer indicator with ring animations and adjusting tools.
 - `LiveAudioControlAuthorization` - `src/components/control/LiveAudioControlAuthorization.tsx`: compact Fase 5.3 Control principal/pending authorization panel.
+- `LiveAudioControlContainer.computeVisibleList` / `distributeVisibleList` /
+  `lastSentListRef` - `src/features/liveAudio/components/control/LiveAudioControlContainer.tsx`: Control-owned E2E visible participant list computation and differential encrypted distribution.
 - `ControlVerificationCode` - `src/components/shared/ControlVerificationCode.tsx`: short verification-code display with countdown.
 - `SlideVisualizer` - `src/components/shared/SlideVisualizer.tsx`: control-side preview.
 - `AutoResizeText` - `src/components/shared/AutoResizeText.tsx`: projected responsive text.
@@ -92,6 +95,19 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
 - `LiveAudioBroadcastMessage` / `PrivateControlSignalMessage` -
   `src/types/liveAudio.ts`: optional Live Audio message family kept separate from
   `SyncStatePayload` and existing remote commands.
+- `LIVE_AUDIO_SET_ALIAS_SHARED_VISIBILITY`,
+  `LIVE_AUDIO_SET_ACTIVE_LIST_VIEW_PERMISSION`,
+  `LIVE_AUDIO_ACTIVE_LIST_VIEW_PERMISSION`,
+  `LIVE_AUDIO_ACTIVE_PARTICIPANT_PROFILE`,
+  `LIVE_AUDIO_REMOVE_ACTIVE_PARTICIPANT` - `src/types/liveAudio.ts` and
+  `server/ws-server.mjs`: technical Live Audio visibility/profile messages and
+  remove-vs-block behavior.
+- `VISIBLE_ACTIVE_PARTICIPANTS` - private encrypted payload inside
+  `PRIVATE_CONTROL_SIGNAL`, not a public WebSocket message.
+- `isAliasVisibleToActiveParticipants`, `isAliasHiddenByControl`,
+  `canViewActiveParticipants`, `activeListPublicKey` - Live Audio participant
+  visibility fields in `src/types/liveAudio.ts`, `server/ws-server.mjs`, and
+  Control/audience UI.
 - `src/features/liveAudio/` - optional Live Audio runtime module. This is the
   only place where the LiveKit browser SDK, LiveKit track lifecycle, and heavy
   Live Audio UI should live.
@@ -139,6 +155,10 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
 - `src/utils/cryptoUtils.ts`: Web Crypto helpers for ECDH P-256 session and
   ephemeral keys, public/private key import/export, AES-GCM 256 encrypt/decrypt,
   base64 conversion, and nonce replay rejection.
+- `computeVisibleActiveParticipants` / `serializeVisibleParticipants` /
+  `hasVisibleParticipantsChanged` -
+  `src/features/liveAudio/utils/activeParticipants.ts`: pure helpers for
+  Control-owned visible alias list filtering, A-Z ordering, and send suppression.
 
 ## Types
 

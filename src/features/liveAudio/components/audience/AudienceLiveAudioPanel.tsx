@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Mic, MicOff, Hand, MessageSquare, LogOut, Volume2, VolumeX, Play, RotateCcw, CheckCircle2, Loader2 } from 'lucide-react';
+import { Mic, MicOff, Hand, MessageSquare, LogOut, Volume2, VolumeX, Play, RotateCcw, CheckCircle2, Loader2, Users } from 'lucide-react';
 import type { LiveAudioConnectionState, LiveAudioMicrophoneDiagnostics } from '../../../../types/liveAudio';
+import { ActiveParticipantsPanel } from './ActiveParticipantsPanel';
 
 interface AudienceLiveAudioPanelProps {
   state: LiveAudioConnectionState;
@@ -24,6 +25,10 @@ interface AudienceLiveAudioPanelProps {
   onCancelRequest: () => void;
   onToggleMicrophone: () => void;
   onOpenMessage: () => void;
+  isAliasVisibleToOthers: boolean;
+  onAliasVisibilityChange: (checked: boolean) => void;
+  canViewActiveParticipants: boolean;
+  visibleParticipants: string[];
   microphoneDiagnostics?: LiveAudioMicrophoneDiagnostics;
   variant?: 'overlay' | 'inline';
 }
@@ -50,6 +55,10 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
   onCancelRequest,
   onToggleMicrophone,
   onOpenMessage,
+  isAliasVisibleToOthers,
+  onAliasVisibilityChange,
+  canViewActiveParticipants,
+  visibleParticipants,
   microphoneDiagnostics,
   variant = 'overlay',
 }) => {
@@ -58,6 +67,7 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
     return stored === null ? true : stored === 'true';
   });
   const [isVolumeOpen, setIsVolumeOpen] = useState(false);
+  const [isParticipantsOpen, setIsParticipantsOpen] = useState(false);
   const hasAudioStartedRef = useRef(hasAudioStarted);
   const panelRootRef = useRef<HTMLDivElement>(null);
   const isFirstMountRef = useRef(true);
@@ -307,6 +317,17 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
     <div ref={panelRootRef} className={wrapperClass} onClick={handlePanelClick}>
       <div className={`${panelClass} relative bg-gray-900/70 backdrop-blur-lg border border-white/10 px-2 rounded-2xl shadow-2xl`}>
         {diagnostics}
+        {isParticipantsOpen && (
+          <div className="absolute bottom-full mb-3 left-0 right-0" onClick={(event) => event.stopPropagation()}>
+            <ActiveParticipantsPanel
+              isAuthorized={canViewActiveParticipants}
+              participants={visibleParticipants}
+              isAliasVisible={isAliasVisibleToOthers}
+              onAliasVisibilityChange={onAliasVisibilityChange}
+              onClose={() => setIsParticipantsOpen(false)}
+            />
+          </div>
+        )}
         {reconnectStatus}
 
         {isWordGranted ? (
@@ -339,6 +360,14 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
           title="Mensaje Privado a Control"
         >
           <MessageSquare className="w-6 h-6" />
+        </button>
+
+        <button
+          onClick={() => setIsParticipantsOpen((current) => !current)}
+          className="flex items-center justify-center p-3 rounded-xl bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors"
+          title="Participantes"
+        >
+          <Users className="w-6 h-6" />
         </button>
 
         <div

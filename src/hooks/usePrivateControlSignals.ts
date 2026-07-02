@@ -59,6 +59,7 @@ export interface PrivateControlSignalsState {
   rotateControlKey: () => Promise<void>;
   sendPrivateSignal: (value: unknown, options?: SendPrivateSignalOptions) => Promise<boolean>;
   sendPrivateSignalToParticipant: (participantId: string, participantPublicKeyBase64: string, value: unknown) => Promise<boolean>;
+  getAudiencePublicKey: () => Promise<string | null>;
   requestAliases: () => Promise<boolean>;
   requestControlAuthorization: (verificationCode: string) => Promise<boolean>;
   authorizeSecondaryControl: (request: LiveAudioControlJoinRequestMessage) => Promise<boolean>;
@@ -136,6 +137,12 @@ export function usePrivateControlSignals(options: UsePrivateControlSignalsOption
     setControlPublicKey(null);
   }, []);
 
+  const ensureAudienceKeyPair = useCallback(async () => {
+    const keyPair = audienceKeyPairRef.current ?? await generateEphemeralKeyPair();
+    audienceKeyPairRef.current = keyPair;
+    return keyPair;
+  }, []);
+
   const publishControlPublicKey = useCallback(async () => {
     if (role !== 'control' || !transportReady) return;
 
@@ -188,7 +195,7 @@ export function usePrivateControlSignals(options: UsePrivateControlSignalsOption
 
   const negotiateAudienceKey = useCallback(async (publicKeyBase64: string, nextKeyId: string) => {
     const controlKey = await importPublicKey(publicKeyBase64);
-    const audienceKeyPair = await generateEphemeralKeyPair();
+    const audienceKeyPair = await ensureAudienceKeyPair();
     const sharedKey = await deriveSharedKey(audienceKeyPair.privateKey, controlKey);
 
     audienceKeyPairRef.current = audienceKeyPair;
@@ -198,7 +205,13 @@ export function usePrivateControlSignals(options: UsePrivateControlSignalsOption
     usedNonceKeysRef.current.clear();
     setKeyId(nextKeyId);
     setControlPublicKey(publicKeyBase64);
-  }, []);
+  }, [ensureAudienceKeyPair]);
+
+  const getAudiencePublicKey = useCallback(async (): Promise<string | null> => {
+    if (role !== 'audience') return null;
+    const keyPair = await ensureAudienceKeyPair();
+    return exportPublicKey(keyPair);
+  }, [ensureAudienceKeyPair, role]);
 
   const sendPrivateSignal = useCallback(async (
     value: unknown,
@@ -451,6 +464,7 @@ export function usePrivateControlSignals(options: UsePrivateControlSignalsOption
     rotateControlKey,
     sendPrivateSignal,
     sendPrivateSignalToParticipant,
+    getAudiencePublicKey,
     requestAliases,
     requestControlAuthorization,
     authorizeSecondaryControl,

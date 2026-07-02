@@ -51,7 +51,7 @@ services:
     image: livekit/livekit-server:latest
     container_name: sefer-presenter-livekit
     restart: unless-stopped
-    entrypoint: /bin/sh -c "export NODE_IP=$$(wget -qO- http://ifconfig.me/ip) && exec /livekit-server"
+    entrypoint: /bin/sh -c "export NODE_IP=$$(wget -qO- http://api.ipify.org || wget -qO- http://icanhazip.com || wget -qO- http://ifconfig.me/ip) && exec /livekit-server"
     environment:
       - "LIVEKIT_KEYS=${LIVEKIT_API_KEY:-devkey}: ${LIVEKIT_API_SECRET:-secret}"
       - "REDIS_HOST=redis:6379"

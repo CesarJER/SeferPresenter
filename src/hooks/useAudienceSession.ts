@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { makeClientId } from '../utils/normalizePresentation';
 
+const ALIAS_VISIBLE_KEY = 'sefer-audience-alias-visible';
+
 interface UseAudienceSessionProps {
   subscribeToWsMessage?: (handler: (type: string, payload: Record<string, unknown>) => void) => () => void;
 }
@@ -8,6 +10,7 @@ interface UseAudienceSessionProps {
 export function useAudienceSession({ subscribeToWsMessage }: UseAudienceSessionProps = {}) {
   const [deviceId, setDeviceId] = useState<string>('');
   const [nick, setNick] = useState<string>('');
+  const [aliasVisible, setAliasVisible] = useState<boolean>(false);
   const [presentationSessionId, setPresentationSessionId] = useState<string | null>(null);
 
   // Initialize from localStorage
@@ -22,6 +25,11 @@ export function useAudienceSession({ subscribeToWsMessage }: UseAudienceSessionP
     const savedNick = localStorage.getItem('sefer-audience-nick') || '';
     setNick(savedNick);
 
+    const savedAliasVisible = localStorage.getItem(ALIAS_VISIBLE_KEY);
+    const defaultAliasVisible =
+      String(import.meta.env.VITE_SEFER_ACTIVE_ALIAS_VISIBLE_BY_DEFAULT ?? 'false').toLowerCase() === 'true';
+    setAliasVisible(savedAliasVisible !== null ? savedAliasVisible === 'true' : defaultAliasVisible);
+
     const savedSessionId = localStorage.getItem('sefer-audience-session-id');
     if (savedSessionId) {
       setPresentationSessionId(savedSessionId);
@@ -31,6 +39,7 @@ export function useAudienceSession({ subscribeToWsMessage }: UseAudienceSessionP
   const clearLocalSession = useCallback(() => {
     localStorage.removeItem('sefer-audience-nick');
     localStorage.removeItem('sefer-audience-session-id');
+    localStorage.removeItem(ALIAS_VISIBLE_KEY);
     
     // Opcionalmente borrar respuestas de quiz guardadas (limpiar la sesión activa actual)
     const activeQuizSession = localStorage.getItem('sefer-audience-session-id');
@@ -40,6 +49,7 @@ export function useAudienceSession({ subscribeToWsMessage }: UseAudienceSessionP
     }
 
     setNick('');
+    setAliasVisible(false);
     setPresentationSessionId(null);
     
     // Disparar evento para que otras partes de la app reaccionen al logout
@@ -82,15 +92,24 @@ export function useAudienceSession({ subscribeToWsMessage }: UseAudienceSessionP
 
   const logout = useCallback(() => {
     localStorage.removeItem('sefer-audience-nick');
+    localStorage.removeItem(ALIAS_VISIBLE_KEY);
     setNick('');
+    setAliasVisible(false);
+  }, []);
+
+  const setAliasVisibleCallback = useCallback((value: boolean) => {
+    localStorage.setItem(ALIAS_VISIBLE_KEY, value ? 'true' : 'false');
+    setAliasVisible(value);
   }, []);
 
   return {
     deviceId,
     nick,
+    aliasVisible,
     presentationSessionId,
     login,
     logout,
+    setAliasVisible: setAliasVisibleCallback,
     isLoggedIn: !!nick
   };
 }

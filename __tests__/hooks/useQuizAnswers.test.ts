@@ -15,7 +15,7 @@ Object.defineProperty(window, 'EventSource', {
     close() {}
   }
 });
-(global as any).fetch = vi.fn().mockResolvedValue({ json: () => Promise.resolve({}) });
+vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ json: () => Promise.resolve({}) }));
 
 describe('useQuizAnswers - Audience', () => {
   beforeEach(() => {

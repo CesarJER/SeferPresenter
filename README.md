@@ -161,6 +161,9 @@ Canales principales:
 - `LIVE_AUDIO_SNAPSHOT_REQUEST` / `LIVE_AUDIO_SNAPSHOT`: snapshot operacional
   efimero para Controles autorizados, con participantes, cola, autorizaciones,
   estado LiveKit y agregados anonimos de quiz. Controles pendientes no lo reciben.
+- `LIVE_AUDIO_ACTIVE_PARTICIPANT_PROFILE`: perfil activo claro enviado solo a
+  Controles autorizados con alias, preferencia de visibilidad y clave publica
+  para cifrar la lista visible de nicks.
 
 La audiencia muestra la misma imagen viva del presenter, sin controles de navegacion ni apertura del panel de control.
 
@@ -175,6 +178,9 @@ El servidor WebSocket gestiona el Control principal: la primera conexion
 `/control` es `PRINCIPAL`, las siguientes quedan `PENDING` con codigo `NNN-NNN`
 temporal, y solo Controles autorizados reciben senales privadas o pueden emitir
 acciones de moderacion.
+La lista visible de participantes activos se cifra dentro de
+`PRIVATE_CONTROL_SIGNAL`; los permisos para ver la lista viajan como estado
+tecnico claro y no dependen de desencriptar la propia lista.
 
 ## Live Audio opcional
 
@@ -214,6 +220,8 @@ SEFER_LIVE_AUDIO_TOKEN_TTL_MINUTES=30
 SEFER_LIVE_AUDIO_REJOIN_GRACE_SECONDS=60
 SEFER_LIVE_AUDIO_ALLOW_DELEGATED_MODERATORS=true
 SEFER_LIVE_AUDIO_CONTROL_CODE_TTL_SECONDS=90
+VITE_SEFER_ACTIVE_ALIAS_VISIBLE_BY_DEFAULT=false
+SEFER_ACTIVE_ALIAS_MODERATION_DEFAULT_VISIBLE=true
 LIVEKIT_URL=
 LIVEKIT_API_KEY=
 LIVEKIT_API_SECRET=

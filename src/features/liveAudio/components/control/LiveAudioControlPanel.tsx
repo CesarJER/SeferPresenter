@@ -26,6 +26,9 @@ interface LiveAudioControlPanelProps {
   onMute: (id: string) => void;
   onKick: (id: string) => void;
   onRescue: (id: string) => void;
+  onSetAliasSharedVisibility?: (id: string, hidden: boolean) => void;
+  onSetActiveListViewPermission?: (id: string, canView: boolean) => void;
+  onRemove?: (id: string) => void;
   onMicrophoneConfigChange?: (id: string, config: { volume?: number; musicMode?: boolean }) => void;
   pendingWordCount: number;
 }
@@ -51,6 +54,9 @@ export const LiveAudioControlPanel: React.FC<LiveAudioControlPanelProps> = ({
   onMute,
   onKick,
   onRescue,
+  onSetAliasSharedVisibility,
+  onSetActiveListViewPermission,
+  onRemove,
   onMicrophoneConfigChange,
   pendingWordCount
 }) => {
@@ -99,6 +105,9 @@ export const LiveAudioControlPanel: React.FC<LiveAudioControlPanelProps> = ({
               onGrant={onGrant}
               onKick={onKick}
               onRescue={onRescue}
+              onSetAliasSharedVisibility={onSetAliasSharedVisibility}
+              onSetActiveListViewPermission={onSetActiveListViewPermission}
+              onRemove={onRemove}
               onMicrophoneConfigChange={onMicrophoneConfigChange}
             />
             <LiveAudioSpeakers 
@@ -108,6 +117,9 @@ export const LiveAudioControlPanel: React.FC<LiveAudioControlPanelProps> = ({
               onMute={onMute}
               onKick={onKick}
               onRescue={onRescue}
+              onSetAliasSharedVisibility={onSetAliasSharedVisibility}
+              onSetActiveListViewPermission={onSetActiveListViewPermission}
+              onRemove={onRemove}
               onMicrophoneConfigChange={onMicrophoneConfigChange}
             />
             <LiveAudioListeners 
@@ -116,6 +128,9 @@ export const LiveAudioControlPanel: React.FC<LiveAudioControlPanelProps> = ({
               onGrant={onGrant}
               onKick={onKick}
               onRescue={onRescue}
+              onSetAliasSharedVisibility={onSetAliasSharedVisibility}
+              onSetActiveListViewPermission={onSetActiveListViewPermission}
+              onRemove={onRemove}
               onMicrophoneConfigChange={onMicrophoneConfigChange}
             />
           </div>

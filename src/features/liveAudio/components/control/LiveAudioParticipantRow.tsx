@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Hand, MessageSquare, MicOff, RotateCcw, Volume2, X, XCircle } from 'lucide-react';
+import { Eye, EyeOff, Hand, MessageSquare, MicOff, RotateCcw, Trash2, UserCheck, UserX, Volume2, X, XCircle } from 'lucide-react';
 import type { SpeakerState } from '../../../../types/liveAudio';
 import { LiveAudioStatusBadge, type ParticipantStatus } from '../shared/LiveAudioStatusBadge';
 
@@ -11,6 +11,9 @@ export interface LiveAudioParticipant {
   isMicrophoneActive: boolean;
   isActiveAudience: boolean;
   isKicked: boolean;
+  isAliasVisibleToActiveParticipants?: boolean;
+  isAliasHiddenByControl?: boolean;
+  canViewActiveParticipants?: boolean;
   microphoneVolume?: number;
   isMusicMode?: boolean;
 }
@@ -23,6 +26,9 @@ interface LiveAudioParticipantRowProps {
   onMute?: (id: string) => void;
   onKick?: (id: string) => void;
   onRescue?: (id: string) => void;
+  onSetAliasSharedVisibility?: (id: string, hidden: boolean) => void;
+  onSetActiveListViewPermission?: (id: string, canView: boolean) => void;
+  onRemove?: (id: string) => void;
   onMicrophoneConfigChange?: (
     id: string,
     config: { volume?: number; musicMode?: boolean }
@@ -37,6 +43,9 @@ export const LiveAudioParticipantRow: React.FC<LiveAudioParticipantRowProps> = (
   onMute,
   onKick,
   onRescue,
+  onSetAliasSharedVisibility,
+  onSetActiveListViewPermission,
+  onRemove,
   onMicrophoneConfigChange,
 }) => {
   const [isVolumeOpen, setIsVolumeOpen] = useState(false);
@@ -78,7 +87,7 @@ export const LiveAudioParticipantRow: React.FC<LiveAudioParticipantRowProps> = (
         </span>
       </div>
 
-      <div className="flex items-center gap-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+      <div className="flex items-center gap-2 opacity-100 md:max-w-0 md:opacity-0 md:group-hover:max-w-full md:group-hover:opacity-100 transition-all">
         {isRequested && onGrant && (
           <button
             onClick={() => onGrant(participant.participantId)}
@@ -105,8 +114,8 @@ export const LiveAudioParticipantRow: React.FC<LiveAudioParticipantRowProps> = (
           <button
             onClick={() => onMute(participant.participantId)}
             className={`flex items-center gap-1 px-2 py-1 rounded text-xs ${hasOpenMicrophone
-                ? 'bg-red-600 hover:bg-red-500 text-white'
-                : 'bg-gray-600 text-gray-300'
+              ? 'bg-red-600 hover:bg-red-500 text-white'
+              : 'bg-gray-600 text-gray-300'
               }`}
             title={hasOpenMicrophone ? 'Silenciar track' : 'Micro cerrado o silenciado'}
           >
@@ -137,8 +146,8 @@ export const LiveAudioParticipantRow: React.FC<LiveAudioParticipantRowProps> = (
             <button
               onClick={() => setIsVolumeOpen(!isVolumeOpen)}
               className={`flex items-center gap-1 p-1 rounded transition-colors ${isVolumeOpen
-                  ? 'bg-blue-600 text-white'
-                  : 'text-gray-400 hover:text-white hover:bg-gray-700'
+                ? 'bg-blue-600 text-white'
+                : 'text-gray-400 hover:text-white hover:bg-gray-700'
                 }`}
               title="Ajustar micro remoto"
             >
@@ -168,8 +177,8 @@ export const LiveAudioParticipantRow: React.FC<LiveAudioParticipantRowProps> = (
 
                 <label
                   className={`flex items-center justify-center gap-1 px-2 py-1 rounded cursor-pointer text-[10px] ${participant.isMusicMode
-                      ? 'bg-purple-600 text-white'
-                      : 'bg-gray-900 text-gray-300 hover:bg-gray-700'
+                    ? 'bg-purple-600 text-white'
+                    : 'bg-gray-900 text-gray-300 hover:bg-gray-700'
                     }`}
                   title="Modo música"
                 >
@@ -198,6 +207,56 @@ export const LiveAudioParticipantRow: React.FC<LiveAudioParticipantRowProps> = (
           </div>
         )}
 
+        {onSetAliasSharedVisibility && (
+          <button
+            onClick={() => {
+              if (!participant.isAliasVisibleToActiveParticipants) return;
+              onSetAliasSharedVisibility(
+                participant.participantId,
+                !participant.isAliasHiddenByControl,
+              );
+            }}
+            disabled={!participant.isAliasVisibleToActiveParticipants}
+            className={`p-1 rounded transition-colors ${!participant.isAliasVisibleToActiveParticipants
+                ? 'text-gray-600 cursor-not-allowed'
+                : participant.isAliasHiddenByControl
+                  ? 'text-gray-400 hover:text-white hover:bg-gray-700'
+                  : 'text-green-400 hover:text-white hover:bg-gray-700'
+              }`}
+            title={
+              !participant.isAliasVisibleToActiveParticipants
+                ? 'Usuario no autorizo compartir alias'
+                : participant.isAliasHiddenByControl
+                  ? 'Incognito, clic para hacer visible'
+                  : 'Visible para otros, clic para ocultar'
+            }
+          >
+            {participant.isAliasHiddenByControl ? <UserX size={16} /> : <UserCheck size={16} />}
+          </button>
+        )}
+
+        {onSetActiveListViewPermission && (
+          <button
+            onClick={() =>
+              onSetActiveListViewPermission(
+                participant.participantId,
+                !participant.canViewActiveParticipants,
+              )
+            }
+            className={`p-1 rounded transition-colors ${participant.canViewActiveParticipants
+                ? 'text-blue-400 hover:text-white hover:bg-gray-700'
+                : 'text-gray-500 hover:text-white hover:bg-gray-700'
+              }`}
+            title={
+              participant.canViewActiveParticipants
+                ? 'Puede ver lista, clic para revocar'
+                : 'No puede ver lista, clic para conceder'
+            }
+          >
+            {participant.canViewActiveParticipants ? <Eye size={16} /> : <EyeOff size={16} />}
+          </button>
+        )}
+
         {participant.isKicked && onRescue && (
           <button
             onClick={() => onRescue(participant.participantId)}
@@ -206,6 +265,20 @@ export const LiveAudioParticipantRow: React.FC<LiveAudioParticipantRowProps> = (
           >
             <RotateCcw size={14} />
             <span className="hidden sm:inline">Rescatar</span>
+          </button>
+        )}
+
+        {participant.isKicked && onRemove && (
+          <button
+            onClick={() => {
+              if (window.confirm(`Eliminar a ${displayName} de la sesion activa? Podra volver a unirse.`)) {
+                onRemove(participant.participantId);
+              }
+            }}
+            className="text-gray-500 hover:text-red-400 p-1 transition-colors"
+            title="Eliminar de activos (no bloquea, puede volver)"
+          >
+            <Trash2 size={16} />
           </button>
         )}
 

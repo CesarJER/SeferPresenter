@@ -29,7 +29,9 @@ const liveAudioModerationTypes = new Set([
 const audienceAllowedTypes = new Set([
   'SERVER_TIME_PING',
   'LIVE_AUDIO_PARTICIPANT_STATUS',
+  'LIVE_AUDIO_ACTIVE_PARTICIPANT_PROFILE',
   'PRIVATE_CONTROL_SIGNAL',
+  'LIVE_AUDIO_REMOVE_ACTIVE_PARTICIPANT',
 ])
 
 const makeRole = (value) => roles.has(value) ? value : 'unknown'
@@ -42,6 +44,9 @@ const getControlCodeTtlMs = () => {
 
 const allowDelegatedModerators = () =>
   String(process.env.SEFER_LIVE_AUDIO_ALLOW_DELEGATED_MODERATORS || 'true').toLowerCase() !== 'false'
+
+const getDefaultModerationVisible = () =>
+  String(process.env.SEFER_ACTIVE_ALIAS_MODERATION_DEFAULT_VISIBLE || 'true').toLowerCase() !== 'false'
 
 const getSnapshotEncryptionKey = () => {
   const password = process.env.SEFER_CONTROL_PASSWORD || 'sefer-local-ephemeral-snapshot'
@@ -112,6 +117,16 @@ const mergeSensitiveSnapshot = (patch) => {
       }
       if (typeof participant.microphoneTrackState === 'string') {
         next.microphoneTrackStates[participant.participantId] = participant.microphoneTrackState
+      }
+      if (typeof participant.isAliasVisibleToActiveParticipants === 'boolean') {
+        const storedParticipant = liveAudioParticipants.get(participant.participantId)
+        if (storedParticipant) {
+          storedParticipant.isAliasVisibleToActiveParticipants = participant.isAliasVisibleToActiveParticipants
+          storedParticipant.updatedAt = Date.now()
+          if (storedParticipant.isAliasHiddenByControl === undefined) {
+            storedParticipant.isAliasHiddenByControl = !getDefaultModerationVisible()
+          }
+        }
       }
     }
   }
@@ -202,6 +217,10 @@ const getLiveAudioParticipantSnapshot = () => ({
     isActiveAudience: participant.isActiveAudience,
     isMicrophoneActive: participant.isMicrophoneActive,
     isKicked: participant.isKicked,
+    isAliasVisibleToActiveParticipants: participant.isAliasVisibleToActiveParticipants ?? false,
+    canViewActiveParticipants: participant.canViewActiveParticipants ?? false,
+    isAliasHiddenByControl: participant.isAliasHiddenByControl ?? false,
+    activeListPublicKey: participant.activeListPublicKey,
     connected: Boolean(participant.ws && participant.ws.readyState === WebSocket.OPEN),
     disconnectedAt: participant.disconnectedAt,
     updatedAt: participant.updatedAt,
@@ -263,6 +282,10 @@ const makeOperationalParticipantSnapshot = (participant, sensitive = {}) => {
     isActiveAudience: participant.isActiveAudience,
     isMicrophoneActive: participant.isMicrophoneActive,
     isKicked: participant.isKicked,
+    isAliasVisibleToActiveParticipants: participant.isAliasVisibleToActiveParticipants ?? false,
+    canViewActiveParticipants: participant.canViewActiveParticipants ?? false,
+    isAliasHiddenByControl: participant.isAliasHiddenByControl ?? false,
+    activeListPublicKey: participant.activeListPublicKey,
     connected: Boolean(participant.ws && participant.ws.readyState === WebSocket.OPEN),
     connectedAt: participant.connectedAt,
     disconnectedAt: participant.disconnectedAt,
@@ -362,6 +385,10 @@ const getLiveAudioParticipantState = (participantId) => {
     isActiveAudience: participant.isActiveAudience,
     isMicrophoneActive: participant.isMicrophoneActive,
     isKicked: participant.isKicked,
+    isAliasVisibleToActiveParticipants: participant.isAliasVisibleToActiveParticipants ?? false,
+    canViewActiveParticipants: participant.canViewActiveParticipants ?? false,
+    isAliasHiddenByControl: participant.isAliasHiddenByControl ?? false,
+    activeListPublicKey: participant.activeListPublicKey,
     connected: Boolean(participant.ws && participant.ws.readyState === WebSocket.OPEN),
     disconnectedAt: participant.disconnectedAt,
     updatedAt: participant.updatedAt,
@@ -702,6 +729,18 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
     return msg.alias === undefined
   }
 
+  const validateActiveParticipantProfile = (msg) => {
+    if (!msg || typeof msg !== 'object' || Array.isArray(msg)) return false
+    if (msg.type !== 'LIVE_AUDIO_ACTIVE_PARTICIPANT_PROFILE') return false
+    if (!isValidParticipantId(msg.participantId)) return false
+    if (typeof msg.alias !== 'string' || msg.alias.trim() === '') return false
+    if (msg.alias.trim().length > 80) return false
+    if (!isValidBase64(msg.activeListPublicKey)) return false
+    if (typeof msg.isAliasVisibleToActiveParticipants !== 'boolean') return false
+    if (msg.createdAt !== undefined && (typeof msg.createdAt !== 'number' || !Number.isFinite(msg.createdAt))) return false
+    return true
+  }
+
   const bindParticipantToConnection = (meta, participantId, status = {}) => {
     if (!isValidParticipantId(participantId)) return null
     if (meta.participantId && meta.participantId !== participantId) return null
@@ -739,6 +778,10 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
       isActiveAudience: isKicked ? false : typeof status.isActiveAudience === 'boolean' ? status.isActiveAudience : existing?.isActiveAudience ?? false,
       isMicrophoneActive,
       isKicked,
+      isAliasVisibleToActiveParticipants: existing?.isAliasVisibleToActiveParticipants ?? false,
+      canViewActiveParticipants: existing?.canViewActiveParticipants ?? false,
+      isAliasHiddenByControl: existing?.isAliasHiddenByControl ?? !getDefaultModerationVisible(),
+      activeListPublicKey: existing?.activeListPublicKey,
       microphonePermissionState: typeof status.microphonePermissionState === 'string'
         ? status.microphonePermissionState
         : existing?.microphonePermissionState || 'unknown',
@@ -854,6 +897,10 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
     isActiveAudience: msg.isActiveAudience,
     isMicrophoneActive: msg.isMicrophoneActive,
     isKicked: msg.isKicked,
+    isAliasVisibleToActiveParticipants: msg.isAliasVisibleToActiveParticipants ?? false,
+    canViewActiveParticipants: msg.canViewActiveParticipants ?? false,
+    isAliasHiddenByControl: msg.isAliasHiddenByControl ?? false,
+    activeListPublicKey: msg.activeListPublicKey,
     microphonePermissionState: msg.microphonePermissionState,
     microphoneTrackState: msg.microphoneTrackState,
     updatedAt: msg.updatedAt || Date.now(),
@@ -1110,9 +1157,48 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
           {
             const participant = bindParticipantToConnection(meta, msg.participantId, msg)
             if (!participant) break
+            if (!participant.isActiveAudience && !participant.isKicked) {
+              participant.isAliasVisibleToActiveParticipants = false
+              participant.canViewActiveParticipants = false
+              participant.activeListPublicKey = undefined
+              const sensitive = decryptSensitiveSnapshot()
+              if (sensitive.aliases) delete sensitive.aliases[participant.participantId]
+              encryptedSensitiveSnapshot = encryptSensitiveSnapshot(sensitive)
+            }
             routeParticipantStatus(participant)
           }
           break
+
+        case 'LIVE_AUDIO_ACTIVE_PARTICIPANT_PROFILE': {
+          if (meta.role !== 'audience') break
+          if (!validateActiveParticipantProfile(msg)) break
+          const participant = bindParticipantToConnection(meta, msg.participantId, {
+            speakerState: 'LISTENER',
+            canSubscribe: true,
+            canPublishAudio: false,
+            isMuted: true,
+            isActiveAudience: true,
+            isMicrophoneActive: false,
+            isKicked: false,
+          })
+          if (!participant || participant.isKicked) break
+          participant.isAliasVisibleToActiveParticipants = msg.isAliasVisibleToActiveParticipants
+          participant.activeListPublicKey = msg.activeListPublicKey
+          participant.updatedAt = Date.now()
+          routeParticipantStatus(participant)
+          broadcast({
+            type: 'LIVE_AUDIO_ACTIVE_PARTICIPANT_PROFILE',
+            participantId: msg.participantId,
+            alias: msg.alias.trim().slice(0, 80),
+            activeListPublicKey: msg.activeListPublicKey,
+            isAliasVisibleToActiveParticipants: msg.isAliasVisibleToActiveParticipants,
+            createdAt: msg.createdAt || Date.now(),
+          }, (targetMeta) => {
+            if (targetMeta.role !== 'control') return false
+            return isControlAuthorized(liveAudioControls.get(targetMeta.controlSessionId))
+          })
+          break
+        }
 
         case 'LIVE_AUDIO_CONTROL_AUTHORIZATION_DECISION':
           if (meta?.role !== 'control') break
@@ -1169,6 +1255,85 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
             break
           }
           mergeSensitiveSnapshot(msg.snapshot)
+          broadcast(makeSnapshotMessage(), (targetMeta) => {
+            if (targetMeta.role !== 'control') return false
+            return isControlAuthorized(liveAudioControls.get(targetMeta.controlSessionId))
+          })
+          break
+        }
+
+        case 'LIVE_AUDIO_SET_ACTIVE_LIST_VIEW_PERMISSION': {
+          if (meta?.role !== 'control') break
+          const controlMeta = liveAudioControls.get(meta.controlSessionId)
+          if (!isControlAuthorized(controlMeta)) break
+          if (!isValidParticipantId(msg.participantId) || typeof msg.canViewActiveParticipants !== 'boolean') break
+          const participant = liveAudioParticipants.get(msg.participantId)
+          if (!participant) break
+          participant.canViewActiveParticipants = msg.canViewActiveParticipants
+          participant.updatedAt = Date.now()
+          if (participant.ws?.readyState === WebSocket.OPEN) {
+            sendJson(participant.ws, {
+              type: 'LIVE_AUDIO_ACTIVE_LIST_VIEW_PERMISSION',
+              participantId: msg.participantId,
+              canViewActiveParticipants: msg.canViewActiveParticipants,
+              createdAt: Date.now(),
+            })
+          }
+          broadcast(makeSnapshotMessage(), (targetMeta) => {
+            if (targetMeta.role !== 'control') return false
+            return isControlAuthorized(liveAudioControls.get(targetMeta.controlSessionId))
+          })
+          break
+        }
+
+        case 'LIVE_AUDIO_SET_ALIAS_SHARED_VISIBILITY': {
+          if (meta?.role !== 'control') break
+          const controlMeta = liveAudioControls.get(meta.controlSessionId)
+          if (!isControlAuthorized(controlMeta)) break
+          if (!isValidParticipantId(msg.participantId) || typeof msg.isAliasHiddenByControl !== 'boolean') break
+          const participant = liveAudioParticipants.get(msg.participantId)
+          if (!participant) break
+          if (!participant.isAliasVisibleToActiveParticipants && !msg.isAliasHiddenByControl) break
+          participant.isAliasHiddenByControl = msg.isAliasHiddenByControl
+          participant.updatedAt = Date.now()
+          broadcast(makeSnapshotMessage(), (targetMeta) => {
+            if (targetMeta.role !== 'control') return false
+            return isControlAuthorized(liveAudioControls.get(targetMeta.controlSessionId))
+          })
+          break
+        }
+
+        case 'LIVE_AUDIO_REMOVE_ACTIVE_PARTICIPANT': {
+          if (meta?.role !== 'control') break
+          const controlMeta = liveAudioControls.get(meta.controlSessionId)
+          if (!isControlAuthorized(controlMeta)) break
+          if (!isValidParticipantId(msg.participantId)) break
+          const participant = liveAudioParticipants.get(msg.participantId)
+          if (!participant || !participant.isKicked) break
+          Object.assign(participant, {
+            isKicked: false,
+            isActiveAudience: false,
+            isAliasVisibleToActiveParticipants: false,
+            canViewActiveParticipants: false,
+            isAliasHiddenByControl: false,
+            activeListPublicKey: undefined,
+            speakerState: 'LISTENER',
+            canPublishAudio: false,
+            isMuted: true,
+            isMicrophoneActive: false,
+            updatedAt: Date.now(),
+          })
+          const sensitive = decryptSensitiveSnapshot()
+          if (sensitive.aliases) delete sensitive.aliases[msg.participantId]
+          encryptedSensitiveSnapshot = encryptSensitiveSnapshot(sensitive)
+          routeParticipantStatus(makeReducedParticipantStatus(participant))
+          if (participant.ws?.readyState === WebSocket.OPEN) {
+            sendJson(participant.ws, {
+              type: 'LIVE_AUDIO_REMOVE_ACTIVE_PARTICIPANT',
+              participantId: msg.participantId,
+              createdAt: Date.now(),
+            })
+          }
           broadcast(makeSnapshotMessage(), (targetMeta) => {
             if (targetMeta.role !== 'control') return false
             return isControlAuthorized(liveAudioControls.get(targetMeta.controlSessionId))

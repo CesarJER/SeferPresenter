@@ -83,6 +83,10 @@ const AudienceScreen = ({
       onCancelRequest={liveAudio.onCancelRequest}
       onToggleMicrophone={liveAudio.onToggleMicrophone}
       onOpenMessage={liveAudio.onOpenMessage}
+      isAliasVisibleToOthers={liveAudio.isAliasVisibleToOthers}
+      onAliasVisibilityChange={liveAudio.onAliasVisibilityChange}
+      canViewActiveParticipants={liveAudio.canViewActiveParticipants}
+      visibleParticipants={liveAudio.visibleParticipants}
       microphoneDiagnostics={liveAudio.microphoneDiagnostics}
       variant="inline"
     />

@@ -16,6 +16,11 @@ import { useLiveAudio } from '../../hooks/useLiveAudio';
 import { usePrivateControlSignals, type DecryptedPrivateControlSignal } from '../../../../hooks/usePrivateControlSignals';
 import { LiveAudioTrackOutput } from '../shared/LiveAudioTrackOutput';
 import { getAudienceParticipantsNeedingAliasRequest } from '../../utils/liveAudioAliasRequests';
+import {
+  computeVisibleActiveParticipants,
+  hasVisibleParticipantsChanged,
+  serializeVisibleParticipants,
+} from '../../utils/activeParticipants';
 
 type ModerationEndpoint =
   | 'grant-speak'
@@ -71,6 +76,10 @@ const snapshotParticipantToStatus = (
   isKicked: participant.isKicked,
   microphonePermissionState: participant.microphonePermissionState,
   microphoneTrackState: participant.microphoneTrackState,
+  isAliasVisibleToActiveParticipants: participant.isAliasVisibleToActiveParticipants,
+  canViewActiveParticipants: participant.canViewActiveParticipants,
+  isAliasHiddenByControl: participant.isAliasHiddenByControl,
+  activeListPublicKey: participant.activeListPublicKey,
   connected: participant.connected,
   updatedAt: participant.updatedAt,
 });
@@ -97,6 +106,7 @@ export default function LiveAudioControlContainer({
   const [messages, setMessages] = useState<PrivateMessage[]>([]);
   const participantAliasesRef = useRef(participantAliases);
   const aliasRequestSignatureRef = useRef('');
+  const lastSentListRef = useRef('');
 
   const { availability } = useLiveAudioAvailability();
 
@@ -144,6 +154,24 @@ export default function LiveAudioControlContainer({
           snapshot.participants.forEach((participant) => {
             if (participant.role === 'audience' && participant.alias) {
               next[participant.participantId] = participant.alias;
+            } else if (
+              participant.role === 'audience' &&
+              participant.isActiveAudience === false &&
+              participant.isKicked !== true
+            ) {
+              delete next[participant.participantId];
+            }
+          });
+          return next;
+        });
+        setParticipantEphemeralKeys(prev => {
+          const next = { ...prev };
+          snapshot.participants.forEach((participant) => {
+            if (participant.role !== 'audience') return;
+            if (participant.activeListPublicKey) {
+              next[participant.participantId] = participant.activeListPublicKey;
+            } else if (participant.isActiveAudience === false && participant.isKicked !== true) {
+              delete next[participant.participantId];
             }
           });
           return next;
@@ -155,9 +183,70 @@ export default function LiveAudioControlContainer({
         return;
       }
 
+      if (
+        type === 'LIVE_AUDIO_CONTROL_AUTHORIZATION_STATE' &&
+        payload.controlSessionId === controlSessionId &&
+        payload.controlState === 'PRINCIPAL'
+      ) {
+        lastSentListRef.current = '';
+        return;
+      }
+
       if (type === 'LIVE_AUDIO_PARTICIPANT_STATUS') {
         const msg = payload as unknown as LiveAudioParticipantStatusMessage;
         setParticipantsMap(prev => ({ ...prev, [msg.participantId]: msg }));
+        if (msg.activeListPublicKey) {
+          setParticipantEphemeralKeys(prev => ({ ...prev, [msg.participantId]: msg.activeListPublicKey! }));
+        }
+        if (msg.isActiveAudience === false && msg.isKicked !== true) {
+          setParticipantAliases(prev => {
+            const next = { ...prev };
+            delete next[msg.participantId];
+            return next;
+          });
+          setParticipantEphemeralKeys(prev => {
+            const next = { ...prev };
+            delete next[msg.participantId];
+            return next;
+          });
+        }
+        return;
+      }
+
+      if (type === 'LIVE_AUDIO_ACTIVE_PARTICIPANT_PROFILE') {
+        const participantId = typeof payload.participantId === 'string' ? payload.participantId : '';
+        const alias = sanitizeAlias(payload.alias);
+        const activeListPublicKey = typeof payload.activeListPublicKey === 'string'
+          ? payload.activeListPublicKey
+          : '';
+        if (!participantId || !alias || !activeListPublicKey) return;
+        const isAliasVisibleToActiveParticipants = payload.isAliasVisibleToActiveParticipants === true;
+        setParticipantAliases(prev => ({ ...prev, [participantId]: alias }));
+        setParticipantEphemeralKeys(prev => ({ ...prev, [participantId]: activeListPublicKey }));
+        setParticipantsMap(prev => {
+          const existing = prev[participantId];
+          if (!existing) return prev;
+          return {
+            ...prev,
+            [participantId]: {
+              ...existing,
+              isAliasVisibleToActiveParticipants,
+              activeListPublicKey,
+            },
+          };
+        });
+        wsSend?.('LIVE_AUDIO_SNAPSHOT_PATCH', {
+          type: 'LIVE_AUDIO_SNAPSHOT_PATCH',
+          snapshot: {
+            participants: [{
+              participantId,
+              role: 'audience',
+              alias,
+              isAliasVisibleToActiveParticipants,
+            }],
+          },
+          createdAt: Date.now(),
+        });
         return;
       }
 
@@ -189,7 +278,7 @@ export default function LiveAudioControlContainer({
       }
     });
     return unsubscribe;
-  }, [subscribeToWsMessage]);
+  }, [controlSessionId, subscribeToWsMessage, wsSend]);
 
   useEffect(() => {
     if (!isControlAuthorized || !wsSend) return;
@@ -222,6 +311,31 @@ export default function LiveAudioControlContainer({
       setParticipantEphemeralKeys(prev => ({ ...prev, [signal.fromParticipantId]: signal.ephemeralPublicKey! }));
     }
 
+    if (typeof data.isAliasVisibleToActiveParticipants === 'boolean') {
+      setParticipantsMap(prev => {
+        const existing = prev[signal.fromParticipantId];
+        if (!existing) return prev;
+        return {
+          ...prev,
+          [signal.fromParticipantId]: {
+            ...existing,
+            isAliasVisibleToActiveParticipants: data.isAliasVisibleToActiveParticipants as boolean,
+          },
+        };
+      });
+      wsSend?.('LIVE_AUDIO_SNAPSHOT_PATCH', {
+        type: 'LIVE_AUDIO_SNAPSHOT_PATCH',
+        snapshot: {
+          participants: [{
+            participantId: signal.fromParticipantId,
+            role: 'audience',
+            isAliasVisibleToActiveParticipants: data.isAliasVisibleToActiveParticipants,
+          }],
+        },
+        createdAt: Date.now(),
+      });
+    }
+
     const signalType = typeof data.type === 'string' ? data.type : '';
     const content = typeof data.text === 'string'
       ? data.text.trim()
@@ -249,6 +363,52 @@ export default function LiveAudioControlContainer({
     transportReady: Boolean(isControlAuthorized && wsSend && subscribeToWsMessage),
     onPrivateSignal: handlePrivateSignal,
   });
+
+  const computeVisibleList = useCallback((): string[] => (
+    computeVisibleActiveParticipants(participantsMap, participantAliases)
+  ), [participantAliases, participantsMap]);
+
+  const distributeVisibleList = useCallback(async () => {
+    if (!privateSignalsReady) return;
+
+    const list = computeVisibleList();
+    const viewers = Object.values(participantsMap).filter((participant) => (
+      participant.role === 'audience' &&
+      participant.isActiveAudience === true &&
+      participant.canViewActiveParticipants === true &&
+      participant.isKicked !== true
+    ));
+    const viewerSignature = viewers
+      .map((viewer) => `${viewer.participantId}:${participantEphemeralKeys[viewer.participantId] ?? ''}`)
+      .sort()
+      .join('|');
+    const serialized = `${serializeVisibleParticipants(list)}\u001f${viewerSignature}`;
+    if (!hasVisibleParticipantsChanged([serialized], lastSentListRef.current)) return;
+    lastSentListRef.current = serialized;
+
+    const payload = {
+      type: 'VISIBLE_ACTIVE_PARTICIPANTS',
+      participants: list,
+      updatedAt: Date.now(),
+    };
+
+    for (const viewer of viewers) {
+      const publicKey = participantEphemeralKeys[viewer.participantId];
+      if (publicKey) {
+        await sendPrivateSignalToParticipant(viewer.participantId, publicKey, payload);
+      }
+    }
+  }, [
+    computeVisibleList,
+    participantEphemeralKeys,
+    participantsMap,
+    privateSignalsReady,
+    sendPrivateSignalToParticipant,
+  ]);
+
+  useEffect(() => {
+    void distributeVisibleList();
+  }, [distributeVisibleList]);
 
   useEffect(() => {
     if (!privateSignalsReady) return;
@@ -283,6 +443,9 @@ export default function LiveAudioControlContainer({
           isMicrophoneActive,
           isActiveAudience,
           isKicked,
+          isAliasVisibleToActiveParticipants: p.isAliasVisibleToActiveParticipants,
+          isAliasHiddenByControl: p.isAliasHiddenByControl,
+          canViewActiveParticipants: p.canViewActiveParticipants,
           microphoneVolume: participantMicrophoneConfigs[p.participantId]?.volume ?? 100,
           isMusicMode: participantMicrophoneConfigs[p.participantId]?.musicMode ?? false,
         };
@@ -431,6 +594,62 @@ export default function LiveAudioControlContainer({
     });
   }, [participantEphemeralKeys, sendPrivateSignalToParticipant]);
 
+  const handleSetAliasSharedVisibility = useCallback((id: string, hidden: boolean) => {
+    wsSend?.('LIVE_AUDIO_SET_ALIAS_SHARED_VISIBILITY', {
+      type: 'LIVE_AUDIO_SET_ALIAS_SHARED_VISIBILITY',
+      participantId: id,
+      isAliasHiddenByControl: hidden,
+      createdAt: Date.now(),
+    });
+    setParticipantsMap(prev => {
+      const existing = prev[id];
+      if (!existing) return prev;
+      return { ...prev, [id]: { ...existing, isAliasHiddenByControl: hidden } };
+    });
+  }, [wsSend]);
+
+  const handleSetActiveListViewPermission = useCallback((id: string, canView: boolean) => {
+    wsSend?.('LIVE_AUDIO_SET_ACTIVE_LIST_VIEW_PERMISSION', {
+      type: 'LIVE_AUDIO_SET_ACTIVE_LIST_VIEW_PERMISSION',
+      participantId: id,
+      canViewActiveParticipants: canView,
+      createdAt: Date.now(),
+    });
+    setParticipantsMap(prev => {
+      const existing = prev[id];
+      if (!existing) return prev;
+      return { ...prev, [id]: { ...existing, canViewActiveParticipants: canView } };
+    });
+
+    const publicKey = participantEphemeralKeys[id];
+    if (!publicKey) return;
+
+    const list = canView ? computeVisibleList() : [];
+    void sendPrivateSignalToParticipant(id, publicKey, {
+      type: 'VISIBLE_ACTIVE_PARTICIPANTS',
+      participants: list,
+      updatedAt: Date.now(),
+    });
+  }, [computeVisibleList, participantEphemeralKeys, sendPrivateSignalToParticipant, wsSend]);
+
+  const handleRemove = useCallback((id: string) => {
+    wsSend?.('LIVE_AUDIO_REMOVE_ACTIVE_PARTICIPANT', {
+      type: 'LIVE_AUDIO_REMOVE_ACTIVE_PARTICIPANT',
+      participantId: id,
+      createdAt: Date.now(),
+    });
+    setParticipantsMap(prev => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
+    setParticipantAliases(prev => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
+  }, [wsSend]);
+
   if (availability !== 'enabled') {
     return null;
   }
@@ -506,6 +725,9 @@ export default function LiveAudioControlContainer({
         onMute={(id) => void doModerationAction('mute-participant', id)}
         onKick={(id) => void doModerationAction('kick-participant', id)}
         onRescue={(id) => void doModerationAction('rescue-participant', id)}
+        onSetAliasSharedVisibility={handleSetAliasSharedVisibility}
+        onSetActiveListViewPermission={handleSetActiveListViewPermission}
+        onRemove={handleRemove}
         onMicrophoneConfigChange={handleParticipantMicrophoneConfigChange}
         pendingWordCount={pendingWordCount}
       />

@@ -115,6 +115,10 @@ Start with:
 - `src/utils/validation.ts`
 - `src/utils/cryptoUtils.ts` for private moderation cryptography
 - `src/hooks/usePrivateControlSignals.ts` for Fase 5.2 encrypted signal lifecycle
+- `src/hooks/useAudienceSession.ts` for audience nick/session lifecycle and the
+  `sefer-audience-alias-visible` local preference
+- `src/features/liveAudio/utils/activeParticipants.ts` for Control-owned A-Z
+  visible participant list computation
 - `src/hooks/useControlAuthorization.ts`,
   `src/components/control/LiveAudioControlAuthorization.tsx`, and
   `src/components/shared/ControlVerificationCode.tsx` for Fase 5.3 Control
@@ -122,7 +126,8 @@ Start with:
 - `server/ws-server.mjs` for principal election, pending Control TTL,
   authorization, moderation filtering, private-signal routing, rejoin-grace
   cleanup, participant snapshot lookup, operational Control handoff snapshots,
-  rescue-to-active-muted transitions, and succession
+  rescue-to-active-muted transitions, active participant visibility flags,
+  remove-vs-block semantics, and succession
 - `server/livekit-server.mjs` and `server/local-server.mjs` for Fase 5.4
   self-hosted token, status, refresh, participant identity preservation, and
   moderation/rescue endpoints plus anonymous quiz aggregate snapshot input
@@ -144,6 +149,14 @@ Live Audio reusable privacy/status widgets under
 so `/proteccion-datos` works without LiveKit. Keep Live Audio optional: disabled
 or misconfigured LiveKit must leave `/presenter`, `/control`, and `/audience`
 usable in presentation-only mode.
+
+For active participant visibility, Audience sends
+`LIVE_AUDIO_ACTIVE_PARTICIPANT_PROFILE` with alias, sharing preference, and
+public key when it joins or changes visibility. `LiveAudioControlContainer.tsx`
+computes and distributes only the encrypted `VISIBLE_ACTIVE_PARTICIPANTS` list,
+while `AudienceLiveAudioPanel.tsx` and `ActiveParticipantsPanel.tsx` render the
+audience-side checkbox/list. Authorization state is clear WebSocket state;
+only the list of visible nicks is encrypted.
 
 Build/runtime split:
 

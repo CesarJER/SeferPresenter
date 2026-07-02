@@ -2,6 +2,8 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, cleanup } from '@testing-library/react';
 import AudienceScreen from '../src/components/audience/AudienceScreen';
+import type { ScriptureNavState } from '../src/types/presentation';
+import type { QuizSubslide } from '../src/types/quiz';
 
 // Mock PresenterScreen
 vi.mock('../src/components/presenter/PresenterScreen', () => ({
@@ -93,8 +95,22 @@ describe('AudienceScreen', () => {
   it('shows CTA in TV mode when displaying SeferReaderScreen', () => {
     window.location.search = '?tv=1';
     const slide = { id: 's1', type: 'quiz' as const, label: 'quiz', quizData: { timerSeconds: 30, options: [], question: '', randomize: false, multiSelect: false }, lines: [] };
-    const quizSubslides = [{ kind: 'cita-verse' as const }];
-    render(<AudienceScreen {...defaultProps} slide={slide} scriptureState={{ scriptureKind: 'sefer', bookEs: 'Gen', chapter: '1', verse: '1' } as any} quizSubslides={quizSubslides as any} quizCurrentSubslideIndex={0} />);
+    const scriptureState: ScriptureNavState = {
+      scriptureKind: 'sefer',
+      bookEs: 'Gen',
+      bookHeb: '',
+      bookAbbrevEs: 'Gen',
+      chapter: '1',
+      verseStart: '1',
+      verse: '1',
+      verseNikud: '',
+      transliteration: '',
+      translation: '',
+      verseIdx: 0,
+      totalVerses: 1,
+    };
+    const quizSubslides: QuizSubslide[] = [{ kind: 'cita-verse', bookToken: 'Gen', chapter: '1', verseStart: '1', verse: '1' }];
+    render(<AudienceScreen {...defaultProps} slide={slide} scriptureState={scriptureState} quizSubslides={quizSubslides} quizCurrentSubslideIndex={0} />);
     
     expect(screen.getByTestId('sefer-reader-screen')).toBeTruthy();
     expect(screen.getByTestId('tv-cta-banner')).toBeTruthy();

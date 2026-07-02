@@ -264,14 +264,36 @@ describe('Live Audio WebSocket routing', () => {
     const audience = await connectWs('audience');
     const participantId = randomUUID();
 
-    audience.send({
-      type: 'LIVE_AUDIO_GRANT_SPEAK',
-      participantId,
-      createdAt: Date.now(),
-    });
+    [
+      {
+        type: 'LIVE_AUDIO_GRANT_SPEAK',
+        participantId,
+        createdAt: Date.now(),
+      },
+      {
+        type: 'LIVE_AUDIO_SET_ALIAS_SHARED_VISIBILITY',
+        participantId,
+        isAliasHiddenByControl: true,
+        createdAt: Date.now(),
+      },
+      {
+        type: 'LIVE_AUDIO_SET_ACTIVE_LIST_VIEW_PERMISSION',
+        participantId,
+        canViewActiveParticipants: true,
+        createdAt: Date.now(),
+      },
+      {
+        type: 'LIVE_AUDIO_REMOVE_ACTIVE_PARTICIPANT',
+        participantId,
+        createdAt: Date.now(),
+      },
+    ].forEach((message) => audience.send(message));
     await wait(100);
 
     expect(control.messages.some((message) => message.type === 'LIVE_AUDIO_GRANT_SPEAK')).toBe(false);
+    expect(control.messages.some((message) => message.type === 'LIVE_AUDIO_SET_ALIAS_SHARED_VISIBILITY')).toBe(false);
+    expect(control.messages.some((message) => message.type === 'LIVE_AUDIO_SET_ACTIVE_LIST_VIEW_PERMISSION')).toBe(false);
+    expect(control.messages.some((message) => message.type === 'LIVE_AUDIO_REMOVE_ACTIVE_PARTICIPANT')).toBe(false);
   });
 
   it('broadcasts total live audio websocket connection counts to control and presenter', async () => {

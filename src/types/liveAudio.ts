@@ -71,6 +71,10 @@ export interface LiveAudioParticipantStatusMessage {
   isActiveAudience?: boolean;
   isMicrophoneActive?: boolean;
   isKicked?: boolean;
+  isAliasVisibleToActiveParticipants?: boolean;
+  canViewActiveParticipants?: boolean;
+  isAliasHiddenByControl?: boolean;
+  activeListPublicKey?: string;
   connected?: boolean;
   updatedAt?: number;
 }
@@ -123,6 +127,42 @@ export interface LiveAudioRescueParticipantMessage {
   type: 'LIVE_AUDIO_RESCUE_PARTICIPANT';
   participantId: string;
   issuedByParticipantId?: string;
+  createdAt?: number;
+}
+
+export interface LiveAudioSetActiveListViewPermissionMessage {
+  type: 'LIVE_AUDIO_SET_ACTIVE_LIST_VIEW_PERMISSION';
+  participantId: string;
+  canViewActiveParticipants: boolean;
+  createdAt?: number;
+}
+
+export interface LiveAudioSetAliasSharedVisibilityMessage {
+  type: 'LIVE_AUDIO_SET_ALIAS_SHARED_VISIBILITY';
+  participantId: string;
+  isAliasHiddenByControl: boolean;
+  createdAt?: number;
+}
+
+export interface LiveAudioRemoveActiveParticipantMessage {
+  type: 'LIVE_AUDIO_REMOVE_ACTIVE_PARTICIPANT';
+  participantId: string;
+  createdAt?: number;
+}
+
+export interface LiveAudioActiveParticipantProfileMessage {
+  type: 'LIVE_AUDIO_ACTIVE_PARTICIPANT_PROFILE';
+  participantId: string;
+  alias: string;
+  activeListPublicKey: string;
+  isAliasVisibleToActiveParticipants: boolean;
+  createdAt?: number;
+}
+
+export interface LiveAudioActiveListViewPermissionMessage {
+  type: 'LIVE_AUDIO_ACTIVE_LIST_VIEW_PERMISSION';
+  participantId: string;
+  canViewActiveParticipants: boolean;
   createdAt?: number;
 }
 
@@ -214,6 +254,10 @@ export interface LiveAudioOperationalParticipantSnapshot {
   isActiveAudience: boolean;
   isMicrophoneActive: boolean;
   isKicked: boolean;
+  isAliasVisibleToActiveParticipants?: boolean;
+  canViewActiveParticipants?: boolean;
+  isAliasHiddenByControl?: boolean;
+  activeListPublicKey?: string;
   connected: boolean;
   connectedAt?: number;
   disconnectedAt?: number;
@@ -314,6 +358,11 @@ export type LiveAudioBroadcastMessage =
   | LiveAudioMuteAllMessage
   | LiveAudioKickParticipantMessage
   | LiveAudioRescueParticipantMessage
+  | LiveAudioSetActiveListViewPermissionMessage
+  | LiveAudioSetAliasSharedVisibilityMessage
+  | LiveAudioRemoveActiveParticipantMessage
+  | LiveAudioActiveParticipantProfileMessage
+  | LiveAudioActiveListViewPermissionMessage
   | LiveAudioControlPublicKeyMessage
   | LiveAudioControlJoinRequestMessage
   | LiveAudioControlAuthorizedMessage

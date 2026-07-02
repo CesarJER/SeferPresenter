@@ -8,6 +8,9 @@ interface LiveAudioListenersProps {
   onGrant: (id: string) => void;
   onKick: (id: string) => void;
   onRescue?: (id: string) => void;
+  onSetAliasSharedVisibility?: (id: string, hidden: boolean) => void;
+  onSetActiveListViewPermission?: (id: string, canView: boolean) => void;
+  onRemove?: (id: string) => void;
   onMicrophoneConfigChange?: (id: string, config: { volume?: number; musicMode?: boolean }) => void;
 }
 
@@ -17,6 +20,9 @@ export const LiveAudioListeners: React.FC<LiveAudioListenersProps> = ({
   onGrant,
   onKick,
   onRescue,
+  onSetAliasSharedVisibility,
+  onSetActiveListViewPermission,
+  onRemove,
   onMicrophoneConfigChange
 }) => {
   const listeners = participants.filter(
@@ -41,6 +47,9 @@ export const LiveAudioListeners: React.FC<LiveAudioListenersProps> = ({
             onGrant={onGrant}
             onKick={onKick}
             onRescue={onRescue}
+            onSetAliasSharedVisibility={onSetAliasSharedVisibility}
+            onSetActiveListViewPermission={onSetActiveListViewPermission}
+            onRemove={onRemove}
             onMicrophoneConfigChange={onMicrophoneConfigChange}
           />
         ))}

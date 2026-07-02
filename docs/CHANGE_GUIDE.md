@@ -120,6 +120,31 @@ Use these checklists before implementing future tasks.
   Live Audio entry points, ownership, routing, or protocol shape changes.
 - **Fase 5 verification checklist:** refer to the manual verification checklist in `README.md` for full operational tests (token refresh, E2E moderation, cryptography, privacy, and modular build requirements). Ensure no `console.log` leaks ciphertext, alias, or keys, and no persistent nominal tracking exists.
 
+## When Modifying Active Participant Visibility
+
+- Keep the readable alias list E2E encrypted. The server may store technical
+  flags, but must not compute or broadcast aliases in clear text.
+- Keep `isAliasVisibleToActiveParticipants` lifecycle identical to the audience
+  nick: initialize from `localStorage`, persist checkbox changes, and clear it
+  on logout, session rotation, kick, and remove.
+- Keep `isAliasVisibleToActiveParticipants`, `isAliasHiddenByControl`, and
+  `canViewActiveParticipants` orthogonal.
+- Audience active profiles (`LIVE_AUDIO_ACTIVE_PARTICIPANT_PROFILE`) may carry
+  alias, sharing preference, and the public key in clear to authorized Control.
+  Do not require private-signal readiness for authorization state.
+- Control Principal computes the A-Z list locally with
+  `computeVisibleActiveParticipants` and sends only the nick list
+  (`VISIBLE_ACTIVE_PARTICIPANTS`) inside targeted `PRIVATE_CONTROL_SIGNAL`
+  payloads.
+- Use `LIVE_AUDIO_SET_ACTIVE_LIST_VIEW_PERMISSION`,
+  `LIVE_AUDIO_SET_ALIAS_SHARED_VISIBILITY`, and
+  `LIVE_AUDIO_REMOVE_ACTIVE_PARTICIPANT` only from authorized Control clients.
+- Preserve the semantic difference between block and remove: block keeps
+  `isKicked=true`; remove applies only to kicked participants and lets them
+  join again cleanly.
+- Update `src/types/liveAudio.ts`, `server/ws-server.mjs`, Live Audio audience
+  and control UI, tests, `docs/SYNC_ARCHITECTURE.md`, and `README.md` together.
+
 ## When Editing Validation/Import/Export
 
 - Treat imports, API responses, localStorage, and sync messages as untrusted.
