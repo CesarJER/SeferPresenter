@@ -16,6 +16,7 @@ import { registerScopedServiceWorker } from './utils/pwaUpdate';
 import type { AppMode, Presentation, ScriptureNavState, VideoState } from './types/presentation';
 import type { QuizSyncState } from './types/quiz';
 import type { AudioState } from './types/audio';
+import type { AutoduckState } from './types/sync';
 import { DEFAULT_AUDIO_STATE } from './types/audio';
 
 import './index.css';
@@ -31,6 +32,7 @@ function AudienceApp() {
   const [userSelectedBackground, setUserSelectedBackground] = useState<string | null>(null);
   const [videoState, setVideoState] = useState<VideoState | null>(null);
   const [audioState, setAudioState] = useState<AudioState>(DEFAULT_AUDIO_STATE);
+  const [autoduckState, setAutoduckState] = useState<AutoduckState>({ enabled: false, factor: 0.2 });
   const [appMode, setAppMode] = useState<AppMode>('slides');
   const [scriptureState, setScriptureState] = useState<ScriptureNavState | null>(null);
 
@@ -46,6 +48,7 @@ function AudienceApp() {
   const appModeRef = useRef<AppMode>(appMode);
   const scriptureStateRef = useRef<ScriptureNavState | null>(scriptureState);
   const quizStateRef = useRef<QuizSyncState | null>(null);
+  const autoduckStateRef = useRef<AutoduckState>(autoduckState);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
@@ -55,6 +58,7 @@ function AudienceApp() {
   useAudienceAudioPlayback({
     audioState,
     audioRef,
+    autoduckState,
   });
 
   useEffect(() => {
@@ -68,10 +72,11 @@ function AudienceApp() {
     audioStateRef.current = audioState;
     appModeRef.current = appMode;
     scriptureStateRef.current = scriptureState;
+    autoduckStateRef.current = autoduckState;
   }, [
     currentPresentation, currentSlideIndex, currentStepIndex, backgroundLock,
     lockedBackgroundValue, userSelectedBackground, videoState, audioState,
-    appMode, scriptureState
+    appMode, scriptureState, autoduckState
   ]);
 
   const [quizCurrentSubslideIndex, setQuizCurrentSubslideIndex] = useState(0);
@@ -130,6 +135,8 @@ function AudienceApp() {
     setAudioState,
     setAudioSyncMaps: () => {},
     setQuizState: applyRemoteQuizState,
+    autoduckStateRef,
+    setAutoduckState,
   });
 
   const liveAudioAvailability = useLiveAudioAvailability();
@@ -200,6 +207,7 @@ function AudienceApp() {
       quizCurrentSubslideIndex={quizCurrentSubslideIndex}
       quizTimerState={quizTimer.timerState}
       quizMaxBaseCentipunts={maxBaseCentipunts}
+      autoduckState={autoduckState}
     />
   );
 

@@ -40,6 +40,7 @@ interface UseLiveAudioResult {
   participantId: string | null;
   participantIdentity: string | null;
   isMicrophoneActive: boolean;
+  isDuckingActive: boolean;
   startRemoteAudio: () => Promise<void>;
   publishMicrophone: (options?: { musicMode?: boolean }) => Promise<void>;
   unpublishMicrophone: () => Promise<void>;
@@ -216,6 +217,7 @@ export const useLiveAudio = ({
   const [participantId, setParticipantId] = useState<string | null>(null);
   const [participantIdentity, setParticipantIdentity] = useState<string | null>(null);
   const [isMicrophoneActive, setIsMicrophoneActive] = useState(false);
+  const [isDuckingActive, setIsDuckingActive] = useState(false);
   const [microphoneDiagnostics, setMicrophoneDiagnostics] = useState<LiveAudioMicrophoneDiagnostics>(makeInitialMicrophoneDiagnostics);
 
   const roomRef = useRef<Room | null>(null);
@@ -415,6 +417,8 @@ export const useLiveAudio = ({
     setRemoteTracks([]);
     setParticipantId(null);
     setParticipantIdentity(null);
+    setIsDuckingActive(false);
+    window.dispatchEvent(new CustomEvent('sefer-autoduck', { detail: { isDuckingActive: false } }));
     setConnectionQuality('unknown');
     setState(availability === 'enabled' ? 'disconnected' : 'unavailable');
     if (room) {
@@ -574,6 +578,17 @@ export const useLiveAudio = ({
       .on(RoomEvent.TrackPublished, handleTrackPublished)
       .on(RoomEvent.TrackSubscribed, handleTrackSubscribed)
       .on(RoomEvent.TrackUnsubscribed, handleTrackUnsubscribed)
+      .on(RoomEvent.ActiveSpeakersChanged, (speakers: Participant[]) => {
+        if (connectionRunRef.current !== runId) return;
+        const duckRoles = (import.meta.env.VITE_AUTODUCK_ROLES || 'control,audience').split(',');
+        const active = speakers.some(p => {
+          const match = /^(audience|control|presenter)-(.+)$/.exec(p.identity);
+          const participantRole = match?.[1];
+          return participantRole && duckRoles.includes(participantRole);
+        });
+        setIsDuckingActive(active);
+        window.dispatchEvent(new CustomEvent('sefer-autoduck', { detail: { isDuckingActive: active } }));
+      })
       .on(RoomEvent.Disconnected, () => {
         if (connectionRunRef.current !== runId || userDisconnectedRef.current) return;
         setState('reconnecting');
@@ -719,6 +734,17 @@ export const useLiveAudio = ({
       })
       .on(RoomEvent.TrackUnsubscribed, (track: RemoteTrack) => {
         removeRemoteTrack(track);
+      })
+      .on(RoomEvent.ActiveSpeakersChanged, (speakers: Participant[]) => {
+        if (connectionRunRef.current !== runId) return;
+        const duckRoles = (import.meta.env.VITE_AUTODUCK_ROLES || 'control,audience').split(',');
+        const active = speakers.some(p => {
+          const match = /^(audience|control|presenter)-(.+)$/.exec(p.identity);
+          const participantRole = match?.[1];
+          return participantRole && duckRoles.includes(participantRole);
+        });
+        setIsDuckingActive(active);
+        window.dispatchEvent(new CustomEvent('sefer-autoduck', { detail: { isDuckingActive: active } }));
       });
 
     try {
@@ -773,6 +799,7 @@ export const useLiveAudio = ({
     participantId,
     participantIdentity,
     isMicrophoneActive,
+    isDuckingActive,
     startRemoteAudio,
     publishMicrophone,
     unpublishMicrophone,
@@ -783,6 +810,7 @@ export const useLiveAudio = ({
     availability,
     disconnect,
     isMicrophoneActive,
+    isDuckingActive,
     connectionQuality,
     participantId,
     participantIdentity,

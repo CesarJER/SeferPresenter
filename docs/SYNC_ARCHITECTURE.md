@@ -32,6 +32,7 @@ Main message types live in `src/types/sync.ts`:
 - `VIDEO_TELEMETRY`: lightweight video playback updates.
 - `DISPLAY_TELEMETRY`: background lock/override updates.
 - `AUDIO_SYNC_MAPS_UPDATE`: audio cue map updates.
+- `SET_AUTODUCK_STATE`: Autoduck status and fade factor to lower media volume automatically when active speakers are detected.
 - `REQUEST_STATE`: clients ask for a fresh backend snapshot; clients also fetch
   `/api/state` directly on startup.
 - `WELCOME`: sent by the server upon WebSocket connection, providing client ID, role, server time, and presentation session ID.

@@ -32,6 +32,7 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
 - `useBackgroundResolver` - `src/hooks/useBackgroundResolver.ts`: active background, lock, and override behavior.
 - `useUrlSync` - `src/hooks/useUrlSync.ts`: presenter URL/hash synchronization.
 - `useKeyboardNavigation` - `src/hooks/useKeyboardNavigation.ts`: keyboard navigation for slides and scripture.
+- `useSmoothVolume` - `src/hooks/useSmoothVolume.ts`: smooth volume transitions and autoduck factor application via `requestAnimationFrame`.
 - `useAudioPlayback` - `src/hooks/useAudioPlayback.ts`: presenter audio element playback and audio sync.
 - `useScriptureNavigation` - `src/hooks/useScriptureNavigation.ts`: scripture projection, slide boundary, manual Sefer mode transitions.
 - `useSeferReader` - `src/hooks/useSeferReader.ts`: book/chapter/verse reader state and data loading.

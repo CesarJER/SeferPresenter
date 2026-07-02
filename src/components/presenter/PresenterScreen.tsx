@@ -2,9 +2,11 @@ import React, { useEffect, useState, useRef } from 'react';
 import { isImageMedia } from '../../utils/mediaUtils';
 import type { Slide, VideoState } from '../../types/presentation';
 import type { QuizOptionId, QuizSubslide, QuizTimerState } from '../../types/quiz';
+import type { AutoduckState } from '../../types/sync';
 import { AnimatePresence, motion } from 'framer-motion';
 import AutoResizeText from '../shared/AutoResizeText';
 import { QuizPresenterView } from '../quiz/QuizPresenterView';
+import { useSmoothVolume } from '../../hooks/useSmoothVolume';
 
 interface PresenterScreenProps {
   background: string;
@@ -21,6 +23,7 @@ interface PresenterScreenProps {
   quizPresenterDemoSelection?: QuizOptionId | null;
   quizMaxBaseCentipunts?: number;
   liveAudioPanel?: React.ReactNode;
+  autoduckState?: AutoduckState;
 }
 
 const PresenterScreen: React.FC<PresenterScreenProps> = ({
@@ -37,8 +40,19 @@ const PresenterScreen: React.FC<PresenterScreenProps> = ({
   quizPresenterDemoSelection = null,
   quizMaxBaseCentipunts = 0,
   liveAudioPanel,
+  autoduckState,
 }) => {
-  const [videoElement, setVideoElement] = useState<HTMLVideoElement | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+
+  // Custom ref setter to keep state and ref in sync for videoElement
+  const [videoElementState, setVideoElementState] = useState<HTMLVideoElement | null>(null);
+  const setVideoElement = (el: HTMLVideoElement | null) => {
+    videoRef.current = el;
+    setVideoElementState(el);
+  };
+  const videoElement = videoElementState;
+
+  useSmoothVolume(videoRef, videoState?.volume ?? slide?.mediaVolume ?? 1.0, autoduckState);
 
   // Sync prop callback to a ref to avoid stale closures in event listeners/intervals
   const onVideoStateChangeRef = useRef(onVideoStateChange);
@@ -53,9 +67,9 @@ const PresenterScreen: React.FC<PresenterScreenProps> = ({
     if (!videoElement || !videoState || videoState.lastUpdatedBy !== 'controller') return;
 
     // Apply Volume
-    if (videoElement.volume !== videoState.volume) {
-      videoElement.volume = videoState.volume;
-    }
+    // if (videoElement.volume !== videoState.volume) {
+    //   videoElement.volume = videoState.volume;
+    // }
 
     // Apply Playback Speed
     if (videoElement.playbackRate !== videoState.speed) {
@@ -103,7 +117,7 @@ const PresenterScreen: React.FC<PresenterScreenProps> = ({
     const defaultStart = slide.mediaStart ?? 0;
     const defaultLoop = slide.mediaLoop !== false;
 
-    videoElement.volume = defaultVol;
+    // videoElement.volume = defaultVol;
     videoElement.playbackRate = defaultSpeed;
     videoElement.currentTime = defaultStart;
     videoElement.loop = defaultLoop;
@@ -134,11 +148,11 @@ const PresenterScreen: React.FC<PresenterScreenProps> = ({
   useEffect(() => {
     if (!videoElement || !slide || slide.type !== 'media' || !mediaSrc) return;
 
-    const vol = slide.mediaVolume ?? 0.8;
+    // const vol = slide.mediaVolume ?? 0.8;
     const speed = slide.mediaSpeed ?? 1.0;
     const loop = slide.mediaLoop !== false;
 
-    if (videoElement.volume !== vol) videoElement.volume = vol;
+    // if (videoElement.volume !== vol) videoElement.volume = vol;
     if (videoElement.playbackRate !== speed) videoElement.playbackRate = speed;
     if (videoElement.loop !== loop) videoElement.loop = loop;
   }, [

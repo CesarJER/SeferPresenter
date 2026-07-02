@@ -12,7 +12,7 @@ import type { AudioState, AudioSyncMap, AudioTimelineState } from './types/audio
 import { DEFAULT_AUDIO_STATE } from './types/audio';
 import type { AppMode, Presentation, ScriptureNavState, Slide, VideoState, QuizData } from './types/presentation';
 import type { QuizOptionId, QuizSyncState } from './types/quiz';
-import type { RemoteCommandPayload } from './types/sync';
+import type { RemoteCommandPayload, AutoduckState } from './types/sync';
 
 import {
   normalizePresentation,
@@ -61,6 +61,7 @@ function App() {
   const [audioState, setAudioState] = useState<AudioState>(DEFAULT_AUDIO_STATE);
   const [audioTimeline, setAudioTimeline] = useState<AudioTimelineState | null>(null);
   const [audioSyncMaps, setAudioSyncMaps] = useState<AudioSyncMap[]>([]);
+  const [autoduckState, setAutoduckState] = useState<AutoduckState>({ enabled: false, factor: 0.2 });
 
   const [appMode, setAppMode] = useState<AppMode>('slides');
   const [scriptureState, setScriptureState] = useState<ScriptureNavState | null>(null);
@@ -79,6 +80,7 @@ function App() {
   const scriptureStateRef = useRef<ScriptureNavState | null>(scriptureState);
   const slideScriptureStateBeforeManualRef = useRef<ScriptureNavState | null>(null);
   const quizStateRef = useRef<QuizSyncState | null>(null);
+  const autoduckStateRef = useRef<AutoduckState>(autoduckState);
   const clientIdRef = useRef(makeClientId());
   const navigatedSlideIdRef = useRef<string | undefined>(undefined);
   const lastActiveSlideIdRef = useRef<string | undefined>(undefined);
@@ -259,7 +261,8 @@ function App() {
     appModeRef.current = appMode;
     scriptureStateRef.current = scriptureState;
     quizStateRef.current = activeQuizState;
-  }, [currentPresentation, currentSlideIndex, currentStepIndex, backgroundLock, lockedBackgroundValue, userSelectedBackground, videoState, audioState, appMode, scriptureState, activeQuizState]);
+    autoduckStateRef.current = autoduckState;
+  }, [currentPresentation, currentSlideIndex, currentStepIndex, backgroundLock, lockedBackgroundValue, userSelectedBackground, videoState, audioState, appMode, scriptureState, activeQuizState, autoduckState]);
 
 
 
@@ -393,6 +396,9 @@ function App() {
       case 'AUDIO_STATE_CHANGE':
         setAudioState(payload.state);
         break;
+      case 'SET_AUTODUCK_STATE':
+        setAutoduckState(payload.state);
+        break;
       case 'RESET_STATE':
         handleResetStateRef.current?.();
         break;
@@ -403,11 +409,12 @@ function App() {
     isControlMode, isPresenterMode, onRemoteCommand: handleRemoteCommand, clientIdRef,
     currentPresentationRef, currentSlideIndexRef, currentStepIndexRef, backgroundLockRef,
     lockedBackgroundValueRef, userSelectedBackgroundRef, videoStateRef,
-    audioStateRef, appModeRef, scriptureStateRef, quizStateRef,
+    audioStateRef, appModeRef, scriptureStateRef, quizStateRef, autoduckStateRef,
     setCurrentPresentation, setCurrentSlideIndex, setCurrentStepIndex, setBackgroundLock,
     setLockedBackgroundValue, setUserSelectedBackground, setVideoState,
     setAppMode, setScriptureState, setAudioState, setAudioSyncMaps,
     setQuizState: applyRemoteQuizState,
+    setAutoduckState,
     onAudioTimelineState: setAudioTimeline,
   });
   isMediaMasterRef.current = isMediaMaster;
@@ -653,7 +660,8 @@ function App() {
   useAudioPlayback({
     isControlMode, audioState, audioStateRef, audioSyncMaps, currentSlideIndex, currentPresentationId: currentPresentation?.id, scriptureState,
     audioRef, currentPresentationRef, setAutoplayBlocked, emitAudioTelemetry,
-    handleSelectPresentationAndSlide
+    handleSelectPresentationAndSlide,
+    autoduckState
   });
 
   useEffect(() => {
@@ -823,6 +831,7 @@ function App() {
             quizTimerState={quizTimer.timerState}
             quizPresenterDemoSelection={quizPresenterDemoSelection}
             quizMaxBaseCentipunts={calcMaxBaseCentipunts(currentPresentation?.slides.map(s => s.quizData).filter(Boolean) as QuizData[] || [])}
+            autoduckState={autoduckState}
           />
         </div>
       )}

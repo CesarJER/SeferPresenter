@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 import type { AppMode, ScriptureNavState, Slide, VideoState } from '../../types/presentation';
 import type { QuizSubslide, QuizTimerState } from '../../types/quiz';
+import type { AutoduckState } from '../../types/sync';
 import { useAudienceAnswers } from '../../hooks/useQuizAnswers';
 import PresenterScreen from '../presenter/PresenterScreen';
 import SeferReaderScreen from '../presenter/SeferReaderScreen';
@@ -22,6 +23,7 @@ interface AudienceScreenProps {
   quizCurrentSubslideIndex?: number;
   quizTimerState?: QuizTimerState;
   quizMaxBaseCentipunts?: number;
+  autoduckState?: AutoduckState;
 }
 
 const AudienceScreen = ({
@@ -36,6 +38,7 @@ const AudienceScreen = ({
   quizCurrentSubslideIndex = 0,
   quizTimerState,
   quizMaxBaseCentipunts,
+  autoduckState,
 }: AudienceScreenProps) => {
   const audienceAnswers = useAudienceAnswers();
   const activeSubslide = quizSubslides[quizCurrentSubslideIndex];
@@ -167,6 +170,7 @@ const AudienceScreen = ({
           quizCurrentSubslideIndex={quizCurrentSubslideIndex}
           quizTimerState={quizTimerState}
           liveAudioPanel={liveAudioPanel}
+          autoduckState={autoduckState}
         />
       </div>
       <div className="fixed bottom-2 left-2 z-50 pointer-events-auto opacity-60 hover:opacity-100 transition-opacity">

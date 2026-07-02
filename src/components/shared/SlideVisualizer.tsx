@@ -2,8 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { ChevronDown, ChevronUp, Eye } from 'lucide-react';
 import type { Slide, ScriptureNavState, AppMode, VideoState } from '../../types/presentation';
 import type { QuizSubslide } from '../../types/quiz';
-import type { RemoteCommandPayload } from '../../types/sync';
+import type { RemoteCommandPayload, AutoduckState } from '../../types/sync';
 import { sanitizeSlideHtml } from '../../utils/hebrewText';
+import { useSmoothVolume } from '../../hooks/useSmoothVolume';
 import { findScriptureRange } from '../../utils/scriptureLookup';
 import { isImageMedia } from '../../utils/mediaUtils';
 
@@ -18,6 +19,7 @@ interface SlideVisualizerProps {
   isMediaMaster?: boolean;
   emitVideoTelemetry?: (state: VideoState) => void;
   emitCommand?: (payload: RemoteCommandPayload) => void;
+  autoduckState?: AutoduckState;
 }
 
 const containsHebrew = (text: string): boolean => {
@@ -33,11 +35,14 @@ const SlideVisualizer: React.FC<SlideVisualizerProps> = ({
   videoState,
   isMediaMaster,
   emitVideoTelemetry,
+  autoduckState,
 }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [quizVerseLines, setQuizVerseLines] = useState<string[]>([]);
   const videoRef = React.useRef<HTMLVideoElement>(null);
   const lastSeekIdRef = React.useRef<number | undefined>(undefined);
+
+  useSmoothVolume(videoRef, videoState?.volume ?? 1.0, autoduckState);
 
   useEffect(() => {
     if (videoRef.current) {
@@ -62,9 +67,10 @@ const SlideVisualizer: React.FC<SlideVisualizerProps> = ({
       vid.loop = videoState.loop;
     }
 
-    if (videoState.volume !== undefined && vid.volume !== videoState.volume) {
-      vid.volume = videoState.volume;
-    }
+    // Volume is handled by useSmoothVolume
+    // if (videoState.volume !== undefined && vid.volume !== videoState.volume) {
+    //   vid.volume = videoState.volume;
+    // }
 
     // Apply Scrubbing Time (ONLY if requested a seek via seekId, or if slave and out of sync)
     const shouldSeek = isMediaMaster 

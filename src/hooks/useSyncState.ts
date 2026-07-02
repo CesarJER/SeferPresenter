@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { AudioState, AudioSyncMap, AudioTimelineState } from '../types/audio';
 import type { AppMode, Presentation, ScriptureNavState, VideoState } from '../types/presentation';
 import type { QuizSyncState } from '../types/quiz';
-import type { RemoteCommandPayload, DisplayTelemetryState } from '../types/sync';
+import type { RemoteCommandPayload, DisplayTelemetryState, AutoduckState } from '../types/sync';
 import { normalizePresentation } from '../utils/normalizePresentation';
 import { makeSyncMessage } from '../utils/syncProtocol';
 import { validateRemoteStatePayload, validateSyncMessage } from '../utils/validation';
@@ -19,6 +19,7 @@ interface SyncStateOptions {
   scriptureState?: ScriptureNavState | null;
   audioState?: AudioState;
   quizState?: QuizSyncState | null;
+  autoduckState?: AutoduckState;
   stepIndex?: number;
 }
 
@@ -39,6 +40,7 @@ interface UseSyncStateProps {
   appModeRef: React.MutableRefObject<AppMode>;
   scriptureStateRef: React.MutableRefObject<ScriptureNavState | null>;
   quizStateRef?: React.MutableRefObject<QuizSyncState | null>;
+  autoduckStateRef: React.MutableRefObject<AutoduckState>;
   // State setters
   setCurrentPresentation: (p: Presentation | null) => void;
   setCurrentSlideIndex: (idx: number) => void;
@@ -52,6 +54,7 @@ interface UseSyncStateProps {
   setAudioState: (state: AudioState) => void;
   setAudioSyncMaps: (maps: AudioSyncMap[]) => void;
   setQuizState?: (state: QuizSyncState | null) => void;
+  setAutoduckState: (state: AutoduckState) => void;
   onAudioTimelineState?: (state: AudioTimelineState) => void;
 }
 
@@ -190,11 +193,11 @@ export function useSyncState(props: UseSyncStateProps) {
     currentPresentationRef, currentSlideIndexRef, currentStepIndexRef, backgroundLockRef,
     lockedBackgroundValueRef, userSelectedBackgroundRef, videoStateRef,
     audioStateRef, appModeRef, scriptureStateRef,
-    quizStateRef,
+    quizStateRef, autoduckStateRef,
     setCurrentPresentation, setCurrentSlideIndex, setCurrentStepIndex, setBackgroundLock,
     setLockedBackgroundValue, setUserSelectedBackground, setVideoState,
     setAppMode, setScriptureState, setAudioState, setAudioSyncMaps,
-    setQuizState, onAudioTimelineState,
+    setQuizState, setAutoduckState, onAudioTimelineState,
   } = props;
 
   const channel = useMemo(() => new BroadcastChannel('sefer-presenter'), []);
@@ -289,7 +292,7 @@ export function useSyncState(props: UseSyncStateProps) {
     const {
       presentation, slideIndex, bgLock, lockedBg, userSelectedBg,
       videoState, appMode, scriptureState, audioState, quizState,
-      stepIndex,
+      autoduckState, stepIndex,
     } = opts;
 
     const activeVideoState = videoState !== undefined ? videoState : videoStateRef.current;
@@ -297,12 +300,14 @@ export function useSyncState(props: UseSyncStateProps) {
     const activeScriptureState = scriptureState !== undefined ? scriptureState : scriptureStateRef.current;
     const activeAudioState = audioState !== undefined ? audioState : audioStateRef.current;
     const activeQuizState = quizState !== undefined ? quizState : quizStateRef?.current ?? null;
+    const activeAutoduckState = autoduckState !== undefined ? autoduckState : autoduckStateRef.current;
     const activeStepIndex = stepIndex !== undefined ? stepIndex : currentStepIndexRef.current;
 
     // Update local refs immediately (avoid stale reads before React re-renders)
     if (videoState !== undefined) videoStateRef.current = activeVideoState;
     if (audioState !== undefined) audioStateRef.current = activeAudioState;
     if (quizState !== undefined && quizStateRef) quizStateRef.current = activeQuizState;
+    if (autoduckState !== undefined) autoduckStateRef.current = activeAutoduckState;
 
     persistState(presentation, slideIndex, bgLock, lockedBg);
 
@@ -320,6 +325,7 @@ export function useSyncState(props: UseSyncStateProps) {
       scriptureState: activeScriptureState,
       audioState: activeAudioState,
       quizState: activeQuizState,
+      autoduckState: activeAutoduckState,
       stepIndex: activeStepIndex,
     });
 
@@ -334,7 +340,7 @@ export function useSyncState(props: UseSyncStateProps) {
         body: JSON.stringify(payload)
       }).catch(err => console.error('Error syncing state to network', err));
     }
-  }, [channel, isControlMode, persistState, videoStateRef, appModeRef, scriptureStateRef, audioStateRef, quizStateRef, currentStepIndexRef, clientIdRef, wsStatus]);
+  }, [channel, isControlMode, persistState, videoStateRef, appModeRef, scriptureStateRef, audioStateRef, quizStateRef, autoduckStateRef, currentStepIndexRef, clientIdRef, wsStatus]);
 
   const emitCommand = useCallback((payload: RemoteCommandPayload) => {
     const message = makeSyncMessage({
@@ -513,6 +519,11 @@ export function useSyncState(props: UseSyncStateProps) {
       quizStateRef.current = incomingQuizState;
       setQuizState(incomingQuizState);
     }
+    if (safeData.autoduckState !== undefined) {
+      const incomingAutoduckState = safeData.autoduckState as AutoduckState;
+      autoduckStateRef.current = incomingAutoduckState;
+      setAutoduckState(incomingAutoduckState);
+    }
     if (safeData.stepIndex !== undefined && currentStepIndexRef.current !== safeData.stepIndex) {
       setCurrentStepIndex(safeData.stepIndex as number);
     }
@@ -532,7 +543,7 @@ export function useSyncState(props: UseSyncStateProps) {
     setCurrentPresentation, setCurrentSlideIndex, setCurrentStepIndex, setBackgroundLock,
     setLockedBackgroundValue, setUserSelectedBackground,
     setAppMode, setScriptureState, applyAudioTelemetry, persistState,
-    quizStateRef, setQuizState, setVideoState,
+    quizStateRef, setQuizState, setAutoduckState, autoduckStateRef, setVideoState,
   ]);
 
   // Use refs for callbacks so event listeners don't re-bind constantly

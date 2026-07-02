@@ -1,14 +1,19 @@
 import { useEffect, useRef } from 'react';
 import type { AudioState } from '../types/audio';
+import type { AutoduckState } from '../types/sync';
+import { useSmoothVolume } from './useSmoothVolume';
 
 interface UseAudienceAudioPlaybackProps {
   audioState: AudioState;
   audioRef: React.RefObject<HTMLAudioElement | null>;
+  autoduckState?: AutoduckState;
 }
 
 export function useAudienceAudioPlayback(props: UseAudienceAudioPlaybackProps) {
-  const { audioState, audioRef } = props;
+  const { audioState, audioRef, autoduckState } = props;
   const isPerformingSeekRef = useRef<boolean>(false);
+
+  useSmoothVolume(audioRef, audioState.volume, autoduckState);
 
   // 1. Load/change source
   useEffect(() => {
@@ -39,10 +44,10 @@ export function useAudienceAudioPlayback(props: UseAudienceAudioPlaybackProps) {
     const audio = audioRef.current;
     if (!audio || !audioState.audioSrc) return;
 
-    // Apply volume changes
-    if (audio.volume !== audioState.volume) {
-      audio.volume = audioState.volume;
-    }
+    // Volume is handled by useSmoothVolume
+    // if (audio.volume !== audioState.volume) {
+    //   audio.volume = audioState.volume;
+    // }
 
     // Attempt to keep time synchronized. Skip if currently seeking to avoid judder.
     if (!isPerformingSeekRef.current && Math.abs(audio.currentTime - audioState.currentTime) > 0.8) {

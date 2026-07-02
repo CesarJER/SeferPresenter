@@ -1,5 +1,5 @@
 import React from 'react';
-import { Play, Pause, Music, Volume2, ArrowUp, ArrowUpDown, Settings } from 'lucide-react';
+import { Play, Pause, Music, Volume2, ArrowUp, ArrowUpDown, Settings, Mic, MicOff } from 'lucide-react';
 import type { Presentation } from '../../types/presentation';
 import type { AudioState, AudioSyncMap, AudioTimelineAction } from '../../types/audio';
 
@@ -14,6 +14,8 @@ interface AudioPanelProps {
   handleOpenAudioEditor: () => void;
   dispatchAction?: (action: AudioTimelineAction) => void;
   estimatedPositionSec?: number;
+  autoduckState?: import('../../types/sync').AutoduckState;
+  onAutoduckStateChange?: (state: import('../../types/sync').AutoduckState) => void;
 }
 
 const formatTime = (secs: number | undefined) => {
@@ -34,6 +36,8 @@ export const AudioPanel: React.FC<AudioPanelProps> = ({
   handleOpenAudioEditor,
   dispatchAction,
   estimatedPositionSec,
+  autoduckState,
+  onAutoduckStateChange,
 }) => {
   const [dragPosition, setDragPosition] = React.useState<number | null>(null);
 
@@ -207,6 +211,26 @@ export const AudioPanel: React.FC<AudioPanelProps> = ({
               <Volume2 size={14} />
             )}
           </button>
+
+          {/* Autoduck Button */}
+          {onAutoduckStateChange && (
+            <button
+              type="button"
+              onClick={() => onAutoduckStateChange({
+                enabled: !autoduckState?.enabled,
+                factor: autoduckState?.factor ?? 0.2
+              })}
+              disabled={!audioState.audioSrc}
+              className={`audio-panel-btn ${
+                autoduckState?.enabled
+                  ? 'bg-blue-600 hover:bg-blue-500 text-white border border-blue-500'
+                  : 'bg-gray-800 hover:bg-gray-700 text-gray-400 border border-gray-700'
+              }`}
+              title={autoduckState?.enabled ? 'Autoduck Activado (Baja volumen al hablar)' : 'Activar Autoduck'}
+            >
+              {autoduckState?.enabled ? <Mic size={14} /> : <MicOff size={14} />}
+            </button>
+          )}
 
           {/* Volume Slider */}
           <input

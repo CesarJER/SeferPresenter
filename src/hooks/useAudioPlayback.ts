@@ -1,6 +1,8 @@
 import { useEffect, useRef } from 'react';
 import type { AudioState, AudioSyncMap } from '../types/audio';
 import type { Presentation, ScriptureNavState } from '../types/presentation';
+import type { AutoduckState } from '../types/sync';
+import { useSmoothVolume } from './useSmoothVolume';
 
 interface UseAudioPlaybackProps {
   isControlMode: boolean;
@@ -10,6 +12,7 @@ interface UseAudioPlaybackProps {
   currentSlideIndex: number;
   currentPresentationId: string | undefined;
   scriptureState: ScriptureNavState | null;
+  autoduckState?: AutoduckState;
   // Refs
   audioRef: React.RefObject<HTMLAudioElement | null>;
   currentPresentationRef: React.MutableRefObject<Presentation | null>;
@@ -33,6 +36,7 @@ export function useAudioPlayback(props: UseAudioPlaybackProps) {
     setAutoplayBlocked,
     emitAudioTelemetry,
     handleSelectPresentationAndSlide,
+    autoduckState,
   } = props;
 
   const lastSyncCueRef = useRef<number>(-1);
@@ -44,6 +48,8 @@ export function useAudioPlayback(props: UseAudioPlaybackProps) {
     currentSlideIndexRef.current = currentSlideIndex;
     scriptureStateRef.current = scriptureState;
   }, [currentSlideIndex, scriptureState]);
+
+  useSmoothVolume(audioRef, audioState.volume, autoduckState);
 
   // 1. Load/change source
   useEffect(() => {
@@ -79,9 +85,7 @@ export function useAudioPlayback(props: UseAudioPlaybackProps) {
     if (audioState.lastUpdatedBy !== 'controller') return;
 
     if (audioState.changeType === 'volume') {
-      if (audio.volume !== audioState.volume) {
-        audio.volume = audioState.volume;
-      }
+      // Volume is handled by useSmoothVolume, we only update state.
     } else if (audioState.changeType === 'seek') {
       if (Math.abs(audio.currentTime - audioState.currentTime) > 0.8) {
         audio.currentTime = audioState.currentTime;
@@ -100,9 +104,7 @@ export function useAudioPlayback(props: UseAudioPlaybackProps) {
         audio.pause();
       }
     } else if (audioState.changeType === 'track') {
-      if (audio.volume !== audioState.volume) {
-        audio.volume = audioState.volume;
-      }
+      // Volume is handled by useSmoothVolume
       if (Math.abs(audio.currentTime - audioState.currentTime) > 0.8) {
         audio.currentTime = audioState.currentTime;
       }

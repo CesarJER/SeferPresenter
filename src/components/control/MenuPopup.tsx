@@ -62,6 +62,8 @@ interface MenuPopupProps {
   availableAudioFiles: string[];
   onAudioStateChange: (state: AudioState) => void;
   onAudioSyncMapsChange: (maps: AudioSyncMap[]) => void;
+  autoduckState?: import('../../types/sync').AutoduckState;
+  onAutoduckStateChange?: (state: import('../../types/sync').AutoduckState) => void;
   onResetState?: (clearSession?: boolean) => void;
   quizSubslides?: QuizSubslide[];
   quizCurrentSubslideIndex?: number;
@@ -140,6 +142,8 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
   audioSyncMaps,
   availableAudioFiles,
   onAudioStateChange,
+  autoduckState,
+  onAutoduckStateChange,
   onResetState,
   quizSubslides = [],
   quizCurrentSubslideIndex = 0,
@@ -1493,6 +1497,8 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
           <AudioPanel
             audioState={audioState}
             onAudioStateChange={onAudioStateChange}
+            autoduckState={autoduckState}
+            onAutoduckStateChange={onAutoduckStateChange}
             audioSyncMaps={audioSyncMaps}
             availableAudioFiles={availableAudioFiles}
             presentations={presentations}
@@ -1665,8 +1671,10 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                     {/* ── Video Player Controller ───────────────────────────────── */}
                     <MediaControls
                       activeSlide={activeSlide!}
-                      videoState={videoState}
-                      onVideoStateChange={onVideoStateChange}
+                      videoState={videoState || null}
+                      onVideoStateChange={onVideoStateChange || (() => {})}
+                      autoduckState={autoduckState}
+                      onAutoduckStateChange={onAutoduckStateChange}
                     />
 
                     {activeSlide?.type === 'quiz' && activeSlide.quizData && quizTimerState && (() => {

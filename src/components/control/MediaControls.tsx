@@ -1,11 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import type { Slide, VideoState } from '../../types/presentation';
+import type { AutoduckState } from '../../types/sync';
 import { isImageMedia } from '../../utils/mediaUtils';
+import { Mic, MicOff } from 'lucide-react';
 
 interface MediaControlsProps {
   activeSlide: Slide;
   videoState: VideoState | null;
   onVideoStateChange: (state: VideoState | null) => void;
+  autoduckState?: AutoduckState;
+  onAutoduckStateChange?: (state: AutoduckState) => void;
 }
 
 const formatTime = (secs: number | undefined) => {
@@ -18,7 +22,9 @@ const formatTime = (secs: number | undefined) => {
 export const MediaControls: React.FC<MediaControlsProps> = ({
   activeSlide,
   videoState,
-  onVideoStateChange
+  onVideoStateChange,
+  autoduckState,
+  onAutoduckStateChange,
 }) => {
   const [localTime, setLocalTime] = useState<number>(0);
   const [isScrubbing, setIsScrubbing] = useState<boolean>(false);
@@ -73,6 +79,24 @@ export const MediaControls: React.FC<MediaControlsProps> = ({
             <svg className="w-4 h-4 ml-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
           )}
         </button>
+
+        {onAutoduckStateChange && (
+          <button
+            type="button"
+            onClick={() => onAutoduckStateChange({
+              enabled: !autoduckState?.enabled,
+              factor: autoduckState?.factor ?? 0.2
+            })}
+            className={`control-icon-btn h-8 w-8 rounded-full shadow-md flex items-center justify-center ${
+              autoduckState?.enabled
+                ? 'bg-blue-600 hover:bg-blue-500 text-white'
+                : 'bg-gray-800 hover:bg-gray-700 text-gray-400 border border-gray-700'
+            }`}
+            title={autoduckState?.enabled ? 'Autoduck Activado (Baja volumen al hablar)' : 'Activar Autoduck'}
+          >
+            {autoduckState?.enabled ? <Mic size={14} /> : <MicOff size={14} />}
+          </button>
+        )}
 
         <div className="flex items-center gap-2 rounded border border-gray-800 bg-gray-950/60 px-2 py-1">
           <span className="text-[9px] font-black text-gray-500">VOL</span>

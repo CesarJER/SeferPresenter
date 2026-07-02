@@ -12,6 +12,7 @@ import type { AudioState, AudioSyncMap, AudioTimelineState } from './types/audio
 import { DEFAULT_AUDIO_STATE } from './types/audio';
 import type { AppMode, Presentation, ScriptureNavState, VideoState } from './types/presentation';
 import type { QuizSyncState } from './types/quiz';
+import type { AutoduckState } from './types/sync';
 
 import {
   normalizePresentation,
@@ -54,6 +55,7 @@ function ControlApp() {
   const [appMode, setAppMode] = useState<AppMode>('slides');
   const [scriptureState, setScriptureState] = useState<ScriptureNavState | null>(null);
   const [quizState, setQuizState] = useState<QuizSyncState | null>(null);
+  const [autoduckState, setAutoduckState] = useState<AutoduckState>({ enabled: false, factor: 0.2 });
 
   const currentPresentationRef = useRef<Presentation | null>(currentPresentation);
   const currentSlideIndexRef = useRef(currentSlideIndex);
@@ -66,6 +68,7 @@ function ControlApp() {
   const appModeRef = useRef<AppMode>(appMode);
   const scriptureStateRef = useRef<ScriptureNavState | null>(scriptureState);
   const quizStateRef = useRef<QuizSyncState | null>(quizState);
+  const autoduckStateRef = useRef<AutoduckState>(autoduckState);
   const clientIdRef = useRef(makeClientId());
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const audioTimelineRef = useRef<HTMLAudioElement | null>(null);
@@ -98,7 +101,8 @@ function ControlApp() {
     appModeRef.current = appMode;
     scriptureStateRef.current = scriptureState;
     quizStateRef.current = quizState;
-  }, [currentPresentation, currentSlideIndex, backgroundLock, lockedBackgroundValue, userSelectedBackground, videoState, audioState, appMode, scriptureState, quizState]);
+    autoduckStateRef.current = autoduckState;
+  }, [currentPresentation, currentSlideIndex, backgroundLock, lockedBackgroundValue, userSelectedBackground, videoState, audioState, appMode, scriptureState, quizState, autoduckState]);
 
   useEffect(() => {
     fetch('/api/backgrounds')
@@ -152,6 +156,7 @@ function ControlApp() {
     appModeRef,
     scriptureStateRef,
     quizStateRef,
+    autoduckStateRef,
     setCurrentPresentation,
     setCurrentSlideIndex,
     setCurrentStepIndex: (idx) => { currentStepIndexRef.current = idx; },
@@ -164,6 +169,7 @@ function ControlApp() {
     setAudioState,
     setAudioSyncMaps,
     setQuizState,
+    setAutoduckState,
     onAudioTimelineState: setAudioTimeline,
   });
 
@@ -181,6 +187,7 @@ function ControlApp() {
     scriptureState,
     audioRef,
     currentPresentationRef,
+    autoduckState,
     setAutoplayBlocked: () => {},
     emitAudioTelemetry,
     handleSelectPresentationAndSlide: (p, idx, direction, targetVerse) => {
@@ -344,6 +351,13 @@ function ControlApp() {
           if (isMediaMaster) {
             setAudioState(state);
             emitAudioTelemetry(state);
+          }
+        }}
+        autoduckState={autoduckState}
+        onAutoduckStateChange={(state) => {
+          emitCommand({ command: 'SET_AUTODUCK_STATE', state });
+          if (isMediaMaster) {
+            setAutoduckState(state);
           }
         }}
         onAudioSyncMapsChange={(maps) => {

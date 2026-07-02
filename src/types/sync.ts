@@ -18,6 +18,11 @@ export interface DisplayTelemetryState {
   userSelectedBackground: string | null;
 }
 
+export interface AutoduckState {
+  enabled: boolean;
+  factor: number;
+}
+
 export interface AudiencePublicState {
   mode: AppMode;
   presentationTitle: string;
@@ -54,6 +59,7 @@ export interface SyncStatePayload {
   audioState: AudioState;
   quizState?: QuizSyncState | null;
   stepIndex?: number;
+  autoduckState?: AutoduckState;
 }
 
 export type RemoteCommandPayload =
@@ -80,6 +86,7 @@ export type RemoteCommandPayload =
   | { command: 'UPDATE_FONT_SIZES'; hebrewFontSize?: number; combinedTextBaseSize?: number }
   | { command: 'VIDEO_STATE_CHANGE'; state: VideoState | null }
   | { command: 'AUDIO_STATE_CHANGE'; state: AudioState }
+  | { command: 'SET_AUTODUCK_STATE'; state: AutoduckState }
   | { command: 'RESET_STATE'; clearSession?: boolean };
 
 export type BroadcastMessage =
