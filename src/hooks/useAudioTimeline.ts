@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { AudioTimelineState, AudioTimelineAction } from '../types/audio';
+import { calcCurrentPositionSec } from '../utils/audioTimeline';
 
 export interface UseAudioTimelineResult {
   estimatedPositionSec: number;
@@ -32,8 +33,7 @@ export function useAudioTimeline(
 
     let reqId: number;
     const updatePosition = () => {
-      const pos = timeline.basePositionSec + (serverNow() - timeline.baseServerTimeMs) / 1000 * timeline.playbackRate;
-      setEstimatedPositionSec(pos);
+      setEstimatedPositionSec(calcCurrentPositionSec(timeline, serverNow()));
       reqId = requestAnimationFrame(updatePosition);
     };
 

@@ -155,6 +155,33 @@ describe('runtime validation', () => {
     expect(result.errors.join('\n')).toContain('volume');
   });
 
+  it('validates timeline duration, loop, and end actions', () => {
+    expect(validateSyncMessage({
+      type: 'AUDIO_TIMELINE_ACTION',
+      action: { type: 'SET_DURATION', durationSec: 120 },
+    }).ok).toBe(true);
+
+    expect(validateSyncMessage({
+      type: 'AUDIO_TIMELINE_ACTION',
+      action: { type: 'SET_LOOP', loop: true },
+    }).ok).toBe(true);
+
+    expect(validateSyncMessage({
+      type: 'AUDIO_TIMELINE_ACTION',
+      action: { type: 'END', positionSec: 120 },
+    }).ok).toBe(true);
+
+    expect(validateSyncMessage({
+      type: 'AUDIO_TIMELINE_ACTION',
+      action: { type: 'SET_DURATION', durationSec: -1 },
+    }).ok).toBe(false);
+
+    expect(validateSyncMessage({
+      type: 'AUDIO_TIMELINE_ACTION',
+      action: { type: 'SET_LOOP', loop: 'yes' },
+    }).ok).toBe(false);
+  });
+
   it('rejects incomplete sync state messages', () => {
     const result = validateSyncMessage({
       type: 'SYNC_STATE',

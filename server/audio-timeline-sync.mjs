@@ -1,10 +1,16 @@
 export const estimateTimelinePositionSec = (timeline, now = Date.now()) => {
   if (!timeline || typeof timeline !== 'object') return 0
   const basePositionSec = Number.isFinite(timeline.basePositionSec) ? timeline.basePositionSec : 0
-  if (timeline.status !== 'playing') return Math.max(0, basePositionSec)
+  const normalizePosition = (positionSec) => {
+    const safePositionSec = Math.max(0, positionSec)
+    if (!Number.isFinite(timeline.durationSec) || timeline.durationSec <= 0) return safePositionSec
+    if (timeline.loop === true) return safePositionSec % timeline.durationSec
+    return Math.min(safePositionSec, timeline.durationSec)
+  }
+  if (timeline.status !== 'playing') return normalizePosition(basePositionSec)
   const baseServerTimeMs = Number.isFinite(timeline.baseServerTimeMs) ? timeline.baseServerTimeMs : now
   const playbackRate = Number.isFinite(timeline.playbackRate) ? timeline.playbackRate : 1
-  return Math.max(0, basePositionSec + ((now - baseServerTimeMs) / 1000) * playbackRate)
+  return normalizePosition(basePositionSec + ((now - baseServerTimeMs) / 1000) * playbackRate)
 }
 
 export const findActiveCueIndex = (cues, positionSec) => {

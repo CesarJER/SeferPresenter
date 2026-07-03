@@ -35,11 +35,19 @@ const playTimelineAudio = (audio: HTMLAudioElement, logErrors: boolean): void =>
   });
 };
 
+interface AudioTimelineApplicatorOptions {
+  onDurationChange?: (durationSec: number | null) => void;
+  onEnded?: (positionSec: number) => void;
+}
+
+const defaultAudioTimelineApplicatorOptions: AudioTimelineApplicatorOptions = {};
+
 export function useAudioTimelineApplicator(
   audioRef: React.RefObject<HTMLAudioElement | null>,
   timeline: AudioTimelineState | null,
   serverNow: () => number,
   autoduckState?: AutoduckState,
+  options: AudioTimelineApplicatorOptions = defaultAudioTimelineApplicatorOptions,
 ): void {
   useSmoothVolume(audioRef, timeline?.volume ?? 1, autoduckState);
 
@@ -61,11 +69,14 @@ export function useAudioTimelineApplicator(
       }
     } else {
       audio.pause();
+      audio.loop = false;
       audio.removeAttribute('src');
       audio.setAttribute('data-timeline-src', '');
       audio.load();
       return;
     }
+
+    audio.loop = timeline.loop;
 
     // 2. Playback status
     if (timeline.status === 'playing') {
@@ -74,6 +85,8 @@ export function useAudioTimelineApplicator(
         timelineBasePositionSec: timeline.basePositionSec,
         timelineBaseServerTimeMs: timeline.baseServerTimeMs,
         timelinePlaybackRate: timeline.playbackRate,
+        timelineDurationSec: timeline.durationSec,
+        timelineLoop: timeline.loop,
         nowMs: serverNow(),
         nudgeThresholdSec: INITIAL_SEEK_THRESHOLD_SEC,
         seekThresholdSec: INITIAL_SEEK_THRESHOLD_SEC,
@@ -114,6 +127,8 @@ export function useAudioTimelineApplicator(
         timelineBasePositionSec: timeline.basePositionSec,
         timelineBaseServerTimeMs: timeline.baseServerTimeMs,
         timelinePlaybackRate: timeline.playbackRate,
+        timelineDurationSec: timeline.durationSec,
+        timelineLoop: timeline.loop,
         nowMs: serverNow(),
       });
 
@@ -143,9 +158,46 @@ export function useAudioTimelineApplicator(
     timeline?.audioSrc,
     timeline?.basePositionSec,
     timeline?.baseServerTimeMs,
+    timeline?.durationSec,
+    timeline?.loop,
     timeline?.playbackRate,
     timeline?.status,
     timeline?.timelineId,
     serverNow,
+  ]);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio || !timeline?.audioSrc) return;
+
+    const reportDuration = () => {
+      options.onDurationChange?.(
+        Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : null,
+      );
+    };
+
+    const reportEnded = () => {
+      if (audio.loop || timeline.loop) return;
+      options.onEnded?.(
+        Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : audio.currentTime,
+      );
+    };
+
+    reportDuration();
+    audio.addEventListener('loadedmetadata', reportDuration);
+    audio.addEventListener('durationchange', reportDuration);
+    audio.addEventListener('ended', reportEnded);
+
+    return () => {
+      audio.removeEventListener('loadedmetadata', reportDuration);
+      audio.removeEventListener('durationchange', reportDuration);
+      audio.removeEventListener('ended', reportEnded);
+    };
+  }, [
+    audioRef,
+    options,
+    timeline?.audioSrc,
+    timeline?.loop,
+    timeline?.timelineId,
   ]);
 }

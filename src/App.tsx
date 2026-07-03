@@ -420,8 +420,17 @@ function App() {
   isMediaMasterRef.current = isMediaMaster;
 
   const { serverNow } = useServerClock(wsSend, wsStatus, subscribeToWsMessage);
-  useAudioTimeline(audioTimeline, serverNow, wsSend);
-  useAudioTimelineApplicator(audioTimelineRef, audioTimeline, serverNow, autoduckState);
+  const audioTimelineControls = useAudioTimeline(audioTimeline, serverNow, wsSend);
+  const dispatchAudioTimelineAction = audioTimelineControls.dispatchAction;
+  const audioTimelineApplicatorOptions = useMemo(() => ({
+    onDurationChange: (durationSec: number | null) => {
+      dispatchAudioTimelineAction({ type: 'SET_DURATION', durationSec });
+    },
+    onEnded: (positionSec: number) => {
+      dispatchAudioTimelineAction({ type: 'END', positionSec });
+    },
+  }), [dispatchAudioTimelineAction]);
+  useAudioTimelineApplicator(audioTimelineRef, audioTimeline, serverNow, autoduckState, audioTimelineApplicatorOptions);
 
   const { getActiveBackground, handleToggleBackgroundLock, handleSelectBackgroundOverride } = useBackgroundResolver({
     currentPresentation, currentSlideIndex, backgroundLock,

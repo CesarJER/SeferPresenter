@@ -15,7 +15,7 @@ describe('audioTimeline utils', () => {
       const state: AudioTimelineState = {
         timelineId: '1', version: 1, presentationId: null, audioSrc: null, syncMapId: null,
         status: 'paused', basePositionSec: 10, baseServerTimeMs: 1000, playbackRate: 1,
-        volume: 1, syncMode: 'none', activeCueIndex: -1, nextCueIndex: -1, updatedBy: 'control'
+        volume: 1, durationSec: null, loop: false, syncMode: 'none', activeCueIndex: -1, nextCueIndex: -1, updatedBy: 'control'
       };
       expect(calcCurrentPositionSec(state, 5000)).toBe(10);
     });
@@ -24,7 +24,7 @@ describe('audioTimeline utils', () => {
       const state: AudioTimelineState = {
         timelineId: '1', version: 1, presentationId: null, audioSrc: null, syncMapId: null,
         status: 'playing', basePositionSec: 10, baseServerTimeMs: 1000, playbackRate: 1.5,
-        volume: 1, syncMode: 'none', activeCueIndex: -1, nextCueIndex: -1, updatedBy: 'control'
+        volume: 1, durationSec: null, loop: false, syncMode: 'none', activeCueIndex: -1, nextCueIndex: -1, updatedBy: 'control'
       };
       // elapsed = 2000ms = 2s. 2s * 1.5 = 3s. base 10 + 3 = 13.
       expect(calcCurrentPositionSec(state, 3000)).toBe(13);
@@ -34,9 +34,27 @@ describe('audioTimeline utils', () => {
       const state: AudioTimelineState = {
         timelineId: '1', version: 1, presentationId: null, audioSrc: null, syncMapId: null,
         status: 'playing', basePositionSec: -5, baseServerTimeMs: 1000, playbackRate: 1,
-        volume: 1, syncMode: 'none', activeCueIndex: -1, nextCueIndex: -1, updatedBy: 'control'
+        volume: 1, durationSec: null, loop: false, syncMode: 'none', activeCueIndex: -1, nextCueIndex: -1, updatedBy: 'control'
       };
       expect(calcCurrentPositionSec(state, 1000)).toBe(0);
+    });
+
+    it('wraps position at duration when loop is enabled', () => {
+      const state: AudioTimelineState = {
+        timelineId: '1', version: 1, presentationId: null, audioSrc: null, syncMapId: null,
+        status: 'playing', basePositionSec: 8, baseServerTimeMs: 1000, playbackRate: 1,
+        volume: 1, durationSec: 10, loop: true, syncMode: 'none', activeCueIndex: -1, nextCueIndex: -1, updatedBy: 'control'
+      };
+      expect(calcCurrentPositionSec(state, 5000)).toBe(2);
+    });
+
+    it('clamps position at duration when loop is disabled', () => {
+      const state: AudioTimelineState = {
+        timelineId: '1', version: 1, presentationId: null, audioSrc: null, syncMapId: null,
+        status: 'playing', basePositionSec: 8, baseServerTimeMs: 1000, playbackRate: 1,
+        volume: 1, durationSec: 10, loop: false, syncMode: 'none', activeCueIndex: -1, nextCueIndex: -1, updatedBy: 'control'
+      };
+      expect(calcCurrentPositionSec(state, 5000)).toBe(10);
     });
   });
 
@@ -119,13 +137,28 @@ describe('audioTimeline utils', () => {
       expect(correction.seekPositionSec).toBe(12);
       expect(correction.playbackRate).toBe(1);
     });
+
+    it('wraps correction target when loop is enabled', () => {
+      const correction = computeAudioTimelineCorrection({
+        audioCurrentTimeSec: 1.95,
+        timelineBasePositionSec: 8,
+        timelineBaseServerTimeMs: 1000,
+        timelinePlaybackRate: 1,
+        timelineDurationSec: 10,
+        timelineLoop: true,
+        nowMs: 5000,
+      });
+
+      expect(correction.expectedPositionSec).toBe(2);
+      expect(correction.action).toBe('none');
+    });
   });
 
   describe('applyTimelineAction', () => {
     const baseState: AudioTimelineState = {
       timelineId: '1', version: 1, presentationId: 'p1', audioSrc: '/test.mp3', syncMapId: 'sm1',
       status: 'paused', basePositionSec: 10, baseServerTimeMs: 1000, playbackRate: 1,
-      volume: 1, syncMode: 'none', activeCueIndex: -1, nextCueIndex: -1, updatedBy: 'control'
+      volume: 1, durationSec: null, loop: false, syncMode: 'none', activeCueIndex: -1, nextCueIndex: -1, updatedBy: 'control'
     };
 
     it('applies PLAY action', () => {
@@ -160,6 +193,14 @@ describe('audioTimeline utils', () => {
       expect(newState.version).toBe(2);
     });
 
+    it('applies SET_DURATION and SET_LOOP actions', () => {
+      const withDuration = applyTimelineAction(baseState, { type: 'SET_DURATION', durationSec: 42 }, 2000);
+      expect(withDuration.durationSec).toBe(42);
+
+      const withLoop = applyTimelineAction(withDuration, { type: 'SET_LOOP', loop: true }, 3000);
+      expect(withLoop.loop).toBe(true);
+    });
+
     it('applies SET_RATE action', () => {
       const newState = applyTimelineAction(baseState, { type: 'SET_RATE', rate: 1.5 }, 2000);
       expect(newState.playbackRate).toBe(1.5);
@@ -173,7 +214,8 @@ describe('audioTimeline utils', () => {
     });
 
     it('applies SET_TRACK action', () => {
-      const newState = applyTimelineAction(baseState, {
+      const stateWithLoop = { ...baseState, durationSec: 60, loop: true };
+      const newState = applyTimelineAction(stateWithLoop, {
         type: 'SET_TRACK', presentationId: 'p2', audioSrc: '/new.mp3', syncMapId: 'sm2'
       }, 2000);
       expect(newState.presentationId).toBe('p2');
@@ -182,6 +224,16 @@ describe('audioTimeline utils', () => {
       expect(newState.status).toBe('loading');
       expect(newState.basePositionSec).toBe(0);
       expect(newState.baseServerTimeMs).toBe(2000);
+      expect(newState.durationSec).toBeNull();
+      expect(newState.loop).toBe(false);
+      expect(newState.version).toBe(2);
+    });
+
+    it('applies END action', () => {
+      const playingState: AudioTimelineState = { ...baseState, status: 'playing', durationSec: 30 };
+      const newState = applyTimelineAction(playingState, { type: 'END', positionSec: 30 }, 3000);
+      expect(newState.status).toBe('ended');
+      expect(newState.basePositionSec).toBe(30);
       expect(newState.version).toBe(2);
     });
 

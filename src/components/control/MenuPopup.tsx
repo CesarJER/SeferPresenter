@@ -63,6 +63,7 @@ interface MenuPopupProps {
   onAudioStateChange: (state: AudioState) => void;
   audioDispatchAction?: (action: AudioTimelineAction) => void;
   audioEstimatedPositionSec?: number;
+  audioLoop?: boolean;
   onAudioSyncMapsChange: (maps: AudioSyncMap[]) => void;
   autoduckState?: import('../../types/sync').AutoduckState;
   onAutoduckStateChange?: (state: import('../../types/sync').AutoduckState) => void;
@@ -146,6 +147,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
   onAudioStateChange,
   audioDispatchAction,
   audioEstimatedPositionSec,
+  audioLoop,
   autoduckState,
   onAutoduckStateChange,
   onResetState,
@@ -1511,6 +1513,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
             handleOpenAudioEditor={handleOpenAudioEditor}
             dispatchAction={audioDispatchAction}
             estimatedPositionSec={audioEstimatedPositionSec}
+            loop={audioLoop}
           />
         )}
 

@@ -176,7 +176,17 @@ function ControlApp() {
 
   const { serverNow } = useServerClock(wsSend, wsStatus, subscribeToWsMessage);
   const audioTimelineControls = useAudioTimeline(audioTimeline, serverNow, wsSend);
-  useAudioTimelineApplicator(audioTimelineRef, audioTimeline, serverNow, autoduckState);
+  const dispatchAudioTimelineAction = audioTimelineControls.dispatchAction;
+  const audioTimelineApplicatorOptions = useMemo(() => ({
+    onDurationChange: (durationSec: number | null) => {
+      setAudioTimelineDuration(durationSec ?? 0);
+      dispatchAudioTimelineAction({ type: 'SET_DURATION', durationSec });
+    },
+    onEnded: (positionSec: number) => {
+      dispatchAudioTimelineAction({ type: 'END', positionSec });
+    },
+  }), [dispatchAudioTimelineAction]);
+  useAudioTimelineApplicator(audioTimelineRef, audioTimeline, serverNow, autoduckState, audioTimelineApplicatorOptions);
 
   useEffect(() => {
     const audio = audioTimelineRef.current;
@@ -205,7 +215,7 @@ function ControlApp() {
       ...DEFAULT_AUDIO_STATE,
       isPlaying: audioTimeline.status === 'playing',
       currentTime: audioTimelineControls.estimatedPositionSec,
-      duration: audioTimelineDuration || audioState.duration,
+      duration: audioTimelineDuration || audioTimeline.durationSec || audioState.duration,
       volume: audioTimeline.volume,
       audioSrc: audioTimeline.audioSrc,
       activeSyncMapId: audioTimeline.syncMapId,
@@ -393,6 +403,7 @@ function ControlApp() {
         }}
         audioDispatchAction={wsStatus === 'open' ? audioTimelineControls.dispatchAction : undefined}
         audioEstimatedPositionSec={audioTimeline ? audioTimelineControls.estimatedPositionSec : undefined}
+        audioLoop={audioTimeline?.loop ?? false}
         autoduckState={autoduckState}
         onAutoduckStateChange={(state) => {
           emitCommand({ command: 'SET_AUTODUCK_STATE', state });

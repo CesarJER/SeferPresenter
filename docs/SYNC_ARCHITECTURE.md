@@ -317,7 +317,7 @@ all roles without adding high-frequency progress broadcasts.
 
 - `timelineId`, `version`, `presentationId`, `audioSrc`, and `syncMapId`.
 - Playback state: `status`, `basePositionSec`, `baseServerTimeMs`,
-  `playbackRate`, and `volume`.
+  `playbackRate`, `volume`, `durationSec`, and `loop`.
 - Sync metadata: `syncMode`, cue indexes, and `updatedBy`.
 
 `AUDIO_TIMELINE_ACTION` `SET_TRACK` may include `syncMode` and `volume` from
@@ -326,6 +326,13 @@ the selected `AudioSyncMap`; the server normalizes empty track identifiers to
 timeline state. Runtime autoduck applies only to the DOM media element's
 effective output volume; it must not overwrite the canonical timeline or
 `AudioState.volume` value that controls will continue to display and sync.
+Presenter/Control clients report finite media duration with
+`AUDIO_TIMELINE_ACTION` `SET_DURATION`; the server uses it to clamp non-looping
+positions and wrap looping positions. Control can toggle canonical audio loop
+with `SET_LOOP`. When a non-looping DOM audio element reaches the end,
+Presenter/Control emits `END`, moving the backend timeline to `ended` so all
+roles leave `playing` together. Audience remains read-only and never sends
+timeline actions.
 
 `server/local-server.mjs` evaluates backend-owned timeline cues against
 `audio_sync.json` and emits canonical `SELECT_PRESENTATION_AND_SLIDE`

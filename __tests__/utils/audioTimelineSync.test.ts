@@ -27,6 +27,28 @@ describe('audio timeline sync helpers', () => {
     }, 3_000)).toBe(13);
   });
 
+  it('wraps backend timeline position when loop is enabled', () => {
+    expect(estimateTimelinePositionSec({
+      status: 'playing',
+      basePositionSec: 8,
+      baseServerTimeMs: 1_000,
+      playbackRate: 1,
+      durationSec: 10,
+      loop: true,
+    }, 5_000)).toBe(2);
+  });
+
+  it('clamps backend timeline position at duration when loop is disabled', () => {
+    expect(estimateTimelinePositionSec({
+      status: 'playing',
+      basePositionSec: 8,
+      baseServerTimeMs: 1_000,
+      playbackRate: 1,
+      durationSec: 10,
+      loop: false,
+    }, 5_000)).toBe(10);
+  });
+
   it('finds the active cue for a timeline position', () => {
     expect(findActiveCueIndex(syncMap.cues, -1)).toBe(-1);
     expect(findActiveCueIndex(syncMap.cues, 0)).toBe(0);

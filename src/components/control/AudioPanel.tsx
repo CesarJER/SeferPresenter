@@ -1,5 +1,5 @@
 import React from 'react';
-import { Play, Pause, Music, Volume2, ArrowUp, ArrowUpDown, Settings, Mic, MicOff } from 'lucide-react';
+import { Play, Pause, Music, Volume2, Repeat2, ArrowUp, ArrowUpDown, Settings, Mic, MicOff } from 'lucide-react';
 import type { Presentation } from '../../types/presentation';
 import type { AudioState, AudioSyncMap, AudioTimelineAction } from '../../types/audio';
 
@@ -14,6 +14,7 @@ interface AudioPanelProps {
   handleOpenAudioEditor: () => void;
   dispatchAction?: (action: AudioTimelineAction) => void;
   estimatedPositionSec?: number;
+  loop?: boolean;
   autoduckState?: import('../../types/sync').AutoduckState;
   onAutoduckStateChange?: (state: import('../../types/sync').AutoduckState) => void;
 }
@@ -25,7 +26,28 @@ const formatTime = (secs: number | undefined) => {
   return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
 };
 
-const SCRUBBER_RESYNC_DELAY_MS = 1200;
+const SCRUBBER_STALE_DRAG_RESYNC_MS = 1800;
+const OPTIMISTIC_SEEK_HOLD_MS = 1800;
+const OPTIMISTIC_SEEK_TICK_MS = 250;
+const OPTIMISTIC_RECONNECT_TOLERANCE_SEC = 0.3;
+
+interface OptimisticSeekState {
+  positionSec: number;
+  startedAtMs: number;
+  isPlaying: boolean;
+}
+
+const clampAudioPosition = (positionSec: number, durationSec: number): number => {
+  const safePositionSec = Number.isFinite(positionSec) ? Math.max(0, positionSec) : 0;
+  return Number.isFinite(durationSec) && durationSec > 0
+    ? Math.min(safePositionSec, durationSec)
+    : safePositionSec;
+};
+
+const estimateOptimisticSeekPosition = (state: OptimisticSeekState, nowMs: number): number => {
+  if (!state.isPlaying) return state.positionSec;
+  return Math.max(0, state.positionSec + (nowMs - state.startedAtMs) / 1000);
+};
 
 export const AudioPanel: React.FC<AudioPanelProps> = ({
   audioState,
@@ -38,10 +60,13 @@ export const AudioPanel: React.FC<AudioPanelProps> = ({
   handleOpenAudioEditor,
   dispatchAction,
   estimatedPositionSec,
+  loop = false,
   autoduckState,
   onAutoduckStateChange,
 }) => {
   const [dragPosition, setDragPosition] = React.useState<number | null>(null);
+  const [optimisticSeek, setOptimisticSeek] = React.useState<OptimisticSeekState | null>(null);
+  const [optimisticNowMs, setOptimisticNowMs] = React.useState(() => Date.now());
   const dragPositionRef = React.useRef<number | null>(null);
 
   const setPendingDragPosition = React.useCallback((position: number | null) => {
@@ -53,22 +78,31 @@ export const AudioPanel: React.FC<AudioPanelProps> = ({
     const pendingPosition = dragPositionRef.current;
     if (pendingPosition === null) return;
 
+    const seekPositionSec = clampAudioPosition(pendingPosition, audioState.duration);
     if (dispatchAction && Number.isFinite(pendingPosition)) {
-      dispatchAction({ type: 'SEEK', positionSec: pendingPosition });
+      dispatchAction({ type: 'SEEK', positionSec: seekPositionSec });
+      const nowMs = Date.now();
+      setOptimisticNowMs(nowMs);
+      setOptimisticSeek({
+        positionSec: seekPositionSec,
+        startedAtMs: nowMs,
+        isPlaying: audioState.isPlaying,
+      });
     }
     setPendingDragPosition(null);
-  }, [dispatchAction, setPendingDragPosition]);
+  }, [audioState.duration, audioState.isPlaying, dispatchAction, setPendingDragPosition]);
 
   React.useEffect(() => {
     setPendingDragPosition(null);
+    setOptimisticSeek(null);
   }, [audioState.audioSrc, setPendingDragPosition]);
 
   React.useEffect(() => {
     if (!dispatchAction || dragPosition === null) return;
 
-    const timeoutId = window.setTimeout(commitDragPosition, SCRUBBER_RESYNC_DELAY_MS);
+    const timeoutId = window.setTimeout(() => setPendingDragPosition(null), SCRUBBER_STALE_DRAG_RESYNC_MS);
     return () => window.clearTimeout(timeoutId);
-  }, [commitDragPosition, dispatchAction, dragPosition]);
+  }, [dispatchAction, dragPosition, setPendingDragPosition]);
 
   React.useEffect(() => {
     if (!dispatchAction || dragPosition === null) return;
@@ -88,9 +122,37 @@ export const AudioPanel: React.FC<AudioPanelProps> = ({
     };
   }, [commitDragPosition, dispatchAction, dragPosition]);
 
+  React.useEffect(() => {
+    if (!optimisticSeek) return;
+
+    setOptimisticNowMs(Date.now());
+    const tickId = window.setInterval(() => setOptimisticNowMs(Date.now()), OPTIMISTIC_SEEK_TICK_MS);
+    const timeoutId = window.setTimeout(() => setOptimisticSeek(null), OPTIMISTIC_SEEK_HOLD_MS);
+
+    return () => {
+      window.clearInterval(tickId);
+      window.clearTimeout(timeoutId);
+    };
+  }, [optimisticSeek]);
+
+  const authoritativePosition = estimatedPositionSec !== undefined && estimatedPositionSec !== null
+    ? estimatedPositionSec
+    : audioState.currentTime;
+  const optimisticPosition = optimisticSeek
+    ? clampAudioPosition(estimateOptimisticSeekPosition(optimisticSeek, optimisticNowMs), audioState.duration)
+    : null;
+
+  React.useEffect(() => {
+    if (!optimisticSeek || optimisticPosition === null) return;
+
+    if (Math.abs(authoritativePosition - optimisticPosition) <= OPTIMISTIC_RECONNECT_TOLERANCE_SEC) {
+      setOptimisticSeek(null);
+    }
+  }, [authoritativePosition, optimisticPosition, optimisticSeek]);
+
   const currentPosition = dragPosition !== null
     ? dragPosition
-    : (estimatedPositionSec !== undefined && estimatedPositionSec !== null ? estimatedPositionSec : audioState.currentTime);
+    : (optimisticPosition !== null ? optimisticPosition : authoritativePosition);
   const matchedSyncMap = audioState.audioSrc
     ? audioSyncMaps.find(m => m.audioSrc === audioState.audioSrc)
     : undefined;
@@ -302,6 +364,25 @@ export const AudioPanel: React.FC<AudioPanelProps> = ({
             disabled={!audioState.audioSrc}
             className="control-range-slim w-16"
           />
+
+          <button
+            type="button"
+            onClick={() => {
+              if (dispatchAction) {
+                dispatchAction({ type: 'SET_LOOP', loop: !loop });
+              }
+            }}
+            disabled={!audioState.audioSrc || !dispatchAction}
+            className={`audio-panel-btn ${
+              loop
+                ? 'bg-emerald-600 hover:bg-emerald-500 text-white border border-emerald-500'
+                : 'bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700'
+            }`}
+            title={loop ? 'Bucle activado' : 'Activar bucle'}
+            aria-label={loop ? 'Desactivar bucle de audio' : 'Activar bucle de audio'}
+          >
+            <Repeat2 size={14} />
+          </button>
         </div>
       </div>
 

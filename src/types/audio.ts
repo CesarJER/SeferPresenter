@@ -19,6 +19,8 @@ export interface AudioTimelineState {
   baseServerTimeMs: number;
   playbackRate: number;
   volume: number;
+  durationSec: number | null;
+  loop: boolean;
   syncMode: AudioSyncMode;
   activeCueIndex: number | null;
   nextCueIndex: number | null;
@@ -32,7 +34,10 @@ export type AudioTimelineAction =
   | { type: 'SEEK'; positionSec: number }
   | { type: 'SET_RATE'; rate: number }
   | { type: 'SET_VOLUME'; volume: number }
+  | { type: 'SET_DURATION'; durationSec: number | null }
+  | { type: 'SET_LOOP'; loop: boolean }
   | { type: 'SET_SYNC_MODE'; mode: AudioSyncMode }
+  | { type: 'END'; positionSec?: number }
   | { type: 'STOP' };
 
 /** A single time→slide mapping entry within a sync map */

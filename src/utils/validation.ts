@@ -624,8 +624,19 @@ const validateAudioTimelineAction = (value: unknown, path: string): ValidationRe
     case 'SET_VOLUME':
       if (!isFiniteNumber(value.volume) || value.volume < 0 || value.volume > 1) errors.push(`${path}.volume debe estar entre 0 y 1.`);
       break;
+    case 'SET_DURATION':
+      if (value.durationSec !== null && (!isFiniteNumber(value.durationSec) || value.durationSec <= 0)) {
+        errors.push(`${path}.durationSec debe ser numero positivo o null.`);
+      }
+      break;
+    case 'SET_LOOP':
+      if (typeof value.loop !== 'boolean') errors.push(`${path}.loop debe ser booleano.`);
+      break;
     case 'SET_SYNC_MODE':
       if (typeof value.mode !== 'string' || !audioSyncModes.has(value.mode as AudioSyncMode)) errors.push(`${path}.mode no es valido.`);
+      break;
+    case 'END':
+      if (value.positionSec !== undefined && !isFiniteNumber(value.positionSec)) errors.push(`${path}.positionSec debe ser numero.`);
       break;
     default:
       errors.push(`${path}.type no es valido.`);
@@ -653,6 +664,10 @@ const validateAudioTimelineState = (value: unknown, path: string): ValidationRes
   if (!isFiniteNumber(value.baseServerTimeMs)) errors.push(`${path}.baseServerTimeMs debe ser numero.`);
   if (!isFiniteNumber(value.playbackRate)) errors.push(`${path}.playbackRate debe ser numero.`);
   if (!isFiniteNumber(value.volume) || value.volume < 0 || value.volume > 1) errors.push(`${path}.volume debe estar entre 0 y 1.`);
+  if (value.durationSec !== undefined && value.durationSec !== null && (!isFiniteNumber(value.durationSec) || value.durationSec <= 0)) {
+    errors.push(`${path}.durationSec debe ser numero positivo o null.`);
+  }
+  if (value.loop !== undefined && typeof value.loop !== 'boolean') errors.push(`${path}.loop debe ser booleano.`);
   if (typeof value.syncMode !== 'string' || !audioSyncModes.has(value.syncMode as AudioSyncMode)) errors.push(`${path}.syncMode no es valido.`);
   validateNullableNumber(value.activeCueIndex, `${path}.activeCueIndex`, errors);
   validateNullableNumber(value.nextCueIndex, `${path}.nextCueIndex`, errors);

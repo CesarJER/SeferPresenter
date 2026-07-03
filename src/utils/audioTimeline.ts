@@ -11,9 +11,11 @@ export interface AudioTimelineState {
   baseServerTimeMs: number;
   playbackRate: number;
   volume: number;
+  durationSec: number | null;
+  loop: boolean;
   syncMode: AudioSyncMode;
-  activeCueIndex: number;
-  nextCueIndex: number;
+  activeCueIndex: number | null;
+  nextCueIndex: number | null;
   updatedBy: 'control' | 'presenter' | 'server';
 }
 
@@ -23,16 +25,30 @@ export type AudioTimelineAction =
   | { type: 'SEEK'; positionSec: number }
   | { type: 'SET_VOLUME'; volume: number }
   | { type: 'SET_RATE'; rate: number }
+  | { type: 'SET_DURATION'; durationSec: number | null }
+  | { type: 'SET_LOOP'; loop: boolean }
   | { type: 'SET_SYNC_MODE'; syncMode: AudioSyncMode }
+  | { type: 'END'; positionSec?: number }
   | { type: 'SET_TRACK'; presentationId: string | null; audioSrc: string | null; syncMapId: string | null }
   | { type: 'STOP' };
 
+function normalizeTimelinePosition(positionSec: number, durationSec: number | null, loop: boolean): number {
+  const safePositionSec = Math.max(0, positionSec);
+  if (!Number.isFinite(durationSec) || durationSec === null || durationSec <= 0) return safePositionSec;
+  if (loop) return safePositionSec % durationSec;
+  return Math.min(safePositionSec, durationSec);
+}
+
 export function calcCurrentPositionSec(timeline: AudioTimelineState, nowMs: number): number {
   if (timeline.status !== 'playing') {
-    return Math.max(0, timeline.basePositionSec);
+    return normalizeTimelinePosition(timeline.basePositionSec, timeline.durationSec, timeline.loop);
   }
   const elapsedSec = (nowMs - timeline.baseServerTimeMs) / 1000;
-  return Math.max(0, timeline.basePositionSec + elapsedSec * timeline.playbackRate);
+  return normalizeTimelinePosition(
+    timeline.basePositionSec + elapsedSec * timeline.playbackRate,
+    timeline.durationSec,
+    timeline.loop,
+  );
 }
 
 export type AudioTimelineCorrectionAction = 'none' | 'nudge' | 'seek';
@@ -42,6 +58,8 @@ export interface AudioTimelineCorrectionInput {
   timelineBasePositionSec: number;
   timelineBaseServerTimeMs: number;
   timelinePlaybackRate: number;
+  timelineDurationSec?: number | null;
+  timelineLoop?: boolean;
   nowMs: number;
   nudgeThresholdSec?: number;
   seekThresholdSec?: number;
@@ -64,6 +82,8 @@ export function computeAudioTimelineCorrection({
   timelineBasePositionSec,
   timelineBaseServerTimeMs,
   timelinePlaybackRate,
+  timelineDurationSec = null,
+  timelineLoop = false,
   nowMs,
   nudgeThresholdSec = 0.12,
   seekThresholdSec = 0.65,
@@ -82,7 +102,11 @@ export function computeAudioTimelineCorrection({
     ? Math.max(0, audioCurrentTimeSec)
     : 0;
   const elapsedSec = Math.max(0, (nowMs - safeBaseServerTime) / 1000);
-  const expectedPositionSec = Math.max(0, safeBasePosition + elapsedSec * baseRate);
+  const expectedPositionSec = normalizeTimelinePosition(
+    safeBasePosition + elapsedSec * baseRate,
+    timelineDurationSec,
+    timelineLoop,
+  );
   const driftSec = expectedPositionSec - safeAudioPosition;
   const absDriftSec = Math.abs(driftSec);
 
@@ -172,6 +196,24 @@ export function applyTimelineAction(
         updatedBy
       };
 
+    case 'SET_DURATION':
+      return {
+        ...timeline,
+        version: timeline.version + 1,
+        durationSec: Number.isFinite(action.durationSec) && action.durationSec !== null && action.durationSec > 0
+          ? action.durationSec
+          : null,
+        updatedBy
+      };
+
+    case 'SET_LOOP':
+      return {
+        ...timeline,
+        version: timeline.version + 1,
+        loop: action.loop,
+        updatedBy
+      };
+
     case 'SET_RATE':
       return {
         ...timeline,
@@ -200,8 +242,22 @@ export function applyTimelineAction(
         status: action.audioSrc ? 'loading' : 'idle',
         basePositionSec: 0,
         baseServerTimeMs: serverTimeMs,
+        durationSec: null,
+        loop: false,
         activeCueIndex: -1,
         nextCueIndex: -1,
+        updatedBy
+      };
+
+    case 'END':
+      return {
+        ...timeline,
+        version: timeline.version + 1,
+        status: 'ended',
+        basePositionSec: Number.isFinite(action.positionSec)
+          ? Math.max(0, action.positionSec ?? 0)
+          : currentPos,
+        baseServerTimeMs: serverTimeMs,
         updatedBy
       };
 
