@@ -4,6 +4,8 @@ import AudienceScreen from './components/audience/AudienceScreen';
 import { useSyncState } from './hooks/useSyncState';
 import { useBackgroundResolver } from './hooks/useBackgroundResolver';
 import { useQuizTimer } from './hooks/useQuizTimer';
+import { useServerClock } from './hooks/useServerClock';
+import { useAudioTimelineApplicator } from './hooks/useAudioTimelineApplicator';
 import { generateQuizSubslides, calcMaxBaseCentipunts } from './utils/quizUtils';
 import { makeClientId } from './utils/normalizePresentation';
 import { DataProtectionLink } from './components/shared/DataProtectionLink';
@@ -15,7 +17,7 @@ import { registerScopedServiceWorker } from './utils/pwaUpdate';
 
 import type { AppMode, Presentation, ScriptureNavState, VideoState } from './types/presentation';
 import type { QuizSyncState } from './types/quiz';
-import type { AudioState } from './types/audio';
+import type { AudioState, AudioTimelineState } from './types/audio';
 import type { AutoduckState } from './types/sync';
 import { DEFAULT_AUDIO_STATE } from './types/audio';
 
@@ -32,6 +34,7 @@ function AudienceApp() {
   const [userSelectedBackground, setUserSelectedBackground] = useState<string | null>(null);
   const [videoState, setVideoState] = useState<VideoState | null>(null);
   const [audioState, setAudioState] = useState<AudioState>(DEFAULT_AUDIO_STATE);
+  const [audioTimeline, setAudioTimeline] = useState<AudioTimelineState | null>(null);
   const [autoduckState, setAutoduckState] = useState<AutoduckState>({ enabled: false, factor: 0.2 });
   const [appMode, setAppMode] = useState<AppMode>('slides');
   const [scriptureState, setScriptureState] = useState<ScriptureNavState | null>(null);
@@ -50,6 +53,7 @@ function AudienceApp() {
   const quizStateRef = useRef<QuizSyncState | null>(null);
   const autoduckStateRef = useRef<AutoduckState>(autoduckState);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const audioTimelineRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
     void registerScopedServiceWorker('/audience');
@@ -108,7 +112,7 @@ function AudienceApp() {
     isMediaMaster: false,
   });
 
-  const { wsSend, subscribeToWsMessage } = useSyncState({
+  const { wsStatus, wsSend, subscribeToWsMessage } = useSyncState({
     isControlMode: false,
     isPresenterMode: false,
     clientIdRef,
@@ -137,7 +141,11 @@ function AudienceApp() {
     setQuizState: applyRemoteQuizState,
     autoduckStateRef,
     setAutoduckState,
+    onAudioTimelineState: setAudioTimeline,
   });
+
+  const { serverNow } = useServerClock(wsSend, wsStatus, subscribeToWsMessage);
+  useAudioTimelineApplicator(audioTimelineRef, audioTimeline, serverNow, autoduckState);
 
   const liveAudioAvailability = useLiveAudioAvailability();
   const audienceSession = useAudienceSession({ subscribeToWsMessage });
@@ -227,6 +235,7 @@ function AudienceApp() {
       
       {/* Hidden audio element for audience audio sync */}
       <audio ref={audioRef} preload="none" style={{ display: 'none' }} />
+      <audio ref={audioTimelineRef} preload="none" style={{ display: 'none' }} />
 
       <div className="fixed bottom-2 right-2 z-50 opacity-50 hover:opacity-100 transition-opacity">
         <DataProtectionLink className="text-[10px] text-white/70 hover:text-white flex items-center gap-1" />

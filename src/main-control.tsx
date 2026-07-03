@@ -49,6 +49,7 @@ function ControlApp() {
 
   const [audioState, setAudioState] = useState<AudioState>(DEFAULT_AUDIO_STATE);
   const [audioTimeline, setAudioTimeline] = useState<AudioTimelineState | null>(null);
+  const [audioTimelineDuration, setAudioTimelineDuration] = useState(0);
   const [audioSyncMaps, setAudioSyncMaps] = useState<AudioSyncMap[]>([]);
   const [availableAudioFiles, setAvailableAudioFiles] = useState<string[]>([]);
 
@@ -174,8 +175,45 @@ function ControlApp() {
   });
 
   const { serverNow } = useServerClock(wsSend, wsStatus, subscribeToWsMessage);
-  useAudioTimeline(audioTimeline, serverNow, wsSend);
-  useAudioTimelineApplicator(audioRef, audioTimeline, serverNow);
+  const audioTimelineControls = useAudioTimeline(audioTimeline, serverNow, wsSend);
+  useAudioTimelineApplicator(audioTimelineRef, audioTimeline, serverNow, autoduckState);
+
+  useEffect(() => {
+    const audio = audioTimelineRef.current;
+    if (!audio || !audioTimeline?.audioSrc) {
+      setAudioTimelineDuration(0);
+      return;
+    }
+
+    const updateDuration = () => {
+      setAudioTimelineDuration(Number.isFinite(audio.duration) ? audio.duration : 0);
+    };
+
+    updateDuration();
+    audio.addEventListener('loadedmetadata', updateDuration);
+    audio.addEventListener('durationchange', updateDuration);
+    return () => {
+      audio.removeEventListener('loadedmetadata', updateDuration);
+      audio.removeEventListener('durationchange', updateDuration);
+    };
+  }, [audioTimeline?.audioSrc, audioTimeline?.timelineId]);
+
+  const audioPanelState = useMemo<AudioState>(() => {
+    if (!audioTimeline) return audioState;
+
+    return {
+      ...DEFAULT_AUDIO_STATE,
+      isPlaying: audioTimeline.status === 'playing',
+      currentTime: audioTimelineControls.estimatedPositionSec,
+      duration: audioTimelineDuration || audioState.duration,
+      volume: audioTimeline.volume,
+      audioSrc: audioTimeline.audioSrc,
+      activeSyncMapId: audioTimeline.syncMapId,
+      syncMode: audioTimeline.syncMode,
+      lastUpdatedBy: audioTimeline.updatedBy === 'control' ? 'controller' : 'projection',
+      timestamp: audioTimeline.baseServerTimeMs,
+    };
+  }, [audioState, audioTimeline, audioTimelineControls.estimatedPositionSec, audioTimelineDuration]);
 
   useAudioPlayback({
     isControlMode: !isMediaMaster,
@@ -343,7 +381,7 @@ function ControlApp() {
         }}
         emitVideoTelemetry={emitVideoTelemetry}
         emitCommand={emitCommand}
-        audioState={audioState}
+        audioState={audioPanelState}
         audioSyncMaps={audioSyncMaps}
         availableAudioFiles={availableAudioFiles}
         onAudioStateChange={(state) => {
@@ -353,6 +391,8 @@ function ControlApp() {
             emitAudioTelemetry(state);
           }
         }}
+        audioDispatchAction={wsStatus === 'open' ? audioTimelineControls.dispatchAction : undefined}
+        audioEstimatedPositionSec={audioTimeline ? audioTimelineControls.estimatedPositionSec : undefined}
         autoduckState={autoduckState}
         onAutoduckStateChange={(state) => {
           emitCommand({ command: 'SET_AUTODUCK_STATE', state });

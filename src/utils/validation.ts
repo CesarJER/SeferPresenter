@@ -2,7 +2,7 @@ import type { AudioState, AudioSyncMap, AudioSyncMode, AudioTimelineAction, Audi
 import type { LiveAudioBroadcastMessage, LiveAudioParticipantRole, PrivateControlSignalMessage } from '../types/liveAudio';
 import type { AppMode, Presentation, ScriptureNavState, Slide, VideoState } from '../types/presentation';
 import type { QuizSyncState } from '../types/quiz';
-import type { BroadcastMessage, DisplayTelemetryState, SyncStatePayload } from '../types/sync';
+import type { AutoduckState, BroadcastMessage, DisplayTelemetryState, SyncStatePayload } from '../types/sync';
 
 export interface ValidationResult<T> {
   ok: boolean;
@@ -559,7 +559,7 @@ const validateVideoState = (value: unknown, path: string): ValidationResult<Vide
   if (typeof value.isPlaying !== 'boolean') errors.push(`${path}.isPlaying debe ser booleano.`);
   if (!isFiniteNumber(value.currentTime)) errors.push(`${path}.currentTime debe ser numero.`);
   if (!isFiniteNumber(value.duration)) errors.push(`${path}.duration debe ser numero.`);
-  if (!isFiniteNumber(value.volume)) errors.push(`${path}.volume debe ser numero.`);
+  if (!isFiniteNumber(value.volume) || value.volume < 0 || value.volume > 1) errors.push(`${path}.volume debe estar entre 0 y 1.`);
   if (!isFiniteNumber(value.speed)) errors.push(`${path}.speed debe ser numero.`);
   if (value.mediaSrc !== null && typeof value.mediaSrc !== 'string' && value.mediaSrc !== undefined) errors.push(`${path}.mediaSrc debe ser texto o null.`);
   if (value.videoSrc !== null && typeof value.videoSrc !== 'string' && value.videoSrc !== undefined) errors.push(`${path}.videoSrc debe ser texto o null.`);
@@ -602,6 +602,12 @@ const validateAudioTimelineAction = (value: unknown, path: string): ValidationRe
       if (typeof value.presentationId !== 'string') errors.push(`${path}.presentationId debe ser texto.`);
       if (typeof value.audioSrc !== 'string') errors.push(`${path}.audioSrc debe ser texto.`);
       if (!isStringOrUndefined(value.syncMapId)) errors.push(`${path}.syncMapId debe ser texto.`);
+      if (value.syncMode !== undefined && (typeof value.syncMode !== 'string' || !audioSyncModes.has(value.syncMode as AudioSyncMode))) {
+        errors.push(`${path}.syncMode no es valido.`);
+      }
+      if (value.volume !== undefined && (!isFiniteNumber(value.volume) || value.volume < 0 || value.volume > 1)) {
+        errors.push(`${path}.volume debe estar entre 0 y 1.`);
+      }
       break;
     case 'PLAY':
       if (value.positionSec !== undefined && !isFiniteNumber(value.positionSec)) errors.push(`${path}.positionSec debe ser numero.`);
@@ -616,7 +622,7 @@ const validateAudioTimelineAction = (value: unknown, path: string): ValidationRe
       if (!isFiniteNumber(value.rate)) errors.push(`${path}.rate debe ser numero.`);
       break;
     case 'SET_VOLUME':
-      if (!isFiniteNumber(value.volume)) errors.push(`${path}.volume debe ser numero.`);
+      if (!isFiniteNumber(value.volume) || value.volume < 0 || value.volume > 1) errors.push(`${path}.volume debe estar entre 0 y 1.`);
       break;
     case 'SET_SYNC_MODE':
       if (typeof value.mode !== 'string' || !audioSyncModes.has(value.mode as AudioSyncMode)) errors.push(`${path}.mode no es valido.`);
@@ -646,7 +652,7 @@ const validateAudioTimelineState = (value: unknown, path: string): ValidationRes
   if (!isFiniteNumber(value.basePositionSec)) errors.push(`${path}.basePositionSec debe ser numero.`);
   if (!isFiniteNumber(value.baseServerTimeMs)) errors.push(`${path}.baseServerTimeMs debe ser numero.`);
   if (!isFiniteNumber(value.playbackRate)) errors.push(`${path}.playbackRate debe ser numero.`);
-  if (!isFiniteNumber(value.volume)) errors.push(`${path}.volume debe ser numero.`);
+  if (!isFiniteNumber(value.volume) || value.volume < 0 || value.volume > 1) errors.push(`${path}.volume debe estar entre 0 y 1.`);
   if (typeof value.syncMode !== 'string' || !audioSyncModes.has(value.syncMode as AudioSyncMode)) errors.push(`${path}.syncMode no es valido.`);
   validateNullableNumber(value.activeCueIndex, `${path}.activeCueIndex`, errors);
   validateNullableNumber(value.nextCueIndex, `${path}.nextCueIndex`, errors);
@@ -874,6 +880,18 @@ const validateDisplayState = (value: Record<string, unknown>, path: string): Val
   return errors.length > 0 ? fail(errors) : ok(value as unknown as DisplayTelemetryState);
 };
 
+const validateAutoduckState = (value: unknown, path: string): ValidationResult<AutoduckState> => {
+  if (!isRecord(value)) return fail([`${path} debe ser un objeto.`]);
+
+  const errors: string[] = [];
+  if (typeof value.enabled !== 'boolean') errors.push(`${path}.enabled debe ser booleano.`);
+  if (!isFiniteNumber(value.factor) || value.factor < 0 || value.factor > 1) {
+    errors.push(`${path}.factor debe estar entre 0 y 1.`);
+  }
+
+  return errors.length > 0 ? fail(errors) : ok(value as unknown as AutoduckState);
+};
+
 export const validateRemoteStatePayload = (value: unknown): ValidationResult<Partial<SyncStatePayload>> => {
   if (!isRecord(value)) return fail(['El payload remoto debe ser un objeto.']);
 
@@ -959,6 +977,11 @@ export const validateRemoteStatePayload = (value: unknown): ValidationResult<Par
     } else {
       errors.push('remote.stepIndex debe ser numero.');
     }
+  }
+  if (value.autoduckState !== undefined) {
+    const result = validateAutoduckState(value.autoduckState, 'remote.autoduckState');
+    if (result.ok) next.autoduckState = result.value;
+    else errors.push(...result.errors);
   }
 
   return errors.length > 0 ? fail(errors) : ok(next);
@@ -1147,6 +1170,11 @@ export const validateSyncMessage = (value: unknown): ValidationResult<BroadcastM
         case 'AUDIO_STATE_CHANGE':
           if (!isRecord(payload.state)) baseErrors.push('state debe ser objeto');
           break;
+        case 'SET_AUTODUCK_STATE': {
+          const result = validateAutoduckState(payload.state, 'payload.state');
+          if (!result.ok) baseErrors.push(...result.errors);
+          break;
+        }
       }
     }
     return baseErrors.length > 0 ? fail(baseErrors) : ok(value as unknown as BroadcastMessage);

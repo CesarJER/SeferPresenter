@@ -16,8 +16,13 @@ import {
   normalizeProjectionState,
   reduceProjectionCommand,
 } from './projection-state-reducer.mjs'
-import { hasActivePresenter, broadcastWs, getMediaMasterClientId } from './ws-server.mjs'
+import { broadcastWs, getMediaMasterClientId } from './ws-server.mjs'
 import { getTimeline, applyAction } from './timelineManager.mjs'
+import {
+  estimateTimelinePositionSec,
+  findActiveCueIndex,
+  findCueForSlideSelection,
+} from './audio-timeline-sync.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const rootDir = path.resolve(__dirname, '..')
@@ -37,6 +42,7 @@ let audienceClients = new Set()
 let quizClients = new Set()
 let liveKitApi = null
 let audioSyncMapsCache = []
+let presentationsCache = []
 const quizAggregateState = {
   submittedSessionsBySlideId: new Map(),
   finalScoreBuckets: new Map(),
@@ -171,6 +177,21 @@ const writeJsonAtomic = (filePath, value) => {
   fs.writeFileSync(filePath, JSON.stringify(value, null, 2), 'utf-8')
 }
 
+const readPresentationsCache = () => {
+  try {
+    presentationsCache = normalizePresentations(readJsonFile(path.join(rootDir, 'presentations.json'), []))
+  } catch {
+    presentationsCache = []
+  }
+  return presentationsCache
+}
+
+const getPresentationForSyncMap = (syncMap) => {
+  if (!syncMap?.presentationId) return null
+  if (currentState.presentation?.id === syncMap.presentationId) return currentState.presentation
+  return presentationsCache.find((presentation) => presentation.id === syncMap.presentationId) || null
+}
+
 const walkAssets = (directories, matcher) => {
   const results = []
   const walk = (dir) => {
@@ -292,6 +313,36 @@ const canReduceRemoteCommand = (sourceMeta) => {
   return isLiveAudioControlAuthorized(sourceMeta.controlSessionId)
 }
 
+const broadcastTimelineState = () => {
+  broadcastWs({
+    type: 'AUDIO_TIMELINE_STATE',
+    timeline: getTimeline(),
+  })
+}
+
+const syncTimelineToSlideSelection = (payload, now = Date.now()) => {
+  const tl = getTimeline()
+  if (tl.syncMode !== 'bilateral' || !tl.syncMapId) return
+
+  const syncMap = audioSyncMapsCache.find((map) => map.id === tl.syncMapId)
+  if (!syncMap || !Array.isArray(syncMap.cues) || syncMap.cues.length === 0) return
+
+  const presentation = payload.presentation || currentState.presentation
+  if (!presentation || presentation.id !== syncMap.presentationId) return
+
+  const targetVerse = payload.targetVerse || currentState.scriptureState?.verse
+  const match = findCueForSlideSelection(syncMap, payload.slideIndex, targetVerse)
+  if (!match) return
+
+  const currentPositionSec = estimateTimelinePositionSec(tl, now)
+  if (Math.abs(currentPositionSec - match.cue.timeSec) <= 1.0) return
+
+  applyAction({ type: 'SEEK', positionSec: match.cue.timeSec })
+  lastSyncMapId = tl.syncMapId
+  lastActiveCueIndex = match.index
+  broadcastTimelineState()
+}
+
 const reduceRemoteCommandMessage = (message, sourceMeta) => {
   if (!isObjectRecord(message) || message.type !== 'REMOTE_COMMAND') {
     return { ok: false, status: 400, error: 'Invalid remote command message' }
@@ -327,13 +378,19 @@ const reduceRemoteCommandMessage = (message, sourceMeta) => {
     return { ok: false, status: 400, error: result.error }
   }
 
+  const committedState = commitState(result.state, {
+    clientId: message.clientId,
+    origin: 'control',
+    now,
+  })
+
+  if (message.payload.command === 'SELECT_PRESENTATION_AND_SLIDE') {
+    syncTimelineToSlideSelection(message.payload, now)
+  }
+
   return {
     ok: true,
-    state: commitState(result.state, {
-      clientId: message.clientId,
-      origin: 'control',
-      now,
-    }),
+    state: committedState,
   }
 }
 
@@ -636,8 +693,7 @@ const handleApi = async (req, res, url) => {
 
   if (url.pathname === '/api/presentations' && req.method === 'GET') {
     try {
-      const presentations = readJsonFile(path.join(rootDir, 'presentations.json'), [])
-      sendJson(res, 200, normalizePresentations(presentations))
+      sendJson(res, 200, readPresentationsCache())
     } catch {
       sendJson(res, 500, { error: 'Invalid presentations JSON' })
     }
@@ -648,6 +704,7 @@ const handleApi = async (req, res, url) => {
     try {
       const presentations = normalizePresentations(JSON.parse(await readBody(req)))
       writeJsonAtomic(path.join(rootDir, 'presentations.json'), presentations)
+      presentationsCache = presentations
       sendJson(res, 200, { success: true })
     } catch (err) {
       sendJson(res, 400, { error: err.message || 'Invalid JSON' })
@@ -797,7 +854,7 @@ const handleWsMessageFromClient = (msg, meta) => {
         : tl.basePositionSec;
       if (Math.abs(currentEstimated - msg.audioState.currentTime) > 1.0) {
         applyAction({ type: 'SEEK', positionSec: msg.audioState.currentTime });
-        broadcastWs({ type: 'AUDIO_TIMELINE_STATE', timeline: getTimeline() }, (m) => m.role !== 'audience');
+        broadcastWs({ type: 'AUDIO_TIMELINE_STATE', timeline: getTimeline() });
       }
     }
   } else if (msg.type === 'VIDEO_TELEMETRY') {
@@ -824,24 +881,17 @@ let lastActiveCueIndex = -1
 let lastSyncMapId = null
 
 const evaluateServerCues = () => {
-  if (hasActivePresenter()) return
   const tl = getTimeline()
   if (tl.status !== 'playing' || tl.syncMode === 'none' || !tl.syncMapId) return
 
   const syncMap = audioSyncMapsCache.find(m => m.id === tl.syncMapId)
   if (!syncMap || !syncMap.cues || syncMap.cues.length === 0) return
+  const presentation = getPresentationForSyncMap(syncMap)
+  if (!presentation) return
 
   const now = Date.now()
-  const elapsedSec = (now - tl.baseServerTimeMs) / 1000
-  const currentPos = tl.basePositionSec + elapsedSec * tl.playbackRate
-
-  let activeCueIdx = -1
-  for (let i = syncMap.cues.length - 1; i >= 0; i--) {
-    if (currentPos >= syncMap.cues[i].timeSec) {
-      activeCueIdx = i
-      break
-    }
-  }
+  const currentPos = estimateTimelinePositionSec(tl, now)
+  const activeCueIdx = findActiveCueIndex(syncMap.cues, currentPos)
 
   if (tl.syncMapId !== lastSyncMapId) {
     lastSyncMapId = tl.syncMapId
@@ -857,8 +907,9 @@ const evaluateServerCues = () => {
       clientId: 'server',
       payload: {
         command: 'SELECT_PRESENTATION_AND_SLIDE',
-        presentationId: cue.presentationId,
+        presentation,
         slideIndex: cue.slideIndex,
+        direction: cue.slideIndex < currentState.slideIndex ? 'backward' : 'forward',
         targetVerse: cue.verse
       }
     }, null)
@@ -882,6 +933,7 @@ liveKitApi = createLiveKitApi({
 
 server.listen(port, () => {
   audioSyncMapsCache = readJsonFile(path.join(rootDir, 'audio_sync.json'), [])
+  readPresentationsCache()
   const staticLabel = staticDir ? `, serving ${path.relative(rootDir, staticDir)}` : ''
   createWsServer(server, handleWsMessageFromClient, {
     getLiveKitState: () => liveKitApi?.getState?.() || {

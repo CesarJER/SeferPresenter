@@ -425,9 +425,6 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
     }
   }
 
-  const broadcastExcludeAudience = (message) =>
-    broadcast(message, (meta) => meta.role !== 'audience')
-
   const sendJson = (client, message) => {
     if (client.readyState !== WebSocket.OPEN) return false
     try {
@@ -1089,12 +1086,10 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
       sendJson(ws, liveAudioControlPublicKeyMessage)
     }
 
-    if (role !== 'audience') {
-      ws.send(JSON.stringify({
-        type: 'AUDIO_TIMELINE_STATE',
-        timeline: getTimeline(),
-      }))
-    }
+    ws.send(JSON.stringify({
+      type: 'AUDIO_TIMELINE_STATE',
+      timeline: getTimeline(),
+    }))
 
     ws.on('message', (raw) => {
       let msg
@@ -1125,7 +1120,7 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
         case 'AUDIO_TIMELINE_ACTION': {
           if (meta?.role === 'audience') break
           const timeline = applyAction(msg.action)
-          broadcastExcludeAudience({
+          broadcast({
             type: 'AUDIO_TIMELINE_STATE',
             timeline,
           })
@@ -1172,14 +1167,22 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
         case 'LIVE_AUDIO_ACTIVE_PARTICIPANT_PROFILE': {
           if (meta.role !== 'audience') break
           if (!validateActiveParticipantProfile(msg)) break
+          const existing = liveAudioParticipants.get(msg.participantId)
+          const shouldActivate = existing?.isKicked === true
+            ? false
+            : existing?.isActiveAudience ?? true
           const participant = bindParticipantToConnection(meta, msg.participantId, {
-            speakerState: 'LISTENER',
-            canSubscribe: true,
-            canPublishAudio: false,
-            isMuted: true,
-            isActiveAudience: true,
-            isMicrophoneActive: false,
-            isKicked: false,
+            speakerState: existing?.speakerState && existing.speakerState !== 'REVOKED'
+              ? existing.speakerState
+              : 'LISTENER',
+            canSubscribe: existing?.canSubscribe ?? true,
+            canPublishAudio: existing?.canPublishAudio ?? false,
+            isMuted: existing?.isMuted ?? true,
+            isActiveAudience: shouldActivate,
+            isMicrophoneActive: existing?.isMicrophoneActive ?? false,
+            isKicked: existing?.isKicked ?? false,
+            microphonePermissionState: existing?.microphonePermissionState,
+            microphoneTrackState: existing?.microphoneTrackState,
           })
           if (!participant || participant.isKicked) break
           participant.isAliasVisibleToActiveParticipants = msg.isAliasVisibleToActiveParticipants

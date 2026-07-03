@@ -160,6 +160,18 @@ describe('visible active participants', () => {
     expect(participant?.isAliasHiddenByControl).toBe(true);
   });
 
+  it('sends the backend audio timeline to audience clients as read-only state', async () => {
+    const audience = await connectWs('audience');
+
+    const timeline = await waitFor(audience, (message) => message.type === 'AUDIO_TIMELINE_STATE');
+
+    expect(timeline.timeline).toMatchObject({
+      status: 'idle',
+      audioSrc: null,
+      syncMode: 'none',
+    });
+  });
+
   it('applies control alias hiding after participant consent', async () => {
     const control = await connectWs('control');
     const audience = await connectWs('audience');
@@ -275,6 +287,70 @@ describe('visible active participants', () => {
     expect(profile.activeListPublicKey).toBe(activeListPublicKey);
     expect(participant?.activeListPublicKey).toBe(activeListPublicKey);
     expect(participant?.isAliasVisibleToActiveParticipants).toBe(true);
+  });
+
+  it('keeps a raised hand when the participant republishes alias visibility', async () => {
+    const control = await connectWs('control');
+    const audience = await connectWs('audience');
+    const participantId = randomUUID();
+
+    audience.send(makeParticipantStatus(participantId, { speakerState: 'REQUESTED' }));
+    await waitFor(
+      control,
+      (message) => (
+        message.type === 'LIVE_AUDIO_PARTICIPANT_STATUS' &&
+        message.participantId === participantId &&
+        message.speakerState === 'REQUESTED'
+      ),
+    );
+
+    audience.send(makeActiveProfile(participantId, 'Mano Levantada'));
+    await waitFor(
+      control,
+      (message) => message.type === 'LIVE_AUDIO_ACTIVE_PARTICIPANT_PROFILE' && message.participantId === participantId,
+    );
+
+    const participant = getLiveAudioParticipantSnapshot().participants.find((item) => item.participantId === participantId);
+    expect(participant?.speakerState).toBe('REQUESTED');
+    expect(participant?.isActiveAudience).toBe(true);
+    expect(participant?.canPublishAudio).toBe(false);
+    expect(participant?.isMicrophoneActive).toBe(false);
+  });
+
+  it('keeps operational state when list-view permission changes', async () => {
+    const control = await connectWs('control');
+    const audience = await connectWs('audience');
+    const participantId = randomUUID();
+
+    audience.send(makeParticipantStatus(participantId, {
+      speakerState: 'GRANTED',
+      canPublishAudio: true,
+      isMuted: false,
+      isMicrophoneActive: true,
+    }));
+    await waitFor(
+      control,
+      (message) => (
+        message.type === 'LIVE_AUDIO_PARTICIPANT_STATUS' &&
+        message.participantId === participantId &&
+        message.speakerState === 'GRANTED'
+      ),
+    );
+
+    control.send({
+      type: 'LIVE_AUDIO_SET_ACTIVE_LIST_VIEW_PERMISSION',
+      participantId,
+      canViewActiveParticipants: false,
+      createdAt: Date.now(),
+    });
+    await wait(100);
+
+    const participant = getLiveAudioParticipantSnapshot().participants.find((item) => item.participantId === participantId);
+    expect(participant?.speakerState).toBe('GRANTED');
+    expect(participant?.isActiveAudience).toBe(true);
+    expect(participant?.canPublishAudio).toBe(true);
+    expect(participant?.isMuted).toBe(false);
+    expect(participant?.isMicrophoneActive).toBe(true);
   });
 
   it('removes only kicked participants and clears active-list flags', async () => {

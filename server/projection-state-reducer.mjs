@@ -36,6 +36,7 @@ const isRecord = (value) => value !== null && typeof value === 'object' && !Arra
 const isFiniteNumber = (value) => typeof value === 'number' && Number.isFinite(value);
 const isInteger = (value) => Number.isInteger(value);
 const isNullableString = (value) => value === null || typeof value === 'string';
+const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 
 const clone = (value) => {
   if (value === undefined) return undefined;
@@ -47,6 +48,15 @@ const makeError = (message) => ({ ok: false, error: message });
 const makeOk = (state) => ({ ok: true, state });
 
 export const getDefaultProjectionState = () => clone(DEFAULT_STATE);
+
+const normalizeAutoduckState = (value) => {
+  const source = isRecord(value) ? value : {};
+  const factor = isFiniteNumber(source.factor) ? source.factor : DEFAULT_STATE.autoduckState.factor;
+  return {
+    enabled: typeof source.enabled === 'boolean' ? source.enabled : DEFAULT_STATE.autoduckState.enabled,
+    factor: clamp(factor, 0, 1),
+  };
+};
 
 export const normalizeProjectionState = (state = {}) => {
   const source = isRecord(state) ? state : {};
@@ -67,7 +77,7 @@ export const normalizeProjectionState = (state = {}) => {
     scriptureState: source.scriptureState === null || isRecord(source.scriptureState) ? clone(source.scriptureState) : null,
     audioState: { ...clone(DEFAULT_AUDIO_STATE), ...clone(audioState) },
     quizState: source.quizState === null || isRecord(source.quizState) ? clone(source.quizState) : null,
-    autoduckState: isRecord(source.autoduckState) ? { ...DEFAULT_STATE.autoduckState, ...clone(source.autoduckState) } : clone(DEFAULT_STATE.autoduckState),
+    autoduckState: normalizeAutoduckState(source.autoduckState),
   };
 };
 
@@ -397,7 +407,7 @@ const validateCommandPayload = (payload) => {
     case 'SET_AUTODUCK_STATE':
       if (!isRecord(payload.state)) return makeError('autoduck state must be an object');
       if (typeof payload.state.enabled !== 'boolean') return makeError('enabled must be boolean');
-      if (payload.state.factor !== undefined && !isFiniteNumber(payload.state.factor)) return makeError('factor must be a number');
+      if (!isFiniteNumber(payload.state.factor) || payload.state.factor < 0 || payload.state.factor > 1) return makeError('factor must be between 0 and 1');
       break;
     case 'QUIZ_SELECT_SUBSLIDE':
       if (!isInteger(payload.index) || payload.index < 0) return makeError('index must be an integer >= 0');
@@ -623,7 +633,7 @@ export const reduceProjectionCommand = (currentState, payload, metadata = {}) =>
       return makeOk({ ...state, audioState: { ...state.audioState, ...clone(payload.state) } });
 
     case 'SET_AUTODUCK_STATE':
-      return makeOk({ ...state, autoduckState: { ...state.autoduckState, ...clone(payload.state.state) } });
+      return makeOk({ ...state, autoduckState: normalizeAutoduckState(payload.state) });
 
     case 'QUIZ_START_TIMER':
       return makeOk(updateQuizState(state, (quizState) => ({

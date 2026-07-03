@@ -65,7 +65,7 @@ Hooks:
 - [useWebSocket.ts](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useWebSocket.ts): standalone WebSocket connection management.
 - [useServerClock.ts](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useServerClock.ts): WebSocket server clock offset and RTT estimation.
 - [useAudioTimeline.ts](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useAudioTimeline.ts): local audio timeline tracking, status estimation, action dispatching over WebSocket.
-- [useAudioTimelineApplicator.ts](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useAudioTimelineApplicator.ts): applying timeline changes (source, status, volume, rate) to presenter's audio element.
+- [useAudioTimelineApplicator.ts](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useAudioTimelineApplicator.ts): applying timeline changes, volume/autoduck, and drift correction to presenter/control/audience audio elements.
 - [useAudienceAudioPlayback.ts](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useAudienceAudioPlayback.ts): syncs presenter audio state to the audience device.
 - [useSeferControlLogic.ts](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useSeferControlLogic.ts): stateful logic for the sacred text reader operator interface.
 - [useResizablePanel.ts](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useResizablePanel.ts): pointer-drag resizing behavior for sidebar panels.
@@ -101,7 +101,7 @@ Library/sync/validation:
 - `src/utils/pwaUpdate.ts`: PWA service-worker registration and update/reload helpers for route-specific shells.
 - `src/utils/normalizePresentation.ts`: persistence/path normalization.
 - `src/utils/syncProtocol.ts`: sync message construction.
-- `src/utils/audioTimeline.ts`: client timeline manipulation and status estimation helpers.
+- `src/utils/audioTimeline.ts`: client timeline manipulation, status estimation, and local audio drift-correction helpers.
 - `src/utils/navigationUtils.ts`: step generators for slide navigation.
 - `src/utils/mediaUtils.ts`: serializers and parsers for media slide parameters.
 - `server/projection-state-reducer.mjs`: pure projection-state reducer used by

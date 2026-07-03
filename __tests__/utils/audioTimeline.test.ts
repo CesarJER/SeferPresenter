@@ -3,6 +3,7 @@ import {
   calcCurrentPositionSec,
   calcActiveCueIndex,
   applyTimelineAction,
+  computeAudioTimelineCorrection,
   estimateClientOffset,
   AudioTimelineState
 } from '../../src/utils/audioTimeline';
@@ -59,6 +60,64 @@ describe('audioTimeline utils', () => {
     
     it('returns -1 for empty cues array', () => {
       expect(calcActiveCueIndex(10, [])).toBe(-1);
+    });
+  });
+
+  describe('computeAudioTimelineCorrection', () => {
+    it('does not adjust playback when local audio is within drift tolerance', () => {
+      const correction = computeAudioTimelineCorrection({
+        audioCurrentTimeSec: 12.04,
+        timelineBasePositionSec: 10,
+        timelineBaseServerTimeMs: 1000,
+        timelinePlaybackRate: 1,
+        nowMs: 3000,
+      });
+
+      expect(correction.expectedPositionSec).toBe(12);
+      expect(correction.action).toBe('none');
+      expect(correction.playbackRate).toBe(1);
+    });
+
+    it('nudges playback faster when local audio is behind the server timeline', () => {
+      const correction = computeAudioTimelineCorrection({
+        audioCurrentTimeSec: 11.7,
+        timelineBasePositionSec: 10,
+        timelineBaseServerTimeMs: 1000,
+        timelinePlaybackRate: 1,
+        nowMs: 3000,
+      });
+
+      expect(correction.action).toBe('nudge');
+      expect(correction.playbackRate).toBeGreaterThan(1);
+      expect(correction.playbackRate).toBeLessThanOrEqual(1.08);
+    });
+
+    it('nudges playback slower when local audio is ahead of the server timeline', () => {
+      const correction = computeAudioTimelineCorrection({
+        audioCurrentTimeSec: 12.3,
+        timelineBasePositionSec: 10,
+        timelineBaseServerTimeMs: 1000,
+        timelinePlaybackRate: 1,
+        nowMs: 3000,
+      });
+
+      expect(correction.action).toBe('nudge');
+      expect(correction.playbackRate).toBeLessThan(1);
+      expect(correction.playbackRate).toBeGreaterThanOrEqual(0.92);
+    });
+
+    it('seeks when drift is too large to correct smoothly', () => {
+      const correction = computeAudioTimelineCorrection({
+        audioCurrentTimeSec: 10,
+        timelineBasePositionSec: 10,
+        timelineBaseServerTimeMs: 1000,
+        timelinePlaybackRate: 1,
+        nowMs: 3000,
+      });
+
+      expect(correction.action).toBe('seek');
+      expect(correction.seekPositionSec).toBe(12);
+      expect(correction.playbackRate).toBe(1);
     });
   });
 

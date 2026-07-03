@@ -165,4 +165,33 @@ describe('projectionStateReducer', () => {
 
     expect(messageValidation.ok).toBe(false);
   });
+
+  it('reduces autoduck commands into validated canonical state', () => {
+    const result = reduceProjectionCommand(baseState, {
+      command: 'SET_AUTODUCK_STATE',
+      state: { enabled: true, factor: 0.35 },
+    }, { now: 1000 });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.state.autoduckState).toEqual({ enabled: true, factor: 0.35 });
+
+    const syncState = makeProjectionSyncStateMessage(result.state, {
+      clientId: 'control-1',
+      origin: 'control',
+      now: 1000,
+      messageId: 'm-autoduck',
+    });
+
+    expect(validateSyncMessage(syncState).ok).toBe(true);
+  });
+
+  it('rejects invalid autoduck factors before state reduction', () => {
+    const result = reduceProjectionCommand(baseState, {
+      command: 'SET_AUTODUCK_STATE',
+      state: { enabled: true, factor: 1.5 },
+    }, { now: 1000 });
+
+    expect(result.ok).toBe(false);
+  });
 });

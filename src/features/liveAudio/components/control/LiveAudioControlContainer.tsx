@@ -430,10 +430,7 @@ export default function LiveAudioControlContainer({
       .map(p => {
         const alias = participantAliases[p.participantId] || '';
         const isKicked = p.isKicked === true;
-        const isActiveAudience = !isKicked && (
-          p.isActiveAudience === true ||
-          (Boolean(alias) && p.speakerState !== 'REVOKED')
-        );
+        const isActiveAudience = !isKicked && p.isActiveAudience === true;
         const isMicrophoneActive = p.isMicrophoneActive ?? (p.speakerState === 'GRANTED' && p.isMuted === false);
         return {
           participantId: p.participantId,

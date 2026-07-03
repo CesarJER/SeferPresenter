@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import type { AutoduckState } from '../types/sync';
 
+const clamp01 = (value: number) => Math.max(0, Math.min(value, 1));
+
 /**
  * Hook to smoothly transition the volume of a media element.
  * @param mediaRef Reference to the HTMLMediaElement (audio or video).
@@ -20,8 +22,9 @@ export function useSmoothVolume(
 
   useEffect(() => {
     const handleAutoduck = (e: Event) => {
-      const customEvent = e as CustomEvent<{ active: boolean }>;
-      setIsDucking(customEvent.detail.active);
+      const customEvent = e as CustomEvent<{ active?: boolean; isDuckingActive?: boolean }>;
+      const active = customEvent.detail.active ?? customEvent.detail.isDuckingActive ?? false;
+      setIsDucking(active);
     };
 
     window.addEventListener('sefer-autoduck', handleAutoduck);
@@ -29,10 +32,14 @@ export function useSmoothVolume(
   }, []);
 
   useEffect(() => {
+    const safeBaseVolume = Number.isFinite(baseVolume) ? clamp01(baseVolume) : 1;
+    const rawFactor = autoduckState?.factor ?? 0.2;
+    const safeFactor = Number.isFinite(rawFactor) ? clamp01(rawFactor) : 0.2;
+
     // Calculate actual target volume based on ducking state
-    let finalTargetVolume = baseVolume;
+    let finalTargetVolume = safeBaseVolume;
     if (autoduckState?.enabled && isDucking) {
-      finalTargetVolume = baseVolume * (autoduckState.factor ?? 0.2);
+      finalTargetVolume = safeBaseVolume * safeFactor;
     }
 
     targetVolumeRef.current = finalTargetVolume;

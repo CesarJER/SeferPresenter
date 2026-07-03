@@ -23,7 +23,7 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
 - [useWebSocket](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useWebSocket.ts) - `src/hooks/useWebSocket.ts`: standalone WebSocket connection helper with safe JSON send, typed receive callback, status, cleanup, and exponential reconnect.
 - [useServerClock](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useServerClock.ts) - `src/hooks/useServerClock.ts`: WebSocket server clock offset and RTT estimation from `SERVER_TIME_PING` / `SERVER_TIME_PONG`.
 - [useAudioTimeline](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useAudioTimeline.ts) - `src/hooks/useAudioTimeline.ts`: local audio timeline tracking, status estimation, action dispatching over WebSocket.
-- [useAudioTimelineApplicator](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useAudioTimelineApplicator.ts) - `src/hooks/useAudioTimelineApplicator.ts`: applies audio timeline changes (source, status, volume, rate) to the presenter's HTML audio element.
+- [useAudioTimelineApplicator](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useAudioTimelineApplicator.ts) - `src/hooks/useAudioTimelineApplicator.ts`: applies audio timeline changes and continuous drift correction to each role-local HTML audio element.
 - [useAudienceAudioPlayback](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useAudienceAudioPlayback.ts) - `src/hooks/useAudienceAudioPlayback.ts`: synchronizes HTML audio element playback, current time, and volume on the audience device based on presentation audio telemetry.
 - [useSeferControlLogic](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useSeferControlLogic.ts) - `src/hooks/useSeferControlLogic.ts`: orchestrates the full or mini scripture navigation control UI logic, including verse selection, page navigation, boundary checks, and font adjustments.
 - [useResizablePanel](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useResizablePanel.ts) - `src/hooks/useResizablePanel.ts`: controls dragging and resizing behavior for side/layout panels (e.g. Sefer reader layout), adapting size based on viewport orientation.
@@ -140,6 +140,8 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
   `participantId` metadata and no alias; refresh keeps the same participant
   identity while reflecting current speaker permission and muted speaker state.
 - `server/timelineManager.mjs`: backend-owned audio timeline state and action reducer.
+- `server/audio-timeline-sync.mjs`: pure helpers for estimating backend audio
+  timeline position and mapping audio cue positions to slide/verse selections.
 - [server/authUtils.mjs](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/server/authUtils.mjs) - `server/authUtils.mjs`: server-side authentication helpers based on `SEFER_REQUIRE_AUTH` and `SEFER_CONTROL_PASSWORD`.
 
 ## Validation Modules
@@ -197,4 +199,4 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
 - `transliterateText` - `src/utils/transliterate.ts`: transliteration helper.
 - `sanitizeHtml` / `sanitizeSlideHtml` / niqqud helpers - `src/utils/hebrewText.ts`: slide HTML sanitizing and Hebrew text cleanup.
 - `registerScopedServiceWorker` / `restartPwaApp` - `src/utils/pwaUpdate.ts`: route-scoped PWA service-worker registration and update-aware reload without clearing local state.
-- [audioTimeline](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/utils/audioTimeline.ts) - `src/utils/audioTimeline.ts`: timeline calculations, actions application, and client clock offset estimations.
+- [audioTimeline](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/utils/audioTimeline.ts) - `src/utils/audioTimeline.ts`: timeline calculations, actions application, client clock offset estimations, and local audio drift-correction decisions.

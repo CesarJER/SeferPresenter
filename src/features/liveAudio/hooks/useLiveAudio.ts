@@ -418,7 +418,7 @@ export const useLiveAudio = ({
     setParticipantId(null);
     setParticipantIdentity(null);
     setIsDuckingActive(false);
-    window.dispatchEvent(new CustomEvent('sefer-autoduck', { detail: { isDuckingActive: false } }));
+    window.dispatchEvent(new CustomEvent('sefer-autoduck', { detail: { active: false, isDuckingActive: false } }));
     setConnectionQuality('unknown');
     setState(availability === 'enabled' ? 'disconnected' : 'unavailable');
     if (room) {
@@ -587,7 +587,7 @@ export const useLiveAudio = ({
           return participantRole && duckRoles.includes(participantRole);
         });
         setIsDuckingActive(active);
-        window.dispatchEvent(new CustomEvent('sefer-autoduck', { detail: { isDuckingActive: active } }));
+        window.dispatchEvent(new CustomEvent('sefer-autoduck', { detail: { active, isDuckingActive: active } }));
       })
       .on(RoomEvent.Disconnected, () => {
         if (connectionRunRef.current !== runId || userDisconnectedRef.current) return;
@@ -744,7 +744,7 @@ export const useLiveAudio = ({
           return participantRole && duckRoles.includes(participantRole);
         });
         setIsDuckingActive(active);
-        window.dispatchEvent(new CustomEvent('sefer-autoduck', { detail: { isDuckingActive: active } }));
+        window.dispatchEvent(new CustomEvent('sefer-autoduck', { detail: { active, isDuckingActive: active } }));
       });
 
     try {

@@ -111,7 +111,7 @@ const SlideVisualizer: React.FC<SlideVisualizerProps> = ({
         isPlaying: !vid.paused,
         currentTime: vid.currentTime,
         duration: Number.isFinite(vid.duration) ? vid.duration : 0,
-        volume: vid.volume,
+        volume: videoState?.volume ?? slide.mediaVolume ?? 1.0,
         speed: vid.playbackRate,
         loop: vid.loop,
         mediaSrc: slide.mediaSrc || null,

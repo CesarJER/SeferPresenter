@@ -127,6 +127,34 @@ describe('runtime validation', () => {
     expect(result.errors.join('\n')).toContain('timeSec');
   });
 
+  it('validates timeline track defaults for volume and sync mode', () => {
+    expect(validateSyncMessage({
+      type: 'AUDIO_TIMELINE_ACTION',
+      action: {
+        type: 'SET_TRACK',
+        presentationId: 'p1',
+        audioSrc: '/audio/lectura.mp3',
+        syncMapId: 'a1',
+        syncMode: 'unilateral',
+        volume: 0.7,
+      },
+    }).ok).toBe(true);
+
+    const result = validateSyncMessage({
+      type: 'AUDIO_TIMELINE_ACTION',
+      action: {
+        type: 'SET_TRACK',
+        presentationId: 'p1',
+        audioSrc: '/audio/lectura.mp3',
+        syncMode: 'bilateral',
+        volume: 1.5,
+      },
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.errors.join('\n')).toContain('volume');
+  });
+
   it('rejects incomplete sync state messages', () => {
     const result = validateSyncMessage({
       type: 'SYNC_STATE',
@@ -157,6 +185,45 @@ describe('runtime validation', () => {
     });
 
     expect(result.ok).toBe(true);
+  });
+
+  it('validates autoduck state in sync and remote command messages', () => {
+    expect(validateSyncMessage({
+      type: 'SYNC_STATE',
+      clientId: 'c1',
+      origin: 'control',
+      presentation: validPresentation,
+      slideIndex: 0,
+      backgroundLock: false,
+      lockedBackgroundValue: null,
+      userSelectedBackground: null,
+      videoState: null,
+      appMode: 'slides',
+      scriptureState: null,
+      audioState: DEFAULT_AUDIO_STATE,
+      autoduckState: { enabled: true, factor: 0.35 },
+    }).ok).toBe(true);
+
+    expect(validateSyncMessage({
+      type: 'REMOTE_COMMAND',
+      clientId: 'c1',
+      payload: {
+        command: 'SET_AUTODUCK_STATE',
+        state: { enabled: true, factor: 0.35 },
+      },
+    }).ok).toBe(true);
+
+    const result = validateSyncMessage({
+      type: 'REMOTE_COMMAND',
+      clientId: 'c1',
+      payload: {
+        command: 'SET_AUTODUCK_STATE',
+        state: { enabled: true, factor: 2 },
+      },
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.errors.join('\n')).toContain('factor');
   });
 
   it('accepts valid private control signals as separate Live Audio messages', () => {

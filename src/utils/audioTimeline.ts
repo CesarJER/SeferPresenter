@@ -35,6 +35,85 @@ export function calcCurrentPositionSec(timeline: AudioTimelineState, nowMs: numb
   return Math.max(0, timeline.basePositionSec + elapsedSec * timeline.playbackRate);
 }
 
+export type AudioTimelineCorrectionAction = 'none' | 'nudge' | 'seek';
+
+export interface AudioTimelineCorrectionInput {
+  audioCurrentTimeSec: number;
+  timelineBasePositionSec: number;
+  timelineBaseServerTimeMs: number;
+  timelinePlaybackRate: number;
+  nowMs: number;
+  nudgeThresholdSec?: number;
+  seekThresholdSec?: number;
+  maxRateNudge?: number;
+}
+
+export interface AudioTimelineCorrection {
+  expectedPositionSec: number;
+  driftSec: number;
+  action: AudioTimelineCorrectionAction;
+  playbackRate: number;
+  seekPositionSec?: number;
+}
+
+const clamp = (value: number, min: number, max: number): number =>
+  Math.min(max, Math.max(min, value));
+
+export function computeAudioTimelineCorrection({
+  audioCurrentTimeSec,
+  timelineBasePositionSec,
+  timelineBaseServerTimeMs,
+  timelinePlaybackRate,
+  nowMs,
+  nudgeThresholdSec = 0.12,
+  seekThresholdSec = 0.65,
+  maxRateNudge = 0.08,
+}: AudioTimelineCorrectionInput): AudioTimelineCorrection {
+  const baseRate = Number.isFinite(timelinePlaybackRate) && timelinePlaybackRate > 0
+    ? timelinePlaybackRate
+    : 1;
+  const safeBasePosition = Number.isFinite(timelineBasePositionSec)
+    ? Math.max(0, timelineBasePositionSec)
+    : 0;
+  const safeBaseServerTime = Number.isFinite(timelineBaseServerTimeMs)
+    ? timelineBaseServerTimeMs
+    : nowMs;
+  const safeAudioPosition = Number.isFinite(audioCurrentTimeSec)
+    ? Math.max(0, audioCurrentTimeSec)
+    : 0;
+  const elapsedSec = Math.max(0, (nowMs - safeBaseServerTime) / 1000);
+  const expectedPositionSec = Math.max(0, safeBasePosition + elapsedSec * baseRate);
+  const driftSec = expectedPositionSec - safeAudioPosition;
+  const absDriftSec = Math.abs(driftSec);
+
+  if (absDriftSec >= seekThresholdSec) {
+    return {
+      expectedPositionSec,
+      driftSec,
+      action: 'seek',
+      playbackRate: baseRate,
+      seekPositionSec: expectedPositionSec,
+    };
+  }
+
+  if (absDriftSec >= nudgeThresholdSec) {
+    const rateNudge = clamp(driftSec * 0.1, -maxRateNudge, maxRateNudge);
+    return {
+      expectedPositionSec,
+      driftSec,
+      action: 'nudge',
+      playbackRate: clamp(baseRate + rateNudge, 0.25, 4),
+    };
+  }
+
+  return {
+    expectedPositionSec,
+    driftSec,
+    action: 'none',
+    playbackRate: baseRate,
+  };
+}
+
 export function calcActiveCueIndex(positionSec: number, cues: AudioSyncCue[]): number {
   if (!cues || cues.length === 0) return -1;
   let activeCueIdx = -1;

@@ -175,7 +175,7 @@ const PresenterScreen: React.FC<PresenterScreenProps> = ({
           isPlaying: !videoElement.paused,
           currentTime: videoElement.currentTime,
           duration: Number.isFinite(videoElement.duration) ? videoElement.duration : 0,
-          volume: videoElement.volume,
+          volume: videoState?.volume ?? slide?.mediaVolume ?? 1.0,
           speed: videoElement.playbackRate,
           loop: videoElement.loop,
           mediaSrc: slide.mediaSrc || null,

@@ -421,7 +421,7 @@ function App() {
 
   const { serverNow } = useServerClock(wsSend, wsStatus, subscribeToWsMessage);
   useAudioTimeline(audioTimeline, serverNow, wsSend);
-  useAudioTimelineApplicator(audioTimelineRef, audioTimeline, serverNow);
+  useAudioTimelineApplicator(audioTimelineRef, audioTimeline, serverNow, autoduckState);
 
   const { getActiveBackground, handleToggleBackgroundLock, handleSelectBackgroundOverride } = useBackgroundResolver({
     currentPresentation, currentSlideIndex, backgroundLock,

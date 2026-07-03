@@ -305,6 +305,13 @@ and keeps the participant as `LISTENER` without publish permission.
 Fase 2 adds a backend-owned audio timeline over `ws://localhost:<port>/ws`.
 The React client connects to this channel, receives `AUDIO_TIMELINE_STATE` updates, and dispatches actions via `AUDIO_TIMELINE_ACTION`.
 This channel synchronizes timeline state while maintaining compatibility with existing SSE event streams.
+Presenter, Control, and Audience each apply the same backend timeline to their
+local hidden audio element. While the backend timeline is playing, clients
+periodically compare their local media `currentTime` with `serverNow()` and
+the canonical `basePositionSec` / `baseServerTimeMs`; small drift is corrected
+with a temporary playback-rate nudge, while large drift is corrected with a
+seek. This keeps the rendered lyrics/timeline and the audible track aligned on
+all roles without adding high-frequency progress broadcasts.
 
 `server/timelineManager.mjs` owns only the audio timeline fields:
 
@@ -313,12 +320,26 @@ This channel synchronizes timeline state while maintaining compatibility with ex
   `playbackRate`, and `volume`.
 - Sync metadata: `syncMode`, cue indexes, and `updatedBy`.
 
+`AUDIO_TIMELINE_ACTION` `SET_TRACK` may include `syncMode` and `volume` from
+the selected `AudioSyncMap`; the server normalizes empty track identifiers to
+`null`, clamps volume to `0..1`, and stores the selected mode as the canonical
+timeline state. Runtime autoduck applies only to the DOM media element's
+effective output volume; it must not overwrite the canonical timeline or
+`AudioState.volume` value that controls will continue to display and sync.
+
+`server/local-server.mjs` evaluates backend-owned timeline cues against
+`audio_sync.json` and emits canonical `SELECT_PRESENTATION_AND_SLIDE`
+reductions with the full presentation object. This keeps music-to-letter
+navigation server-owned even when a Presenter tab is connected. In `bilateral`
+mode, manual Control/Presenter slide or verse selection seeks the backend
+timeline to the matching cue and rebroadcasts `AUDIO_TIMELINE_STATE`.
+
 `server/ws-server.mjs` handles:
 
 - `WELCOME` on connection, including `clientId`, role, and server time.
 - `SERVER_TIME_PING` / `SERVER_TIME_PONG` for clock estimation.
 - `AUDIO_TIMELINE_ACTION` from presenter/control clients.
-- `AUDIO_TIMELINE_STATE` broadcasts back to presenter/control clients.
+- `AUDIO_TIMELINE_STATE` broadcasts back to presenter/control/audience clients.
 - Live Audio Control authorization state, verification-code expiry, delegated
   authorization, participant association, private-signal rate limiting,
   moderation filtering, public-key routing, private-signal routing, and
@@ -329,9 +350,10 @@ open and estimates client-to-server clock offset plus RTT from
 `SERVER_TIME_PONG`. Audio timeline clients should use `serverNow()` from this
 hook when they need backend-owned timeline time.
 
-Audience WebSocket clients receive `WELCOME` but do not receive the private
-audio timeline. Existing SSE endpoints remain active for state, audience,
-quiz, and telemetry flows.
+Audience WebSocket clients receive `WELCOME` and `AUDIO_TIMELINE_STATE` as
+read-only playback state so audience devices can hear backend-owned tracks.
+Audience clients still cannot send `AUDIO_TIMELINE_ACTION`. Existing SSE
+endpoints remain active for state, audience, quiz, and telemetry flows.
 
 ## Local-Only Today
 
@@ -440,7 +462,8 @@ Synchronization protocol:
   because it depends only on Web Crypto and the existing sync transport.
 - Synchronize server clock offset and RTT: [useServerClock.ts](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useServerClock.ts).
 - Track and dispatch audio timeline actions: [useAudioTimeline.ts](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useAudioTimeline.ts).
-- Apply timeline changes to presenter's audio element: [useAudioTimelineApplicator.ts](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useAudioTimelineApplicator.ts).
+- Apply timeline changes and drift correction to role-local audio elements:
+  [useAudioTimelineApplicator.ts](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useAudioTimelineApplicator.ts).
 - Mirror over network and own canonical projection state:
   `server/local-server.mjs`.
 - Add backend-owned audio timeline behavior: `server/timelineManager.mjs` and `server/ws-server.mjs`.

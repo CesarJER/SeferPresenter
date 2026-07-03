@@ -20,6 +20,7 @@ const createInitialTimeline = () => ({
 let timeline = createInitialTimeline()
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value))
+const validSyncModes = new Set(['none', 'unilateral', 'bilateral'])
 
 const getEstimatedPosition = (now) => {
   if (timeline.status !== 'playing') return timeline.basePositionSec
@@ -42,9 +43,11 @@ const applyAction = (action) => {
     case 'SET_TRACK':
       next.timelineId = randomUUID()
       next.version = 1
-      next.presentationId = action.presentationId ?? null
-      next.audioSrc = action.audioSrc ?? null
-      next.syncMapId = action.syncMapId ?? null
+      next.presentationId = action.presentationId || null
+      next.audioSrc = action.audioSrc || null
+      next.syncMapId = action.syncMapId || null
+      next.syncMode = validSyncModes.has(action.syncMode) ? action.syncMode : 'none'
+      next.volume = clamp(Number.isFinite(action.volume) ? action.volume : next.volume, 0, 1)
       next.status = 'idle'
       next.basePositionSec = 0
       next.activeCueIndex = null
@@ -74,7 +77,7 @@ const applyAction = (action) => {
       next.updatedBy = 'control'
       break
     case 'SET_SYNC_MODE':
-      next.syncMode = ['none', 'unilateral', 'bilateral'].includes(action.mode) ? action.mode : 'none'
+      next.syncMode = validSyncModes.has(action.mode) ? action.mode : 'none'
       next.updatedBy = 'control'
       break
     case 'STOP':

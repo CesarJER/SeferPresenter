@@ -25,6 +25,8 @@ const formatTime = (secs: number | undefined) => {
   return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
 };
 
+const SCRUBBER_RESYNC_DELAY_MS = 1200;
+
 export const AudioPanel: React.FC<AudioPanelProps> = ({
   audioState,
   onAudioStateChange,
@@ -40,10 +42,51 @@ export const AudioPanel: React.FC<AudioPanelProps> = ({
   onAutoduckStateChange,
 }) => {
   const [dragPosition, setDragPosition] = React.useState<number | null>(null);
+  const dragPositionRef = React.useRef<number | null>(null);
+
+  const setPendingDragPosition = React.useCallback((position: number | null) => {
+    dragPositionRef.current = position;
+    setDragPosition(position);
+  }, []);
+
+  const commitDragPosition = React.useCallback(() => {
+    const pendingPosition = dragPositionRef.current;
+    if (pendingPosition === null) return;
+
+    if (dispatchAction && Number.isFinite(pendingPosition)) {
+      dispatchAction({ type: 'SEEK', positionSec: pendingPosition });
+    }
+    setPendingDragPosition(null);
+  }, [dispatchAction, setPendingDragPosition]);
 
   React.useEffect(() => {
-    setDragPosition(null);
-  }, [audioState.audioSrc]);
+    setPendingDragPosition(null);
+  }, [audioState.audioSrc, setPendingDragPosition]);
+
+  React.useEffect(() => {
+    if (!dispatchAction || dragPosition === null) return;
+
+    const timeoutId = window.setTimeout(commitDragPosition, SCRUBBER_RESYNC_DELAY_MS);
+    return () => window.clearTimeout(timeoutId);
+  }, [commitDragPosition, dispatchAction, dragPosition]);
+
+  React.useEffect(() => {
+    if (!dispatchAction || dragPosition === null) return;
+
+    window.addEventListener('mouseup', commitDragPosition);
+    window.addEventListener('pointerup', commitDragPosition);
+    window.addEventListener('pointercancel', commitDragPosition);
+    window.addEventListener('touchend', commitDragPosition);
+    window.addEventListener('blur', commitDragPosition);
+
+    return () => {
+      window.removeEventListener('mouseup', commitDragPosition);
+      window.removeEventListener('pointerup', commitDragPosition);
+      window.removeEventListener('pointercancel', commitDragPosition);
+      window.removeEventListener('touchend', commitDragPosition);
+      window.removeEventListener('blur', commitDragPosition);
+    };
+  }, [commitDragPosition, dispatchAction, dragPosition]);
 
   const currentPosition = dragPosition !== null
     ? dragPosition
@@ -64,6 +107,8 @@ export const AudioPanel: React.FC<AudioPanelProps> = ({
         presentationId,
         audioSrc,
         syncMapId,
+        syncMode: newMatchedMap?.defaultSyncMode ?? 'none',
+        volume: newMatchedMap?.defaultVolume ?? audioState.volume,
       });
     } else {
       onAudioStateChange({
@@ -239,6 +284,7 @@ export const AudioPanel: React.FC<AudioPanelProps> = ({
             max="1"
             step="0.05"
             value={audioState.volume}
+            aria-label="Volumen de audio"
             onChange={(e) => {
               const val = parseFloat(e.target.value);
               if (dispatchAction) {
@@ -268,10 +314,11 @@ export const AudioPanel: React.FC<AudioPanelProps> = ({
           max={audioState.duration || 100}
           step="0.1"
           value={currentPosition}
+          aria-label="Posicion de audio"
           onChange={(e) => {
             const val = parseFloat(e.target.value);
             if (dispatchAction) {
-              setDragPosition(val);
+              setPendingDragPosition(val);
             } else {
               onAudioStateChange({
                 ...audioState,
@@ -282,24 +329,12 @@ export const AudioPanel: React.FC<AudioPanelProps> = ({
               });
             }
           }}
-          onMouseUp={() => {
-            if (dispatchAction && dragPosition !== null) {
-              dispatchAction({ type: 'SEEK', positionSec: dragPosition });
-              setDragPosition(null);
-            }
-          }}
-          onTouchEnd={() => {
-            if (dispatchAction && dragPosition !== null) {
-              dispatchAction({ type: 'SEEK', positionSec: dragPosition });
-              setDragPosition(null);
-            }
-          }}
-          onKeyUp={() => {
-            if (dispatchAction && dragPosition !== null) {
-              dispatchAction({ type: 'SEEK', positionSec: dragPosition });
-              setDragPosition(null);
-            }
-          }}
+          onMouseUp={commitDragPosition}
+          onTouchEnd={commitDragPosition}
+          onPointerUp={commitDragPosition}
+          onPointerCancel={commitDragPosition}
+          onKeyUp={commitDragPosition}
+          onBlur={commitDragPosition}
           disabled={!audioState.audioSrc}
           className="control-range-slim min-w-0 flex-1"
         />

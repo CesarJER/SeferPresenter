@@ -14,7 +14,7 @@ import { AudioPanel } from './AudioPanel';
 import { PresentationList } from './PresentationList';
 import { PresentationEditor } from './PresentationEditor';
 import { CustomSearchSelect } from '../shared/CustomSearchSelect';
-import type { AudioState, AudioSyncMap } from '../../types/audio';
+import type { AudioState, AudioSyncMap, AudioTimelineAction } from '../../types/audio';
 import type { QuizOptionId, QuizSubslide, QuizTimerState } from '../../types/quiz';
 import type { PendingControlAuthorization } from '../../types/liveAudio';
 import type { RemoteCommandPayload } from '../../types/sync';
@@ -61,6 +61,8 @@ interface MenuPopupProps {
   audioSyncMaps: AudioSyncMap[];
   availableAudioFiles: string[];
   onAudioStateChange: (state: AudioState) => void;
+  audioDispatchAction?: (action: AudioTimelineAction) => void;
+  audioEstimatedPositionSec?: number;
   onAudioSyncMapsChange: (maps: AudioSyncMap[]) => void;
   autoduckState?: import('../../types/sync').AutoduckState;
   onAutoduckStateChange?: (state: import('../../types/sync').AutoduckState) => void;
@@ -142,6 +144,8 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
   audioSyncMaps,
   availableAudioFiles,
   onAudioStateChange,
+  audioDispatchAction,
+  audioEstimatedPositionSec,
   autoduckState,
   onAutoduckStateChange,
   onResetState,
@@ -1505,6 +1509,8 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
             currentPresentation={currentPresentation}
             onSelectPresentation={onSelectPresentation}
             handleOpenAudioEditor={handleOpenAudioEditor}
+            dispatchAction={audioDispatchAction}
+            estimatedPositionSec={audioEstimatedPositionSec}
           />
         )}
 

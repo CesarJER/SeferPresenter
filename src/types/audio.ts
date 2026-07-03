@@ -26,7 +26,7 @@ export interface AudioTimelineState {
 }
 
 export type AudioTimelineAction =
-  | { type: 'SET_TRACK'; presentationId: string; audioSrc: string; syncMapId?: string }
+  | { type: 'SET_TRACK'; presentationId: string; audioSrc: string; syncMapId?: string; syncMode?: AudioSyncMode; volume?: number }
   | { type: 'PLAY'; positionSec?: number }
   | { type: 'PAUSE' }
   | { type: 'SEEK'; positionSec: number }

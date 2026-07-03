@@ -109,7 +109,7 @@ describe('AudienceScreen', () => {
       verseIdx: 0,
       totalVerses: 1,
     };
-    const quizSubslides: QuizSubslide[] = [{ kind: 'cita-verse', bookToken: 'Gen', chapter: '1', verseStart: '1', verse: '1' }];
+    const quizSubslides: QuizSubslide[] = [{ kind: 'cita-verse', label: 'Gen 1:1', bookToken: 'Gen', chapter: '1', verseStart: '1', verseEnd: '1', verse: '1' }];
     render(<AudienceScreen {...defaultProps} slide={slide} scriptureState={scriptureState} quizSubslides={quizSubslides} quizCurrentSubslideIndex={0} />);
     
     expect(screen.getByTestId('sefer-reader-screen')).toBeTruthy();
