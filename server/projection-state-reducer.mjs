@@ -388,6 +388,10 @@ const validateCommandPayload = (payload) => {
         return makeError('navCommand is not valid');
       }
       break;
+    case 'SCRIPTURE_ADD_SLIDE':
+      if (!isRecord(payload.state)) return makeError('state must be an object');
+      if (payload.kind !== undefined && payload.kind !== 'tanaj' && payload.kind !== 'sefer') return makeError('kind must be tanaj or sefer');
+      break;
     case 'SCRIPTURE_BOUNDARY':
       if (!SCRIPTURE_BOUNDARIES.has(payload.direction)) return makeError('direction must be next or previous');
       break;
@@ -559,6 +563,9 @@ export const reduceProjectionCommand = (currentState, payload, metadata = {}) =>
         },
       });
     }
+
+    case 'SCRIPTURE_ADD_SLIDE':
+      return makeOk(state);
 
     case 'SCRIPTURE_BOUNDARY': {
       if (!state.presentation) return makeOk(state);
