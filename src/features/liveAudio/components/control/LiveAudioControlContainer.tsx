@@ -10,6 +10,8 @@ import type {
   LiveAudioOperationalSnapshot,
   LiveAudioParticipantStatusMessage,
   PendingControlAuthorization,
+  LiveAudioControlJoinRequestMessage,
+  LiveAudioControlState,
 } from '../../../../types/liveAudio';
 import { useLiveAudioAvailability } from '../../hooks/useLiveAudioAvailability';
 import { useLiveAudio } from '../../hooks/useLiveAudio';
@@ -38,6 +40,8 @@ export interface LiveAudioControlContainerProps {
   wsSend?: (type: string, payload?: unknown) => boolean;
   subscribeToWsMessage?: (handler: (type: string, payload: Record<string, unknown>) => void) => () => void;
   controlSessionId?: string | null;
+  controlState?: LiveAudioControlState | null;
+  verificationCode?: string | null;
 }
 
 const getSignalRecord = (signal: DecryptedPrivateControlSignal): Record<string, unknown> => {
@@ -92,6 +96,8 @@ export default function LiveAudioControlContainer({
   wsSend,
   subscribeToWsMessage,
   controlSessionId,
+  controlState,
+  verificationCode,
 }: LiveAudioControlContainerProps) {
   const [isInboxOpen, setIsInboxOpen] = useState(false);
   const [isModeratorMuted, setIsModeratorMuted] = useState(true);
@@ -104,9 +110,11 @@ export default function LiveAudioControlContainer({
   const [participantMicrophoneConfigs, setParticipantMicrophoneConfigs] = useState<Record<string, { volume: number; musicMode: boolean }>>({});
   const [connectionCounts, setConnectionCounts] = useState<LiveAudioConnectionCountsMessage | null>(null);
   const [messages, setMessages] = useState<PrivateMessage[]>([]);
+  const [joinRequests, setJoinRequests] = useState<Record<string, LiveAudioControlJoinRequestMessage>>({});
   const participantAliasesRef = useRef(participantAliases);
   const aliasRequestSignatureRef = useRef('');
   const lastSentListRef = useRef('');
+  const requestedAuthRef = useRef<string | null>(null);
 
   const { availability } = useLiveAudioAvailability();
 
@@ -275,6 +283,15 @@ export default function LiveAudioControlContainer({
 
       if (type === 'LIVE_AUDIO_CONNECTION_COUNTS') {
         setConnectionCounts(payload as unknown as LiveAudioConnectionCountsMessage);
+        return;
+      }
+
+      if (type === 'LIVE_AUDIO_CONTROL_JOIN_REQUEST') {
+        const msg = payload as unknown as LiveAudioControlJoinRequestMessage;
+        if (msg.controlSessionId) {
+          setJoinRequests(prev => ({ ...prev, [msg.controlSessionId]: msg }));
+        }
+        return;
       }
     });
     return unsubscribe;
@@ -354,15 +371,51 @@ export default function LiveAudioControlContainer({
     }
   }, [wsSend]);
 
-  const { sendPrivateSignalToParticipant, requestAliases, ready: privateSignalsReady } = usePrivateControlSignals({
+  const {
+    sendPrivateSignalToParticipant,
+    requestAliases,
+    ready: privateSignalsReady,
+    requestControlAuthorization,
+    authorizeSecondaryControl
+  } = usePrivateControlSignals({
     role: 'control',
     participantId: participantId || controlSessionId || 'control',
     controlSessionId: controlSessionId || undefined,
+    controlState,
     sendMessage: wsSend || (() => false),
     subscribeToWsMessage: subscribeToWsMessage || (() => () => { }),
     transportReady: Boolean(isControlAuthorized && wsSend && subscribeToWsMessage),
     onPrivateSignal: handlePrivateSignal,
   });
+
+  useEffect(() => {
+    if (controlState === 'PENDING' && verificationCode && requestedAuthRef.current !== verificationCode) {
+      requestedAuthRef.current = verificationCode;
+      void requestControlAuthorization(verificationCode).catch((err) => {
+        console.warn('LiveAudioControl: Failed to request control authorization crypto:', err);
+      });
+    }
+  }, [controlState, verificationCode, requestControlAuthorization]);
+
+  const handleApproveRequest = useCallback((sessionId: string) => {
+    const joinReq = joinRequests[sessionId];
+    if (joinReq) {
+      void authorizeSecondaryControl(joinReq)
+        .catch(err => console.error('Failed to authorize secondary control crypto', err))
+        .finally(() => onApproveRequest(sessionId));
+    } else {
+      onApproveRequest(sessionId);
+    }
+    setJoinRequests(prev => {
+      const next = { ...prev };
+      delete next[sessionId];
+      return next;
+    });
+  }, [authorizeSecondaryControl, joinRequests, onApproveRequest]);
+
+  const handleDismissMessage = useCallback((id: string) => {
+    setMessages(prev => prev.filter(m => m.id !== id));
+  }, []);
 
   const computeVisibleList = useCallback((): string[] => (
     computeVisibleActiveParticipants(participantsMap, participantAliases)
@@ -693,9 +746,9 @@ export default function LiveAudioControlContainer({
             isControlAuthorized={isControlAuthorized}
             messages={messages}
             authorizationRequests={authorizationRequests}
-            onApproveRequest={onApproveRequest}
+            onApproveRequest={handleApproveRequest}
             onRejectRequest={onRejectRequest}
-            onDismissMessage={(id) => setMessages(prev => prev.filter(m => m.id !== id))}
+            onDismissMessage={handleDismissMessage}
           />
         </div>,
         portalTarget

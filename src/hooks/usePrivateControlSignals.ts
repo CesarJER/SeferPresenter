@@ -22,6 +22,7 @@ import { makeSyncMessage } from '../utils/syncProtocol';
 import { isValidPrivateControlSignal } from '../utils/validation';
 
 type PrivateSignalRole = 'control' | 'audience';
+type LiveAudioControlState = 'PRINCIPAL' | 'AUTHORIZED' | 'PENDING';
 type WsSubscriber = (handler: (type: string, payload: Record<string, unknown>) => void) => () => void;
 type WsSender = (type: string, payload?: unknown) => boolean;
 
@@ -37,10 +38,11 @@ export interface DecryptedPrivateControlSignal {
 export interface UsePrivateControlSignalsOptions {
   role: PrivateSignalRole;
   participantId: string;
+  controlSessionId?: string;
+  controlState?: LiveAudioControlState | null;
   sendMessage: WsSender;
   subscribeToWsMessage: WsSubscriber;
   transportReady?: boolean;
-  controlSessionId?: string;
   onPrivateSignal?: (signal: DecryptedPrivateControlSignal) => void;
   onControlKeyRotated?: (message: ControlKeyRotatedMessage) => void;
   onError?: (error: unknown) => void;
@@ -90,6 +92,7 @@ export function usePrivateControlSignals(options: UsePrivateControlSignalsOption
     subscribeToWsMessage,
     transportReady = true,
     controlSessionId: providedControlSessionId,
+    controlState,
     onPrivateSignal,
     onControlKeyRotated,
     onError,
@@ -146,6 +149,10 @@ export function usePrivateControlSignals(options: UsePrivateControlSignalsOption
   const publishControlPublicKey = useCallback(async () => {
     if (role !== 'control' || !transportReady) return;
 
+    if (!sessionKeyPairRef.current && controlState === 'AUTHORIZED') {
+      return;
+    }
+
     const keyPair = sessionKeyPairRef.current ?? await generateSessionKeyPair();
     sessionKeyPairRef.current = keyPair;
 
@@ -166,7 +173,7 @@ export function usePrivateControlSignals(options: UsePrivateControlSignalsOption
     });
 
     sendMessageRef.current(message.type, message);
-  }, [controlSessionId, role, transportReady]);
+  }, [controlSessionId, role, transportReady, controlState]);
 
   const rotateControlKey = useCallback(async () => {
     if (role !== 'control' || !transportReady) return;
