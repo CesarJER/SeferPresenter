@@ -235,6 +235,7 @@ export const useLiveAudio = ({
   const microphoneGainNodeRef = useRef<GainNode | null>(null);
   const microphoneAudioContextRef = useRef<AudioContext | null>(null);
   const microphoneProcessorRef = useRef<TrackProcessor<Track.Kind.Audio, AudioProcessorOptions> | null>(null);
+  const isPublishingMicrophoneRef = useRef(false);
 
   useEffect(() => {
     participantIdRef.current = participantId;
@@ -460,7 +461,10 @@ export const useLiveAudio = ({
       throw new Error('Live Audio room is not connected');
     }
     if (localAudioTrackRef.current) return;
+    if (isPublishingMicrophoneRef.current) return;
 
+    isPublishingMicrophoneRef.current = true;
+    let pendingLocalTrack: LocalAudioTrack | null = null;
     try {
       const activeParticipantId = participantIdRef.current;
       if (role === 'audience' && activeParticipantId && room.localParticipant.permissions?.canPublish !== true) {
@@ -475,6 +479,7 @@ export const useLiveAudio = ({
         noiseSuppression: !options?.musicMode,
         autoGainControl: !options?.musicMode,
       });
+      pendingLocalTrack = localTrack;
       const audioContext = createBrowserAudioContext();
       if (audioContext) {
         try {
@@ -497,6 +502,7 @@ export const useLiveAudio = ({
         red: true,
       });
       localAudioTrackRef.current = localTrack;
+      pendingLocalTrack = null;
       setIsMicrophoneActive(true);
       setMicrophoneDiagnostics((current) => ({
         ...current,
@@ -514,9 +520,13 @@ export const useLiveAudio = ({
         console.log(`[LIVEKIT] livekit:microphone:permission-denied`);
         setState('permissionDenied');
       }
+      pendingLocalTrack?.stop();
+      clearMicrophoneProcessor();
       throw error;
+    } finally {
+      isPublishingMicrophoneRef.current = false;
     }
-  }, [role]);
+  }, [clearMicrophoneProcessor, role]);
 
   const startRemoteAudio = useCallback(async () => {
     const room = roomRef.current;

@@ -362,6 +362,13 @@ read-only playback state so audience devices can hear backend-owned tracks.
 Audience clients still cannot send `AUDIO_TIMELINE_ACTION`. Existing SSE
 endpoints remain active for state, audience, quiz, and telemetry flows.
 
+On iPhone/iPad, audience playback may still require a local user gesture after
+the synchronized state arrives. `src/main-audience.tsx` shows an `Activar audio
+y video` button when local audio/video `play()` is blocked, resumes the managed
+audio context, and retries the current audio, timeline, and active video media.
+This is a browser-policy recovery path only; it does not change canonical
+timeline state or grant audience control over media actions.
+
 ## Local-Only Today
 
 Current local/browser state includes:

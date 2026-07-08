@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { AutoduckState } from '../types/sync';
+import { getMediaOutputVolume, setMediaOutputVolume } from '../utils/mediaVolume';
 
 const clamp01 = (value: number) => Math.max(0, Math.min(value, 1));
 
@@ -18,6 +19,7 @@ export function useSmoothVolume(
 ) {
   const requestRef = useRef<number | null>(null);
   const targetVolumeRef = useRef(baseVolume);
+  const isApplyingVolumeRef = useRef(false);
   const [isDucking, setIsDucking] = useState(false);
 
   useEffect(() => {
@@ -46,16 +48,20 @@ export function useSmoothVolume(
     const media = mediaRef.current;
     if (!media) return;
 
+    const outputTargetVolume = media.muted ? 0 : finalTargetVolume;
+
     if (requestRef.current) {
       cancelAnimationFrame(requestRef.current);
     }
 
-    const startVolume = media.volume;
-    const delta = finalTargetVolume - startVolume;
+    const startVolume = getMediaOutputVolume(media);
+    const delta = outputTargetVolume - startVolume;
     
     // If the difference is negligible or duration is 0, set immediately
     if (Math.abs(delta) < 0.01 || durationMs <= 0) {
-      media.volume = finalTargetVolume;
+      isApplyingVolumeRef.current = true;
+      setMediaOutputVolume(media, outputTargetVolume);
+      isApplyingVolumeRef.current = false;
       return;
     }
 
@@ -68,10 +74,11 @@ export function useSmoothVolume(
       
       // Simple linear interpolation
       const newVolume = startVolume + delta * progress;
-      // Clamp between 0 and 1
-      mediaRef.current.volume = Math.max(0, Math.min(newVolume, 1));
+      isApplyingVolumeRef.current = true;
+      setMediaOutputVolume(mediaRef.current, newVolume);
+      isApplyingVolumeRef.current = false;
 
-      if (progress < 1 && mediaRef.current.volume !== targetVolumeRef.current) {
+      if (progress < 1 && Math.abs(getMediaOutputVolume(mediaRef.current) - outputTargetVolume) > 0.005) {
         requestRef.current = requestAnimationFrame(animateVolume);
       } else {
         requestRef.current = null;
@@ -86,4 +93,21 @@ export function useSmoothVolume(
       }
     };
   }, [baseVolume, durationMs, mediaRef, autoduckState, isDucking]);
+
+  useEffect(() => {
+    const media = mediaRef.current;
+    if (!media) return;
+
+    const applyMutedState = () => {
+      if (isApplyingVolumeRef.current) return;
+      setMediaOutputVolume(media, media.muted ? 0 : targetVolumeRef.current);
+    };
+
+    applyMutedState();
+    media.addEventListener('volumechange', applyMutedState);
+
+    return () => {
+      media.removeEventListener('volumechange', applyMutedState);
+    };
+  });
 }

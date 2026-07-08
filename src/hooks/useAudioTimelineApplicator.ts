@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import type { AudioTimelineState } from '../types/audio';
 import type { AutoduckState } from '../types/sync';
 import { computeAudioTimelineCorrection } from '../utils/audioTimeline';
+import { isMediaPlaybackBlockedError } from '../utils/mediaVolume';
 import { useSmoothVolume } from './useSmoothVolume';
 
 const INITIAL_SEEK_THRESHOLD_SEC = 0.3;
@@ -27,8 +28,17 @@ const applyPlaybackRate = (audio: HTMLAudioElement, playbackRate: number): void 
   }
 };
 
-const playTimelineAudio = (audio: HTMLAudioElement, logErrors: boolean): void => {
-  audio.play().catch(error => {
+const playTimelineAudio = (
+  audio: HTMLAudioElement,
+  logErrors: boolean,
+  onPlaybackBlocked?: (blocked: boolean) => void,
+): void => {
+  audio.play().then(() => {
+    onPlaybackBlocked?.(false);
+  }).catch(error => {
+    if (isMediaPlaybackBlockedError(error)) {
+      onPlaybackBlocked?.(true);
+    }
     if (logErrors) {
       console.error('TimelineApplicator play error', error);
     }
@@ -38,6 +48,7 @@ const playTimelineAudio = (audio: HTMLAudioElement, logErrors: boolean): void =>
 interface AudioTimelineApplicatorOptions {
   onDurationChange?: (durationSec: number | null) => void;
   onEnded?: (positionSec: number) => void;
+  onPlaybackBlocked?: (blocked: boolean) => void;
 }
 
 const defaultAudioTimelineApplicatorOptions: AudioTimelineApplicatorOptions = {};
@@ -97,7 +108,7 @@ export function useAudioTimelineApplicator(
       }
 
       if (audio.paused) {
-        playTimelineAudio(audio, true);
+        playTimelineAudio(audio, true, options.onPlaybackBlocked);
       }
     } else if (timeline.status === 'paused') {
       // 3. Paused status
@@ -113,7 +124,7 @@ export function useAudioTimelineApplicator(
 
     // 4. Playback rate
     applyPlaybackRate(audio, timeline.playbackRate);
-  }, [timeline, serverNow, audioRef]);
+  }, [timeline, serverNow, audioRef, options]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -141,7 +152,7 @@ export function useAudioTimelineApplicator(
         const nowClientMs = Date.now();
         if (nowClientMs - lastPlayAttemptMs >= PLAY_RETRY_INTERVAL_MS) {
           lastPlayAttemptMs = nowClientMs;
-          playTimelineAudio(audio, false);
+          playTimelineAudio(audio, false, options.onPlaybackBlocked);
         }
       }
     };
@@ -164,6 +175,7 @@ export function useAudioTimelineApplicator(
     timeline?.status,
     timeline?.timelineId,
     serverNow,
+    options,
   ]);
 
   useEffect(() => {

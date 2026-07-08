@@ -24,6 +24,7 @@ interface AudienceScreenProps {
   quizTimerState?: QuizTimerState;
   quizMaxBaseCentipunts?: number;
   autoduckState?: AutoduckState;
+  onPlaybackBlocked?: (blocked: boolean) => void;
 }
 
 const AudienceScreen = ({
@@ -39,6 +40,7 @@ const AudienceScreen = ({
   quizTimerState,
   quizMaxBaseCentipunts,
   autoduckState,
+  onPlaybackBlocked,
 }: AudienceScreenProps) => {
   const audienceAnswers = useAudienceAnswers();
   const activeSubslide = quizSubslides[quizCurrentSubslideIndex];
@@ -171,6 +173,7 @@ const AudienceScreen = ({
           quizTimerState={quizTimerState}
           liveAudioPanel={liveAudioPanel}
           autoduckState={autoduckState}
+          onPlaybackBlocked={onPlaybackBlocked}
         />
       </div>
       <div className="fixed bottom-2 left-2 z-50 pointer-events-auto opacity-60 hover:opacity-100 transition-opacity">

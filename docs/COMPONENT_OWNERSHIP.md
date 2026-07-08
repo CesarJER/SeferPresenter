@@ -98,6 +98,9 @@ Library/sync/validation:
 - `src/utils/validation.ts`: runtime validation.
 - `src/utils/cryptoUtils.ts`: pure Web Crypto helpers for ECDH P-256,
   AES-GCM 256, base64 encoding, and nonce replay protection.
+- `src/utils/mediaVolume.ts`: iOS-aware media volume helpers used by
+  `useSmoothVolume`, including Web Audio gain fallback and playback-blocked
+  error detection.
 - `src/utils/pwaUpdate.ts`: PWA service-worker registration and update/reload helpers for route-specific shells.
 - `src/utils/normalizePresentation.ts`: persistence/path normalization.
 - `src/utils/syncProtocol.ts`: sync message construction.

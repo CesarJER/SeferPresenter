@@ -186,6 +186,9 @@ Use these checklists before implementing future tasks.
   deploys do not leave stale incompatible shells.
 - PWA restart/update actions may activate a waiting service worker and reload,
   but must not clear nick, quiz answers, localStorage, or persistent local state.
+- For iPhone/iPad media fixes, keep playback unlock behind an explicit user
+  gesture and prefer the shared `src/utils/mediaVolume.ts` / `useSmoothVolume`
+  path instead of setting `HTMLMediaElement.volume` ad hoc.
 
 ## Documentation Update Triggers
 

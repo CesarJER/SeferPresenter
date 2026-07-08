@@ -198,5 +198,7 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
 - `parseMediaSlideString` - `src/utils/mediaUtils.ts`: media slide parsing.
 - `transliterateText` - `src/utils/transliterate.ts`: transliteration helper.
 - `sanitizeHtml` / `sanitizeSlideHtml` / niqqud helpers - `src/utils/hebrewText.ts`: slide HTML sanitizing and Hebrew text cleanup.
+- `mediaVolume` helpers - `src/utils/mediaVolume.ts`: iOS-aware output volume,
+  Web Audio gain fallback, audio-context resume, and autoplay-blocked error detection.
 - `registerScopedServiceWorker` / `restartPwaApp` - `src/utils/pwaUpdate.ts`: route-scoped PWA service-worker registration and update-aware reload without clearing local state.
 - [audioTimeline](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/utils/audioTimeline.ts) - `src/utils/audioTimeline.ts`: timeline calculations, actions application, client clock offset estimations, and local audio drift-correction decisions.

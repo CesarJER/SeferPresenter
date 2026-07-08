@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import type { LiveAudioRemoteTrack } from '../../../../types/liveAudio';
+import { useSmoothVolume } from '../../../../hooks/useSmoothVolume';
 
 interface LiveAudioTrackOutputProps {
   remoteTrack: LiveAudioRemoteTrack;
@@ -8,6 +9,9 @@ interface LiveAudioTrackOutputProps {
 
 export const LiveAudioTrackOutput: React.FC<LiveAudioTrackOutputProps> = ({ remoteTrack, volumePercent }) => {
   const audioRef = useRef<HTMLAudioElement>(null);
+  const volume = Math.max(0, Math.min(volumePercent, 100));
+
+  useSmoothVolume(audioRef, volume / 100);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -19,13 +23,6 @@ export const LiveAudioTrackOutput: React.FC<LiveAudioTrackOutputProps> = ({ remo
       audio.srcObject = null;
     };
   }, [remoteTrack]);
-
-  useEffect(() => {
-    const volume = Math.max(0, Math.min(volumePercent, 100));
-    if (audioRef.current) {
-      audioRef.current.volume = volume / 100;
-    }
-  }, [volumePercent]);
 
   return <audio ref={audioRef} autoPlay playsInline style={{ display: 'none' }} />;
 };

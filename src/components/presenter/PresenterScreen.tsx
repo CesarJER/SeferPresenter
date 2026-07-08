@@ -7,6 +7,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import AutoResizeText from '../shared/AutoResizeText';
 import { QuizPresenterView } from '../quiz/QuizPresenterView';
 import { useSmoothVolume } from '../../hooks/useSmoothVolume';
+import { isMediaPlaybackBlockedError } from '../../utils/mediaVolume';
 
 interface PresenterScreenProps {
   background: string;
@@ -24,6 +25,7 @@ interface PresenterScreenProps {
   quizMaxBaseCentipunts?: number;
   liveAudioPanel?: React.ReactNode;
   autoduckState?: AutoduckState;
+  onPlaybackBlocked?: (blocked: boolean) => void;
 }
 
 const PresenterScreen: React.FC<PresenterScreenProps> = ({
@@ -41,6 +43,7 @@ const PresenterScreen: React.FC<PresenterScreenProps> = ({
   quizMaxBaseCentipunts = 0,
   liveAudioPanel,
   autoduckState,
+  onPlaybackBlocked,
 }) => {
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
@@ -97,11 +100,18 @@ const PresenterScreen: React.FC<PresenterScreenProps> = ({
       if (isAtEnd) {
         videoElement.currentTime = slide?.mediaStart ?? 0;
       }
-      videoElement.play().catch(err => console.error("Error auto-playing projection video:", err));
+      videoElement.play()
+        .then(() => onPlaybackBlocked?.(false))
+        .catch(err => {
+          if (isMediaPlaybackBlockedError(err)) {
+            onPlaybackBlocked?.(true);
+          }
+          console.error("Error auto-playing projection video:", err);
+        });
     } else if (!videoState.isPlaying && !videoElement.paused) {
       videoElement.pause();
     }
-  }, [videoState, slide?.mediaStart, slide?.mediaEnd, videoElement]);
+  }, [videoState, slide?.mediaStart, slide?.mediaEnd, videoElement, onPlaybackBlocked]);
 
   // 2. Slide change listener: Setup dedicated slide video when slide transitions
   const mediaSrc = slide?.type === 'media' ? slide.mediaSrc : null;

@@ -1,5 +1,6 @@
-import React, { useState, useMemo, useRef, useEffect } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { createRoot } from 'react-dom/client';
+import { Play } from 'lucide-react';
 import AudienceScreen from './components/audience/AudienceScreen';
 import { useSyncState } from './hooks/useSyncState';
 import { useBackgroundResolver } from './hooks/useBackgroundResolver';
@@ -14,6 +15,7 @@ import { useAudienceAudioPlayback } from './hooks/useAudienceAudioPlayback';
 import { useAudienceSession } from './hooks/useAudienceSession';
 import { useQuizAudio } from './hooks/useQuizAudio';
 import { registerScopedServiceWorker } from './utils/pwaUpdate';
+import { isMediaPlaybackBlockedError, resumeManagedMediaAudio } from './utils/mediaVolume';
 
 import type { AppMode, Presentation, ScriptureNavState, VideoState } from './types/presentation';
 import type { QuizSyncState } from './types/quiz';
@@ -36,6 +38,7 @@ function AudienceApp() {
   const [audioState, setAudioState] = useState<AudioState>(DEFAULT_AUDIO_STATE);
   const [audioTimeline, setAudioTimeline] = useState<AudioTimelineState | null>(null);
   const [autoduckState, setAutoduckState] = useState<AutoduckState>({ enabled: false, factor: 0.2 });
+  const [mediaPlaybackBlocked, setMediaPlaybackBlocked] = useState(false);
   const [appMode, setAppMode] = useState<AppMode>('slides');
   const [scriptureState, setScriptureState] = useState<ScriptureNavState | null>(null);
 
@@ -59,10 +62,15 @@ function AudienceApp() {
     void registerScopedServiceWorker('/audience');
   }, []);
 
+  const handlePlaybackBlocked = useCallback((blocked: boolean) => {
+    setMediaPlaybackBlocked(blocked);
+  }, []);
+
   useAudienceAudioPlayback({
     audioState,
     audioRef,
     autoduckState,
+    onPlaybackBlocked: handlePlaybackBlocked,
   });
 
   useEffect(() => {
@@ -145,7 +153,10 @@ function AudienceApp() {
   });
 
   const { serverNow } = useServerClock(wsSend, wsStatus, subscribeToWsMessage);
-  useAudioTimelineApplicator(audioTimelineRef, audioTimeline, serverNow, autoduckState);
+  const audioTimelineApplicatorOptions = useMemo(() => ({
+    onPlaybackBlocked: handlePlaybackBlocked,
+  }), [handlePlaybackBlocked]);
+  useAudioTimelineApplicator(audioTimelineRef, audioTimeline, serverNow, autoduckState, audioTimelineApplicatorOptions);
 
   const liveAudioAvailability = useLiveAudioAvailability();
   const audienceSession = useAudienceSession({ subscribeToWsMessage });
@@ -202,6 +213,57 @@ function AudienceApp() {
     return calcMaxBaseCentipunts(allQuizData);
   }, [currentPresentation]);
 
+  const handleEnableAudienceMedia = useCallback(async () => {
+    await resumeManagedMediaAudio();
+
+    const playAttempts: Promise<unknown>[] = [];
+    const queuePlay = (media: HTMLMediaElement | null) => {
+      if (!media) return;
+      if (!media.currentSrc && !media.getAttribute('src') && !media.srcObject) return;
+      try {
+        playAttempts.push(media.play());
+      } catch (error) {
+        playAttempts.push(Promise.reject(error));
+      }
+    };
+
+    if (audioState.isPlaying) {
+      queuePlay(audioRef.current);
+    }
+    if (audioTimeline?.status === 'playing') {
+      queuePlay(audioTimelineRef.current);
+    }
+    if (videoState?.isPlaying && videoState.mediaSrc) {
+      const targetSrc = decodeURIComponent(`${window.location.origin}${encodeURI(videoState.mediaSrc)}`);
+      document.querySelectorAll('video').forEach((video) => {
+        const currentSrc = decodeURIComponent(video.currentSrc || video.src || '');
+        if (currentSrc === targetSrc || currentSrc.endsWith(videoState.mediaSrc ?? '')) {
+          queuePlay(video);
+        }
+      });
+    }
+
+    if (playAttempts.length === 0) {
+      setMediaPlaybackBlocked(false);
+      return;
+    }
+
+    const results = await Promise.allSettled(playAttempts);
+    setMediaPlaybackBlocked(
+      results.some((result) => result.status === 'rejected' && isMediaPlaybackBlockedError(result.reason)),
+    );
+  }, [
+    audioState.isPlaying,
+    audioTimeline?.status,
+    videoState,
+  ]);
+
+  const shouldShowMediaUnlock = mediaPlaybackBlocked && (
+    audioState.isPlaying ||
+    audioTimeline?.status === 'playing' ||
+    videoState?.isPlaying === true
+  );
+
   const audienceScreenElement = (
     <AudienceScreen
       appMode={appMode}
@@ -216,6 +278,7 @@ function AudienceApp() {
       quizTimerState={quizTimer.timerState}
       quizMaxBaseCentipunts={maxBaseCentipunts}
       autoduckState={autoduckState}
+      onPlaybackBlocked={handlePlaybackBlocked}
     />
   );
 
@@ -232,6 +295,16 @@ function AudienceApp() {
           {audienceScreenElement}
         </LiveAudioContainer>
       </React.Suspense>
+      {shouldShowMediaUnlock && (
+        <button
+          type="button"
+          onClick={handleEnableAudienceMedia}
+          className="fixed bottom-20 left-1/2 z-[90] flex -translate-x-1/2 items-center gap-2 rounded-full border border-white/20 bg-blue-600/95 px-5 py-3 text-sm font-bold text-white shadow-2xl backdrop-blur-md transition-colors hover:bg-blue-500 pointer-events-auto"
+        >
+          <Play className="h-4 w-4" />
+          <span>Activar audio y video</span>
+        </button>
+      )}
       
       {/* Hidden audio element for audience audio sync */}
       <audio ref={audioRef} preload="none" style={{ display: 'none' }} />

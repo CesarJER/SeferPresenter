@@ -1,16 +1,18 @@
 import { useEffect, useRef } from 'react';
 import type { AudioState } from '../types/audio';
 import type { AutoduckState } from '../types/sync';
+import { isMediaPlaybackBlockedError } from '../utils/mediaVolume';
 import { useSmoothVolume } from './useSmoothVolume';
 
 interface UseAudienceAudioPlaybackProps {
   audioState: AudioState;
   audioRef: React.RefObject<HTMLAudioElement | null>;
   autoduckState?: AutoduckState;
+  onPlaybackBlocked?: (blocked: boolean) => void;
 }
 
 export function useAudienceAudioPlayback(props: UseAudienceAudioPlaybackProps) {
-  const { audioState, audioRef, autoduckState } = props;
+  const { audioState, audioRef, autoduckState, onPlaybackBlocked } = props;
   const isPerformingSeekRef = useRef<boolean>(false);
 
   useSmoothVolume(audioRef, audioState.volume, autoduckState);
@@ -71,11 +73,16 @@ export function useAudienceAudioPlayback(props: UseAudienceAudioPlaybackProps) {
 
     // Apply play/pause state
     if (audioState.isPlaying && audio.paused) {
-      audio.play().catch((err) => {
+      audio.play().then(() => {
+        onPlaybackBlocked?.(false);
+      }).catch((err) => {
+        if (isMediaPlaybackBlockedError(err)) {
+          onPlaybackBlocked?.(true);
+        }
         console.error('[Audience] Error playing audio (autoplay policy may block this):', err);
       });
     } else if (!audioState.isPlaying && !audio.paused) {
       audio.pause();
     }
-  }, [audioState.isPlaying, audioState.currentTime, audioState.volume, audioState.audioSrc, audioRef]);
+  }, [audioState.isPlaying, audioState.currentTime, audioState.volume, audioState.audioSrc, audioRef, onPlaybackBlocked]);
 }

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import type { ReactNode } from 'react';
 import { AudienceInterventionModal } from './AudienceInterventionModal';
 import { AudiencePrivateControlMessage } from './AudiencePrivateControlMessage';
@@ -63,6 +63,7 @@ export default function LiveAudioAudienceContainer({
   const [volume, setVolume] = useState(1);
   const [microphoneVolume, setMicrophoneVolume] = useState(100);
   const [isMusicMode, setIsMusicMode] = useState(false);
+  const isStartingAudioRef = useRef(false);
 
   const [portalTarget, setPortalTarget] = useState<Element | null>(null);
   useEffect(() => {
@@ -139,19 +140,6 @@ export default function LiveAudioAudienceContainer({
         if (typeof payload.musicMode === 'boolean') {
           const nextMusicMode = payload.musicMode;
           setIsMusicMode(nextMusicMode);
-          if (isMicrophoneActive && nextMusicMode !== isMusicMode) {
-            void unpublishMicrophone()
-              .then(() => publishMicrophone({ musicMode: nextMusicMode }))
-              .then(() => sendParticipantStatus('GRANTED', {
-                canPublishAudio: true,
-                isMuted: false,
-                isActiveAudience: true,
-                isMicrophoneActive: true,
-              }))
-              .catch((err) => {
-                console.error('Failed to republish microphone with remote config:', err);
-              });
-          }
         }
       } else if (payload.type === 'VISIBLE_ACTIVE_PARTICIPANTS' && Array.isArray(payload.participants)) {
         setVisibleParticipants(payload.participants.filter((participant): participant is string => typeof participant === 'string'));
@@ -389,8 +377,14 @@ export default function LiveAudioAudienceContainer({
   }, [activeAlias, isActive, isAliasVisibleToOthers, isPendingWord, isWordGranted, keyRotationCount, privateSignalReady, publishActiveProfile, sendPrivateSignal]);
 
   const handleStartAudio = useCallback(() => {
-    void startRemoteAudio().then(() => setHasAudioStarted(true));
-  }, [startRemoteAudio]);
+    if (hasAudioStarted || isStartingAudioRef.current) return;
+    isStartingAudioRef.current = true;
+    void startRemoteAudio()
+      .then(() => setHasAudioStarted(true))
+      .finally(() => {
+        isStartingAudioRef.current = false;
+      });
+  }, [hasAudioStarted, startRemoteAudio]);
 
   const handleJoinActive = useCallback(() => {
     if (isKicked) return;

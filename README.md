@@ -114,6 +114,15 @@ sin `allow="microphone"`, una `Permissions-Policy` que bloquea microfono,
 permiso bloqueado en la configuracion del sitio, PWA instalada con contexto
 antiguo/inseguro, o pedir microfono fuera de un gesto del usuario.
 
+### iPhone/iPad: activacion de audio y media
+
+Safari/iOS puede bloquear `play()` remoto hasta que el usuario toque la pantalla
+y suele ignorar `HTMLMediaElement.volume`. La audiencia muestra un boton
+`Activar audio y video` cuando detecta ese bloqueo para desbloquear audio,
+video y timeline sincronizada desde un gesto explicito. El volumen y autoduck de
+audio/video usan una ruta Web Audio en iOS para que los controles sigan
+teniendo efecto aunque el volumen nativo del elemento sea ignorado.
+
 ## Arquitectura
 
 La aplicacion se organiza por consumidor:
