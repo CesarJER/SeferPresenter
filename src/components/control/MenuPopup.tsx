@@ -30,6 +30,7 @@ import {
   serializeQuizToText,
   serializeResultProfiles,
   calcMaxBaseCentipunts,
+  scoreAnswer,
 } from '../../utils/quizUtils';
 
 interface MenuPopupProps {
@@ -1695,6 +1696,8 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                       for (const opt of activeSlide.quizData.options) {
                         optionCounts[opt.id] = 0;
                       }
+                      let citaHits = 0;
+                      let citaMisses = 0;
                       for (const session of Object.values(controllerAnswers.sessions)) {
                         const answer = session.answers[activeSlide.id];
                         if (answer?.submitted) {
@@ -1702,6 +1705,11 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                             if (optionCounts[optId] !== undefined) {
                               optionCounts[optId]++;
                             }
+                          }
+                          if (activeSlide.quizData.citaRef && !activeSlide.quizData.citaReviewRef) {
+                            const score = scoreAnswer(activeSlide.quizData, answer);
+                            if (score.citaCentipunts > 0) citaHits++;
+                            else citaMisses++;
                           }
                         }
                       }
@@ -1724,6 +1732,8 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                           onPlayApplause={onQuizPlayApplause}
                           onPlayMal={onQuizPlayMal}
                           optionCounts={optionCounts}
+                          citaHits={citaHits}
+                          citaMisses={citaMisses}
                           onClearAnswers={() => controllerAnswers.clearSlideAnswers(activeSlide.id)}
                           rangeStats={controllerAnswers.calcRangeStats(activeSlide.quizData.resultProfiles || [], maxBaseCentipunts)}
                           totalSessions={Object.keys(controllerAnswers.sessions).length}
@@ -1763,6 +1773,8 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
               for (const opt of activeSlide.quizData.options) {
                 optionCounts[opt.id] = 0;
               }
+              let citaHits = 0;
+              let citaMisses = 0;
               for (const session of Object.values(controllerAnswers.sessions)) {
                 const answer = session.answers[activeSlide.id];
                 if (answer?.submitted) {
@@ -1770,6 +1782,11 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                     if (optionCounts[optId] !== undefined) {
                       optionCounts[optId]++;
                     }
+                  }
+                  if (activeSlide.quizData.citaRef && !activeSlide.quizData.citaReviewRef) {
+                    const score = scoreAnswer(activeSlide.quizData, answer);
+                    if (score.citaCentipunts > 0) citaHits++;
+                    else citaMisses++;
                   }
                 }
               }
@@ -1792,6 +1809,8 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                   onPlayApplause={onQuizPlayApplause}
                   onPlayMal={onQuizPlayMal}
                   optionCounts={optionCounts}
+                  citaHits={citaHits}
+                  citaMisses={citaMisses}
                   onClearAnswers={() => controllerAnswers.clearSlideAnswers(activeSlide.id)}
                   rangeStats={controllerAnswers.calcRangeStats(activeSlide.quizData.resultProfiles || [], maxBaseCentipunts)}
                   totalSessions={Object.keys(controllerAnswers.sessions).length}

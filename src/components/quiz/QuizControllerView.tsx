@@ -40,6 +40,8 @@ interface QuizControllerViewProps {
   audioMuted?: boolean;
   onToggleMute?: () => void;
   optionCounts: Record<QuizOptionId, number>;
+  citaHits?: number;
+  citaMisses?: number;
   onClearAnswers: () => void;
   rangeStats: QuizRangeStats[];
   totalSessions: number;
@@ -70,6 +72,8 @@ export const QuizControllerView: React.FC<QuizControllerViewProps> = ({
   audioMuted = false,
   onToggleMute,
   optionCounts,
+  citaHits,
+  citaMisses,
   onClearAnswers,
   rangeStats,
   totalSessions,
@@ -310,9 +314,17 @@ export const QuizControllerView: React.FC<QuizControllerViewProps> = ({
       {/* Cita reference */}
       {(renderMode === 'both' || renderMode === 'bottom') && !isResults && (quizData.citaRef || quizData.citaReviewRef) && (
         <div className="rounded-lg border border-yellow-900/40 bg-yellow-950/20 px-2.5 py-2">
-          <p className="text-[9px] font-black uppercase tracking-wider text-yellow-600 mb-0.5">
-            {quizData.citaRef ? 'CITA: (evaluable)' : 'CITA!: (revisión)'}
-          </p>
+          <div className="flex items-center justify-between">
+            <p className="text-[9px] font-black uppercase tracking-wider text-yellow-600 mb-0.5">
+              {quizData.citaRef ? 'CITA: (evaluable)' : 'CITA!: (revisión)'}
+            </p>
+            {quizData.citaRef && citaHits !== undefined && citaMisses !== undefined && (
+              <div className="flex gap-2 text-[10px] font-bold">
+                <span className="text-emerald-400 flex items-center gap-0.5" title="Aciertos de la cita"><CheckCircle size={10} /> {citaHits}</span>
+                <span className="text-red-400 flex items-center gap-0.5" title="Fallos de la cita"><XCircle size={10} /> {citaMisses}</span>
+              </div>
+            )}
+          </div>
           <p className="text-xs font-semibold text-yellow-300">
             {quizData.citaRef ?? quizData.citaReviewRef}
           </p>
