@@ -530,10 +530,28 @@ export const reduceProjectionCommand = (currentState, payload, metadata = {}) =>
       return makeOk({ ...state, appMode: payload.mode });
     }
 
-    case 'TOGGLE_BG_LOCK':
-      return makeOk({ ...state, backgroundLock: payload.locked });
+    case 'TOGGLE_BG_LOCK': {
+      if (!payload.locked) {
+        return makeOk({ ...state, backgroundLock: false, lockedBackgroundValue: null });
+      }
+      
+      const slide = getActiveSlide(state);
+      const activeBg = state.userSelectedBackground || slide?.background || state.presentation?.background || '';
+      return makeOk({ 
+        ...state, 
+        backgroundLock: true, 
+        lockedBackgroundValue: state.lockedBackgroundValue || activeBg 
+      });
+    }
 
     case 'SELECT_BG_OVERRIDE':
+      if (state.backgroundLock) {
+        return makeOk({ 
+          ...state, 
+          userSelectedBackground: payload.bg,
+          lockedBackgroundValue: payload.bg
+        });
+      }
       return makeOk({ ...state, userSelectedBackground: payload.bg });
 
     case 'SCRIPTURE_PROJECT': {

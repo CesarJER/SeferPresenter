@@ -404,7 +404,13 @@ const isVideoAsset = (value) => /\.(mp4|webm)$/i.test(value || '')
 const isImageAsset = (value) => /\.(png|jpe?g|gif|webp|svg)$/i.test(value || '')
 
 const deriveBackground = (state, slide) => {
-  const value = state.userSelectedBackground || slide?.background || state.presentation?.background || ''
+  let value = ''
+  if (state.backgroundLock) {
+    value = state.lockedBackgroundValue || state.presentation?.background || ''
+  } else {
+    value = state.userSelectedBackground || slide?.background || state.presentation?.background || ''
+  }
+
   if (isImageAsset(value) && !isVideoAsset(value)) return { kind: 'image', value }
   return { kind: 'color', value: '#07111f' }
 }
