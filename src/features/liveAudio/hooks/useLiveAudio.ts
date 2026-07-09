@@ -801,6 +801,39 @@ export const useLiveAudio = ({
     retryAudioRef.current = retryAudio;
   }, [retryAudio]);
 
+  useEffect(() => {
+    let wakeLock: any = null;
+
+    const requestWakeLock = async () => {
+      if (isMicrophoneActive && typeof navigator !== 'undefined' && 'wakeLock' in navigator) {
+        try {
+          wakeLock = await (navigator as any).wakeLock.request('screen');
+          console.log('[LIVEKIT] wakeLock active (screen)');
+        } catch (err) {
+          console.error('[LIVEKIT] wakeLock failed:', err);
+        }
+      }
+    };
+
+    void requestWakeLock();
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && isMicrophoneActive && wakeLock === null) {
+        void requestWakeLock();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      if (wakeLock) {
+        wakeLock.release().catch(() => {});
+        wakeLock = null;
+      }
+    };
+  }, [isMicrophoneActive]);
+
   return useMemo(() => ({
     state,
     connectionQuality,
