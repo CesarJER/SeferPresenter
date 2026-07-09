@@ -64,6 +64,7 @@ export default function LiveAudioAudienceContainer({
   const [microphoneVolume, setMicrophoneVolume] = useState(100);
   const [isMusicMode, setIsMusicMode] = useState(false);
   const isStartingAudioRef = useRef(false);
+  const silenceAudioRef = useRef<HTMLAudioElement | null>(null);
 
   const [portalTarget, setPortalTarget] = useState<Element | null>(null);
   useEffect(() => {
@@ -97,6 +98,25 @@ export default function LiveAudioAudienceContainer({
     autoConnect: availability === 'enabled',
     microphoneVolumePercent: microphoneVolume,
   });
+
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      const audioEl = silenceAudioRef.current;
+      if (!audioEl) return;
+      
+      const hasActiveAudio = remoteTracks.length > 0;
+      
+      if (document.hidden && liveKitState === 'connected' && !hasActiveAudio) {
+        audioEl.play().catch(e => console.warn("Silence loop play prevented:", e));
+      } else {
+        audioEl.pause();
+      }
+    };
+
+    handleVisibilityChange();
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [liveKitState, remoteTracks.length]);
 
   const sendParticipantStatus = useCallback((speakerState: SpeakerState, options: ParticipantStatusOptions = {}) => {
     if (!participantId) return false;
@@ -574,6 +594,14 @@ export default function LiveAudioAudienceContainer({
           volumePercent={volume * 100}
         />
       ))}
+
+      {/* Background silence loop to keep WebRTC alive on mobile browsers when no other media is active */}
+      <audio 
+        ref={silenceAudioRef} 
+        src="/audio/sounds/silence.ogg" 
+        loop 
+        playsInline 
+      />
 
       {isMicrophoneActive && (
         <div className="fixed inset-0 z-40 pointer-events-none border-[6px] md:border-[10px] border-blue-500/80 rounded-xl transition-all shadow-[inset_0_0_30px_rgba(59,130,246,0.6)]"></div>
