@@ -104,7 +104,22 @@ export default function LiveAudioAudienceContainer({
       const audioEl = silenceAudioRef.current;
       if (!audioEl) return;
       
-      const hasActiveAudio = remoteTracks.length > 0;
+      // Comprobar si hay alguna pista de multimedia normal reproduciéndose
+      const isOtherMediaPlaying = () => {
+        const mediaElements = document.querySelectorAll('audio, video');
+        for (const el of Array.from(mediaElements)) {
+          const media = el as HTMLMediaElement;
+          if (media === audioEl) continue; // Ignorar nuestro silencio
+          if (media.srcObject) continue; // Ignorar pistas de LiveKit/WebRTC
+          
+          if (!media.paused && media.currentTime > 0 && !media.ended && !media.muted) {
+            return true;
+          }
+        }
+        return false;
+      };
+      
+      const hasActiveAudio = isOtherMediaPlaying();
       
       if (document.hidden && liveKitState === 'connected' && !hasActiveAudio) {
         audioEl.play().catch(e => console.warn("Silence loop play prevented:", e));
@@ -116,7 +131,7 @@ export default function LiveAudioAudienceContainer({
     handleVisibilityChange();
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [liveKitState, remoteTracks.length]);
+  }, [liveKitState]);
 
   const sendParticipantStatus = useCallback((speakerState: SpeakerState, options: ParticipantStatusOptions = {}) => {
     if (!participantId) return false;
