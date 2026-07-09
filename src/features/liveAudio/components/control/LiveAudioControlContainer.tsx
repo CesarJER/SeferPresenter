@@ -13,6 +13,7 @@ import type {
   LiveAudioControlJoinRequestMessage,
   LiveAudioControlState,
 } from '../../../../types/liveAudio';
+import type { WebSocketConnectionStatus } from '../../../../hooks/useWebSocket';
 import { useLiveAudioAvailability } from '../../hooks/useLiveAudioAvailability';
 import { useLiveAudio } from '../../hooks/useLiveAudio';
 import { usePrivateControlSignals, type DecryptedPrivateControlSignal } from '../../../../hooks/usePrivateControlSignals';
@@ -39,6 +40,7 @@ export interface LiveAudioControlContainerProps {
   onRejectRequest?: (sessionId: string) => void;
   wsSend?: (type: string, payload?: unknown) => boolean;
   subscribeToWsMessage?: (handler: (type: string, payload: Record<string, unknown>) => void) => () => void;
+  wsStatus?: WebSocketConnectionStatus;
   controlSessionId?: string | null;
   controlState?: LiveAudioControlState | null;
   verificationCode?: string | null;
@@ -95,6 +97,7 @@ export default function LiveAudioControlContainer({
   onRejectRequest = () => { },
   wsSend,
   subscribeToWsMessage,
+  wsStatus,
   controlSessionId,
   controlState,
   verificationCode,
@@ -384,7 +387,7 @@ export default function LiveAudioControlContainer({
     controlState,
     sendMessage: wsSend || (() => false),
     subscribeToWsMessage: subscribeToWsMessage || (() => () => { }),
-    transportReady: Boolean(isControlAuthorized && wsSend && subscribeToWsMessage),
+    transportReady: wsStatus === 'open',
     onPrivateSignal: handlePrivateSignal,
   });
 

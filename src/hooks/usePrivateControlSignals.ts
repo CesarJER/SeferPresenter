@@ -149,7 +149,7 @@ export function usePrivateControlSignals(options: UsePrivateControlSignalsOption
   const publishControlPublicKey = useCallback(async () => {
     if (role !== 'control' || !transportReady) return;
 
-    if (!sessionKeyPairRef.current && controlState === 'AUTHORIZED') {
+    if (controlState !== 'PRINCIPAL') {
       return;
     }
 
@@ -325,7 +325,7 @@ export function usePrivateControlSignals(options: UsePrivateControlSignalsOption
 
   const handlePrivateControlSignal = useCallback(async (payload: Record<string, unknown>) => {
     const signal = payload as unknown as PrivateControlSignalMessage;
-    
+
     if (role === 'control') {
       if (!isValidPrivateControlSignal(payload, 'audience')) return;
       if (!sessionKeyPairRef.current || payload.keyId !== currentKeyIdRef.current) return;

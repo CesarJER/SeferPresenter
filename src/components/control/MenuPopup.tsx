@@ -16,7 +16,8 @@ import { PresentationEditor } from './PresentationEditor';
 import { CustomSearchSelect } from '../shared/CustomSearchSelect';
 import type { AudioState, AudioSyncMap, AudioTimelineAction } from '../../types/audio';
 import type { QuizOptionId, QuizSubslide, QuizTimerState } from '../../types/quiz';
-import type { PendingControlAuthorization } from '../../types/liveAudio';
+import type { PendingControlAuthorization, LiveAudioControlState } from '../../types/liveAudio';
+import type { WebSocketConnectionStatus } from '../../hooks/useWebSocket';
 import type { RemoteCommandPayload } from '../../types/sync';
 
 const LiveAudioControlContainer = lazy(() => import('../../features/liveAudio/components/control/LiveAudioControlContainer'));
@@ -83,11 +84,12 @@ interface MenuPopupProps {
   onQuizPlayApplause?: () => void;
   onQuizPlayMal?: () => void;
   onQuizAdjustTimer?: (seconds: number) => void;
-  controlAuthorization?: { role: string; verificationCode?: string; pendingControls?: PendingControlAuthorization[]; };
+  controlAuthorization?: { role: string; verificationCode?: string; pendingControls?: PendingControlAuthorization[]; controlState?: LiveAudioControlState | null; };
   onApproveControlRequest?: (sessionId: string) => void;
   onRejectControlRequest?: (sessionId: string) => void;
   wsSend?: (type: string, payload?: unknown) => boolean;
   subscribeToWsMessage?: (handler: (type: string, payload: Record<string, unknown>) => void) => () => void;
+  wsStatus?: WebSocketConnectionStatus;
   controlSessionId?: string | null;
 }
 
@@ -171,6 +173,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
   onRejectControlRequest,
   wsSend,
   subscribeToWsMessage,
+  wsStatus,
   controlSessionId,
 }) => {
   const controllerAnswers = useControllerAnswers();
@@ -1956,7 +1959,10 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
           onRejectRequest={onRejectControlRequest}
           wsSend={wsSend}
           subscribeToWsMessage={subscribeToWsMessage}
+          wsStatus={wsStatus}
           controlSessionId={controlSessionId}
+          controlState={controlAuthorization?.controlState}
+          verificationCode={controlAuthorization?.verificationCode}
         />
       </Suspense>
     </div>

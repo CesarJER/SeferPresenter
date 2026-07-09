@@ -475,12 +475,14 @@ function ControlApp() {
           role: controlAuthorization.controlState === 'PRINCIPAL' ? 'principal' : 
                 controlAuthorization.controlState === 'AUTHORIZED' ? 'delegated' : 'pending',
           verificationCode: controlAuthorization.verificationCode ?? undefined,
-          pendingControls: controlAuthorization.pendingControls
+          pendingControls: controlAuthorization.pendingControls,
+          controlState: controlAuthorization.controlState
         }}
         onApproveControlRequest={controlAuthorization.approveControl}
         onRejectControlRequest={controlAuthorization.rejectControl}
         wsSend={wsSend}
         subscribeToWsMessage={subscribeToWsMessage}
+        wsStatus={wsStatus}
         controlSessionId={controlAuthorization.controlSessionId}
       />
       <div className="absolute bottom-2 left-2 z-50">
