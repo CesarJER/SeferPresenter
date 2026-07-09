@@ -26,6 +26,7 @@ interface PresenterScreenProps {
   liveAudioPanel?: React.ReactNode;
   autoduckState?: AutoduckState;
   onPlaybackBlocked?: (blocked: boolean) => void;
+  enableDriftCorrection?: boolean;
 }
 
 const PresenterScreen: React.FC<PresenterScreenProps> = ({
@@ -44,6 +45,7 @@ const PresenterScreen: React.FC<PresenterScreenProps> = ({
   liveAudioPanel,
   autoduckState,
   onPlaybackBlocked,
+  enableDriftCorrection,
 }) => {
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
@@ -112,6 +114,28 @@ const PresenterScreen: React.FC<PresenterScreenProps> = ({
       videoElement.pause();
     }
   }, [videoState, slide?.mediaStart, slide?.mediaEnd, videoElement, onPlaybackBlocked]);
+
+  // 1.5. Drift correction for Audience devices
+  useEffect(() => {
+    if (!enableDriftCorrection || !videoElement || !videoState || slide?.type !== 'media') return;
+
+    if (videoState.isPlaying) {
+      // Force play if it was manually paused locally
+      if (videoElement.paused) {
+        videoElement.play().catch(e => console.error('Audience auto-resume blocked:', e));
+      }
+      // Correct drift
+      const drift = Math.abs(videoElement.currentTime - videoState.currentTime);
+      if (drift > 2.0) {
+        videoElement.currentTime = videoState.currentTime;
+      }
+    } else {
+      // Force pause if it was manually played locally
+      if (!videoElement.paused) {
+        videoElement.pause();
+      }
+    }
+  }, [videoState, videoElement, slide?.type, enableDriftCorrection]);
 
   // 2. Slide change listener: Setup dedicated slide video when slide transitions
   const mediaSrc = slide?.type === 'media' ? slide.mediaSrc : null;

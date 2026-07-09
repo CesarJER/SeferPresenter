@@ -202,6 +202,7 @@ export function useSyncState(props: UseSyncStateProps) {
 
   const channel = useMemo(() => new BroadcastChannel('sefer-presenter'), []);
   const processedMessageIdsRef = useRef<Set<string>>(new Set());
+  const lastControllerUpdateMsRef = useRef<number>(0);
 
   const wsUrl = useMemo(() => {
     if (typeof window === 'undefined') return null;
@@ -502,8 +503,12 @@ export function useSyncState(props: UseSyncStateProps) {
       setUserSelectedBackground(safeData.userSelectedBackground as string | null);
     }
     if (safeData.videoState !== undefined && !areVideoStatesEqual(videoStateRef.current, safeData.videoState as VideoState | null)) {
-      if (videoStateRef) videoStateRef.current = safeData.videoState as VideoState | null;
-      setVideoState(safeData.videoState as VideoState | null);
+      const incomingVideoState = safeData.videoState as VideoState | null;
+      if (incomingVideoState?.lastUpdatedBy === 'controller') {
+        lastControllerUpdateMsRef.current = Date.now();
+      }
+      if (videoStateRef) videoStateRef.current = incomingVideoState;
+      setVideoState(incomingVideoState);
     }
     if (safeData.appMode !== undefined && appModeRef.current !== safeData.appMode) {
       setAppMode(safeData.appMode as AppMode);
@@ -631,6 +636,9 @@ export function useSyncState(props: UseSyncStateProps) {
       }
 
       if (data.type === 'VIDEO_TELEMETRY') {
+        if (Date.now() - lastControllerUpdateMsRef.current < 2000) {
+          return;
+        }
         if (videoStateRef) videoStateRef.current = data.videoState as VideoState | null;
         setVideoStateRef.current(data.videoState as VideoState | null);
         return;
@@ -708,6 +716,9 @@ export function useSyncState(props: UseSyncStateProps) {
           }
 
           if (safeData.type === 'VIDEO_TELEMETRY') {
+            if (Date.now() - lastControllerUpdateMsRef.current < 2000) {
+              return;
+            }
             if (videoStateRef) videoStateRef.current = safeData.videoState as VideoState | null;
             setVideoStateRef.current(safeData.videoState as VideoState | null);
             return;

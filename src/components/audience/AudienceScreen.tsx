@@ -174,6 +174,7 @@ const AudienceScreen = ({
           liveAudioPanel={liveAudioPanel}
           autoduckState={autoduckState}
           onPlaybackBlocked={onPlaybackBlocked}
+          enableDriftCorrection={true}
         />
       </div>
       <div className="fixed bottom-2 left-2 z-50 pointer-events-auto opacity-60 hover:opacity-100 transition-opacity">
