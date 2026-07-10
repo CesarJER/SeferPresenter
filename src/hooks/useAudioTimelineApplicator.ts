@@ -4,12 +4,16 @@ import type { AutoduckState } from '../types/sync';
 import { computeAudioTimelineCorrection } from '../utils/audioTimeline';
 import { isMediaPlaybackBlockedError } from '../utils/mediaVolume';
 import { useSmoothVolume } from './useSmoothVolume';
+import { useIosAudioBufferPlayer } from './useIosAudioBufferPlayer';
+import type { IosAudioBufferPlayer } from '../utils/iosAudioBufferPlayer';
+
+type TimelineAudioTarget = HTMLAudioElement | IosAudioBufferPlayer;
 
 const INITIAL_SEEK_THRESHOLD_SEC = 0.3;
 const DRIFT_CHECK_INTERVAL_MS = 250;
 const PLAY_RETRY_INTERVAL_MS = 2000;
 
-const seekAudio = (audio: HTMLAudioElement, positionSec: number): void => {
+const seekAudio = (audio: TimelineAudioTarget, positionSec: number): void => {
   if (!Number.isFinite(positionSec)) return;
 
   const safePositionSec = Math.max(0, positionSec);
@@ -21,7 +25,7 @@ const seekAudio = (audio: HTMLAudioElement, positionSec: number): void => {
   audio.currentTime = safePositionSec;
 };
 
-const applyPlaybackRate = (audio: HTMLAudioElement, playbackRate: number): void => {
+const applyPlaybackRate = (audio: TimelineAudioTarget, playbackRate: number): void => {
   if (!Number.isFinite(playbackRate) || playbackRate <= 0) return;
   if (Math.abs(audio.playbackRate - playbackRate) > 0.005) {
     audio.playbackRate = playbackRate;
@@ -29,7 +33,7 @@ const applyPlaybackRate = (audio: HTMLAudioElement, playbackRate: number): void 
 };
 
 const playTimelineAudio = (
-  audio: HTMLAudioElement,
+  audio: TimelineAudioTarget,
   logErrors: boolean,
   onPlaybackBlocked?: (blocked: boolean) => void,
 ): void => {
@@ -60,10 +64,12 @@ export function useAudioTimelineApplicator(
   autoduckState?: AutoduckState,
   options: AudioTimelineApplicatorOptions = defaultAudioTimelineApplicatorOptions,
 ): void {
-  useSmoothVolume(audioRef, timeline?.volume ?? 1, autoduckState);
+  const { isIos, player: iosPlayer } = useIosAudioBufferPlayer(audioRef, timeline?.volume ?? 1, autoduckState);
+  useSmoothVolume(audioRef, timeline?.volume ?? 1, autoduckState, 300, !isIos);
 
   useEffect(() => {
-    const audio = audioRef.current;
+    if (isIos && !iosPlayer) return;
+    const audio = iosPlayer ?? audioRef.current;
     if (!audio || !timeline) return;
 
     // 1. Source change
@@ -124,10 +130,11 @@ export function useAudioTimelineApplicator(
 
     // 4. Playback rate
     applyPlaybackRate(audio, timeline.playbackRate);
-  }, [timeline, serverNow, audioRef, options]);
+  }, [timeline, serverNow, audioRef, isIos, iosPlayer, options]);
 
   useEffect(() => {
-    const audio = audioRef.current;
+    if (isIos && !iosPlayer) return;
+    const audio = iosPlayer ?? audioRef.current;
     if (!audio || !timeline?.audioSrc || timeline.status !== 'playing') return;
 
     let lastPlayAttemptMs = 0;
@@ -166,6 +173,8 @@ export function useAudioTimelineApplicator(
     };
   }, [
     audioRef,
+    isIos,
+    iosPlayer,
     timeline?.audioSrc,
     timeline?.basePositionSec,
     timeline?.baseServerTimeMs,
@@ -179,7 +188,8 @@ export function useAudioTimelineApplicator(
   ]);
 
   useEffect(() => {
-    const audio = audioRef.current;
+    if (isIos && !iosPlayer) return;
+    const audio = iosPlayer ?? audioRef.current;
     if (!audio || !timeline?.audioSrc) return;
 
     const reportDuration = () => {
@@ -207,6 +217,8 @@ export function useAudioTimelineApplicator(
     };
   }, [
     audioRef,
+    isIos,
+    iosPlayer,
     options,
     timeline?.audioSrc,
     timeline?.loop,

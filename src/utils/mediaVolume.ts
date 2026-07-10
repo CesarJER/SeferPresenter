@@ -53,7 +53,7 @@ const ensureSharedAudioContext = (): AudioContext | null => {
 
 export const resumeManagedMediaAudio = async (): Promise<void> => {
   const context = ensureSharedAudioContext();
-  if (!context || context.state !== 'suspended') return;
+  if (!context || context.state === 'running' || context.state === 'closed') return;
 
   try {
     await context.resume();
@@ -76,6 +76,14 @@ const ensureInteractionListeners = () => {
   window.addEventListener('keydown', handleUserActivation, { capture: true });
 };
 
+export const isIphoneDevice = (): boolean =>
+  typeof navigator !== 'undefined' && /iPhone/.test(navigator.userAgent || '');
+
+export const getManagedMediaAudioContext = (): AudioContext | null => {
+  ensureInteractionListeners();
+  return ensureSharedAudioContext();
+};
+
 const getManagedVolumeGraph = (media: HTMLMediaElement): ManagedMediaVolumeGraph | null => {
   const existing = managedVolumeGraphs.get(media);
   if (existing) return existing;
@@ -86,8 +94,7 @@ const getManagedVolumeGraph = (media: HTMLMediaElement): ManagedMediaVolumeGraph
   // output path; the gain fallback remains available for projected video.
   if (media instanceof HTMLAudioElement) return null;
 
-  ensureInteractionListeners();
-  const context = ensureSharedAudioContext();
+  const context = getManagedMediaAudioContext();
   if (!context) return null;
 
   try {

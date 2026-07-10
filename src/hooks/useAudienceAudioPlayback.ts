@@ -3,6 +3,7 @@ import type { AudioState } from '../types/audio';
 import type { AutoduckState } from '../types/sync';
 import { isMediaPlaybackBlockedError } from '../utils/mediaVolume';
 import { useSmoothVolume } from './useSmoothVolume';
+import { useIosAudioBufferPlayer } from './useIosAudioBufferPlayer';
 
 interface UseAudienceAudioPlaybackProps {
   audioState: AudioState;
@@ -14,12 +15,14 @@ interface UseAudienceAudioPlaybackProps {
 export function useAudienceAudioPlayback(props: UseAudienceAudioPlaybackProps) {
   const { audioState, audioRef, autoduckState, onPlaybackBlocked } = props;
   const isPerformingSeekRef = useRef<boolean>(false);
+  const { isIos, player: iosPlayer } = useIosAudioBufferPlayer(audioRef, audioState.volume, autoduckState);
 
-  useSmoothVolume(audioRef, audioState.volume, autoduckState);
+  useSmoothVolume(audioRef, audioState.volume, autoduckState, 300, !isIos);
 
   // 1. Load/change source
   useEffect(() => {
-    const audio = audioRef.current;
+    if (isIos && !iosPlayer) return;
+    const audio = iosPlayer ?? audioRef.current;
     if (!audio) return;
 
     if (audioState.audioSrc) {
@@ -39,11 +42,12 @@ export function useAudienceAudioPlayback(props: UseAudienceAudioPlaybackProps) {
       audio.removeAttribute('src');
       audio.setAttribute('data-src', '');
     }
-  }, [audioState.audioSrc, audioRef]);
+  }, [audioState.audioSrc, audioRef, isIos, iosPlayer]);
 
   // 2. Sync playback state and time from telemetry
   useEffect(() => {
-    const audio = audioRef.current;
+    if (isIos && !iosPlayer) return;
+    const audio = iosPlayer ?? audioRef.current;
     if (!audio || !audioState.audioSrc) return;
 
     // Volume is handled by useSmoothVolume
@@ -84,5 +88,5 @@ export function useAudienceAudioPlayback(props: UseAudienceAudioPlaybackProps) {
     } else if (!audioState.isPlaying && !audio.paused) {
       audio.pause();
     }
-  }, [audioState.isPlaying, audioState.currentTime, audioState.volume, audioState.audioSrc, audioRef, onPlaybackBlocked]);
+  }, [audioState.isPlaying, audioState.currentTime, audioState.volume, audioState.audioSrc, audioRef, isIos, iosPlayer, onPlaybackBlocked]);
 }

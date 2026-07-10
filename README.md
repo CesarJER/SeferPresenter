@@ -117,14 +117,20 @@ sin `allow="microphone"`, una `Permissions-Policy` que bloquea microfono,
 permiso bloqueado en la configuracion del sitio, PWA instalada con contexto
 antiguo/inseguro, o pedir microfono fuera de un gesto del usuario.
 
-### iPhone/iPad: activacion de audio y media
+### iPhone: audio normal y activacion de media
 
 Safari/iOS puede bloquear `play()` remoto hasta que el usuario toque la pantalla
 y suele ignorar `HTMLMediaElement.volume`. La audiencia muestra un boton
 `Activar audio y video` cuando detecta ese bloqueo para desbloquear audio,
-video y timeline sincronizada desde un gesto explicito. El video usa una ruta
-Web Audio para volumen y autoduck. La musica normal conserva la salida nativa
-de Safari para evitar audio entrecortado; iOS puede ignorar su volumen parcial.
+video y timeline sincronizada desde un gesto explicito. Solo en iPhone, la
+musica normal se descarga y decodifica como `AudioBuffer`, con fuentes de un
+solo uso recreadas para play, pause y seek. Esto permite volumen y autoduck por
+`GainNode`; su salida pasa por `MediaStreamAudioDestinationNode` a un `<audio>`
+oculto para conservar una sesion multimedia al bloquear la pantalla, sin
+enrutar el archivo por `MediaElementAudioSourceNode`, que puede producir audio
+entrecortado. Android, iPad y escritorio conservan el reproductor nativo. Si la
+salida stream, descarga o decodificacion falla, iPhone vuelve al destino Web
+Audio directo o al `<audio>` nativo, segun el punto de fallo.
 
 ## Arquitectura
 

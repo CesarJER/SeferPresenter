@@ -42,6 +42,8 @@ Fast map for agents. Use real paths only; this repo does not currently have
 - `src/hooks/`: stateful behavior for sync, background resolution, media playback, keyboard, URL sync, quiz, Sefer reader, scripture navigation, and the Fase 5.2 crypto-only `usePrivateControlSignals.ts` hook. LiveKit runtime hooks should still live under `src/features/liveAudio/hooks/` when implemented.
 - `src/utils/`: validation, normalization, sync message construction, quiz parsing/scoring, scripture parsing/lookup, media helpers, and Web Crypto helpers.
 - `src/utils/mediaVolume.ts`: iOS-aware media output helpers, video-only Web Audio gain fallback on iOS, audio-context resume helper, and autoplay-blocked error detection.
+- `src/utils/iosAudioBufferPlayer.ts`: iPhone-only normal-music engine with decoded buffers, gain, MediaStream-backed output, source recreation, timing, and native fallback.
+- `src/hooks/useIosAudioBufferPlayer.ts`: React lifecycle and autoduck adapter for the iPhone normal-music engine.
 - `src/utils/pwaUpdate.ts`: shared service-worker registration and confirmed PWA reload/update activation helpers.
 - `server/projection-state-reducer.mjs`: projection-state command reducer shared by backend runtime and Vitest.
 - `src/types/`: shared contracts for presentations, sync, audio, quiz, and transliteration.

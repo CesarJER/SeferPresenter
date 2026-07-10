@@ -191,6 +191,13 @@ Use these checklists before implementing future tasks.
   path instead of setting `HTMLMediaElement.volume` ad hoc. Keep normal music
   `<audio>` elements off `MediaElementAudioSourceNode` because that route can
   produce choppy playback in Safari/iOS.
+- For iPhone normal-music changes, preserve the `IosAudioBufferPlayer` facade
+  contract used by classic audio and timeline hooks. Recreate one-shot sources
+  after pause/seek, release decoded buffers on track changes, retain native
+  fallback, keep MediaStream output as the only audible Web Audio destination,
+  and do not enable this engine on iPad, Android, or desktop. Do not add the
+  existing `silence.ogg` loop in parallel unless physical iPhone testing shows
+  the MediaStream session alone is insufficient.
 
 ## Documentation Update Triggers
 

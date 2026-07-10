@@ -3,6 +3,7 @@ import type { AudioState, AudioSyncMap } from '../types/audio';
 import type { Presentation, ScriptureNavState } from '../types/presentation';
 import type { AutoduckState } from '../types/sync';
 import { useSmoothVolume } from './useSmoothVolume';
+import { useIosAudioBufferPlayer } from './useIosAudioBufferPlayer';
 
 interface UseAudioPlaybackProps {
   isControlMode: boolean;
@@ -43,18 +44,25 @@ export function useAudioPlayback(props: UseAudioPlaybackProps) {
   const isPerformingBilateralSeekRef = useRef<boolean>(false);
   const currentSlideIndexRef = useRef<number>(currentSlideIndex);
   const scriptureStateRef = useRef<ScriptureNavState | null>(scriptureState);
+  const { isIos, player: iosPlayer } = useIosAudioBufferPlayer(
+    audioRef,
+    audioState.volume,
+    autoduckState,
+    !isControlMode,
+  );
 
   useEffect(() => {
     currentSlideIndexRef.current = currentSlideIndex;
     scriptureStateRef.current = scriptureState;
   }, [currentSlideIndex, scriptureState]);
 
-  useSmoothVolume(audioRef, audioState.volume, autoduckState);
+  useSmoothVolume(audioRef, audioState.volume, autoduckState, 300, !isIos);
 
   // 1. Load/change source
   useEffect(() => {
     if (isControlMode) return;
-    const audio = audioRef.current;
+    if (isIos && !iosPlayer) return;
+    const audio = iosPlayer ?? audioRef.current;
     if (!audio) return;
 
     if (audioState.audioSrc) {
@@ -75,12 +83,13 @@ export function useAudioPlayback(props: UseAudioPlaybackProps) {
       audio.removeAttribute('src');
       audio.setAttribute('data-src', '');
     }
-  }, [audioState.audioSrc, isControlMode, audioRef]);
+  }, [audioState.audioSrc, isControlMode, audioRef, isIos, iosPlayer]);
 
   // 2. Sync playback settings from controller (play/pause/volume/currentTime)
   useEffect(() => {
     if (isControlMode) return;
-    const audio = audioRef.current;
+    if (isIos && !iosPlayer) return;
+    const audio = iosPlayer ?? audioRef.current;
     if (!audio || !audioState.audioSrc) return;
     if (audioState.lastUpdatedBy !== 'controller') return;
 
@@ -114,12 +123,13 @@ export function useAudioPlayback(props: UseAudioPlaybackProps) {
         audio.pause();
       }
     }
-  }, [audioState, isControlMode, audioRef, setAutoplayBlocked]);
+  }, [audioState, isControlMode, audioRef, isIos, iosPlayer, setAutoplayBlocked]);
 
   // 3. Telemetry emission back to the controller
   useEffect(() => {
     if (isControlMode) return;
-    const audio = audioRef.current;
+    if (isIos && !iosPlayer) return;
+    const audio = iosPlayer ?? audioRef.current;
     if (!audio) return;
 
     let intervalId: ReturnType<typeof setInterval> | null = null;
@@ -150,6 +160,7 @@ export function useAudioPlayback(props: UseAudioPlaybackProps) {
     };
 
     const handlePlay = () => {
+      setAutoplayBlocked(false);
       if (intervalId) clearInterval(intervalId);
       intervalId = setInterval(() => emitCurrentAudioTelemetry(false), 1000);
       emitCurrentAudioTelemetry(true);
@@ -180,13 +191,14 @@ export function useAudioPlayback(props: UseAudioPlaybackProps) {
       audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
     };
   }, [
-    isControlMode, emitAudioTelemetry, audioRef, audioStateRef,
+    isControlMode, emitAudioTelemetry, audioRef, audioStateRef, isIos, iosPlayer, setAutoplayBlocked,
   ]);
 
   // 4. Drive slide/verse navigation from audio cues (Unilateral / Bilateral)
   useEffect(() => {
     if (isControlMode) return;
-    const audio = audioRef.current;
+    if (isIos && !iosPlayer) return;
+    const audio = iosPlayer ?? audioRef.current;
     if (!audio || !audioState.audioSrc || !audioState.isPlaying) return;
     if (audioState.syncMode === 'none') return;
 
@@ -237,13 +249,16 @@ export function useAudioPlayback(props: UseAudioPlaybackProps) {
     isControlMode,
     handleSelectPresentationAndSlide,
     audioRef,
+    isIos,
+    iosPlayer,
     currentPresentationRef,
   ]);
 
   // 5. Bilateral sync: Seek audio on manual slide/verse changes
   useEffect(() => {
     if (isControlMode) return;
-    const audio = audioRef.current;
+    if (isIos && !iosPlayer) return;
+    const audio = iosPlayer ?? audioRef.current;
     if (!audio || !audioState.audioSrc) return;
     if (audioState.syncMode !== 'bilateral') return;
 
@@ -314,6 +329,8 @@ export function useAudioPlayback(props: UseAudioPlaybackProps) {
     isControlMode,
     emitAudioTelemetry,
     audioRef,
+    isIos,
+    iosPlayer,
     audioStateRef,
     currentPresentationRef,
   ]);

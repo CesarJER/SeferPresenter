@@ -106,7 +106,13 @@ Library/sync/validation:
   AES-GCM 256, base64 encoding, and nonce replay protection.
 - `src/utils/mediaVolume.ts`: iOS-aware media volume helpers used by
   `useSmoothVolume`, including a video-only Web Audio gain fallback on iOS and
-  playback-blocked error detection. Normal audio stays on Safari's native path.
+  playback-blocked error detection.
+- `src/utils/iosAudioBufferPlayer.ts`: owns iPhone-only decoded normal-audio
+  playback, source recreation, gain, MediaStream-backed media-session output,
+  timing, and fallback to direct/native output. It does not own canonical audio
+  or timeline state.
+- `src/hooks/useIosAudioBufferPlayer.ts`: owns the React lifetime and autoduck
+  binding for that engine; normal audio hooks select it only on iPhone.
 - `src/utils/pwaUpdate.ts`: PWA service-worker registration and update/reload helpers for route-specific shells.
 - `src/utils/normalizePresentation.ts`: persistence/path normalization.
 - `src/utils/syncProtocol.ts`: sync message construction.

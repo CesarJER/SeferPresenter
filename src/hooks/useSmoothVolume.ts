@@ -15,7 +15,8 @@ export function useSmoothVolume(
   mediaRef: React.RefObject<HTMLMediaElement | null>,
   baseVolume: number,
   autoduckState?: AutoduckState,
-  durationMs: number = 300
+  durationMs: number = 300,
+  enabled: boolean = true,
 ) {
   const requestRef = useRef<number | null>(null);
   const targetVolumeRef = useRef(baseVolume);
@@ -34,6 +35,7 @@ export function useSmoothVolume(
   }, []);
 
   useEffect(() => {
+    if (!enabled) return;
     const safeBaseVolume = Number.isFinite(baseVolume) ? clamp01(baseVolume) : 1;
     const rawFactor = autoduckState?.factor ?? 0.2;
     const safeFactor = Number.isFinite(rawFactor) ? clamp01(rawFactor) : 0.2;
@@ -92,9 +94,10 @@ export function useSmoothVolume(
         cancelAnimationFrame(requestRef.current);
       }
     };
-  }, [baseVolume, durationMs, mediaRef, autoduckState, isDucking]);
+  }, [baseVolume, durationMs, mediaRef, autoduckState, isDucking, enabled]);
 
   useEffect(() => {
+    if (!enabled) return;
     const media = mediaRef.current;
     if (!media) return;
 
@@ -109,5 +112,5 @@ export function useSmoothVolume(
     return () => {
       media.removeEventListener('volumechange', applyMutedState);
     };
-  });
+  }, [enabled, mediaRef]);
 }

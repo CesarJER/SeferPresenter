@@ -306,8 +306,9 @@ Fase 2 adds a backend-owned audio timeline over `ws://localhost:<port>/ws`.
 The React client connects to this channel, receives `AUDIO_TIMELINE_STATE` updates, and dispatches actions via `AUDIO_TIMELINE_ACTION`.
 This channel synchronizes timeline state while maintaining compatibility with existing SSE event streams.
 Presenter, Control, and Audience each apply the same backend timeline to their
-local hidden audio element. While the backend timeline is playing, clients
-periodically compare their local media `currentTime` with `serverNow()` and
+local playback target. This is the hidden audio element on normal platforms and
+an `IosAudioBufferPlayer` facade for normal music on iPhone. While the backend
+timeline is playing, clients periodically compare local `currentTime` with `serverNow()` and
 the canonical `basePositionSec` / `baseServerTimeMs`; small drift is corrected
 with a temporary playback-rate nudge, while large drift is corrected with a
 seek. This keeps the rendered lyrics/timeline and the audible track aligned on
@@ -368,6 +369,19 @@ y video` button when local audio/video `play()` is blocked, resumes the managed
 audio context, and retries the current audio, timeline, and active video media.
 This is a browser-policy recovery path only; it does not change canonical
 timeline state or grant audience control over media actions.
+
+Only iPhone normal music uses the decoded-buffer player. It recreates one-shot
+`AudioBufferSourceNode` instances for play and seek, applies canonical volume
+and runtime autoduck through a `GainNode`, and routes that gain into a
+`MediaStreamAudioDestinationNode` consumed by one hidden audio element. This
+keeps a Safari media session associated with normal music across screen locking
+without duplicating the audible graph while playback is active. Pause stops both
+the buffer source and MediaStream audio element; a later remote resume may need
+the existing user-gesture unlock path. Stream-output failures use the direct
+AudioContext destination; decode/request failures use the hidden native audio
+element. The player exposes the same local timing surface used by drift
+correction. This local choice does not alter timeline messages, telemetry
+contracts, ownership, or Android/iPad/desktop playback.
 
 ## Local-Only Today
 

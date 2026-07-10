@@ -206,5 +206,10 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
 - `mediaVolume` helpers - `src/utils/mediaVolume.ts`: iOS-aware output volume,
   video-only Web Audio gain fallback on iOS, audio-context resume, and
   autoplay-blocked error detection.
+- `IosAudioBufferPlayer` - `src/utils/iosAudioBufferPlayer.ts`: iPhone-only
+  normal-music player with decoded buffers, gain ramps, MediaStream-backed
+  output, transport timing, and native fallback.
+- `useIosAudioBufferPlayer` - `src/hooks/useIosAudioBufferPlayer.ts`: selects
+  and binds the iPhone player to React audio state and runtime autoduck.
 - `registerScopedServiceWorker` / `restartPwaApp` - `src/utils/pwaUpdate.ts`: route-scoped PWA service-worker registration and update-aware reload without clearing local state.
 - [audioTimeline](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/utils/audioTimeline.ts) - `src/utils/audioTimeline.ts`: timeline calculations, actions application, client clock offset estimations, and local audio drift-correction decisions.
