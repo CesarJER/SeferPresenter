@@ -49,6 +49,12 @@ Shared:
 - `src/components/shared/DataProtectionPage.tsx`
 - `src/components/shared/PwaRestartButton.tsx`: shared confirmed PWA reload action for installable audience/control shells; it must not clear localStorage or session state.
 - Live Audio shared widgets such as `LiveAudioStatusBadge.tsx` and
+
+Catalog:
+
+- `src/components/catalog/CatalogApp.tsx`: React root for the public catalog interface, parsing route paths and fetching public index data.
+- `src/components/catalog/CatalogIndex.tsx`: displays the list of all available public catalogs and their tags.
+- `src/components/catalog/CatalogViewer.tsx`: renders public, safe-for-web presentation copies, hiding internal metadata and removing media/quiz slides.
   `LiveAudioTrackOutput.tsx` belong under
   `src/features/liveAudio/components/shared/`. Future `LiveAudioNotice.tsx`,
   `CollapsiblePrivacyNotice.tsx`, `LiveAudioAliasInput.tsx`, and

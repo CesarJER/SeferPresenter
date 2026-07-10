@@ -16,6 +16,7 @@ export default defineConfig({
         audience: resolve(__dirname, 'audience.html'),
         control: resolve(__dirname, 'control.html'),
         audioEditor: resolve(__dirname, 'audio-editor.html'),
+        catalog: resolve(__dirname, 'catalog.html'),
       },
     },
   },

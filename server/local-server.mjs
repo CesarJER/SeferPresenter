@@ -23,6 +23,8 @@ import {
   findActiveCueIndex,
   findCueForSlideSelection,
 } from './audio-timeline-sync.mjs'
+import { getPublicCatalogs } from './public-catalog-config.mjs'
+import { buildPublicPresentations } from './public-presentations-builder.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const rootDir = path.resolve(__dirname, '..')
@@ -43,6 +45,7 @@ let quizClients = new Set()
 let liveKitApi = null
 let audioSyncMapsCache = []
 let presentationsCache = []
+let publicPresentationsCache = []
 const quizAggregateState = {
   submittedSessionsBySlideId: new Map(),
   finalScoreBuckets: new Map(),
@@ -183,6 +186,7 @@ const readPresentationsCache = () => {
   } catch {
     presentationsCache = []
   }
+  publicPresentationsCache = buildPublicPresentations(presentationsCache, getPublicCatalogs())
   return presentationsCache
 }
 
@@ -711,9 +715,43 @@ const handleApi = async (req, res, url) => {
       const presentations = normalizePresentations(JSON.parse(await readBody(req)))
       writeJsonAtomic(path.join(rootDir, 'presentations.json'), presentations)
       presentationsCache = presentations
+      publicPresentationsCache = buildPublicPresentations(presentationsCache, getPublicCatalogs())
       sendJson(res, 200, { success: true })
     } catch (err) {
       sendJson(res, 400, { error: err.message || 'Invalid JSON' })
+    }
+    return true
+  }
+
+  if (url.pathname === '/api/public-catalogs' && req.method === 'GET') {
+    sendJson(res, 200, getPublicCatalogs())
+    return true
+  }
+
+  const catalogMatch = url.pathname.match(/^\/api\/public-catalogs\/([^/]+)\/presentations(?:\/([^/]+))?$/)
+  if (catalogMatch && req.method === 'GET') {
+    const catalogId = catalogMatch[1]
+    const presentationId = catalogMatch[2]
+    
+    const catalogs = getPublicCatalogs()
+    const catalog = catalogs.find(c => c.id === catalogId)
+    
+    if (!catalog) {
+      sendJson(res, 404, { error: 'Catalog not found' })
+      return true
+    }
+
+    const catalogPresentations = publicPresentationsCache.filter(p => p.tags.some(t => catalog.tags.includes(t)))
+
+    if (presentationId) {
+      const pres = catalogPresentations.find(p => p.id === presentationId)
+      if (pres) {
+        sendJson(res, 200, pres)
+      } else {
+        sendJson(res, 404, { error: 'Presentation not found in catalog' })
+      }
+    } else {
+      sendJson(res, 200, catalogPresentations)
     }
     return true
   }
@@ -800,18 +838,32 @@ const handleStatic = (req, res, url) => {
     return true
   }
 
+  const publicCatalogs = getPublicCatalogs()
+  const isCatalogRoute = publicCatalogs.some((cat) => cleanPath === cat.path || cleanPath.startsWith(cat.path + '/'))
+
   const htmlFile = cleanPath.startsWith('/presenter')
     ? 'presenter.html'
     : cleanPath.startsWith('/control')
       ? 'control.html'
       : cleanPath.startsWith('/audio-editor')
         ? 'audio-editor.html'
-        : 'audience.html'
+        : isCatalogRoute
+          ? 'catalog.html'
+          : 'audience.html'
 
   const htmlPath = path.join(staticDir, htmlFile)
   if (fs.existsSync(htmlPath)) {
     serveFile(req, res, htmlPath)
     return true
+  }
+
+  const catalogs = getPublicCatalogs()
+  if (catalogs.some(c => cleanPath.startsWith(c.path))) {
+    const catalogHtmlPath = path.join(staticDir, 'catalog.html')
+    if (fs.existsSync(catalogHtmlPath)) {
+      serveFile(req, res, catalogHtmlPath)
+      return true
+    }
   }
 
   return false

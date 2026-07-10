@@ -435,6 +435,11 @@ const validatePresentationValue = (value: unknown, path: string): ValidationResu
     errors.push(`${path}.mode no es valido.`);
   }
   if (value.fontScale !== undefined && !isFiniteNumber(value.fontScale)) errors.push(`${path}.fontScale debe ser numero.`);
+  if (value.tags !== undefined) {
+    if (!Array.isArray(value.tags) || !value.tags.every((tag) => typeof tag === 'string')) {
+      errors.push(`${path}.tags debe ser un array de textos.`);
+    }
+  }
   if (!Array.isArray(value.slides)) {
     errors.push(`${path}.slides debe ser un array.`);
   }
@@ -460,6 +465,7 @@ const validatePresentationValue = (value: unknown, path: string): ValidationResu
     background: typeof value.background === 'string' ? value.background : '',
     mode: (typeof value.mode === 'string' ? value.mode : 'standard') as Presentation['mode'],
     fontScale: isFiniteNumber(value.fontScale) ? value.fontScale : undefined,
+    tags: Array.isArray(value.tags) ? Array.from(new Set(value.tags.map(String).map(s => s.trim()).filter(Boolean))) : undefined,
     slides,
   } as Presentation);
 };

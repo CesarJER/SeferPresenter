@@ -10,9 +10,11 @@ Fast map for agents. Use real paths only; this repo does not currently have
 - `audience.html`: audience HTML entry used by Vite multi-entry builds; loads `src/main-audience.tsx`.
 - `control.html`: control HTML entry used by Vite multi-entry builds; loads `src/main-control.tsx`.
 - `audio-editor.html`: audio editor HTML entry used by Vite multi-entry builds; loads `src/main-audio-editor.tsx`.
+- `catalog.html`: public catalog HTML entry used by Vite multi-entry builds; loads `src/main-catalog.tsx`.
 - `index.html`: development/default shell that still loads `src/main.tsx`.
 - `src/main.tsx`: current presenter React root and global CSS import.
 - `src/main-audio-editor.tsx`: standalone audio editor React root; loads presentations, audio files, and audio sync maps from local APIs.
+- `src/main-catalog.tsx`: public catalog React root; fetches and displays public presentations.
 - `src/main-audience.tsx`: placeholder mode-specific React entry for the MPA split.
 - `src/main-control.tsx`: standalone control React root; loads the control panel tree without presenter dependencies.
 - `public/audience-sw.js`: shared PWA service worker for `/audience` and `/control` scopes, with network-first shells and no caching for live endpoints or large media.
@@ -34,6 +36,7 @@ Fast map for agents. Use real paths only; this repo does not currently have
 - `src/components/control/`: operator UI, presentation editor, background/audio/video controls, Sefer controls.
 - `src/components/presenter/`: projector UI, slide rendering, Sefer reader display, verse sidebar/flow visuals.
 - `src/components/audience/`: audience route wrapper and audience quiz/projection selection.
+- `src/components/catalog/`: public catalog UI, catalog index, presentation viewer.
 - `src/components/quiz/`: quiz presenter, controller, audience, results, timer, and editor UI.
 - `src/components/shared/`: reusable UI widgets such as auto-resizing text/input and slide previews.
 - `src/hooks/`: stateful behavior for sync, background resolution, media playback, keyboard, URL sync, quiz, Sefer reader, scripture navigation, and the Fase 5.2 crypto-only `usePrivateControlSignals.ts` hook. LiveKit runtime hooks should still live under `src/features/liveAudio/hooks/` when implemented.

@@ -21,6 +21,7 @@ export interface Presentation {
   background: string;
   mode: 'standard' | 'trilingual';
   fontScale?: number;
+  tags?: string[];
   slides: Slide[];
 }
 

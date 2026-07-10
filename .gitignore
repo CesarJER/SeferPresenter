@@ -34,3 +34,5 @@ launcher
 *.sw?
 .agents
 .env*
+
+public/logo.svg

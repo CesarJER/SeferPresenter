@@ -13,6 +13,7 @@ services:
       - LIVEKIT_API_KEY=${LIVEKIT_API_KEY:-}
       - LIVEKIT_API_SECRET=${LIVEKIT_API_SECRET:-}
       - SEFER_LIVE_AUDIO_PUBLIC_LISTEN=${SEFER_LIVE_AUDIO_PUBLIC_LISTEN:-true}
+      - SEFER_PUBLIC_CATALOGS_JSON=${SEFER_PUBLIC_CATALOGS_JSON:-}
     volumes:
       - ${DATA_DIR:-.}/presentations.json:/app/presentations.json
       - ${DATA_DIR:-.}/audio_sync.json:/app/audio_sync.json

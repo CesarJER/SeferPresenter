@@ -8,8 +8,9 @@ SeferPresenter es una aplicacion React/Vite para proyectar presentaciones con so
 - **Control**: abre `/control`. Permite seleccionar presentaciones, editar slides, cambiar fondos, controlar audio/video y navegar textos.
 - **Editor de audio**: abre `/audio-editor`. Permite asociar pistas de audio a presentaciones y cues de diapositiva.
 - **Audiencia**: abre `/audience`. Muestra la misma proyeccion visual que presenter, en modo solo lectura y sincronizada.
+- **Catálogo Público**: rutas dinámicas configurables vía `SEFER_PUBLIC_CATALOG_TAGS` en `.env` (ej: `/himnos`). Muestra una versión pública, segura y de solo lectura de las presentaciones, omitiendo metadatos privados y bloques de medios.
 - **Proteccion de datos**: `/proteccion-datos` queda como ruta publica (accesible sin autenticacion) para el aviso de privacidad del futuro modulo de voz en vivo.
-- **Modo sin LiveKit**: la aplicacion conserva el uso solo presentacion. Si LiveKit esta desactivado, mal configurado o no soportado, `/presenter`, `/control`, `/audio-editor` y `/audience` deben seguir cargando sin requerir voz en vivo.
+- **Modo sin LiveKit**: la aplicacion conserva el uso solo presentacion. Si LiveKit esta desactivado, mal configurado o no soportado, `/presenter`, `/control`, `/audio-editor`, `/audience` y catálogos deben seguir cargando sin requerir voz en vivo.
 
 ## Scripts
 
@@ -44,6 +45,8 @@ El backend local vive en `server/local-server.mjs`. Mantiene inicialmente la mis
 - `POST /api/audio-sync`
 - `GET /api/presentations`
 - `POST /api/presentations`
+- `GET /api/public-catalogs`
+- `GET /api/public-catalogs/:id/presentations`
 - `GET /api/audience/state`
 - `GET /api/audience/events`
 - `GET /api/audience-cache-assets`

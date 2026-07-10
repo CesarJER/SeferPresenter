@@ -188,6 +188,8 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
   const [id, setId] = useState('');
   const [title, setTitle] = useState('');
   const [bg, setBg] = useState('');
+  const [tags, setTags] = useState<string[]>([]);
+  const [availableTags, setAvailableTags] = useState<string[]>([]);
 
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isMusicPanelOpen, setIsMusicPanelOpen] = useState(false);
@@ -244,6 +246,16 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
   // NUEVOS estados para visor/reproducción reestructurado
   const [editorMode, setEditorMode] = useState<'list' | 'edit'>('list');
   const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    fetch('/api/public-catalogs')
+      .then(r => r.json())
+      .then((catalogs: Array<{tags?: string[]}>) => {
+        const allTags = new Set(catalogs.flatMap(c => c.tags || []));
+        setAvailableTags(Array.from(allTags));
+      })
+      .catch(err => console.error('Error fetching public catalogs tags', err));
+  }, []);
   // Local video state for scrubbing (prevents slider fighting telemetry)
 
 
@@ -333,6 +345,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
     setId(p.id);
     setTitle(p.title);
     setBg(p.background);
+    setTags(p.tags || []);
     setMode(p.mode);
     setFontScale(p.fontScale ?? 1);
     setSlides(p.slides);
@@ -376,6 +389,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
     setId(Date.now().toString());
     setTitle('');
     setBg(backgrounds[0] || '');
+    setTags([]);
     setMode('standard');
     setFontScale(1);
     setStandardText('');
@@ -1363,6 +1377,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
       id: id || currentPresentation?.id || Date.now().toString(),
       title,
       background: finalBg,
+      tags: tags.length > 0 ? tags : undefined,
       mode: parsed.mode,
       fontScale,
       slides: parsed.slides
@@ -1849,6 +1864,9 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                 setTitle={setTitle}
                 bg={bg}
                 setBg={setBg}
+                tags={tags}
+                setTags={setTags}
+                availableTags={availableTags}
                 backgrounds={backgrounds}
                 slides={slides}
                 setSlides={setSlides}

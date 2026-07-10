@@ -8,10 +8,12 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
 - `audience.html` - Vite build entry for audience mode; loads `src/main-audience.tsx`.
 - `control.html` - Vite build entry for control mode; loads `src/main-control.tsx`.
 - `audio-editor.html` - Vite build entry for audio editor mode; loads `src/main-audio-editor.tsx`.
+- `catalog.html` - Vite build entry for public catalogs; loads `src/main-catalog.tsx`.
 - `src/main.tsx` - current React root for presenter/default shell.
 - `src/main-audio-editor.tsx` - standalone audio editor root; loads and saves `/api/audio-sync` without presenter sync wiring.
 - `src/main-audience.tsx` - placeholder mode-specific root for audience mode in the MPA split.
 - `src/main-control.tsx` - standalone React root for control mode; orchestrates control state and sync wiring without presenter/media elements.
+- `src/main-catalog.tsx` - standalone React root for the public catalog interface.
 - `vite.config.ts` - Vite multi-entry input configuration.
 - `public/audience-sw.js` - shared PWA service worker for `/audience` and `/control`, versioned as `1.1.0` with testable cache exclusion helpers.
 - `public/manifest.webmanifest` - Audience PWA manifest scoped to `/audience` and using `public/logo.svg`.
@@ -63,6 +65,9 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
 - `SeferFlowView` - `src/components/presenter/SeferFlowView.tsx`: scripture flow visual.
 - `VerseSidebar` - `src/components/presenter/VerseSidebar.tsx`: verse sidebar visual.
 - `AudienceScreen` - `src/components/audience/AudienceScreen.tsx`: audience route projection/quiz selection.
+- `CatalogApp` - `src/components/catalog/CatalogApp.tsx`: public catalog root component, handles routing.
+- `CatalogIndex` - `src/components/catalog/CatalogIndex.tsx`: displays available public catalogs.
+- `CatalogViewer` - `src/components/catalog/CatalogViewer.tsx`: displays presentations for a given public catalog.
 - `ActiveParticipantsPanel` - `src/features/liveAudio/components/audience/ActiveParticipantsPanel.tsx`: audience-side alias-sharing checkbox and authorized visible participant list.
 - `PwaRestartButton` - `src/components/shared/PwaRestartButton.tsx`: confirmed reload/update action for installed audience/control PWAs.
 - Proposed Live Audio components - future optional runtime components under

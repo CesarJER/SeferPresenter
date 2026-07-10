@@ -96,7 +96,10 @@ export const normalizePresentation = (presentation: Presentation): Presentation 
     mode,
     slides,
     background: normalizePublicPath(presentation.background),
-    fontScale: presentation.fontScale ?? 1
+    fontScale: presentation.fontScale ?? 1,
+    tags: Array.isArray(presentation.tags) 
+      ? Array.from(new Set(presentation.tags.map(String).map(s => s.trim()).filter(Boolean))) 
+      : undefined
   };
 };
 

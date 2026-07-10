@@ -34,6 +34,9 @@ interface PresentationEditorProps {
   setTitle: React.Dispatch<React.SetStateAction<string>>;
   bg: string;
   setBg: React.Dispatch<React.SetStateAction<string>>;
+  tags: string[];
+  setTags: React.Dispatch<React.SetStateAction<string[]>>;
+  availableTags: string[];
   backgrounds: string[];
   slides: Slide[];
   setSlides: React.Dispatch<React.SetStateAction<Slide[]>>;
@@ -91,6 +94,9 @@ export const PresentationEditor: React.FC<PresentationEditorProps> = ({
   setTitle,
   bg,
   setBg,
+  tags,
+  setTags,
+  availableTags,
   backgrounds,
   slides,
   setSlides,
@@ -200,6 +206,36 @@ export const PresentationEditor: React.FC<PresentationEditorProps> = ({
                         <Layers size={13} />
                       </button>
                     </div>
+
+                    {/* Selector de Tags Públicos */}
+                    {availableTags.length > 0 && (
+                      <div className="flex items-center gap-2 bg-gray-800 border border-gray-750 px-2.5 py-1 rounded-md max-w-full overflow-x-auto">
+                        <label className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Público</label>
+                        <div className="flex flex-wrap gap-1">
+                          {availableTags.map(tag => {
+                            const active = tags.includes(tag);
+                            return (
+                              <button
+                                key={tag}
+                                type="button"
+                                onClick={() => {
+                                  if (active) setTags(tags.filter(t => t !== tag));
+                                  else setTags([...tags, tag]);
+                                }}
+                                className={`px-2 py-0.5 rounded text-[10px] font-bold transition-colors cursor-pointer whitespace-nowrap ${
+                                  active 
+                                    ? 'bg-yellow-600 text-white shadow-sm' 
+                                    : 'bg-gray-700 text-gray-400 hover:text-white hover:bg-gray-600'
+                                }`}
+                                title={`Asignar tag '${tag}' para publicación en catálogo`}
+                              >
+                                {tag}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
 
                     {/* 1x / 3x segmented module switcher */}
                     <div className="flex items-center bg-gray-800 p-0.5 rounded-md border border-gray-750">
