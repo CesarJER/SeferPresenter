@@ -122,9 +122,9 @@ antiguo/inseguro, o pedir microfono fuera de un gesto del usuario.
 Safari/iOS puede bloquear `play()` remoto hasta que el usuario toque la pantalla
 y suele ignorar `HTMLMediaElement.volume`. La audiencia muestra un boton
 `Activar audio y video` cuando detecta ese bloqueo para desbloquear audio,
-video y timeline sincronizada desde un gesto explicito. El volumen y autoduck de
-audio/video usan una ruta Web Audio en iOS para que los controles sigan
-teniendo efecto aunque el volumen nativo del elemento sea ignorado.
+video y timeline sincronizada desde un gesto explicito. El video usa una ruta
+Web Audio para volumen y autoduck. La musica normal conserva la salida nativa
+de Safari para evitar audio entrecortado; iOS puede ignorar su volumen parcial.
 
 ## Arquitectura
 

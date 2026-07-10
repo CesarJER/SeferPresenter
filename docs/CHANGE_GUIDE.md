@@ -188,7 +188,9 @@ Use these checklists before implementing future tasks.
   but must not clear nick, quiz answers, localStorage, or persistent local state.
 - For iPhone/iPad media fixes, keep playback unlock behind an explicit user
   gesture and prefer the shared `src/utils/mediaVolume.ts` / `useSmoothVolume`
-  path instead of setting `HTMLMediaElement.volume` ad hoc.
+  path instead of setting `HTMLMediaElement.volume` ad hoc. Keep normal music
+  `<audio>` elements off `MediaElementAudioSourceNode` because that route can
+  produce choppy playback in Safari/iOS.
 
 ## Documentation Update Triggers
 

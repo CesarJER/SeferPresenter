@@ -81,6 +81,10 @@ const getManagedVolumeGraph = (media: HTMLMediaElement): ManagedMediaVolumeGraph
   if (existing) return existing;
 
   if (!isIosMediaVolumeQuirk()) return null;
+  // iOS can produce choppy playback when a normal music <audio> element is
+  // rerouted through MediaElementAudioSourceNode. Keep audio on Safari's native
+  // output path; the gain fallback remains available for projected video.
+  if (media instanceof HTMLAudioElement) return null;
 
   ensureInteractionListeners();
   const context = ensureSharedAudioContext();
