@@ -3,7 +3,14 @@ import type { Presentation, QuizData, Slide, VideoState, AppMode, ScriptureNavSt
 import type { SeferReaderState } from '../../hooks/useSeferReader';
 import { transliterateText } from '../../utils/transliterate';
 import { parseMediaSlideString, serializeMediaToText } from '../../utils/mediaUtils';
-import { materializeScriptureSlides, parseScriptureTag, scriptureSlideToTag } from '../../utils/scriptureLookup';
+import {
+  auditQuickScriptureReferences,
+  auditSlideScriptureReferences,
+  materializeScriptureSlides,
+  parseScriptureTag,
+  scriptureSlideToTag,
+  type ScriptureAuditIssue,
+} from '../../utils/scriptureLookup';
 import { ArrowUp, Pencil, Maximize2, Minimize2, Music, ArrowUpDown } from 'lucide-react';
 import SeferControlPanel from './SeferControlPanel';
 import SeferControlPanelMini from './SeferControlPanelMini';
@@ -242,6 +249,25 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
   // Estados reactivos para la gestión de diapositivas del editor visual
   const [slides, setSlides] = useState<Slide[]>([]);
   const [isTableMode, setIsTableMode] = useState(true);
+
+  const showScriptureAudit = (action: string, issues: ScriptureAuditIssue[]) => {
+    const details = issues.map((issue, index) => `${index + 1}. ${issue.location}: ${issue.message}`).join('\n');
+    alert(`No se puede ${action}. Se encontraron ${issues.length} posible${issues.length === 1 ? '' : 's'} error${issues.length === 1 ? '' : 'es'} en citas bíblicas:\n\n${details}\n\nCorrige las referencias y vuelve a intentarlo.`);
+  };
+
+  const auditQuickEditor = async (action: string) => {
+    try {
+      const primaryText = mode === 'standard' ? standardText : hebText;
+      const issues = await auditQuickScriptureReferences(primaryText);
+      if (issues.length === 0) return true;
+      showScriptureAudit(action, issues);
+      return false;
+    } catch (error) {
+      console.error('Error auditing scripture references', error);
+      alert(`No se puede ${action} porque no fue posible comprobar las citas bíblicas. Verifica que metadata.json esté disponible y vuelve a intentarlo.`);
+      return false;
+    }
+  };
 
   // NUEVOS estados para visor/reproducción reestructurado
   const [editorMode, setEditorMode] = useState<'list' | 'edit'>('list');
@@ -505,6 +531,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
       setIsTableMode(false);
     } else {
       // De Texto Rápido a Tabla:
+      if (!await auditQuickEditor('cambiar a la vista de tabla')) return;
       const parsed = await buildSlidesForSave();
       const merged = parsed.slides.map((pSlide, idx) => {
         const existing = slides[idx] || slides.find(s => s.id === pSlide.id);
@@ -521,6 +548,8 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
 
   const handleModeChange = async (newMode: 'standard' | 'trilingual') => {
     if (newMode === mode) return;
+
+    if (!isTableMode && !await auditQuickEditor(`cambiar al modo ${newMode === 'trilingual' ? '3x' : '1x'}`)) return;
 
     setMode(newMode);
 
@@ -1371,7 +1400,21 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
       ? (currentPresentation?.background || backgrounds[0])
       : bg;
 
+    if (!isTableMode && !await auditQuickEditor('guardar la presentación')) return;
+
     const parsed = await buildSlidesForSave();
+    let slideIssues: ScriptureAuditIssue[];
+    try {
+      slideIssues = await auditSlideScriptureReferences(parsed.slides);
+    } catch (error) {
+      console.error('Error auditing saved scripture references', error);
+      alert('No se puede guardar la presentación porque no fue posible comprobar sus citas bíblicas. Verifica que metadata.json esté disponible y vuelve a intentarlo.');
+      return;
+    }
+    if (slideIssues.length > 0) {
+      showScriptureAudit('guardar la presentación', slideIssues);
+      return;
+    }
 
     await onSave({
       id: id || currentPresentation?.id || Date.now().toString(),

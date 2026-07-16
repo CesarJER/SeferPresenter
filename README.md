@@ -39,7 +39,7 @@ El backend local vive en `server/local-server.mjs`. Mantiene inicialmente la mis
 - `POST /api/audio-telemetry`
 - `POST /api/video-telemetry`
 - `POST /api/display-telemetry`
-- `GET /api/backgrounds`
+- `GET /api/backgrounds` (imágenes AVIF, GIF, JPEG, PNG, SVG y WebP; vídeo MP4 y WebM)
 - `GET /api/audio`
 - `GET /api/audio-sync`
 - `POST /api/audio-sync`

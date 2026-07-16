@@ -192,6 +192,7 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
 - `getMetadata` / `loadBookData` - `src/utils/metadataCache.ts`: scripture metadata/book loading and caching.
 - `parseVerses` - `src/utils/scriptureParser.ts`: TSV scripture parsing.
 - `getScriptureChapterVerses` / `materializeScriptureSlides` - `src/utils/scriptureLookup.ts`: scripture lookup and slide materialization.
+- `validateScriptureSpec` / `auditQuickScriptureReferences` / `auditSlideScriptureReferences` - `src/utils/scriptureLookup.ts`: checks quiz and Sefer/Tanaj references against generated metadata before editor conversion or persistence.
 - `scripts/generate-verses.js`: generated `public/books/*.tsv` and `public/metadata.json`.
 - [navigationUtils](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/utils/navigationUtils.ts) - `src/utils/navigationUtils.ts`: sequential linear step generation for presentations.
 

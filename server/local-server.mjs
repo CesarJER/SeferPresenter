@@ -54,7 +54,9 @@ const quizAggregateState = {
 }
 
 const contentTypes = {
+  '.avif': 'image/avif',
   '.css': 'text/css; charset=utf-8',
+  '.gif': 'image/gif',
   '.html': 'text/html; charset=utf-8',
   '.ico': 'image/x-icon',
   '.js': 'text/javascript; charset=utf-8',
@@ -68,6 +70,7 @@ const contentTypes = {
   '.tsv': 'text/tab-separated-values; charset=utf-8',
   '.txt': 'text/plain; charset=utf-8',
   '.wav': 'audio/wav',
+  '.webp': 'image/webp',
   '.webm': 'video/webm',
   '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg',
@@ -668,7 +671,7 @@ const handleApi = async (req, res, url) => {
   if (url.pathname === '/api/backgrounds' && req.method === 'GET') {
     const backgrounds = walkAssets(
       [path.join(publicDir, 'backgrounds'), path.join(publicDir, 'videos')],
-      /\.(png|jpe?g|mp4|webm)$/i
+      /\.(avif|gif|jpe?g|png|svg|webp|mp4|webm)$/i
     )
     sendJson(res, 200, backgrounds)
     return true
