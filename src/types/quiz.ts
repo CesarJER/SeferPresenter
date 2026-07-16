@@ -90,6 +90,8 @@ export const makeEmptyAudienceAnswer = (slideId: string): QuizAudienceAnswer => 
 export interface QuizAudienceSession {
   /** Random UUID generated on first interaction */
   sessionId: string;
+  /** Presentation owning every answer in this session snapshot */
+  presentationId: string;
   /** Optional display name */
   displayName?: string;
   /** answers keyed by slide.id */
@@ -151,6 +153,8 @@ export interface QuizRangeStats {
  * Audience answer sync is handled via a separate channel/endpoint.
  */
 export interface QuizSyncState {
+  /** Presentation that owns this ephemeral quiz run. */
+  presentationId?: string;
   /** Current subslide index being displayed */
   currentSubslideIndex: number;
   timerState: QuizTimerState;
@@ -158,10 +162,15 @@ export interface QuizSyncState {
   presenterDemoSelection: Record<string, QuizOptionId | null>;
   /** Maximum base score for the entire quiz */
   maxBaseCentipunts?: number;
+  /** Questions that reached the answer/correction phase in this run. */
+  completedQuizSlideIds?: string[];
+  /** Explicit question cut used by the current results calculation. */
+  resultQuizSlideIds?: string[];
+  /** Changes whenever the server asks audiences to recalculate and resend their score. */
+  scoreRequestId?: number;
   /** Ephemeral feedback sound trigger */
   feedbackSound?: {
     type: 'applause' | 'mal' | 'bip';
     timestamp: number;
   } | null;
 }
-

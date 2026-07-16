@@ -81,6 +81,8 @@ interface MenuPopupProps {
   quizCurrentSubslideIndex?: number;
   quizTimerState?: QuizTimerState;
   quizPresenterDemoSelection?: QuizOptionId | null;
+  quizMaxBaseCentipunts?: number;
+  quizResultSlideIds?: string[];
   onQuizSubslideSelect?: (idx: number) => void;
   onQuizStartTimer?: () => void;
   onQuizPauseTimer?: () => void;
@@ -165,6 +167,8 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
   quizCurrentSubslideIndex = 0,
   quizTimerState,
   quizPresenterDemoSelection = null,
+  quizMaxBaseCentipunts,
+  quizResultSlideIds,
   onQuizSubslideSelect = () => { },
   onQuizStartTimer = () => { },
   onQuizPauseTimer = () => { },
@@ -183,13 +187,39 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
   wsStatus,
   controlSessionId,
 }) => {
-  const controllerAnswers = useControllerAnswers();
+  const controllerAnswers = useControllerAnswers(currentPresentation?.id ?? null);
   // ────────────────────────────────────────────────────────────────
   // States
   // ────────────────────────────────────────────────────────────────
   const activeSlide = currentPresentation && currentSlideIndex >= 0 && currentSlideIndex < currentPresentation.slides.length
     ? currentPresentation.slides[currentSlideIndex]
     : null;
+  const quizQuestionSlides = currentPresentation?.slides.filter(
+    (slide) => slide.type === 'quiz' && slide.quizData && !slide.quizData.isResultsSlide,
+  ) ?? [];
+  const fullQuizMaxBaseCentipunts = calcMaxBaseCentipunts(quizQuestionSlides.map((slide) => slide.quizData!));
+  const effectiveQuizMaxBaseCentipunts = quizMaxBaseCentipunts ?? fullQuizMaxBaseCentipunts;
+  const recalculateResultSlideIds = quizQuestionSlides
+    .filter((slide) => controllerAnswers.getSubmittedCount(slide.id) > 0)
+    .map((slide) => slide.id);
+  const handleRecalculateQuizResults = () => {
+    if (recalculateResultSlideIds.length === 0) return;
+    emitCommand?.({ command: 'QUIZ_RECALCULATE_RESULTS', slideIds: recalculateResultSlideIds });
+  };
+  const handleClearQuizAnswers = (slideId: string) => {
+    controllerAnswers.clearSlideAnswers(slideId);
+    emitCommand?.({ command: 'QUIZ_CLEAR_QUESTION_RESULTS', slideId });
+  };
+  const controllerResultScoreOverrides = quizResultSlideIds
+    ? Object.fromEntries(Object.entries(controllerAnswers.sessions).map(([sessionId, session]) => {
+      const totalCentipunts = quizQuestionSlides.reduce((total, slide) => {
+        if (!quizResultSlideIds.includes(slide.id) || !slide.quizData) return total;
+        const answer = session.answers[slide.id];
+        return answer?.submitted ? total + scoreAnswer(slide.quizData, answer).totalCentipunts : total;
+      }, 0);
+      return [sessionId, totalCentipunts];
+    }))
+    : undefined;
   const isActiveScriptureSlide = !!activeSlide && (activeSlide.type === 'sefer' || activeSlide.type === 'tanaj' || !!activeSlide.scriptureBook);
 
   const [id, setId] = useState('');
@@ -364,7 +394,20 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
       { id: 'slide-title', label: 'Título', lines: ['', '-', '-'] }
     ]);
     setIsTableMode(true);
-  }, [backgrounds]);
+  }, [
+    backgrounds,
+    setBg,
+    setFontScale,
+    setHebText,
+    setId,
+    setIsTableMode,
+    setMode,
+    setSlides,
+    setStandardText,
+    setTitle,
+    setTraText,
+    setTransText,
+  ]);
 
   const handleStartEditing = (p: Presentation) => {
     setEditorMode('edit');
@@ -1688,14 +1731,23 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                       <div className="flex-1 flex flex-wrap gap-1.5 max-h-[4.2rem] overflow-y-auto pr-1 scrollbar-thin">
                         {currentPresentation.slides.map((slide, idx) => {
                           const isSelected = currentSlideIndex === idx;
+                          const isRegisteredQuizQuestion = slide.type === 'quiz'
+                            && slide.quizData
+                            && !slide.quizData.isResultsSlide
+                            && controllerAnswers.getSubmittedCount(slide.id) > 0;
                           return (
                             <button
                               id={`live-slide-btn-${idx}`}
                               key={slide.id}
                               onClick={() => onSelectSlide(idx)}
+                              title={isRegisteredQuizQuestion ? 'Pregunta registrada y contabilizada' : undefined}
                               className={`min-w-[2.2rem] rounded border text-xs font-semibold transition-all px-2.5 py-1 select-none ${isSelected
-                                ? 'border-yellow-500 bg-yellow-600 text-white font-bold shadow-[0_0_8px_rgba(234,179,8,0.3)]'
-                                : 'border-gray-600 bg-gray-700 hover:bg-gray-600 text-gray-300'
+                                ? isRegisteredQuizQuestion
+                                  ? 'border-yellow-400 bg-emerald-600 text-white font-bold ring-1 ring-yellow-400 shadow-[0_0_8px_rgba(16,185,129,0.4)]'
+                                  : 'border-yellow-500 bg-yellow-600 text-white font-bold shadow-[0_0_8px_rgba(234,179,8,0.3)]'
+                                : isRegisteredQuizQuestion
+                                  ? 'border-emerald-400 bg-emerald-700 hover:bg-emerald-600 text-white'
+                                  : 'border-gray-600 bg-gray-700 hover:bg-gray-600 text-gray-300'
                                 }`}
                             >
                               {slide.label}
@@ -1749,10 +1801,6 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                     />
 
                     {activeSlide?.type === 'quiz' && activeSlide.quizData && quizTimerState && (() => {
-                      const allQuizData = currentPresentation?.slides
-                        .filter(s => s.type === 'quiz' && s.quizData)
-                        .map(s => s.quizData!) || [];
-                      const maxBaseCentipunts = calcMaxBaseCentipunts(allQuizData);
                       const optionCounts: Record<string, number> = {};
                       for (const opt of activeSlide.quizData.options) {
                         optionCounts[opt.id] = 0;
@@ -1795,10 +1843,12 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                           optionCounts={optionCounts}
                           citaHits={citaHits}
                           citaMisses={citaMisses}
-                          onClearAnswers={() => controllerAnswers.clearSlideAnswers(activeSlide.id)}
-                          rangeStats={controllerAnswers.calcRangeStats(activeSlide.quizData.resultProfiles || [], maxBaseCentipunts)}
+                          onClearAnswers={() => handleClearQuizAnswers(activeSlide.id)}
+                          rangeStats={controllerAnswers.calcRangeStats(activeSlide.quizData.resultProfiles || [], effectiveQuizMaxBaseCentipunts, controllerResultScoreOverrides)}
                           totalSessions={Object.keys(controllerAnswers.sessions).length}
-                          maxBaseCentipunts={maxBaseCentipunts}
+                          maxBaseCentipunts={effectiveQuizMaxBaseCentipunts}
+                          registeredQuestionCount={recalculateResultSlideIds.length}
+                          onRecalculateResults={handleRecalculateQuizResults}
                           renderMode="top"
                           onAdjustTimer={onQuizAdjustTimer}
                         />
@@ -1826,10 +1876,6 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
             emitCommand={emitCommand}
           >
             {activeSlide?.type === 'quiz' && activeSlide.quizData && quizTimerState && (() => {
-              const allQuizData = currentPresentation?.slides
-                .filter(s => s.type === 'quiz' && s.quizData)
-                .map(s => s.quizData!) || [];
-              const maxBaseCentipunts = calcMaxBaseCentipunts(allQuizData);
               const optionCounts: Record<string, number> = {};
               for (const opt of activeSlide.quizData.options) {
                 optionCounts[opt.id] = 0;
@@ -1872,10 +1918,12 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                   optionCounts={optionCounts}
                   citaHits={citaHits}
                   citaMisses={citaMisses}
-                  onClearAnswers={() => controllerAnswers.clearSlideAnswers(activeSlide.id)}
-                  rangeStats={controllerAnswers.calcRangeStats(activeSlide.quizData.resultProfiles || [], maxBaseCentipunts)}
+                  onClearAnswers={() => handleClearQuizAnswers(activeSlide.id)}
+                  rangeStats={controllerAnswers.calcRangeStats(activeSlide.quizData.resultProfiles || [], effectiveQuizMaxBaseCentipunts, controllerResultScoreOverrides)}
                   totalSessions={Object.keys(controllerAnswers.sessions).length}
-                  maxBaseCentipunts={maxBaseCentipunts}
+                  maxBaseCentipunts={effectiveQuizMaxBaseCentipunts}
+                  registeredQuestionCount={recalculateResultSlideIds.length}
+                  onRecalculateResults={handleRecalculateQuizResults}
                   renderMode="bottom"
                   onAdjustTimer={onQuizAdjustTimer}
                 />

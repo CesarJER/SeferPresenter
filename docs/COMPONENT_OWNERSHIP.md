@@ -218,7 +218,7 @@ Live Audio state:
 
 ## Examples
 
-- Quiz content is persistent in `Slide.quizData`, but timer/subslide/demo selection is runtime state in `QuizSyncState` and hooks.
-- Audience quiz answers live in `useQuizAnswers`; they are not presenter demo selections.
+- Quiz content is persistent in `Slide.quizData`, but timer/subslide/demo selection and the completed/result question cut are runtime state in `QuizSyncState` and hooks.
+- Audience quiz answers live in `useQuizAnswers`, partitioned by presentation ID; they are not presenter demo selections.
 - Background lock and override are sync-ready because presenter, control, and audience must agree on projection visuals.
 - `PresenterScreen` receives `slide`, `background`, `videoState`, and quiz props; it does not select presentations.

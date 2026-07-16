@@ -74,6 +74,8 @@ export type RemoteCommandPayload =
   | { command: 'QUIZ_RESET_TIMER' }
   | { command: 'QUIZ_ADJUST_TIMER'; seconds: number }
   | { command: 'QUIZ_COMPLETE' }
+  | { command: 'QUIZ_RECALCULATE_RESULTS'; slideIds: string[] }
+  | { command: 'QUIZ_CLEAR_QUESTION_RESULTS'; slideId: string }
   | { command: 'QUIZ_SELECT_SUBSLIDE'; index: number }
   | { command: 'QUIZ_DEMO_SELECT'; optionId: string | null }
   | { command: 'QUIZ_PLAY_APPLAUSE' }
