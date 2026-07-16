@@ -32,7 +32,7 @@ export const CatalogApp: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-black text-gray-400 flex items-center justify-center">
+      <div className="min-h-screen bg-slate-50 text-slate-600 flex items-center justify-center">
         <p>Cargando catálogo...</p>
       </div>
     );
@@ -40,7 +40,7 @@ export const CatalogApp: React.FC = () => {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-black text-red-400 flex flex-col items-center justify-center p-4">
+      <div className="min-h-screen bg-slate-50 text-red-500 flex flex-col items-center justify-center p-4">
         <h1 className="text-2xl font-bold mb-2">Error</h1>
         <p>{error}</p>
       </div>

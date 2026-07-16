@@ -97,6 +97,7 @@ export interface Slide {
   scriptureChapter?: string;
   scriptureVerseStart?: string;
   scriptureVerseEnd?: string;
+  scriptureVerses?: string[][];
   scriptureVerseBackgrounds?: Record<string, string>;
   /** Present only when type === 'quiz' */
   quizData?: QuizData;

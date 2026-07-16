@@ -8,15 +8,15 @@ interface CatalogIndexProps {
 
 export const CatalogIndex: React.FC<CatalogIndexProps> = ({ catalogs }) => {
   return (
-    <div className="min-h-screen bg-black text-gray-200 p-4 sm:p-8 flex flex-col items-center">
+    <div className="h-dvh overflow-y-auto bg-[#fef3c7] text-amber-950 p-4 sm:p-8 flex flex-col items-center">
       <div className="max-w-4xl w-full">
         <header className="mb-10 text-center">
-          <h1 className="text-3xl sm:text-4xl font-bold text-yellow-500 mb-2">Catálogos Públicos</h1>
-          <p className="text-gray-400">Selecciona un catálogo para ver su contenido</p>
+          <h1 className="text-3xl sm:text-4xl font-bold text-amber-700 mb-2">Catálogos Públicos</h1>
+          <p className="text-amber-900/70">Selecciona un catálogo para ver su contenido</p>
         </header>
 
         {catalogs.length === 0 ? (
-          <div className="text-center p-8 bg-gray-900 border border-gray-800 rounded-lg text-gray-500">
+          <div className="text-center p-8 bg-amber-100/50 border border-amber-200 rounded-lg text-amber-800">
             No hay catálogos públicos disponibles en este momento.
           </div>
         ) : (
@@ -25,15 +25,15 @@ export const CatalogIndex: React.FC<CatalogIndexProps> = ({ catalogs }) => {
               <a
                 key={cat.id}
                 href={cat.path}
-                className="bg-gray-900 border border-gray-700 hover:border-yellow-600 hover:bg-gray-800 transition-colors rounded-lg p-6 flex flex-col items-center text-center group cursor-pointer shadow-lg"
+                className="bg-white/80 border border-amber-200 hover:border-amber-400 hover:bg-white transition-colors rounded-lg p-6 flex flex-col items-center text-center group cursor-pointer shadow-sm hover:shadow-md"
               >
-                <div className="bg-gray-800 p-4 rounded-full mb-4 group-hover:bg-yellow-600/20 transition-colors">
-                  <BookOpen size={32} className="text-yellow-500 group-hover:text-yellow-400" />
+                <div className="bg-amber-100 p-4 rounded-full mb-4 group-hover:bg-amber-200 transition-colors">
+                  <BookOpen size={32} className="text-amber-600 group-hover:text-amber-700" />
                 </div>
-                <h2 className="text-xl font-bold text-gray-100 mb-2 group-hover:text-white">{cat.title}</h2>
+                <h2 className="text-xl font-bold text-amber-900 mb-2">{cat.title}</h2>
                 <div className="flex flex-wrap gap-1 justify-center">
                   {cat.tags.map(tag => (
-                    <span key={tag} className="text-[9px] uppercase tracking-wider bg-gray-950 text-gray-500 px-1.5 py-0.5 rounded border border-gray-800">
+                    <span key={tag} className="text-[9px] uppercase tracking-wider bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded border border-amber-200">
                       {tag}
                     </span>
                   ))}
