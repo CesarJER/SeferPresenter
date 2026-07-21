@@ -156,15 +156,17 @@ const isNullableString = (value) => value === null || typeof value === 'string'
 
 const readBody = (req, maxBytes = 5 * 1024 * 1024) =>
   new Promise((resolve, reject) => {
-    let body = ''
+    const chunks = []
+    let totalLength = 0
     req.on('data', (chunk) => {
-      body += chunk.toString()
-      if (Buffer.byteLength(body) > maxBytes) {
+      chunks.push(chunk)
+      totalLength += chunk.length
+      if (totalLength > maxBytes) {
         reject(new Error('Body too large'))
         req.destroy()
       }
     })
-    req.on('end', () => resolve(body))
+    req.on('end', () => resolve(Buffer.concat(chunks).toString('utf-8')))
     req.on('error', reject)
   })
 
