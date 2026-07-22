@@ -58,18 +58,6 @@ interface UseSyncStateProps {
   onAudioTimelineState?: (state: AudioTimelineState) => void;
 }
 
-const areStringArraysEqual = (left: string[] = [], right: string[] = []) =>
-  left.length === right.length && left.every((value, index) => value === right[index]);
-
-const areRecordsEqual = (left?: Record<string, string>, right?: Record<string, string>) => {
-  const leftEntries = Object.entries(left ?? {});
-  const rightRecord = right ?? {};
-  return (
-    leftEntries.length === Object.keys(rightRecord).length &&
-    leftEntries.every(([key, value]) => rightRecord[key] === value)
-  );
-};
-
 const areJsonEqual = (left: unknown, right: unknown) => JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
 
 const liveAudioWsOnlyTypes = new Set([
@@ -106,43 +94,9 @@ const presenterSideEffectCommands = new Set<RemoteCommandPayload['command']>([
 const isPresenterSideEffectCommand = (payload: RemoteCommandPayload) =>
   presenterSideEffectCommands.has(payload.command);
 
-const arePresentationsEqual = (left: Presentation | null, right: Presentation | null) => {
+export const arePresentationsEqual = (left: Presentation | null, right: Presentation | null) => {
   if (left === right) return true;
-  if (!left || !right) return false;
-  if (
-    left.id !== right.id ||
-    left.title !== right.title ||
-    left.background !== right.background ||
-    left.mode !== right.mode ||
-    left.fontScale !== right.fontScale ||
-    left.slides.length !== right.slides.length
-  ) {
-    return false;
-  }
-
-  return left.slides.every((leftSlide, index) => {
-    const rightSlide = right.slides[index];
-    return (
-      leftSlide.id === rightSlide.id &&
-      leftSlide.label === rightSlide.label &&
-      leftSlide.background === rightSlide.background &&
-      leftSlide.type === rightSlide.type &&
-      leftSlide.mediaSrc === rightSlide.mediaSrc &&
-      leftSlide.mediaVolume === rightSlide.mediaVolume &&
-      leftSlide.mediaSpeed === rightSlide.mediaSpeed &&
-      leftSlide.mediaLoop === rightSlide.mediaLoop &&
-      leftSlide.mediaPresenterNav === rightSlide.mediaPresenterNav &&
-      leftSlide.mediaStart === rightSlide.mediaStart &&
-      leftSlide.mediaEnd === rightSlide.mediaEnd &&
-      leftSlide.scriptureBook === rightSlide.scriptureBook &&
-      leftSlide.scriptureChapter === rightSlide.scriptureChapter &&
-      leftSlide.scriptureVerseStart === rightSlide.scriptureVerseStart &&
-      leftSlide.scriptureVerseEnd === rightSlide.scriptureVerseEnd &&
-      areStringArraysEqual(leftSlide.lines, rightSlide.lines) &&
-      areRecordsEqual(leftSlide.scriptureVerseBackgrounds, rightSlide.scriptureVerseBackgrounds) &&
-      areJsonEqual(leftSlide.quizData, rightSlide.quizData)
-    );
-  });
+  return areJsonEqual(left, right);
 };
 
 const areVideoStatesEqual = (left: VideoState | null, right: VideoState | null) => {

@@ -9,11 +9,11 @@
  * 3. On the controller side: receiving and aggregating all answers
  *
  * Architecture:
- * - Audience side: stores answers in localStorage (persist across page refresh/PWA restart).
+ * - Audience side: stores answers locally for the current presentation session.
  *   On answer submit, broadcasts via a dedicated 'sefer-quiz' channel.
  * - Controller side: listens on 'sefer-quiz' channel and accumulates session answers.
  *
- * Session ID: Generated once per audience device, stored in localStorage.
+ * Session ID: Ephemeral for the active page/session and rotated on logout.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -28,19 +28,10 @@ import { makeEmptyAudienceAnswer } from '../types/quiz';
 
 // ── Session ID ────────────────────────────────────────────────────────────────
 
-function getOrCreateSessionId(): string {
-  // Trata de usar el device ID de la audiencia si existe
-  let id = localStorage.getItem('sefer-audience-device-id');
-  if (id) return id;
-
-  const key = 'sefer-quiz-session-id';
-  id = localStorage.getItem(key);
-  if (!id) {
-    id = `qs-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-    localStorage.setItem(key, id);
-  }
-  return id;
-}
+const makeQuizSessionId = (): string =>
+  typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+    ? `qs-${crypto.randomUUID()}`
+    : `qs-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 
 // ── Message types ─────────────────────────────────────────────────────────────
 
@@ -110,8 +101,11 @@ type ScoresByPresentation = Record<string, Record<string, QuizQuestionScore>>;
 const ANSWERS_STORAGE_KEY = 'sefer-quiz-answers-by-presentation';
 const SCORES_STORAGE_KEY = 'sefer-quiz-scores-by-presentation';
 
-export function useAudienceAnswers(presentationId: string | null): UseAudienceAnswersReturn {
-  const sessionId = useMemo(() => getOrCreateSessionId(), []);
+export function useAudienceAnswers(
+  presentationId: string | null,
+  displayName?: string,
+): UseAudienceAnswersReturn {
+  const [sessionId, setSessionId] = useState(makeQuizSessionId);
   const channel = useMemo(() => new BroadcastChannel('sefer-quiz'), []);
   const scopeId = presentationId ?? '';
 
@@ -158,6 +152,19 @@ export function useAudienceAnswers(presentationId: string | null): UseAudienceAn
       // Ignore
     }
   }, [scoresByPresentation]);
+
+  useEffect(() => {
+    const handleLogout = () => {
+      localStorage.removeItem(ANSWERS_STORAGE_KEY);
+      localStorage.removeItem(SCORES_STORAGE_KEY);
+      localStorage.removeItem('sefer-quiz-session-id');
+      setAnswersByPresentation({});
+      setScoresByPresentation({});
+      setSessionId(makeQuizSessionId());
+    };
+    window.addEventListener('sefer-audience-logout', handleLogout);
+    return () => window.removeEventListener('sefer-audience-logout', handleLogout);
+  }, []);
 
   // Listen for CLEAR commands from controller and LOGOUT events from PWA identity
   useEffect(() => {
@@ -234,7 +241,7 @@ export function useAudienceAnswers(presentationId: string | null): UseAudienceAn
       type: 'QUIZ_ANSWER',
       presentationId,
       sessionId,
-      displayName: localStorage.getItem('sefer-audience-nick') || undefined,
+      displayName: displayName?.trim().slice(0, 80) || undefined,
       slideId,
       answer,
     };
@@ -246,7 +253,7 @@ export function useAudienceAnswers(presentationId: string | null): UseAudienceAn
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(msg),
     }).catch(() => {}); // Non-critical — local state is source of truth
-  }, [channel, presentationId, sessionId]);
+  }, [channel, displayName, presentationId, sessionId]);
 
   const selectRadioOption = useCallback((slideId: string, optionId: QuizOptionId) => {
     updateAnswer(slideId, prev => ({ ...prev, selectedOptionIds: [optionId] }));

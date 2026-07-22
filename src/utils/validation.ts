@@ -30,8 +30,17 @@ const isBooleanOrUndefined = (value: unknown): value is boolean | undefined =>
 const isStringRecordOrUndefined = (value: unknown): value is Record<string, string> | undefined =>
   value === undefined || (isRecord(value) && Object.values(value).every((entry) => typeof entry === 'string'));
 
+const isStringMatrixOrUndefined = (value: unknown): value is string[][] | undefined =>
+  value === undefined || (
+    Array.isArray(value) &&
+    value.every((row) => Array.isArray(row) && row.every((entry) => typeof entry === 'string'))
+  );
+
 const slideTypes = new Set(['text', 'media', 'tanaj', 'sefer', 'quiz']);
+const mediaFits = new Set(['cover', 'contain', 'fill']);
 const quizOptionIds = new Set(['A', 'B', 'C', 'D']);
+const quizTimerStatuses = new Set(['idle', 'running', 'paused', 'expired', 'completed']);
+const quizFeedbackSounds = new Set(['applause', 'mal', 'bip']);
 const presentationModes = new Set(['standard', 'trilingual']);
 const appModes = new Set(['slides', 'scripture', 'seferManual']);
 const origins = new Set(['control', 'presenter']);
@@ -369,6 +378,29 @@ const validateQuizData = (value: unknown, path: string): ValidationResult<unknow
   if (!isBooleanOrUndefined(value.isResultsSlide)) errors.push(`${path}.isResultsSlide debe ser booleano.`);
   if (isResultsSlide && !Array.isArray(value.resultProfiles)) {
     errors.push(`${path}.resultProfiles debe ser un array en una diapositiva de resultados.`);
+  } else if (value.resultProfiles !== undefined) {
+    if (!Array.isArray(value.resultProfiles)) {
+      errors.push(`${path}.resultProfiles debe ser un array.`);
+    } else {
+      const ranks = new Set<number>();
+      value.resultProfiles.forEach((profile: unknown, index: number) => {
+        const profilePath = `${path}.resultProfiles[${index}]`;
+        if (!isRecord(profile)) {
+          errors.push(`${profilePath} debe ser un objeto.`);
+          return;
+        }
+        if (!Number.isInteger(profile.rank) || (profile.rank as number) < 1) {
+          errors.push(`${profilePath}.rank debe ser entero >= 1.`);
+        } else if (ranks.has(profile.rank as number)) {
+          errors.push(`${profilePath}.rank no puede estar duplicado.`);
+        } else {
+          ranks.add(profile.rank as number);
+        }
+        for (const field of ['title', 'description', 'giftText'] as const) {
+          if (typeof profile[field] !== 'string') errors.push(`${profilePath}.${field} debe ser texto.`);
+        }
+      });
+    }
   }
 
   return errors.length > 0 ? fail(errors) : ok(value);
@@ -390,7 +422,9 @@ const validateSlideValue = (value: unknown, path: string): ValidationResult<Slid
     errors.push(`${path}.type no es valido.`);
   }
   if (!isStringOrUndefined(value.mediaSrc)) errors.push(`${path}.mediaSrc debe ser texto.`);
-  if (!isStringOrUndefined(value.mediaFit)) errors.push(`${path}.mediaFit debe ser texto.`);
+  if (value.mediaFit !== undefined && (typeof value.mediaFit !== 'string' || !mediaFits.has(value.mediaFit))) {
+    errors.push(`${path}.mediaFit no es valido.`);
+  }
   if (value.mediaVolume !== undefined && !isFiniteNumber(value.mediaVolume)) errors.push(`${path}.mediaVolume debe ser numero.`);
   if (value.mediaSpeed !== undefined && !isFiniteNumber(value.mediaSpeed)) errors.push(`${path}.mediaSpeed debe ser numero.`);
   if (!isBooleanOrUndefined(value.mediaLoop)) errors.push(`${path}.mediaLoop debe ser booleano.`);
@@ -402,6 +436,9 @@ const validateSlideValue = (value: unknown, path: string): ValidationResult<Slid
   if (!isStringOrUndefined(value.scriptureChapter)) errors.push(`${path}.scriptureChapter debe ser texto.`);
   if (!isStringOrUndefined(value.scriptureVerseStart)) errors.push(`${path}.scriptureVerseStart debe ser texto.`);
   if (!isStringOrUndefined(value.scriptureVerseEnd)) errors.push(`${path}.scriptureVerseEnd debe ser texto.`);
+  if (!isStringMatrixOrUndefined(value.scriptureVerses)) {
+    errors.push(`${path}.scriptureVerses debe ser un array de arrays de textos.`);
+  }
   if (!isStringRecordOrUndefined(value.scriptureVerseBackgrounds)) {
     errors.push(`${path}.scriptureVerseBackgrounds debe ser un objeto texto/texto.`);
   }
@@ -913,6 +950,73 @@ const validateAutoduckState = (value: unknown, path: string): ValidationResult<A
   return errors.length > 0 ? fail(errors) : ok(value as unknown as AutoduckState);
 };
 
+const validateQuizSyncState = (value: unknown, path: string): ValidationResult<QuizSyncState> => {
+  if (!isRecord(value)) return fail([`${path} debe ser un objeto.`]);
+
+  const errors: string[] = [];
+  if (value.presentationId !== undefined && typeof value.presentationId !== 'string') {
+    errors.push(`${path}.presentationId debe ser texto.`);
+  }
+  if (!Number.isInteger(value.currentSubslideIndex) || (value.currentSubslideIndex as number) < 0) {
+    errors.push(`${path}.currentSubslideIndex debe ser entero >= 0.`);
+  }
+
+  if (!isRecord(value.timerState)) {
+    errors.push(`${path}.timerState debe ser un objeto.`);
+  } else {
+    const timer = value.timerState;
+    if (typeof timer.status !== 'string' || !quizTimerStatuses.has(timer.status)) {
+      errors.push(`${path}.timerState.status no es valido.`);
+    }
+    if (timer.timerStartedAt !== null && (!isFiniteNumber(timer.timerStartedAt) || timer.timerStartedAt < 0)) {
+      errors.push(`${path}.timerState.timerStartedAt debe ser numero >= 0 o null.`);
+    }
+    if (!isFiniteNumber(timer.timerDurationMs) || timer.timerDurationMs < 0) {
+      errors.push(`${path}.timerState.timerDurationMs debe ser numero >= 0.`);
+    }
+    if (timer.pausedRemainingMs !== null && (!isFiniteNumber(timer.pausedRemainingMs) || timer.pausedRemainingMs < 0)) {
+      errors.push(`${path}.timerState.pausedRemainingMs debe ser numero >= 0 o null.`);
+    }
+  }
+
+  if (!isRecord(value.presenterDemoSelection)) {
+    errors.push(`${path}.presenterDemoSelection debe ser un objeto.`);
+  } else {
+    Object.entries(value.presenterDemoSelection).forEach(([slideId, optionId]) => {
+      if (slideId.trim() === '' || (optionId !== null && (typeof optionId !== 'string' || !quizOptionIds.has(optionId)))) {
+        errors.push(`${path}.presenterDemoSelection contiene una seleccion invalida.`);
+      }
+    });
+  }
+
+  if (value.maxBaseCentipunts !== undefined && (!isFiniteNumber(value.maxBaseCentipunts) || value.maxBaseCentipunts < 0)) {
+    errors.push(`${path}.maxBaseCentipunts debe ser numero >= 0.`);
+  }
+  if (value.scoreRequestId !== undefined && (!Number.isInteger(value.scoreRequestId) || (value.scoreRequestId as number) < 0)) {
+    errors.push(`${path}.scoreRequestId debe ser entero >= 0.`);
+  }
+  for (const field of ['completedQuizSlideIds', 'resultQuizSlideIds'] as const) {
+    const ids = value[field];
+    if (ids !== undefined && (!Array.isArray(ids) || ids.some((id) => typeof id !== 'string'))) {
+      errors.push(`${path}.${field} debe ser un array de textos.`);
+    }
+  }
+  if (value.feedbackSound !== undefined && value.feedbackSound !== null) {
+    if (!isRecord(value.feedbackSound)) {
+      errors.push(`${path}.feedbackSound debe ser un objeto o null.`);
+    } else {
+      if (typeof value.feedbackSound.type !== 'string' || !quizFeedbackSounds.has(value.feedbackSound.type)) {
+        errors.push(`${path}.feedbackSound.type no es valido.`);
+      }
+      if (!isFiniteNumber(value.feedbackSound.timestamp) || value.feedbackSound.timestamp < 0) {
+        errors.push(`${path}.feedbackSound.timestamp debe ser numero >= 0.`);
+      }
+    }
+  }
+
+  return errors.length > 0 ? fail(errors) : ok(value as unknown as QuizSyncState);
+};
+
 export const validateRemoteStatePayload = (value: unknown): ValidationResult<Partial<SyncStatePayload>> => {
   if (!isRecord(value)) return fail(['El payload remoto debe ser un objeto.']);
 
@@ -972,27 +1076,12 @@ export const validateRemoteStatePayload = (value: unknown): ValidationResult<Par
     else errors.push(...result.errors);
   }
   if (value.quizState !== undefined) {
-    if (value.quizState === null || isRecord(value.quizState)) {
-      if (isRecord(value.quizState)) {
-        if (value.quizState.presentationId !== undefined && typeof value.quizState.presentationId !== 'string') {
-          errors.push('remote.quizState.presentationId debe ser texto.');
-        }
-        if (value.quizState.maxBaseCentipunts !== undefined && (!isFiniteNumber(value.quizState.maxBaseCentipunts) || value.quizState.maxBaseCentipunts < 0)) {
-          errors.push('remote.quizState.maxBaseCentipunts debe ser numero >= 0.');
-        }
-        if (value.quizState.scoreRequestId !== undefined && (typeof value.quizState.scoreRequestId !== 'number' || !Number.isInteger(value.quizState.scoreRequestId) || value.quizState.scoreRequestId < 0)) {
-          errors.push('remote.quizState.scoreRequestId debe ser entero >= 0.');
-        }
-        for (const field of ['completedQuizSlideIds', 'resultQuizSlideIds'] as const) {
-          const ids = value.quizState[field];
-          if (ids !== undefined && (!Array.isArray(ids) || ids.some((id) => typeof id !== 'string'))) {
-            errors.push(`remote.quizState.${field} debe ser un array de textos.`);
-          }
-        }
-      }
-      next.quizState = value.quizState as QuizSyncState | null;
+    if (value.quizState === null) {
+      next.quizState = null;
     } else {
-      errors.push('remote.quizState debe ser objeto o null.');
+      const result = validateQuizSyncState(value.quizState, 'remote.quizState');
+      if (result.ok) next.quizState = result.value;
+      else errors.push(...result.errors);
     }
   }
   if (value.clientId !== undefined) {
