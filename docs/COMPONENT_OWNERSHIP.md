@@ -173,7 +173,7 @@ Live Audio state:
   per-participant microphone boost, temporary aliases, and privacy notice
   checkbox state are session/local state owned by `src/features/liveAudio/`.
   Active participant list visibility is split deliberately: Audience owns its
-  local `isAliasVisibleToActiveParticipants` preference through
+  ephemeral `isAliasVisibleToActiveParticipants` preference through
   `useAudienceSession`, Audience publishes alias plus active-list public key in
   `LIVE_AUDIO_ACTIVE_PARTICIPANT_PROFILE`, Control owns visible alias-list
   computation and encrypted list distribution, and `server/ws-server.mjs` owns

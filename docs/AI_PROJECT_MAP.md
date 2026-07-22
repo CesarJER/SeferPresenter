@@ -15,12 +15,14 @@ Fast map for agents. Use real paths only; this repo does not currently have
 - `src/main.tsx`: current presenter React root and global CSS import.
 - `src/main-audio-editor.tsx`: standalone audio editor React root; loads presentations, audio files, and audio sync maps from local APIs.
 - `src/main-catalog.tsx`: public catalog React root; fetches and displays public presentations.
-- `src/main-audience.tsx`: placeholder mode-specific React entry for the MPA split.
+- `src/main-audience.tsx`: standalone Audience root with read-only projection,
+  quiz, media/PWA and optional Live Audio wiring.
 - `src/main-control.tsx`: standalone control React root; loads the control panel tree without presenter dependencies.
 - `public/audience-sw.js`: shared PWA service worker for `/audience` and `/control` scopes, with network-first shells and no caching for live endpoints or large media.
 - `public/manifest.webmanifest`: Audience PWA manifest scoped to `/audience`.
 - `public/control-manifest.webmanifest`: Control PWA manifest scoped to `/control`.
-- `src/App.tsx`: route detection, top-level state, synchronization wiring, command dispatch, mode rendering.
+- `src/App.tsx`: Presenter/default-root state, synchronization, media and
+  projection rendering; route-specific Control/Audience roots live separately.
 - `README.md`: human overview, routes, scripts, backend endpoints, verification.
 - `server/local-server.mjs`: local backend, static serving, SSE, persistence endpoints, auth gate, and WebSocket attachment.
 - `server/ws-server.mjs`: WebSocket `/ws` server for backend-owned audio timeline messages.
@@ -121,8 +123,8 @@ Start with:
 - `src/utils/validation.ts`
 - `src/utils/cryptoUtils.ts` for private moderation cryptography
 - `src/hooks/usePrivateControlSignals.ts` for Fase 5.2 encrypted signal lifecycle
-- `src/hooks/useAudienceSession.ts` for audience nick/session lifecycle and the
-  `sefer-audience-alias-visible` local preference
+- `src/hooks/useAudienceSession.ts` for ephemeral audience nick/technical-ID
+  lifecycle and presentation-session rotation
 - `src/features/liveAudio/utils/activeParticipants.ts` for Control-owned A-Z
   visible participant list computation
 - `src/hooks/useControlAuthorization.ts`,
