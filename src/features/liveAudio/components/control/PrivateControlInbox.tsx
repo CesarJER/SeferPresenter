@@ -110,8 +110,9 @@ export const PrivateControlInbox: React.FC<PrivateControlInboxProps> = ({
               <span className="text-xs font-semibold text-gray-300">Mensaje de: <span className="text-white">{msg.fromAlias}</span></span>
               <button 
                 onClick={() => onDismissMessage(msg.id)}
-                className="text-gray-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                className="text-gray-500 hover:text-red-400 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
                 title="Descartar"
+                aria-label={`Descartar mensaje de ${msg.fromAlias}`}
               >
                 <Trash2 size={14} />
               </button>
