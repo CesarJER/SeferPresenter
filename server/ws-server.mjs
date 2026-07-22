@@ -1,7 +1,7 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from 'node:crypto'
 import { WebSocket, WebSocketServer } from 'ws'
 import { applyAction, getTimeline } from './timelineManager.mjs'
-import { isAuthRequired, hasValidBasicAuth } from './authUtils.mjs'
+import { hasAllowedRequestOrigin, isAuthRequired, hasValidBasicAuth } from './authUtils.mjs'
 
 const wsClients = new Map()
 const roles = new Set(['presenter', 'control', 'audience', 'unknown'])
@@ -13,6 +13,8 @@ let encryptedSensitiveSnapshot = null
 const PRIVATE_CONTROL_SIGNAL_MAX_CIPHERTEXT_BYTES = 4096
 const PRIVATE_CONTROL_SIGNAL_RATE_LIMIT = 5
 const PRIVATE_CONTROL_SIGNAL_RATE_WINDOW_MS = 60_000
+const WS_MAX_PAYLOAD_BYTES = 64 * 1024
+const WS_MAX_BUFFERED_BYTES = 512 * 1024
 const uuidV4Pattern = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const base64Pattern = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/
 const speakerStates = new Set(['LISTENER', 'REQUESTED', 'GRANTED', 'MUTED', 'REVOKED'])
@@ -410,13 +412,22 @@ const resetWsServerStateForTests = () => {
 }
 
 const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) => {
-  const wss = new WebSocketServer({ server: httpServer, path: '/ws' })
+  const wss = new WebSocketServer({
+    server: httpServer,
+    path: '/ws',
+    maxPayload: WS_MAX_PAYLOAD_BYTES,
+  })
 
   const broadcast = (message, filter) => {
     const data = typeof message === 'string' ? message : JSON.stringify(message)
     for (const [client, meta] of wsClients) {
       if (client.readyState !== WebSocket.OPEN) continue
       if (filter && !filter(meta)) continue
+      if (client.bufferedAmount > WS_MAX_BUFFERED_BYTES) {
+        wsClients.delete(client)
+        client.close(1013, 'Slow consumer')
+        continue
+      }
       try {
         client.send(data)
       } catch {
@@ -427,6 +438,11 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
 
   const sendJson = (client, message) => {
     if (client.readyState !== WebSocket.OPEN) return false
+    if (client.bufferedAmount > WS_MAX_BUFFERED_BYTES) {
+      wsClients.delete(client)
+      client.close(1013, 'Slow consumer')
+      return false
+    }
     try {
       client.send(JSON.stringify(message))
       return true
@@ -1043,6 +1059,16 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
     const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`)
     const role = makeRole(url.searchParams.get('role') || 'unknown')
 
+    if (!hasAllowedRequestOrigin(req)) {
+      ws.send(JSON.stringify({
+        type: 'ERROR',
+        code: 'ORIGIN_FORBIDDEN',
+        message: 'Request origin is not allowed',
+      }))
+      ws.close(1008, 'Origin forbidden')
+      return
+    }
+
     if (role !== 'audience' && isAuthRequired() && !hasValidBasicAuth(req)) {
       ws.send(JSON.stringify({
         type: 'ERROR',
@@ -1118,7 +1144,12 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
           break
 
         case 'AUDIO_TIMELINE_ACTION': {
-          if (meta?.role === 'audience') break
+          if (meta?.role !== 'control') break
+          const controlMeta = liveAudioControls.get(meta.controlSessionId)
+          if (!isControlAuthorized(controlMeta)) {
+            sendError(ws, 'CONTROL_PENDING_FORBIDDEN', 'Pending controls cannot mutate the audio timeline')
+            break
+          }
           const timeline = applyAction(msg.action)
           broadcast({
             type: 'AUDIO_TIMELINE_STATE',
@@ -1349,27 +1380,37 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
         case 'VIDEO_TELEMETRY':
         case 'DISPLAY_TELEMETRY':
           if (meta?.role === 'audience') break
+          if (meta?.role === 'control' && !isControlAuthorized(liveAudioControls.get(meta.controlSessionId))) {
+            sendError(ws, 'CONTROL_PENDING_FORBIDDEN', 'Pending controls cannot mutate projection or telemetry state')
+            break
+          }
           if (onFallbackMessage) {
             onFallbackMessage(msg, meta)
           }
           break
 
         case 'REMOTE_COMMAND':
-          if (meta?.role === 'audience') break
+          if (meta?.role !== 'control') break
+          if (!isControlAuthorized(liveAudioControls.get(meta.controlSessionId))) {
+            sendError(ws, 'CONTROL_PENDING_FORBIDDEN', 'Pending controls cannot mutate projection state')
+            break
+          }
+          {
+            const accepted = onFallbackMessage ? onFallbackMessage(msg, meta) === true : false
+            if (!accepted) break
+          }
           if (msg.payload?.command === 'RESET_STATE' && msg.payload.clearSession) {
             presentationSessionId = randomUUID()
             liveAudioControls.clear()
             liveAudioParticipants.clear()
+            encryptedSensitiveSnapshot = null
             broadcastConnectionCounts()
             broadcastAuthorizationState()
             broadcast(JSON.stringify({
               type: 'PRESENTATION_SESSION_ROTATED',
               presentationSessionId,
             }))
-            console.log(`[SERVER DBG] Global presentation session rotated by ${meta.clientId}, new ID: ${presentationSessionId}`)
-          }
-          if (onFallbackMessage) {
-            onFallbackMessage(msg, meta)
+            console.log('[SERVER] Presentation session rotated')
           }
           break
 

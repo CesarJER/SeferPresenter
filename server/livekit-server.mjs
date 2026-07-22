@@ -1,4 +1,5 @@
-import { createHmac, randomUUID } from 'node:crypto'
+import { createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'
+import { hasValidBasicAuth } from './authUtils.mjs'
 
 const roles = new Set(['audience', 'control', 'presenter'])
 const mutatingPaths = new Set([
@@ -95,6 +96,19 @@ const signJwt = (payload, apiKey, apiSecret) => {
   return `${data}.${signature}`
 }
 
+const createRefreshCredential = () => randomBytes(32).toString('base64url')
+
+const hashRefreshCredential = (credential) =>
+  createHash('sha256').update(credential).digest()
+
+const hasValidRefreshCredential = (participant, credential) => {
+  if (typeof credential !== 'string' || credential.length < 32) return false
+  if (!Buffer.isBuffer(participant?.refreshCredentialHash)) return false
+  const candidateHash = hashRefreshCredential(credential)
+  return candidateHash.length === participant.refreshCredentialHash.length &&
+    timingSafeEqual(candidateHash, participant.refreshCredentialHash)
+}
+
 const getRoomName = (config, roomSession) => {
   if (typeof roomSession !== 'string' || roomSession.trim() === '') return config.roomName
   const safeSession = roomSession.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64)
@@ -131,7 +145,7 @@ const getVideoGrant = (role, room, config, participantId, existingParticipant) =
   }
 }
 
-const issueToken = ({ role, roomSession, existingParticipant }) => {
+const issueToken = ({ role, roomSession, controlSessionId, existingParticipant }) => {
   const config = getConfig()
   if (!config.enabled) {
     return { ok: false, status: 503, error: 'Live Audio is disabled or misconfigured' }
@@ -157,24 +171,27 @@ const issueToken = ({ role, roomSession, existingParticipant }) => {
     video,
   }
   const token = signJwt(payload, config.apiKey, config.apiSecret)
+  const refreshCredential = createRefreshCredential()
   const participant = {
     participantId,
     participantIdentity,
     role,
     room,
     roomSession: roomSession || existingParticipant?.roomSession || null,
+    controlSessionId: controlSessionId || existingParticipant?.controlSessionId || null,
     speakerState: existingParticipant?.speakerState || 'LISTENER',
     canSubscribe: Boolean(video.canSubscribe),
     canPublish: Boolean(video.canPublish),
     issuedAt: Date.now(),
     expiresAt,
     lastSeenAt: Date.now(),
+    refreshCredentialHash: hashRefreshCredential(refreshCredential),
   }
 
   participants.set(participantId, participant)
   issuedTokens.set(token, { participantId, expiresAt })
 
-  console.log(`[LIVEKIT] livekit:token:issued role=${role} participantId=${participantId} identity=${participantIdentity}`)
+  console.log(`[LIVEKIT] livekit:token:issued role=${role}`)
 
   return {
     ok: true,
@@ -184,6 +201,7 @@ const issueToken = ({ role, roomSession, existingParticipant }) => {
       expiresAt,
       participantIdentity,
       participantId,
+      refreshCredential,
     },
   }
 }
@@ -250,12 +268,29 @@ const cleanupExpiredState = () => {
   }
 }
 
-const handleToken = async ({ req, res, readBody, sendJson }) => {
+const handleToken = async ({ req, res, readBody, sendJson, controlApi }) => {
   if (!requireConfigured(res, sendJson)) return true
   const body = await readJson(req, readBody)
+  const requestedRole = roles.has(body.role) ? body.role : 'audience'
+
+  if (requestedRole !== 'audience') {
+    if (!hasValidBasicAuth(req)) {
+      sendJson(res, 403, { error: 'Privileged Live Audio roles require authentication' })
+      return true
+    }
+    if (
+      requestedRole === 'control' &&
+      (typeof body.controlSessionId !== 'string' || !controlApi?.isLiveAudioControlAuthorized?.(body.controlSessionId))
+    ) {
+      sendJson(res, 403, { error: 'Control is not authorized for Live Audio' })
+      return true
+    }
+  }
+
   const result = issueToken({
-    role: body.role,
+    role: requestedRole,
     roomSession: body.roomSession,
+    controlSessionId: requestedRole === 'control' ? body.controlSessionId : undefined,
   })
 
   if (!result.ok) {
@@ -276,6 +311,25 @@ const handleRefreshToken = async ({ req, res, readBody, sendJson, controlApi }) 
   }
 
   const existingParticipant = participants.get(body.participantId)
+  if (existingParticipant.expiresAt <= Date.now()) {
+    sendJson(res, 401, { error: 'Live Audio session has expired' })
+    return true
+  }
+  if (!hasValidRefreshCredential(existingParticipant, body.refreshCredential)) {
+    sendJson(res, 403, { error: 'Live Audio refresh credential is invalid' })
+    return true
+  }
+  if (existingParticipant.role !== 'audience' && !hasValidBasicAuth(req)) {
+    sendJson(res, 403, { error: 'Privileged Live Audio refresh requires authentication' })
+    return true
+  }
+  if (
+    existingParticipant.role === 'control' &&
+    !controlApi?.isLiveAudioControlAuthorized?.(existingParticipant.controlSessionId)
+  ) {
+    sendJson(res, 403, { error: 'Control is no longer authorized for Live Audio' })
+    return true
+  }
   const wsParticipant = controlApi?.getLiveAudioParticipantState?.(body.participantId)
   if (wsParticipant) {
     existingParticipant.speakerState = wsParticipant.speakerState
@@ -296,10 +350,11 @@ const handleRefreshToken = async ({ req, res, readBody, sendJson, controlApi }) 
   const result = issueToken({
     role: existingParticipant.role,
     roomSession: existingParticipant.roomSession,
+    controlSessionId: existingParticipant.controlSessionId,
     existingParticipant,
   })
 
-  console.log(`[LIVEKIT] livekit:token:refresh role=${existingParticipant.role} participantId=${body.participantId}`)
+  console.log(`[LIVEKIT] livekit:token:refresh role=${existingParticipant.role}`)
 
   sendJson(res, 200, result.value)
   return true
@@ -371,7 +426,7 @@ const handleModeration = async ({ req, res, url, readBody, sendJson, controlApi 
     return true
   }
 
-  console.log(`[LIVEKIT] origin=control action=${url.pathname.replace('/api/livekit/', '')} participantId=${participantId}`)
+  console.log(`[LIVEKIT] origin=control action=${url.pathname.replace('/api/livekit/', '')}`)
 
   sendJson(res, 200, { success: true })
   return true
@@ -409,7 +464,7 @@ export const createLiveKitApi = (controlApi) => {
 
         if (url.pathname === '/api/livekit/token' && req.method === 'POST') {
           void checkOptionalLiveKitSdk()
-          return await handleToken({ req, res, readBody, sendJson })
+          return await handleToken({ req, res, readBody, sendJson, controlApi })
         }
 
         if (url.pathname === '/api/livekit/refresh-token' && req.method === 'POST') {
