@@ -10,8 +10,6 @@ interface AutoResizeTextProps {
   baseFontSize?: number;
   html?: boolean;
   allowGrow?: boolean;
-  lang?: string;
-  dir?: 'ltr' | 'rtl' | 'auto';
 }
 
 const AutoResizeText: React.FC<AutoResizeTextProps> = ({
@@ -23,8 +21,6 @@ const AutoResizeText: React.FC<AutoResizeTextProps> = ({
   baseFontSize,
   html = false,
   allowGrow = false,
-  lang,
-  dir,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const textRef = useRef<HTMLDivElement>(null);
@@ -136,8 +132,6 @@ const AutoResizeText: React.FC<AutoResizeTextProps> = ({
       {html ? (
         <div
           ref={textRef}
-          lang={lang}
-          dir={dir}
           className={`${className} text-center leading-tight whitespace-pre-wrap`}
           style={fontSize ? { fontSize: `${fontSize}px` } : undefined}
           dangerouslySetInnerHTML={{ __html: cleanText }}
@@ -145,8 +139,6 @@ const AutoResizeText: React.FC<AutoResizeTextProps> = ({
       ) : (
         <div
           ref={textRef}
-          lang={lang}
-          dir={dir}
           className={`${className} text-center leading-tight whitespace-pre-wrap`}
           style={fontSize ? { fontSize: `${fontSize}px` } : undefined}
         >

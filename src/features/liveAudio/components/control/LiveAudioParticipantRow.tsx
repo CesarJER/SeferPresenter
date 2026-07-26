@@ -1,4 +1,4 @@
-import React, { useId, useState } from 'react';
+import React, { useState } from 'react';
 import { Eye, EyeOff, Hand, MessageSquare, MicOff, RotateCcw, Trash2, UserCheck, UserX, Volume2, X, XCircle } from 'lucide-react';
 import type { SpeakerState } from '../../../../types/liveAudio';
 import { LiveAudioStatusBadge, type ParticipantStatus } from '../shared/LiveAudioStatusBadge';
@@ -49,7 +49,6 @@ export const LiveAudioParticipantRow: React.FC<LiveAudioParticipantRowProps> = (
   onMicrophoneConfigChange,
 }) => {
   const [isVolumeOpen, setIsVolumeOpen] = useState(false);
-  const microphoneConfigId = useId();
 
   const isRequested = participant.speakerState === 'REQUESTED' && !participant.isKicked;
   const isGranted = participant.speakerState === 'GRANTED' && !participant.isKicked;
@@ -62,7 +61,7 @@ export const LiveAudioParticipantRow: React.FC<LiveAudioParticipantRowProps> = (
     isGranted && participant.isMicrophoneActive && !participant.isMuted;
 
   const volume = participant.microphoneVolume ?? 100;
-  const displayAlias = participant.alias.trim() || 'Sincronizando alias…';
+  const displayAlias = participant.alias.trim() || 'Sin nick';
   const displayName = isControlAuthorized ? displayAlias : 'Usuario anónimo';
 
   const badgeStatus: ParticipantStatus = participant.isKicked
@@ -76,11 +75,7 @@ export const LiveAudioParticipantRow: React.FC<LiveAudioParticipantRowProps> = (
           : 'connected';
 
   return (
-    <div
-      role="group"
-      aria-label={`Controles de ${displayName}`}
-      className="flex items-center justify-between p-2 hover:bg-gray-800 focus-within:bg-gray-800 border-b border-gray-800 last:border-0 transition-colors group"
-    >
+    <div className="flex items-center justify-between p-2 hover:bg-gray-800 border-b border-gray-800 last:border-0 transition-colors group">
       <div className="flex min-w-0 items-center gap-3">
         <LiveAudioStatusBadge status={badgeStatus} isMuted={participant.isMuted} />
 
@@ -92,11 +87,10 @@ export const LiveAudioParticipantRow: React.FC<LiveAudioParticipantRowProps> = (
         </span>
       </div>
 
-      <div className="flex items-center gap-2 opacity-100 md:max-w-0 md:opacity-0 md:group-hover:max-w-full md:group-hover:opacity-100 md:group-focus-within:max-w-full md:group-focus-within:opacity-100 transition-all">
+      <div className="flex items-center gap-2 opacity-100 md:max-w-0 md:opacity-0 md:group-hover:max-w-full md:group-hover:opacity-100 transition-all">
         {isRequested && onGrant && (
           <button
             onClick={() => onGrant(participant.participantId)}
-            aria-label={`Conceder la palabra a ${displayName}`}
             className="flex items-center gap-1 bg-green-600 hover:bg-green-500 text-white px-2 py-1 rounded text-xs"
             title="Conceder palabra"
           >
@@ -108,7 +102,6 @@ export const LiveAudioParticipantRow: React.FC<LiveAudioParticipantRowProps> = (
         {isListener && onGrant && (
           <button
             onClick={() => onGrant(participant.participantId)}
-            aria-label={`Permitir micrófono a ${displayName}`}
             className="flex items-center gap-1 bg-gray-700 hover:bg-gray-600 text-white px-2 py-1 rounded text-xs"
             title="Permitir micrófono"
           >
@@ -120,7 +113,6 @@ export const LiveAudioParticipantRow: React.FC<LiveAudioParticipantRowProps> = (
         {isGranted && onMute && (
           <button
             onClick={() => onMute(participant.participantId)}
-            aria-label={hasOpenMicrophone ? `Silenciar a ${displayName}` : `${displayName} ya está silenciado`}
             className={`flex items-center gap-1 px-2 py-1 rounded text-xs ${hasOpenMicrophone
               ? 'bg-red-600 hover:bg-red-500 text-white'
               : 'bg-gray-600 text-gray-300'
@@ -141,7 +133,6 @@ export const LiveAudioParticipantRow: React.FC<LiveAudioParticipantRowProps> = (
                 onRevoke(participant.participantId);
               }
             }}
-            aria-label={`Revocar la palabra a ${displayName}`}
             className="flex items-center gap-1 bg-gray-700 hover:bg-gray-600 text-white px-2 py-1 rounded text-xs"
             title="Revocar palabra"
           >
@@ -154,9 +145,6 @@ export const LiveAudioParticipantRow: React.FC<LiveAudioParticipantRowProps> = (
           <div className="relative flex items-center">
             <button
               onClick={() => setIsVolumeOpen(!isVolumeOpen)}
-              aria-expanded={isVolumeOpen}
-              aria-controls={microphoneConfigId}
-              aria-label={`Ajustar micrófono de ${displayName}. Volumen actual ${volume} por ciento`}
               className={`flex items-center gap-1 p-1 rounded transition-colors ${isVolumeOpen
                 ? 'bg-blue-600 text-white'
                 : 'text-gray-400 hover:text-white hover:bg-gray-700'
@@ -168,12 +156,7 @@ export const LiveAudioParticipantRow: React.FC<LiveAudioParticipantRowProps> = (
             </button>
 
             {isVolumeOpen && (
-              <div
-                id={microphoneConfigId}
-                role="group"
-                aria-label={`Configuración del micrófono de ${displayName}`}
-                className="absolute right-8 top-1/2 -translate-y-1/2 bg-gray-800 border border-gray-700 p-2 rounded shadow-xl flex items-center gap-2 z-[100] min-w-48"
-              >
+              <div className="absolute right-8 top-1/2 -translate-y-1/2 bg-gray-800 border border-gray-700 p-2 rounded shadow-xl flex items-center gap-2 z-[100] min-w-48">
                 <span className="text-xs font-semibold text-gray-300 w-10">
                   {volume}%
                 </span>
@@ -184,8 +167,6 @@ export const LiveAudioParticipantRow: React.FC<LiveAudioParticipantRowProps> = (
                   max="300"
                   step="5"
                   value={volume}
-                  aria-label={`Volumen del micrófono de ${displayName}`}
-                  aria-valuetext={`${volume} por ciento`}
                   onChange={(e) =>
                     onMicrophoneConfigChange(participant.participantId, {
                       volume: parseInt(e.target.value, 10),
@@ -209,8 +190,7 @@ export const LiveAudioParticipantRow: React.FC<LiveAudioParticipantRowProps> = (
                         musicMode: e.target.checked,
                       })
                     }
-                    aria-label={`Modo música del micrófono de ${displayName}`}
-                    className="sr-only"
+                    className="hidden"
                   />
                   <span>🎵</span>
                 </label>
@@ -237,12 +217,6 @@ export const LiveAudioParticipantRow: React.FC<LiveAudioParticipantRowProps> = (
               );
             }}
             disabled={!participant.isAliasVisibleToActiveParticipants}
-            aria-pressed={participant.isAliasVisibleToActiveParticipants && !participant.isAliasHiddenByControl}
-            aria-label={
-              participant.isAliasVisibleToActiveParticipants
-                ? `${participant.isAliasHiddenByControl ? 'Mostrar' : 'Ocultar'} alias de ${displayName} a otros participantes`
-                : `${displayName} no autorizó compartir su alias`
-            }
             className={`p-1 rounded transition-colors ${!participant.isAliasVisibleToActiveParticipants
                 ? 'text-gray-600 cursor-not-allowed'
                 : participant.isAliasHiddenByControl
@@ -269,8 +243,6 @@ export const LiveAudioParticipantRow: React.FC<LiveAudioParticipantRowProps> = (
                 !participant.canViewActiveParticipants,
               )
             }
-            aria-pressed={participant.canViewActiveParticipants === true}
-            aria-label={`${participant.canViewActiveParticipants ? 'Revocar' : 'Conceder'} a ${displayName} permiso para ver participantes`}
             className={`p-1 rounded transition-colors ${participant.canViewActiveParticipants
                 ? 'text-blue-400 hover:text-white hover:bg-gray-700'
                 : 'text-gray-500 hover:text-white hover:bg-gray-700'
@@ -288,7 +260,6 @@ export const LiveAudioParticipantRow: React.FC<LiveAudioParticipantRowProps> = (
         {participant.isKicked && onRescue && (
           <button
             onClick={() => onRescue(participant.participantId)}
-            aria-label={`Rescatar a ${displayName} como participante activo`}
             className="flex items-center gap-1 bg-blue-700 hover:bg-blue-600 text-white px-2 py-1 rounded text-xs"
             title="Rescatar como activo sin abrir micrófono"
           >
@@ -304,7 +275,6 @@ export const LiveAudioParticipantRow: React.FC<LiveAudioParticipantRowProps> = (
                 onRemove(participant.participantId);
               }
             }}
-            aria-label={`Eliminar a ${displayName} de participantes activos`}
             className="text-gray-500 hover:text-red-400 p-1 transition-colors"
             title="Eliminar de activos (no bloquea, puede volver)"
           >
@@ -319,7 +289,6 @@ export const LiveAudioParticipantRow: React.FC<LiveAudioParticipantRowProps> = (
                 onKick(participant.participantId);
               }
             }}
-            aria-label={`Bloquear a ${displayName}`}
             className="text-gray-500 hover:text-red-500 p-1"
             title="Expulsar"
           >

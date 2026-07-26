@@ -7,10 +7,6 @@ import { normalizePresentation } from '../utils/normalizePresentation';
 import { makeSyncMessage } from '../utils/syncProtocol';
 import { validateRemoteStatePayload, validateSyncMessage } from '../utils/validation';
 import { useWebSocket } from './useWebSocket';
-import {
-  loadProtectedAudienceSnapshot,
-  saveProtectedAudienceSnapshot,
-} from '../utils/protectedAudienceStore';
 
 interface SyncStateOptions {
   presentation: Presentation | null;
@@ -60,16 +56,19 @@ interface UseSyncStateProps {
   setQuizState?: (state: QuizSyncState | null) => void;
   setAutoduckState: (state: AutoduckState) => void;
   onAudioTimelineState?: (state: AudioTimelineState) => void;
-  audienceAccessCredential?: string | null;
-  audienceAuthorized?: boolean;
-  audienceSseTicket?: string | null;
-  onAudienceSseReconnect?: () => void;
-  onWsMessage?: (type: string, payload: Record<string, unknown>) => void;
-  audienceParticipantId?: string | null;
-  audiencePresentationSessionId?: string | null;
-  audienceCredentialExpiresAt?: number;
-  audienceOffline?: boolean;
 }
+
+const areStringArraysEqual = (left: string[] = [], right: string[] = []) =>
+  left.length === right.length && left.every((value, index) => value === right[index]);
+
+const areRecordsEqual = (left?: Record<string, string>, right?: Record<string, string>) => {
+  const leftEntries = Object.entries(left ?? {});
+  const rightRecord = right ?? {};
+  return (
+    leftEntries.length === Object.keys(rightRecord).length &&
+    leftEntries.every(([key, value]) => rightRecord[key] === value)
+  );
+};
 
 const areJsonEqual = (left: unknown, right: unknown) => JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
 
@@ -85,22 +84,10 @@ const liveAudioWsOnlyTypes = new Set([
   'LIVE_AUDIO_CONTROL_PUBLIC_KEY',
   'LIVE_AUDIO_CONTROL_JOIN_REQUEST',
   'LIVE_AUDIO_CONTROL_AUTHORIZED',
-  'LIVE_AUDIO_CONTROL_KEY_TRANSFER_RESULT',
   'LIVE_AUDIO_CONTROL_AUTHORIZATION_STATE',
   'LIVE_AUDIO_CONTROL_AUTHORIZATION_DECISION',
-  'LIVE_AUDIO_CONTROL_RESUME_RESULT',
-  'LIVE_AUDIO_PRIVATE_OVERLAY_SNAPSHOT',
-  'LIVE_AUDIO_PRIVATE_OVERLAY_RESULT',
-  'AUDIENCE_ACCESS_STATE',
-  'AUDIENCE_ACCESS_REQUEST',
-  'AUDIENCE_ACCESS_DECISION_RESULT',
-    'SESSION_ACCESS_POLICY',
-    'SESSION_RECORDING_POLICY',
-    'SESSION_RECORDING_POLICY_RESULT',
-    'AUDIENCE_RECORDING_CONFIRMATION_RESULT',
   'CONTROL_KEY_ROTATED',
   'PRIVATE_CONTROL_SIGNAL',
-  'PRIVATE_CONTROL_SIGNAL_RESULT',
   'LIVE_AUDIO_REQUEST_ALIASES',
   'LIVE_AUDIO_SNAPSHOT_REQUEST',
   'LIVE_AUDIO_SNAPSHOT',
@@ -109,38 +96,6 @@ const liveAudioWsOnlyTypes = new Set([
 
 const isLiveAudioWsOnlyType = (type: unknown): type is string =>
   typeof type === 'string' && liveAudioWsOnlyTypes.has(type);
-
-const CONTROL_RESUME_STORAGE_KEY = 'sefer-control-resume';
-
-interface StoredControlResume {
-  presentationSessionId: string;
-  controlSessionId: string;
-  credential: string;
-}
-
-const readStoredControlResume = (): StoredControlResume | null => {
-  try {
-    const parsed = JSON.parse(localStorage.getItem(CONTROL_RESUME_STORAGE_KEY) || 'null') as unknown;
-    if (!parsed || typeof parsed !== 'object') return null;
-    const value = parsed as Partial<StoredControlResume>;
-    if (
-      typeof value.presentationSessionId !== 'string' ||
-      typeof value.controlSessionId !== 'string' ||
-      typeof value.credential !== 'string'
-    ) return null;
-    return value as StoredControlResume;
-  } catch {
-    return null;
-  }
-};
-
-const writeStoredControlResume = (value: StoredControlResume | null) => {
-  if (value) {
-    localStorage.setItem(CONTROL_RESUME_STORAGE_KEY, JSON.stringify(value));
-  } else {
-    localStorage.removeItem(CONTROL_RESUME_STORAGE_KEY);
-  }
-};
 
 const presenterSideEffectCommands = new Set<RemoteCommandPayload['command']>([
   'QUIZ_PLAY_APPLAUSE',
@@ -151,15 +106,44 @@ const presenterSideEffectCommands = new Set<RemoteCommandPayload['command']>([
 const isPresenterSideEffectCommand = (payload: RemoteCommandPayload) =>
   presenterSideEffectCommands.has(payload.command);
 
-export const arePresentationsEqual = (left: Presentation | null, right: Presentation | null) => {
+const arePresentationsEqual = (left: Presentation | null, right: Presentation | null) => {
   if (left === right) return true;
-  return areJsonEqual(left, right);
-};
+  if (!left || !right) return false;
+  if (
+    left.id !== right.id ||
+    left.title !== right.title ||
+    left.background !== right.background ||
+    left.mode !== right.mode ||
+    left.fontScale !== right.fontScale ||
+    left.slides.length !== right.slides.length
+  ) {
+    return false;
+  }
 
-export const getProjectionSyncEndpoints = (isAudienceMode: boolean) => ({
-  state: isAudienceMode ? '/api/audience/state' : '/api/state',
-  events: isAudienceMode ? '/api/audience/events' : '/api/state-events',
-});
+  return left.slides.every((leftSlide, index) => {
+    const rightSlide = right.slides[index];
+    return (
+      leftSlide.id === rightSlide.id &&
+      leftSlide.label === rightSlide.label &&
+      leftSlide.background === rightSlide.background &&
+      leftSlide.type === rightSlide.type &&
+      leftSlide.mediaSrc === rightSlide.mediaSrc &&
+      leftSlide.mediaVolume === rightSlide.mediaVolume &&
+      leftSlide.mediaSpeed === rightSlide.mediaSpeed &&
+      leftSlide.mediaLoop === rightSlide.mediaLoop &&
+      leftSlide.mediaPresenterNav === rightSlide.mediaPresenterNav &&
+      leftSlide.mediaStart === rightSlide.mediaStart &&
+      leftSlide.mediaEnd === rightSlide.mediaEnd &&
+      leftSlide.scriptureBook === rightSlide.scriptureBook &&
+      leftSlide.scriptureChapter === rightSlide.scriptureChapter &&
+      leftSlide.scriptureVerseStart === rightSlide.scriptureVerseStart &&
+      leftSlide.scriptureVerseEnd === rightSlide.scriptureVerseEnd &&
+      areStringArraysEqual(leftSlide.lines, rightSlide.lines) &&
+      areRecordsEqual(leftSlide.scriptureVerseBackgrounds, rightSlide.scriptureVerseBackgrounds) &&
+      areJsonEqual(leftSlide.quizData, rightSlide.quizData)
+    );
+  });
+};
 
 const areVideoStatesEqual = (left: VideoState | null, right: VideoState | null) => {
   if (left === right) return true;
@@ -214,25 +198,11 @@ export function useSyncState(props: UseSyncStateProps) {
     setLockedBackgroundValue, setUserSelectedBackground, setVideoState,
     setAppMode, setScriptureState, setAudioState, setAudioSyncMaps,
     setQuizState, setAutoduckState, onAudioTimelineState,
-    audienceAccessCredential, audienceAuthorized = true, audienceSseTicket,
-    onAudienceSseReconnect, onWsMessage,
-    audienceParticipantId, audiencePresentationSessionId,
-    audienceCredentialExpiresAt, audienceOffline = false,
   } = props;
-  const isAudienceMode = !isControlMode && !isPresenterMode;
-  const syncEndpoints = useMemo(
-    () => getProjectionSyncEndpoints(isAudienceMode),
-    [isAudienceMode],
-  );
 
   const channel = useMemo(() => new BroadcastChannel('sefer-presenter'), []);
   const processedMessageIdsRef = useRef<Set<string>>(new Set());
   const lastControllerUpdateMsRef = useRef<number>(0);
-  const audienceRevisionRef = useRef<{
-    presentationSessionId: string | null;
-    serverEpoch: string | null;
-    stateRevision: number;
-  }>({ presentationSessionId: null, serverEpoch: null, stateRevision: -1 });
 
   const wsUrl = useMemo(() => {
     if (typeof window === 'undefined') return null;
@@ -243,10 +213,6 @@ export function useSyncState(props: UseSyncStateProps) {
 
   const onAudioTimelineStateRef = useRef(onAudioTimelineState);
   useEffect(() => { onAudioTimelineStateRef.current = onAudioTimelineState; }, [onAudioTimelineState]);
-  const audienceCredentialRef = useRef(audienceAccessCredential);
-  const onWsMessageRef = useRef(onWsMessage);
-  useEffect(() => { audienceCredentialRef.current = audienceAccessCredential; }, [audienceAccessCredential]);
-  useEffect(() => { onWsMessageRef.current = onWsMessage; }, [onWsMessage]);
 
   const lastKeyMessageRef = useRef<{type: string, payload: Record<string, unknown>} | null>(null);
   const wsMessageSubscribersRef = useRef<Set<(type: string, payload: Record<string, unknown>) => void>>(new Set());
@@ -262,70 +228,13 @@ export function useSyncState(props: UseSyncStateProps) {
   }, []);
 
   const handleWsMessage = useCallback((type: string, payload: Record<string, unknown>) => {
-    onWsMessageRef.current?.(type, payload);
     if (type === 'LIVE_AUDIO_CONTROL_PUBLIC_KEY' || type === 'CONTROL_KEY_ROTATED') {
       lastKeyMessageRef.current = { type, payload };
     }
-
-    if (type === 'LIVE_AUDIO_CONTROL_RESUME_RESULT') {
-      const pending = pendingControlResumeRef.current;
-      if (
-        payload.accepted === true &&
-        typeof payload.presentationSessionId === 'string' &&
-        typeof payload.controlSessionId === 'string' &&
-        typeof payload.credential === 'string'
-      ) {
-        controlSessionIdRef.current = payload.controlSessionId;
-        writeStoredControlResume({
-          presentationSessionId: payload.presentationSessionId,
-          controlSessionId: payload.controlSessionId,
-          credential: payload.credential,
-        });
-      } else if (pending) {
-        controlSessionIdRef.current = pending.controlSessionId;
-        writeStoredControlResume(pending);
-      }
-      pendingControlResumeRef.current = null;
-    }
-
     wsMessageSubscribersRef.current.forEach(handler => handler(type, payload));
     
     if (type === 'WELCOME') {
-      const nextSessionId = typeof payload.controlSessionId === 'string'
-        ? payload.controlSessionId
-        : undefined;
-      const presentationSessionId = typeof payload.presentationSessionId === 'string'
-        ? payload.presentationSessionId
-        : undefined;
-      const credential = typeof payload.controlResumeCredential === 'string'
-        ? payload.controlResumeCredential
-        : undefined;
-      controlSessionIdRef.current = nextSessionId;
-      if (payload.role === 'control' && nextSessionId && presentationSessionId && credential) {
-        const previous = readStoredControlResume();
-        const temporary = { presentationSessionId, controlSessionId: nextSessionId, credential };
-        if (
-          previous &&
-          previous.presentationSessionId === presentationSessionId &&
-          previous.controlSessionId !== nextSessionId
-        ) {
-          pendingControlResumeRef.current = temporary;
-          wsSendRef.current('LIVE_AUDIO_CONTROL_RESUME', {
-            controlSessionId: previous.controlSessionId,
-            credential: previous.credential,
-          });
-        } else {
-          if (previous?.presentationSessionId !== presentationSessionId) {
-            writeStoredControlResume(null);
-          }
-          writeStoredControlResume(temporary);
-        }
-      }
-      if (payload.role === 'audience' && audienceCredentialRef.current) {
-        wsSendRef.current('AUDIENCE_ACCESS_BIND', {
-          credential: audienceCredentialRef.current,
-        });
-      }
+      controlSessionIdRef.current = payload.controlSessionId as string | undefined;
       console.log(`[CLIENT DBG] WebSocket WELCOME - clientId=${payload.clientId} role=${payload.role} controlSessionId=${payload.controlSessionId}`);
       wsSendRef.current('SERVER_TIME_PING', { clientSentAtMs: Date.now() });
       return;
@@ -356,15 +265,9 @@ export function useSyncState(props: UseSyncStateProps) {
   });
   const wsSendRef = useRef(wsSend);
   useEffect(() => { wsSendRef.current = wsSend; }, [wsSend]);
-  useEffect(() => {
-    if (isAudienceMode && wsStatus === 'open' && audienceAccessCredential) {
-      wsSend('AUDIENCE_ACCESS_BIND', { credential: audienceAccessCredential });
-    }
-  }, [audienceAccessCredential, isAudienceMode, wsSend, wsStatus]);
 
   const [isMediaMaster, setIsMediaMaster] = useState(false);
   const controlSessionIdRef = useRef<string | undefined>(undefined);
-  const pendingControlResumeRef = useRef<StoredControlResume | null>(null);
 
   // ── Persist to localStorage ───────────────────────────────────────
   const persistState = useCallback((
@@ -666,51 +569,15 @@ export function useSyncState(props: UseSyncStateProps) {
   }, [applyRemoteState, onRemoteCommand, applyAudioTelemetry, applyDisplayTelemetry, setVideoState, setAudioSyncMaps]);
 
   const requestBackendState = useCallback(async () => {
-    if (isAudienceMode && !audienceAuthorized) return false;
     try {
-      const response = await fetch(syncEndpoints.state, {
+      const response = await fetch('/api/state', {
         method: 'GET',
-        headers: {
-          Accept: 'application/json',
-          ...(isAudienceMode && audienceAccessCredential
-            ? { Authorization: `Bearer ${audienceAccessCredential}` }
-            : {}),
-        },
+        headers: { Accept: 'application/json' },
         cache: 'no-store',
       });
       if (!response.ok) return false;
       const data = await response.json();
       if (!data) return false;
-      if (
-        isAudienceMode &&
-        typeof data.presentationSessionId === 'string' &&
-        typeof data.serverEpoch === 'string' &&
-        Number.isInteger(data.stateRevision)
-      ) {
-        const current = audienceRevisionRef.current;
-        const sameStream = current.presentationSessionId === data.presentationSessionId &&
-          current.serverEpoch === data.serverEpoch;
-        if (sameStream && Number(data.stateRevision) < current.stateRevision) return false;
-        audienceRevisionRef.current = {
-          presentationSessionId: data.presentationSessionId,
-          serverEpoch: data.serverEpoch,
-          stateRevision: Number(data.stateRevision),
-        };
-      }
-      if (
-        isAudienceMode &&
-        audienceAccessCredential &&
-        audienceParticipantId &&
-        audiencePresentationSessionId &&
-        audienceCredentialExpiresAt
-      ) {
-        void saveProtectedAudienceSnapshot({
-          presentationSessionId: audiencePresentationSessionId,
-          participantId: audienceParticipantId,
-          credential: audienceAccessCredential,
-          expiresAt: audienceCredentialExpiresAt,
-        }, Number(data.stateRevision) || 0, data as Record<string, unknown>);
-      }
 
       if (data.type) {
         const validation = validateSyncMessage(data);
@@ -729,38 +596,9 @@ export function useSyncState(props: UseSyncStateProps) {
       return true;
     } catch (err) {
       console.error('Error requesting backend state snapshot', err);
-      if (
-        isAudienceMode &&
-        audienceAuthorized &&
-        audienceOffline &&
-        audienceAccessCredential &&
-        audienceParticipantId &&
-        audiencePresentationSessionId &&
-        audienceCredentialExpiresAt
-      ) {
-        const cached = await loadProtectedAudienceSnapshot({
-          presentationSessionId: audiencePresentationSessionId,
-          participantId: audienceParticipantId,
-          credential: audienceAccessCredential,
-          expiresAt: audienceCredentialExpiresAt,
-        });
-        if (cached) {
-          audienceRevisionRef.current = {
-            presentationSessionId: audiencePresentationSessionId,
-            serverEpoch: null,
-            stateRevision: cached.stateRevision,
-          };
-          applyRemoteStateRef.current(cached.projectionState);
-          return true;
-        }
-      }
       return false;
     }
-  }, [
-    audienceAccessCredential, audienceAuthorized, audienceCredentialExpiresAt,
-    audienceOffline, audienceParticipantId, audiencePresentationSessionId,
-    isAudienceMode, syncEndpoints.state,
-  ]);
+  }, []);
 
   // ── BroadcastChannel listener ─────────────────────────────────────
   useEffect(() => {
@@ -777,7 +615,6 @@ export function useSyncState(props: UseSyncStateProps) {
       const data = validation.value;
 
       if (isLiveAudioWsOnlyType(data.type)) return;
-      if (isAudienceMode && data.type !== 'REQUEST_STATE') return;
 
       if (data.messageId) {
         if (processedMessageIdsRef.current.has(data.messageId)) return;
@@ -833,67 +670,25 @@ export function useSyncState(props: UseSyncStateProps) {
     channel.addEventListener('message', handleMessage);
 
     void requestBackendState().then((loaded) => {
-      if (!loaded && !isAudienceMode) {
+      if (!loaded) {
         channel.postMessage(makeSyncMessage({ type: 'REQUEST_STATE', clientId: clientIdRef.current }));
       }
     });
 
     return () => channel.removeEventListener('message', handleMessage);
   }, [
-    isAudienceMode, isPresenterMode, channel, clientIdRef, requestBackendState, videoStateRef
+    isPresenterMode, channel, clientIdRef, requestBackendState, videoStateRef
   ]);
 
   // ── SSE listener (web mode only) ──────────────────────────────────
   useEffect(() => {
-    if (isAudienceMode && (!audienceAuthorized || !audienceSseTicket)) return;
-    const eventsUrl = isAudienceMode && audienceSseTicket
-      ? `${syncEndpoints.events}?ticket=${encodeURIComponent(audienceSseTicket)}`
-      : syncEndpoints.events;
-    const eventSource = new EventSource(eventsUrl);
+    const eventSource = new EventSource('/api/state-events');
 
     eventSource.onmessage = (event) => {
       try {
         if (event.data === 'heartbeat') return;
         const data = JSON.parse(event.data);
         if (!data) return;
-        if (
-          isAudienceMode &&
-          typeof data.presentationSessionId === 'string' &&
-          typeof data.serverEpoch === 'string' &&
-          Number.isInteger(data.stateRevision)
-        ) {
-          const current = audienceRevisionRef.current;
-          const sameStream = current.presentationSessionId === data.presentationSessionId &&
-            current.serverEpoch === data.serverEpoch;
-          if (!sameStream) {
-            audienceRevisionRef.current = {
-              presentationSessionId: data.presentationSessionId,
-              serverEpoch: data.serverEpoch,
-              stateRevision: Number(data.stateRevision),
-            };
-          } else if (Number(data.stateRevision) <= current.stateRevision) {
-            return;
-          } else if (current.stateRevision >= 0 && Number(data.stateRevision) > current.stateRevision + 1) {
-            void requestBackendState();
-            return;
-          } else {
-            audienceRevisionRef.current.stateRevision = Number(data.stateRevision);
-          }
-        }
-        if (
-          isAudienceMode &&
-          audienceAccessCredential &&
-          audienceParticipantId &&
-          audiencePresentationSessionId &&
-          audienceCredentialExpiresAt
-        ) {
-          void saveProtectedAudienceSnapshot({
-            presentationSessionId: audiencePresentationSessionId,
-            participantId: audienceParticipantId,
-            credential: audienceAccessCredential,
-            expiresAt: audienceCredentialExpiresAt,
-          }, Number(data.stateRevision) || 0, data as Record<string, unknown>);
-        }
 
         if (data.type) {
           const validation = validateSyncMessage(data);
@@ -952,19 +747,9 @@ export function useSyncState(props: UseSyncStateProps) {
       }
     };
 
-    eventSource.onerror = () => {
-      if (!isAudienceMode) return;
-      eventSource.close();
-      onAudienceSseReconnect?.();
-    };
-
     return () => eventSource.close();
   }, [
-    audienceAccessCredential, audienceAuthorized, audienceCredentialExpiresAt,
-    audienceParticipantId, audiencePresentationSessionId, audienceSseTicket,
-    clientIdRef, isAudienceMode,
-    isPresenterMode, onAudienceSseReconnect, requestBackendState,
-    syncEndpoints.events, videoStateRef
+    clientIdRef, isPresenterMode, videoStateRef
   ]);
 
   return { channel, syncState, emitCommand, persistState, emitAudioTelemetry, emitVideoTelemetry, emitDisplayTelemetry, wsStatus, wsSend, subscribeToWsMessage, isMediaMaster };

@@ -9,11 +9,11 @@
  * 3. On the controller side: receiving and aggregating all answers
  *
  * Architecture:
- * - Audience side: stores answers locally for the current presentation session.
+ * - Audience side: stores answers in localStorage (persist across page refresh/PWA restart).
  *   On answer submit, broadcasts via a dedicated 'sefer-quiz' channel.
  * - Controller side: listens on 'sefer-quiz' channel and accumulates session answers.
  *
- * Session ID: Ephemeral for the active page/session and rotated on logout.
+ * Session ID: Generated once per audience device, stored in localStorage.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -25,20 +25,27 @@ import type {
   QuizQuestionScore,
 } from '../types/quiz';
 import { makeEmptyAudienceAnswer } from '../types/quiz';
-import { refreshProtectedAudienceDrafts } from '../utils/protectedAudienceStore';
 
 // ── Session ID ────────────────────────────────────────────────────────────────
 
-const makeQuizSessionId = (): string =>
-  typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-    ? `qs-${crypto.randomUUID()}`
-    : `qs-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+function getOrCreateSessionId(): string {
+  // Trata de usar el device ID de la audiencia si existe
+  let id = localStorage.getItem('sefer-audience-device-id');
+  if (id) return id;
+
+  const key = 'sefer-quiz-session-id';
+  id = localStorage.getItem(key);
+  if (!id) {
+    id = `qs-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    localStorage.setItem(key, id);
+  }
+  return id;
+}
 
 // ── Message types ─────────────────────────────────────────────────────────────
 
 interface QuizAnswerMessage {
   type: 'QUIZ_ANSWER';
-  presentationId: string;
   sessionId: string;
   displayName?: string;
   slideId: string;
@@ -47,25 +54,16 @@ interface QuizAnswerMessage {
 
 interface QuizClearMessage {
   type: 'QUIZ_CLEAR_ANSWERS';
-  presentationId: string;
   slideId: string;
 }
 
 interface QuizFinalScoreMessage {
   type: 'QUIZ_FINAL_SCORE';
-  presentationId: string;
   sessionId: string;
   totalCentipunts: number;
 }
 
-interface QuizSessionSnapshotMessage {
-  type: 'QUIZ_SESSION_SNAPSHOT';
-  presentationId: string;
-  sessions: Record<string, QuizAudienceSession>;
-  sessionTotalScores: Record<string, number>;
-}
-
-type QuizMessage = QuizAnswerMessage | QuizClearMessage | QuizFinalScoreMessage | QuizSessionSnapshotMessage;
+type QuizMessage = QuizAnswerMessage | QuizClearMessage | QuizFinalScoreMessage;
 
 // ── Audience-side hook ────────────────────────────────────────────────────────
 
@@ -96,195 +94,98 @@ export interface UseAudienceAnswersReturn {
   saveScore: (slideId: string, score: QuizQuestionScore) => void;
 }
 
-type AnswersByPresentation = Record<string, Record<string, QuizAudienceAnswer>>;
-type ScoresByPresentation = Record<string, Record<string, QuizQuestionScore>>;
-
-const ANSWERS_STORAGE_KEY = 'sefer-quiz-answers-by-presentation';
-const SCORES_STORAGE_KEY = 'sefer-quiz-scores-by-presentation';
-const QUIZ_SSE_TICKET_KEY = 'sefer-audience-quiz-sse-ticket';
-
-const getAudienceCredential = (): string | null => {
-  try {
-    const parsed = JSON.parse(localStorage.getItem('sefer-audience-resume-credential') || 'null') as {
-      credential?: unknown;
-    } | null;
-    return typeof parsed?.credential === 'string' ? parsed.credential : null;
-  } catch {
-    return null;
-  }
-};
-
-const getAudienceParticipantId = (): string | null => {
-  try {
-    const parsed = JSON.parse(localStorage.getItem('sefer-audience-resume-credential') || 'null') as {
-      participantId?: unknown;
-    } | null;
-    return typeof parsed?.participantId === 'string' ? parsed.participantId : null;
-  } catch {
-    return null;
-  }
-};
-
-const getAudienceHeaders = () => {
-  const credential = getAudienceCredential();
-  return {
-    'Content-Type': 'application/json',
-    ...(credential ? { Authorization: `Bearer ${credential}` } : {}),
-  };
-};
-
-export function useAudienceAnswers(
-  presentationId: string | null,
-  displayName?: string,
-): UseAudienceAnswersReturn {
-  const [sessionId, setSessionId] = useState(makeQuizSessionId);
-  const [ticketRevision, setTicketRevision] = useState(0);
+export function useAudienceAnswers(): UseAudienceAnswersReturn {
+  const sessionId = useMemo(() => getOrCreateSessionId(), []);
   const channel = useMemo(() => new BroadcastChannel('sefer-quiz'), []);
-  const scopeId = presentationId ?? '';
 
-  const [answersByPresentation, setAnswersByPresentation] = useState<AnswersByPresentation>(() => {
+  const [answers, setAnswers] = useState<Record<string, QuizAudienceAnswer>>(() => {
+    // Restore from localStorage on mount
     try {
-      const stored = localStorage.getItem(ANSWERS_STORAGE_KEY);
+      const stored = localStorage.getItem('sefer-quiz-answers');
       return stored ? JSON.parse(stored) : {};
     } catch {
       return {};
     }
   });
 
-  const [scoresByPresentation, setScoresByPresentation] = useState<ScoresByPresentation>(() => {
+  const [scores, setScores] = useState<Record<string, QuizQuestionScore>>(() => {
     try {
-      const stored = localStorage.getItem(SCORES_STORAGE_KEY);
+      const stored = localStorage.getItem('sefer-quiz-scores');
       return stored ? JSON.parse(stored) : {};
     } catch {
       return {};
     }
   });
 
-  const answers = useMemo(
-    () => answersByPresentation[scopeId] ?? {},
-    [answersByPresentation, scopeId],
-  );
-  const scores = useMemo(
-    () => scoresByPresentation[scopeId] ?? {},
-    [scoresByPresentation, scopeId],
-  );
-
-  useEffect(() => {
-    const handleTicketUpdate = () => setTicketRevision((value) => value + 1);
-    window.addEventListener('sefer-audience-tickets-updated', handleTicketUpdate);
-    return () => window.removeEventListener('sefer-audience-tickets-updated', handleTicketUpdate);
-  }, []);
-
+  // Persist to localStorage whenever answers change
   useEffect(() => {
     try {
-      localStorage.setItem(ANSWERS_STORAGE_KEY, JSON.stringify(answersByPresentation));
-      void refreshProtectedAudienceDrafts();
+      localStorage.setItem('sefer-quiz-answers', JSON.stringify(answers));
     } catch {
       // Storage quota exceeded — silently ignore
     }
-  }, [answersByPresentation]);
+  }, [answers]);
 
   // Persist to localStorage whenever scores change
   useEffect(() => {
     try {
-      localStorage.setItem(SCORES_STORAGE_KEY, JSON.stringify(scoresByPresentation));
-      void refreshProtectedAudienceDrafts();
+      localStorage.setItem('sefer-quiz-scores', JSON.stringify(scores));
     } catch {
       // Ignore
     }
-  }, [scoresByPresentation]);
-
-  useEffect(() => {
-    const handleLogout = () => {
-      localStorage.removeItem(ANSWERS_STORAGE_KEY);
-      localStorage.removeItem(SCORES_STORAGE_KEY);
-      localStorage.removeItem('sefer-quiz-session-id');
-      setAnswersByPresentation({});
-      setScoresByPresentation({});
-      setSessionId(makeQuizSessionId());
-    };
-    const handleProtectedRestore = () => {
-      try {
-        setAnswersByPresentation(JSON.parse(localStorage.getItem(ANSWERS_STORAGE_KEY) || '{}'));
-        setScoresByPresentation(JSON.parse(localStorage.getItem(SCORES_STORAGE_KEY) || '{}'));
-      } catch {
-        setAnswersByPresentation({});
-        setScoresByPresentation({});
-      }
-    };
-    window.addEventListener('sefer-audience-logout', handleLogout);
-    window.addEventListener('sefer-protected-quiz-restored', handleProtectedRestore);
-    return () => {
-      window.removeEventListener('sefer-audience-logout', handleLogout);
-      window.removeEventListener('sefer-protected-quiz-restored', handleProtectedRestore);
-    };
-  }, []);
+  }, [scores]);
 
   // Listen for CLEAR commands from controller and LOGOUT events from PWA identity
   useEffect(() => {
     const processClear = (slideId: string) => {
-      if (!scopeId) return;
-      setAnswersByPresentation(prev => {
-        const scoped = prev[scopeId] ?? {};
-        const current = scoped[slideId];
+      setAnswers(prev => {
+        const current = prev[slideId];
         if (!current) return prev;
+        
         return {
           ...prev,
-          [scopeId]: {
-            ...scoped,
-            [slideId]: { ...current, submitted: false, submittedAt: null },
-          },
+          [slideId]: {
+            ...current,
+            submitted: false,
+            submittedAt: null
+          }
         };
       });
-      setScoresByPresentation(prev => {
-        const scoped = prev[scopeId] ?? {};
-        if (!scoped[slideId]) return prev;
-        const nextScoped = { ...scoped };
-        delete nextScoped[slideId];
-        return { ...prev, [scopeId]: nextScoped };
+      setScores(prev => {
+        if (!prev[slideId]) return prev;
+        const next = { ...prev };
+        delete next[slideId];
+        return next;
       });
     };
 
     const handleChannelMessage = (event: MessageEvent) => {
       const data = event.data as QuizMessage;
-      if (data?.type === 'QUIZ_CLEAR_ANSWERS' && data.presentationId === scopeId) {
+      if (data?.type === 'QUIZ_CLEAR_ANSWERS') {
         processClear(data.slideId);
       }
     };
 
     channel.addEventListener('message', handleChannelMessage);
 
-    const credential = getAudienceCredential();
-    const ticket = sessionStorage.getItem(QUIZ_SSE_TICKET_KEY);
-    if (credential && !ticket) {
-      channel.removeEventListener('message', handleChannelMessage);
-      return;
-    }
-    const eventSource = new EventSource(
-      ticket ? `/api/quiz-events?ticket=${encodeURIComponent(ticket)}` : '/api/quiz-events',
-    );
+    const eventSource = new EventSource('/api/quiz-events');
     eventSource.onmessage = (event) => {
       try {
         if (event.data === 'heartbeat') return;
         const data = JSON.parse(event.data);
-        if (data?.type === 'QUIZ_CLEAR_ANSWERS' && data.presentationId === scopeId) {
+        if (data?.type === 'QUIZ_CLEAR_ANSWERS') {
           processClear(data.slideId);
         }
       } catch {
         // intentional no-op
       }
     };
-    eventSource.onerror = () => {
-      if (!credential) return;
-      eventSource.close();
-      window.dispatchEvent(new CustomEvent('sefer-audience-sse-refresh-request'));
-    };
 
     return () => {
       channel.removeEventListener('message', handleChannelMessage);
       eventSource.close();
     };
-  }, [channel, scopeId, ticketRevision]);
+  }, [channel]);
 
   const getAnswers = useCallback(() => answers, [answers]);
 
@@ -293,36 +194,30 @@ export function useAudienceAnswers(
   }, [answers]);
 
   const updateAnswer = useCallback((slideId: string, updater: (prev: QuizAudienceAnswer) => QuizAudienceAnswer) => {
-    if (!scopeId) return;
-    setAnswersByPresentation(prev => {
-      const scoped = prev[scopeId] ?? {};
-      const current = scoped[slideId] ?? makeEmptyAudienceAnswer(slideId);
+    setAnswers(prev => {
+      const current = prev[slideId] ?? makeEmptyAudienceAnswer(slideId);
       const updated = updater(current);
-      return { ...prev, [scopeId]: { ...scoped, [slideId]: updated } };
+      return { ...prev, [slideId]: updated };
     });
-  }, [scopeId]);
+  }, []);
 
   const broadcast = useCallback((slideId: string, answer: QuizAudienceAnswer) => {
-    if (!presentationId) return;
     const msg: QuizAnswerMessage = {
       type: 'QUIZ_ANSWER',
-      presentationId,
-      sessionId: getAudienceParticipantId() ?? sessionId,
-      displayName: displayName?.trim().slice(0, 80) || undefined,
+      sessionId,
+      displayName: localStorage.getItem('sefer-audience-nick') || undefined,
       slideId,
       answer,
     };
     channel.postMessage(msg);
 
     // Also send via SSE endpoint for cross-device sync
-    const { displayName: _displayName, ...serverMessage } = msg;
-    void _displayName;
     fetch('/api/quiz-answer', {
       method: 'POST',
-      headers: getAudienceHeaders(),
-      body: JSON.stringify(serverMessage),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(msg),
     }).catch(() => {}); // Non-critical — local state is source of truth
-  }, [channel, displayName, presentationId, sessionId]);
+  }, [channel, sessionId]);
 
   const selectRadioOption = useCallback((slideId: string, optionId: QuizOptionId) => {
     updateAnswer(slideId, prev => ({ ...prev, selectedOptionIds: [optionId] }));
@@ -360,49 +255,42 @@ export function useAudienceAnswers(
   }, [updateAnswer, broadcast]);
 
   const submitAnswer = useCallback((slideId: string) => {
-    if (!scopeId) return;
-    setAnswersByPresentation(prev => {
-      const scoped = prev[scopeId] ?? {};
-      const current = scoped[slideId] ?? makeEmptyAudienceAnswer(slideId);
+    setAnswers(prev => {
+      const current = prev[slideId] ?? makeEmptyAudienceAnswer(slideId);
       if (current.submitted) return prev; // idempotent
       const submitted = { ...current, submitted: true, submittedAt: Date.now() };
       broadcast(slideId, submitted);
-      return { ...prev, [scopeId]: { ...scoped, [slideId]: submitted } };
+      return { ...prev, [slideId]: submitted };
     });
-  }, [broadcast, scopeId]);
+  }, [broadcast]);
 
   const submitAll = useCallback((slideId: string) => {
-    if (!scopeId) return;
-    setAnswersByPresentation(prev => {
-      const scoped = prev[scopeId] ?? {};
-      const current = scoped[slideId] ?? makeEmptyAudienceAnswer(slideId);
+    setAnswers(prev => {
+      const current = prev[slideId] ?? makeEmptyAudienceAnswer(slideId);
       if (current.submitted) return prev;
       const submitted = { ...current, submitted: true, submittedAt: Date.now() };
       broadcast(slideId, submitted);
-      return { ...prev, [scopeId]: { ...scoped, [slideId]: submitted } };
+      return { ...prev, [slideId]: submitted };
     });
-  }, [broadcast, scopeId]);
+  }, [broadcast]);
 
   const clearAnswer = useCallback((slideId: string) => {
-    if (!scopeId) return;
-    setAnswersByPresentation(prev => {
-      const nextScoped = { ...(prev[scopeId] ?? {}) };
-      delete nextScoped[slideId];
-      return { ...prev, [scopeId]: nextScoped };
+    setAnswers(prev => {
+      const next = { ...prev };
+      delete next[slideId];
+      return next;
     });
-    setScoresByPresentation(prev => {
-      const nextScoped = { ...(prev[scopeId] ?? {}) };
-      delete nextScoped[slideId];
-      return { ...prev, [scopeId]: nextScoped };
+    setScores(prev => {
+      const next = { ...prev };
+      delete next[slideId];
+      return next;
     });
-  }, [scopeId]);
+  }, []);
 
   const sendFinalScore = useCallback((totalCentipunts: number) => {
-    if (!presentationId) return;
     const msg: QuizFinalScoreMessage = {
       type: 'QUIZ_FINAL_SCORE',
-      presentationId,
-      sessionId: getAudienceParticipantId() ?? sessionId,
+      sessionId,
       totalCentipunts,
     };
     channel.postMessage(msg);
@@ -410,20 +298,16 @@ export function useAudienceAnswers(
     // Also send via SSE endpoint for cross-device sync
     fetch('/api/quiz-answer', {
       method: 'POST',
-      headers: getAudienceHeaders(),
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(msg),
     }).catch(() => {});
-  }, [channel, presentationId, sessionId]);
+  }, [channel, sessionId]);
 
   const getScores = useCallback(() => scores, [scores]);
 
   const saveScore = useCallback((slideId: string, score: QuizQuestionScore) => {
-    if (!scopeId) return;
-    setScoresByPresentation(prev => ({
-      ...prev,
-      [scopeId]: { ...(prev[scopeId] ?? {}), [slideId]: score },
-    }));
-  }, [scopeId]);
+    setScores(prev => ({ ...prev, [slideId]: score }));
+  }, []);
 
   return {
     getAnswers,
@@ -456,35 +340,28 @@ export interface UseControllerAnswersReturn {
   /**
    * Calculate range stats for results slide using reported scores.
    */
-  calcRangeStats: (
-    profiles: QuizResultProfile[],
-    maxBaseCentipunts: number,
-    sessionScoreOverrides?: Record<string, number>,
-  ) => QuizRangeStats[];
+  calcRangeStats: (profiles: QuizResultProfile[], maxBaseCentipunts: number) => QuizRangeStats[];
   /** Clear answers for a specific slide across all audiences */
   clearSlideAnswers: (slideId: string) => void;
 }
 
-export function useControllerAnswers(presentationId: string | null): UseControllerAnswersReturn {
+export function useControllerAnswers(): UseControllerAnswersReturn {
   const channel = useMemo(() => new BroadcastChannel('sefer-quiz'), []);
   const [sessions, setSessions] = useState<Record<string, QuizAudienceSession>>({});
   const [sessionTotalScores, setSessionTotalScores] = useState<Record<string, number>>({});
 
   // Listen for incoming answers from audience
   useEffect(() => {
-    let cancelled = false;
     const handleMessage = (event: MessageEvent) => {
-      if (cancelled) return;
       const data = event.data as QuizMessage;
       if (!data) return;
-      if (!presentationId || data.presentationId !== presentationId) return;
 
       if (data.type === 'QUIZ_ANSWER') {
         const { sessionId, slideId, answer } = data;
         if (!sessionId || !slideId || !answer) return;
 
         setSessions(prev => {
-          const existing = prev[sessionId] ?? { sessionId, presentationId, answers: {} };
+          const existing = prev[sessionId] ?? { sessionId, answers: {} };
           return {
             ...prev,
             [sessionId]: {
@@ -497,27 +374,6 @@ export function useControllerAnswers(presentationId: string | null): UseControll
         const { sessionId, totalCentipunts } = data;
         if (!sessionId || totalCentipunts == null) return;
         setSessionTotalScores(prev => ({ ...prev, [sessionId]: totalCentipunts }));
-      } else if (data.type === 'QUIZ_SESSION_SNAPSHOT') {
-        setSessions(prev => {
-          const merged = { ...data.sessions };
-          for (const [sessionId, liveSession] of Object.entries(prev)) {
-            const storedSession = merged[sessionId];
-            if (!storedSession) {
-              merged[sessionId] = liveSession;
-              continue;
-            }
-            const answers = { ...storedSession.answers };
-            for (const [slideId, liveAnswer] of Object.entries(liveSession.answers)) {
-              const storedAnswer = answers[slideId];
-              if (!storedAnswer || (liveAnswer.submittedAt ?? 0) >= (storedAnswer.submittedAt ?? 0)) {
-                answers[slideId] = liveAnswer;
-              }
-            }
-            merged[sessionId] = { ...storedSession, ...liveSession, answers };
-          }
-          return merged;
-        });
-        setSessionTotalScores(prev => ({ ...data.sessionTotalScores, ...prev }));
       }
     };
 
@@ -537,32 +393,11 @@ export function useControllerAnswers(presentationId: string | null): UseControll
       }
     };
 
-    if (presentationId) {
-      fetch('/api/quiz-control-state', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ presentationId }),
-      })
-        .then((response) => response.json())
-        .then((snapshot) => {
-          if (snapshot?.type === 'QUIZ_SESSION_SNAPSHOT') {
-            handleMessage({ data: snapshot } as MessageEvent);
-          }
-        })
-        .catch(() => {});
-    }
-
     return () => {
-      cancelled = true;
       channel.removeEventListener('message', handleMessage);
       eventSource.close();
     };
-  }, [channel, presentationId]);
-
-  useEffect(() => {
-    setSessions({});
-    setSessionTotalScores({});
-  }, [presentationId]);
+  }, [channel]);
 
   const getSessionAnswer = useCallback((sid: string, slideId: string) => {
     return sessions[sid]?.answers[slideId];
@@ -578,9 +413,8 @@ export function useControllerAnswers(presentationId: string | null): UseControll
   }, []);
 
   const clearSlideAnswers = useCallback((slideId: string) => {
-    if (!presentationId) return;
     // Send clear message locally via BroadcastChannel
-    const msg: QuizClearMessage = { type: 'QUIZ_CLEAR_ANSWERS', presentationId, slideId };
+    const msg: QuizClearMessage = { type: 'QUIZ_CLEAR_ANSWERS', slideId };
     channel.postMessage(msg);
 
     // Also send to server via SSE endpoint for cross-device sync (smartphones)
@@ -602,12 +436,11 @@ export function useControllerAnswers(presentationId: string | null): UseControll
       }
       return next;
     });
-  }, [channel, presentationId]);
+  }, [channel]);
 
   const calcRangeStats = useCallback((
     profiles: QuizResultProfile[],
-    maxBaseCentipunts: number,
-    sessionScoreOverrides?: Record<string, number>,
+    maxBaseCentipunts: number
   ): QuizRangeStats[] => {
     const stats: Record<number, QuizRangeStats> = {};
     for (const profile of profiles) {
@@ -620,8 +453,7 @@ export function useControllerAnswers(presentationId: string | null): UseControll
     const ranges = calcResultRanges(profiles, maxBaseCentipunts);
     
     // Evaluate ranks based on total score
-    const scoresToClassify = sessionScoreOverrides ?? sessionTotalScores;
-    for (const [sid, totalPts] of Object.entries(scoresToClassify)) {
+    for (const [sid, totalPts] of Object.entries(sessionTotalScores)) {
       const match = ranges.find(r => totalPts >= r.minCentipunts && totalPts <= r.maxCentipunts);
       if (match && stats[match.rank]) {
         stats[match.rank].count++;

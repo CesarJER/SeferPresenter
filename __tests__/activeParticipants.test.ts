@@ -3,7 +3,6 @@ import { createServer, type Server } from 'node:http';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { WebSocket, type WebSocketServer } from 'ws';
 import {
-  bootstrapAudienceAccess,
   createWsServer,
   getLiveAudioParticipantSnapshot,
   resetWsServerStateForTests,
@@ -21,7 +20,6 @@ interface WsClient {
   ws: WebSocket;
   messages: WsMessage[];
   send: (message: WsMessage) => void;
-  participantId?: string;
 }
 
 let httpServer: Server;
@@ -64,26 +62,19 @@ const waitFor = async (
 
 const connectWs = (role: 'control' | 'audience') =>
   new Promise<WsClient>((resolve, reject) => {
-    const access = role === 'audience'
-      ? bootstrapAudienceAccess() as { credential: string; participantId: string }
-      : null;
     const ws = new WebSocket(`${baseUrl}?role=${role}&clientId=${randomUUID()}`);
     const client: WsClient = {
       ws,
       messages: [],
       send: (message) => ws.send(JSON.stringify(message)),
-      participantId: access?.participantId,
     };
 
     ws.on('message', (raw) => {
-      const message = JSON.parse(raw.toString()) as WsMessage;
-      client.messages.push(message);
-      if (access && message.type === 'AUDIENCE_ACCESS_STATE') resolve(client);
+      client.messages.push(JSON.parse(raw.toString()) as WsMessage);
     });
     ws.on('open', () => {
       clients.push(client);
-      if (access) client.send({ type: 'AUDIENCE_ACCESS_BIND', credential: access.credential });
-      else resolve(client);
+      resolve(client);
     });
     ws.on('error', reject);
   });
@@ -108,11 +99,14 @@ const makeParticipantStatus = (
 
 const makeActiveProfile = (
   participantId: string,
-  isAliasVisibleToActiveParticipants = true,
+  alias: string,
+  activeListPublicKey = Buffer.from(`public-key-${alias}`).toString('base64'),
 ): WsMessage => ({
   type: 'LIVE_AUDIO_ACTIVE_PARTICIPANT_PROFILE',
   participantId,
-  isAliasVisibleToActiveParticipants,
+  alias,
+  activeListPublicKey,
+  isAliasVisibleToActiveParticipants: true,
   createdAt: Date.now(),
 });
 
@@ -148,7 +142,7 @@ describe('visible active participants', () => {
     process.env.SEFER_ACTIVE_ALIAS_MODERATION_DEFAULT_VISIBLE = 'false';
     const control = await connectWs('control');
     const audience = await connectWs('audience');
-    const participantId = audience.participantId!;
+    const participantId = randomUUID();
 
     audience.send(makeParticipantStatus(participantId));
     await waitFor(control, (message) => message.type === 'LIVE_AUDIO_PARTICIPANT_STATUS' && message.participantId === participantId);
@@ -181,7 +175,7 @@ describe('visible active participants', () => {
   it('applies control alias hiding after participant consent', async () => {
     const control = await connectWs('control');
     const audience = await connectWs('audience');
-    const participantId = audience.participantId!;
+    const participantId = randomUUID();
 
     audience.send(makeParticipantStatus(participantId));
     await waitFor(control, (message) => message.type === 'LIVE_AUDIO_PARTICIPANT_STATUS' && message.participantId === participantId);
@@ -215,7 +209,7 @@ describe('visible active participants', () => {
     process.env.SEFER_ACTIVE_ALIAS_MODERATION_DEFAULT_VISIBLE = 'true';
     const control = await connectWs('control');
     const visibleAudience = await connectWs('audience');
-    const visibleParticipantId = visibleAudience.participantId!;
+    const visibleParticipantId = randomUUID();
 
     visibleAudience.send(makeParticipantStatus(visibleParticipantId));
     await waitFor(control, (message) => message.type === 'LIVE_AUDIO_PARTICIPANT_STATUS' && message.participantId === visibleParticipantId);
@@ -224,7 +218,7 @@ describe('visible active participants', () => {
     resetWsServerStateForTests();
     process.env.SEFER_ACTIVE_ALIAS_MODERATION_DEFAULT_VISIBLE = 'false';
     const hiddenAudience = await connectWs('audience');
-    const hiddenParticipantId = hiddenAudience.participantId!;
+    const hiddenParticipantId = randomUUID();
 
     hiddenAudience.send(makeParticipantStatus(hiddenParticipantId));
     await wait(100);
@@ -234,7 +228,7 @@ describe('visible active participants', () => {
   it('updates view permission in participant state', async () => {
     const control = await connectWs('control');
     const audience = await connectWs('audience');
-    const participantId = audience.participantId!;
+    const participantId = randomUUID();
 
     audience.send(makeParticipantStatus(participantId));
     await waitFor(control, (message) => message.type === 'LIVE_AUDIO_PARTICIPANT_STATUS' && message.participantId === participantId);
@@ -253,7 +247,7 @@ describe('visible active participants', () => {
   it('sends list-view permission changes in clear to the target audience participant', async () => {
     const control = await connectWs('control');
     const audience = await connectWs('audience');
-    const participantId = audience.participantId!;
+    const participantId = randomUUID();
 
     audience.send(makeParticipantStatus(participantId));
     await waitFor(control, (message) => message.type === 'LIVE_AUDIO_PARTICIPANT_STATUS' && message.participantId === participantId);
@@ -273,14 +267,15 @@ describe('visible active participants', () => {
     expect(permission.canViewActiveParticipants).toBe(true);
   });
 
-  it('routes only technical alias visibility in the active participant profile', async () => {
+  it('routes active participant profile with alias and public key to authorized control', async () => {
     const control = await connectWs('control');
     const audience = await connectWs('audience');
-    const participantId = audience.participantId!;
+    const participantId = randomUUID();
+    const activeListPublicKey = Buffer.from('audience-visible-list-key').toString('base64');
 
     audience.send(makeParticipantStatus(participantId));
     await waitFor(control, (message) => message.type === 'LIVE_AUDIO_PARTICIPANT_STATUS' && message.participantId === participantId);
-    audience.send(makeActiveProfile(participantId));
+    audience.send(makeActiveProfile(participantId, 'Nuevo Nick', activeListPublicKey));
 
     const profile = await waitFor(
       control,
@@ -288,17 +283,16 @@ describe('visible active participants', () => {
     );
     const participant = getLiveAudioParticipantSnapshot().participants.find((item) => item.participantId === participantId);
 
-    expect(profile).not.toHaveProperty('alias');
-    expect(profile).not.toHaveProperty('activeListPublicKey');
-    expect(participant).not.toHaveProperty('alias');
-    expect(participant).not.toHaveProperty('activeListPublicKey');
+    expect(profile.alias).toBe('Nuevo Nick');
+    expect(profile.activeListPublicKey).toBe(activeListPublicKey);
+    expect(participant?.activeListPublicKey).toBe(activeListPublicKey);
     expect(participant?.isAliasVisibleToActiveParticipants).toBe(true);
   });
 
   it('keeps a raised hand when the participant republishes alias visibility', async () => {
     const control = await connectWs('control');
     const audience = await connectWs('audience');
-    const participantId = audience.participantId!;
+    const participantId = randomUUID();
 
     audience.send(makeParticipantStatus(participantId, { speakerState: 'REQUESTED' }));
     await waitFor(
@@ -310,7 +304,7 @@ describe('visible active participants', () => {
       ),
     );
 
-    audience.send(makeActiveProfile(participantId));
+    audience.send(makeActiveProfile(participantId, 'Mano Levantada'));
     await waitFor(
       control,
       (message) => message.type === 'LIVE_AUDIO_ACTIVE_PARTICIPANT_PROFILE' && message.participantId === participantId,
@@ -326,25 +320,8 @@ describe('visible active participants', () => {
   it('keeps operational state when list-view permission changes', async () => {
     const control = await connectWs('control');
     const audience = await connectWs('audience');
-    const participantId = audience.participantId!;
+    const participantId = randomUUID();
 
-    audience.send(makeParticipantStatus(participantId));
-    await waitFor(
-      control,
-      (message) => (
-        message.type === 'LIVE_AUDIO_PARTICIPANT_STATUS' &&
-        message.participantId === participantId
-      ),
-    );
-    control.send({
-      type: 'LIVE_AUDIO_GRANT_SPEAK',
-      participantId,
-      createdAt: Date.now(),
-    });
-    await waitFor(
-      audience,
-      (message) => message.type === 'LIVE_AUDIO_GRANT_SPEAK' && message.participantId === participantId,
-    );
     audience.send(makeParticipantStatus(participantId, {
       speakerState: 'GRANTED',
       canPublishAudio: true,
@@ -356,8 +333,7 @@ describe('visible active participants', () => {
       (message) => (
         message.type === 'LIVE_AUDIO_PARTICIPANT_STATUS' &&
         message.participantId === participantId &&
-        message.speakerState === 'GRANTED' &&
-        message.isMicrophoneActive === true
+        message.speakerState === 'GRANTED'
       ),
     );
 
@@ -380,7 +356,7 @@ describe('visible active participants', () => {
   it('removes only kicked participants and clears active-list flags', async () => {
     const control = await connectWs('control');
     const audience = await connectWs('audience');
-    const participantId = audience.participantId!;
+    const participantId = randomUUID();
 
     audience.send(makeParticipantStatus(participantId));
     await waitFor(control, (message) => message.type === 'LIVE_AUDIO_PARTICIPANT_STATUS' && message.participantId === participantId);

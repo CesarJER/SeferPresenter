@@ -1,7 +1,6 @@
-const SW_VERSION = 'dev';
+const SW_VERSION = '1.1.0';
 const CACHE_PREFIX = 'sefer-pwa';
 const CACHE_NAME = `${CACHE_PREFIX}-v${SW_VERSION}`;
-const BUILD_ASSETS = [];
 
 const CORE_ASSETS = [
   '/audience.html',
@@ -9,7 +8,6 @@ const CORE_ASSETS = [
   '/metadata.json',
   '/audience-cache-assets.txt',
   '/logo.svg',
-  ...BUILD_ASSETS,
 ];
 
 const MEDIA_EXTENSIONS = new Set([
@@ -203,10 +201,19 @@ const staleWhileRevalidate = async (request) => {
   return update;
 };
 
-const shouldRuntimeCacheUrl = (url) => !isNeverCacheUrl(url) && !isMediaUrl(url);
+const lazyMediaCache = async (request) => {
+  const cache = await caches.open(CACHE_NAME);
+  const cached = await cache.match(request);
+
+  if (cached) return cached;
+
+  const response = await fetch(request);
+  await putIfCacheable(cache, request, response);
+  return response;
+};
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(cacheConfiguredAssets());
+  event.waitUntil(cacheConfiguredAssets().then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', (event) => {
@@ -243,9 +250,8 @@ self.addEventListener('fetch', (event) => {
   }
 
   if (isMediaUrl(url)) {
-    // Media is network-only unless it was explicitly listed for installation in
-    // audience-cache-assets.txt. Avoid filling persistent browser storage with
-    // arbitrary songs/videos requested during a session.
+    if (request.headers.has('range')) return;
+    event.respondWith(lazyMediaCache(request));
     return;
   }
 
@@ -275,7 +281,6 @@ const swTestExports = {
   isMediaUrl,
   isImageUrl,
   isAudienceShell,
-  shouldRuntimeCacheUrl,
 };
 
 if (typeof self !== 'undefined') {

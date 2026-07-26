@@ -203,30 +203,12 @@ const calcMaxBaseCentipunts = (presentation) =>
     return total + (quizData.citaRef ? 100 : 50);
   }, 0);
 
-const calcMaxBaseCentipuntsForSlideIds = (presentation, slideIds) => {
-  const included = new Set(Array.isArray(slideIds) ? slideIds : []);
-  return getSlides(presentation).reduce((total, slide) => {
-    const quizData = slide?.type === 'quiz' ? slide.quizData : null;
-    if (!quizData || quizData.isResultsSlide === true || !included.has(slide.id)) return total;
-    return total + (quizData.citaRef ? 100 : 50);
-  }, 0);
-};
-
-const makeInitialQuizState = (slide, direction = 'forward', presentation = null, previousQuizState = null) => {
+const makeInitialQuizState = (slide, direction = 'forward', presentation = null) => {
   const quizData = slide?.type === 'quiz' ? slide.quizData : null;
   if (!quizData || !slide) return null;
   const subslides = generateQuizSubslides(quizData);
   const initialIndex = direction === 'backward' && subslides.length > 0 ? subslides.length - 1 : 0;
-  const presentationId = typeof presentation?.id === 'string' ? presentation.id : undefined;
-  const canPreserveRun = presentationId && previousQuizState?.presentationId === presentationId;
-  const completedQuizSlideIds = canPreserveRun && Array.isArray(previousQuizState.completedQuizSlideIds)
-    ? previousQuizState.completedQuizSlideIds
-    : [];
-  const resultQuizSlideIds = canPreserveRun && Array.isArray(previousQuizState.resultQuizSlideIds)
-    ? previousQuizState.resultQuizSlideIds
-    : undefined;
   return {
-    presentationId,
     currentSubslideIndex: initialIndex,
     timerState: {
       status: 'idle',
@@ -235,17 +217,9 @@ const makeInitialQuizState = (slide, direction = 'forward', presentation = null,
       pausedRemainingMs: null,
     },
     presenterDemoSelection: {
-      ...(canPreserveRun ? previousQuizState.presenterDemoSelection : {}),
       [slide.id]: null,
     },
-    completedQuizSlideIds,
-    resultQuizSlideIds,
-    scoreRequestId: canPreserveRun && Number.isFinite(previousQuizState.scoreRequestId)
-      ? previousQuizState.scoreRequestId
-      : 0,
-    maxBaseCentipunts: resultQuizSlideIds
-      ? calcMaxBaseCentipuntsForSlideIds(presentation, resultQuizSlideIds)
-      : calcMaxBaseCentipunts(presentation),
+    maxBaseCentipunts: calcMaxBaseCentipunts(presentation),
   };
 };
 
@@ -315,13 +289,7 @@ const applySlideSelection = (state, presentation, slideIndex, direction = 'forwa
   const scriptureState = buildScriptureSlideState(slide, state.scriptureState, direction, targetVerse, now);
   next.appMode = scriptureState ? 'scripture' : 'slides';
   next.scriptureState = scriptureState ?? state.scriptureState;
-  const samePresentation = Boolean(state.presentation?.id && state.presentation.id === next.presentation?.id);
-  next.quizState = makeInitialQuizState(
-    slide,
-    direction,
-    next.presentation,
-    samePresentation ? state.quizState : null,
-  ) ?? (samePresentation ? state.quizState : null);
+  next.quizState = makeInitialQuizState(slide, direction, next.presentation);
 
   const bgValue = slide?.background ?? '';
   if (bgValue !== 'Ignorar' && bgValue !== 'No cambiar') {
@@ -372,16 +340,8 @@ const selectQuizSubslide = (state, index, now = Date.now()) => updateQuizState(s
   const safeIndex = Math.max(0, Math.min(index, Math.max(0, subslides.length - 1)));
   
   let nextTimerState = quizState.timerState;
-  let completedQuizSlideIds = quizState.completedQuizSlideIds ?? [];
-  let resultQuizSlideIds = quizState.resultQuizSlideIds;
-  let maxBaseCentipunts = quizState.maxBaseCentipunts;
   if (subslides[safeIndex]?.kind === 'respuesta') {
     nextTimerState = { ...quizState.timerState, status: 'completed' };
-    if (!activeSlide.quizData.isResultsSlide && !completedQuizSlideIds.includes(activeSlide.id)) {
-      completedQuizSlideIds = [...completedQuizSlideIds, activeSlide.id];
-      resultQuizSlideIds = undefined;
-      maxBaseCentipunts = calcMaxBaseCentipunts(state.presentation);
-    }
   } else if (subslides[safeIndex]?.kind === 'pregunta' && quizState.timerState.status !== 'running') {
     nextTimerState = {
       ...quizState.timerState,
@@ -397,9 +357,6 @@ const selectQuizSubslide = (state, index, now = Date.now()) => updateQuizState(s
     ...quizState,
     currentSubslideIndex: safeIndex,
     timerState: nextTimerState,
-    completedQuizSlideIds,
-    resultQuizSlideIds,
-    maxBaseCentipunts,
   };
 });
 
@@ -462,14 +419,6 @@ const validateCommandPayload = (payload) => {
     case 'QUIZ_ADJUST_TIMER':
       if (!isFiniteNumber(payload.seconds) || payload.seconds < 1) return makeError('seconds must be a number >= 1');
       break;
-    case 'QUIZ_RECALCULATE_RESULTS':
-      if (!Array.isArray(payload.slideIds) || payload.slideIds.some((id) => typeof id !== 'string')) {
-        return makeError('slideIds must be an array of strings');
-      }
-      break;
-    case 'QUIZ_CLEAR_QUESTION_RESULTS':
-      if (typeof payload.slideId !== 'string') return makeError('slideId must be a string');
-      break;
     case 'QUIZ_DEMO_SELECT':
       if (payload.optionId !== null && typeof payload.optionId !== 'string') return makeError('optionId must be text or null');
       break;
@@ -522,22 +471,17 @@ export const reduceProjectionCommand = (currentState, payload, metadata = {}) =>
           stepIndex: payload.stepIndex,
           appMode: 'slides',
           videoState: null,
-          quizState: state.quizState,
+          quizState: null,
         });
       }
 
       if (step.type === 'quiz') {
-        const slide = getSlides(state.presentation)[step.slideIndex] || null;
-        const slideChanged = state.slideIndex !== step.slideIndex;
         const next = {
           ...state,
           slideIndex: step.slideIndex,
           stepIndex: payload.stepIndex,
           appMode: 'slides',
           videoState: null,
-          quizState: slideChanged
-            ? makeInitialQuizState(slide, 'forward', state.presentation, state.quizState)
-            : state.quizState,
         };
         return makeOk(selectQuizSubslide(next, step.subslideIndex, now));
       }
@@ -550,7 +494,7 @@ export const reduceProjectionCommand = (currentState, payload, metadata = {}) =>
         appMode: 'scripture',
         videoState: null,
         scriptureState: buildScriptureSlideState(slide, state.scriptureState, 'forward', step.verse, now),
-        quizState: state.quizState,
+        quizState: null,
       });
     }
 
@@ -790,43 +734,6 @@ export const reduceProjectionCommand = (currentState, payload, metadata = {}) =>
       }));
       return makeOk(answerIndex >= 0 ? selectQuizSubslide(next, answerIndex, now) : next);
     }
-
-    case 'QUIZ_RECALCULATE_RESULTS': {
-      const validQuestionIds = new Set(
-        getSlides(state.presentation)
-          .filter((slide) => slide?.type === 'quiz' && slide.quizData && slide.quizData.isResultsSlide !== true)
-          .map((slide) => slide.id),
-      );
-      const resultQuizSlideIds = [...new Set(payload.slideIds)].filter((id) => validQuestionIds.has(id));
-      return makeOk(updateQuizState(state, (quizState) => ({
-        ...quizState,
-        completedQuizSlideIds: [...new Set([
-          ...(quizState.completedQuizSlideIds ?? []),
-          ...resultQuizSlideIds,
-        ])],
-        resultQuizSlideIds,
-        maxBaseCentipunts: calcMaxBaseCentipuntsForSlideIds(state.presentation, resultQuizSlideIds),
-        scoreRequestId: (quizState.scoreRequestId ?? 0) + 1,
-      })));
-    }
-
-    case 'QUIZ_CLEAR_QUESTION_RESULTS':
-      return makeOk(updateQuizState(state, (quizState) => {
-        const completedQuizSlideIds = (quizState.completedQuizSlideIds ?? [])
-          .filter((id) => id !== payload.slideId);
-        const resultQuizSlideIds = Array.isArray(quizState.resultQuizSlideIds)
-          ? quizState.resultQuizSlideIds.filter((id) => id !== payload.slideId)
-          : undefined;
-        return {
-          ...quizState,
-          completedQuizSlideIds,
-          resultQuizSlideIds,
-          maxBaseCentipunts: resultQuizSlideIds
-            ? calcMaxBaseCentipuntsForSlideIds(state.presentation, resultQuizSlideIds)
-            : calcMaxBaseCentipunts(state.presentation),
-          scoreRequestId: (quizState.scoreRequestId ?? 0) + 1,
-        };
-      }));
 
     case 'QUIZ_SELECT_SUBSLIDE':
       return makeOk(selectQuizSubslide(state, payload.index, now));

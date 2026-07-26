@@ -125,8 +125,8 @@ Use these checklists before implementing future tasks.
 - Keep the readable alias list E2E encrypted. The server may store technical
   flags, but must not compute or broadcast aliases in clear text.
 - Keep `isAliasVisibleToActiveParticipants` lifecycle identical to the audience
-  nick: page-session only, never persisted, and clear it on logout, session
-  rotation, kick, and remove.
+  nick: initialize from `localStorage`, persist checkbox changes, and clear it
+  on logout, session rotation, kick, and remove.
 - Keep `isAliasVisibleToActiveParticipants`, `isAliasHiddenByControl`, and
   `canViewActiveParticipants` orthogonal.
 - Audience active profiles (`LIVE_AUDIO_ACTIVE_PARTICIPANT_PROFILE`) may carry
@@ -158,8 +158,6 @@ Use these checklists before implementing future tasks.
 - Keep persistent data in `QuizData` on `Slide`.
 - Keep runtime timer/subslide/demo state in `QuizSyncState` and quiz hooks.
 - Keep audience answers separate from presenter demo/correction selection.
-- Keep audience answers, final scores, clear messages, and controller aggregates scoped by `presentationId`.
-- If result ranges change at runtime, publish the included quiz slide IDs and recalculated maximum through `QuizSyncState` so Control, Presenter, and Audience agree.
 - Update `src/utils/quizUtils.ts` for parsing, scoring, ranges, and subslides.
 - Update `src/components/quiz/*` for view behavior.
 - Update `__tests__/quiz/quizUtils.test.ts` for pure quiz behavior.
