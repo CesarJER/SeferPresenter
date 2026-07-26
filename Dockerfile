@@ -45,10 +45,11 @@ FROM node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb836
 
 WORKDIR /app
 
-# Ensure we're running as a restricted user for security
-RUN chown -R node:node /app
-
-USER node
+# The entrypoint prepares mounted runtime directories as root and immediately
+# drops privileges to the existing unprivileged node user.
+RUN apk add --no-cache su-exec && \
+    mkdir -p /app/backups && \
+    chown -R node:node /app
 
 # Copy only the necessary files for production
 COPY --from=builder --chown=node:node /app/package.json /app/package-lock.json ./
@@ -59,12 +60,15 @@ RUN npm ci --omit=dev
 COPY --from=builder --chown=node:node /app/dist ./dist
 COPY --from=builder --chown=node:node /app/server ./server
 COPY --from=builder --chown=node:node /app/public ./public
+COPY --chown=root:root server/docker-entrypoint.sh /usr/local/bin/sefer-entrypoint
 
 # Empty placeholder files for config mounts
 # This prevents Docker from creating directories if the files are missing
 RUN touch /app/presentations.json && \
-    touch /app/audio_sync.json
+    touch /app/audio_sync.json && \
+    chmod 0755 /usr/local/bin/sefer-entrypoint
 
 EXPOSE 8787
 
+ENTRYPOINT ["/usr/local/bin/sefer-entrypoint"]
 CMD ["npm", "run", "start:local"]

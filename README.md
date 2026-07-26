@@ -333,7 +333,10 @@ claves efímeras de Audience, y conserva únicamente estado técnico de conexió
 moderación, visibilidad y micrófono.
 
 Compose conserva copias de recuperación fsync de `presentations.json` y
-`audio_sync.json` en el volumen `sefer_backups`. En un montaje individual de
+`audio_sync.json` en el volumen `sefer_backups`. El arranque valida el primario,
+restaura automáticamente una copia válida cuando sea necesario y se niega a
+iniciar si ambos archivos están dañados. El contenedor prepara el volumen y
+después ejecuta la aplicación como usuario `node`. En un montaje individual de
 archivo, Docker puede impedir el `rename` atómico del primario; el backend lo
 registra y solo usa escritura in-place después de crear esa copia durable.
 
