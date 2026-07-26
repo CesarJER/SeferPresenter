@@ -50,6 +50,10 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
 - `AudienceAccessGate` -
   `src/components/audience/AudienceAccessGate.tsx`: encrypted-alias waiting
   room UI that keeps protected session content unmounted until admission.
+- `saveProtectedAudienceSnapshot` / `loadProtectedAudienceSnapshot` /
+  `clearProtectedAudienceSnapshot` -
+  `src/utils/protectedAudienceStore.ts`: credential-bound IndexedDB recovery
+  for the last admitted projection snapshot and quiz drafts.
 - Quiz answer hooks - `src/hooks/useQuizAnswers.ts`: presentation-scoped audience answer sessions and controller aggregation through `useAudienceAnswers` and `useControllerAnswers`.
 - `useQuizAudio` - `src/hooks/useQuizAudio.ts`: quiz feedback sounds.
 - `scriptureNumerals` helpers - `src/hooks/scriptureNumerals.ts`: scripture numeral utilities.

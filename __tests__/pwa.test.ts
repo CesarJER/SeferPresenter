@@ -42,6 +42,8 @@ describe('PWA service worker policy', () => {
       '/api/quiz-events',
       '/api/livekit/token',
       '/api/livekit/refresh-token',
+      '/api/audience/access/bootstrap',
+      '/api/audience/events?ticket=short-lived',
       '/ws',
       '/rtc/validate',
       '/twirp/livekit.RoomService/ListRooms',

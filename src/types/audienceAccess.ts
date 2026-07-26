@@ -14,6 +14,7 @@ export interface AudienceAccessSnapshot {
   participantId: string | null;
   accessState: AudienceAccessState;
   retryAt?: number;
+  expiresAt?: number;
   stateRevision: number;
 }
 

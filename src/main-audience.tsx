@@ -160,6 +160,10 @@ function AudienceApp() {
     audienceSseTicket: audienceAccess.stateSseTicket,
     onAudienceSseReconnect: audienceAccess.refreshTickets,
     onWsMessage: audienceAccess.handleWsMessage,
+    audienceParticipantId: audienceAccess.participantId,
+    audiencePresentationSessionId: audienceAccess.presentationSessionId,
+    audienceCredentialExpiresAt: audienceAccess.expiresAt,
+    audienceOffline: audienceAccess.offline,
   });
 
   const { serverNow } = useServerClock(wsSend, wsStatus, subscribeToWsMessage);
@@ -297,7 +301,10 @@ function AudienceApp() {
     />
   );
 
-  if (!audienceAccess.authorized || !audienceAccess.stateSseTicket || !audienceAccess.quizSseTicket) {
+  if (
+    !audienceAccess.authorized ||
+    (!audienceAccess.offline && (!audienceAccess.stateSseTicket || !audienceAccess.quizSseTicket))
+  ) {
     return (
       <AudienceAccessGate
         accessState={audienceAccess.accessState}
@@ -335,6 +342,14 @@ function AudienceApp() {
           <Play className="h-4 w-4" />
           <span>Activar audio y video</span>
         </button>
+      )}
+      {audienceAccess.offline && (
+        <div
+          role="status"
+          className="fixed left-1/2 top-3 z-[100] -translate-x-1/2 rounded-full border border-amber-500 bg-slate-950/95 px-4 py-2 text-sm font-bold text-amber-200 shadow-xl"
+        >
+          ⛔ Sin conexión — mostrando el último estado autorizado
+        </div>
       )}
       
       {/* Hidden audio element for audience audio sync */}

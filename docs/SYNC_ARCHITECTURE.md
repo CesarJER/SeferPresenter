@@ -56,6 +56,33 @@ Audience projection snapshots carry `presentationSessionId`, `serverEpoch`,
 snapshot on connect/reconnect or a revision gap; it does not reconstruct missed
 projection state from historical events.
 
+Audience resume credentials use an absolute
+`SEFER_AUDIENCE_RESUME_TTL_HOURS` lifetime: 24 hours by default and capped at
+168. Logout, expiry, obsolete credentials and presentation-session rotation
+remove the local credential and the matching server digest. Reject/Block keeps
+the credential so the server can enforce the state, but removes protected local
+content.
+
+### Protected Offline Recovery
+
+The service worker continues to cache only the application shell, scripture,
+images and explicitly configured static resources. Every `/api` route, SSE/WS,
+ticket, token and LiveKit path remains network-only.
+
+After verified admission, Audience mirrors the latest authorized projection
+snapshot and quiz drafts into a separate IndexedDB record bound to
+`presentationSessionId`, technical participant ID, the SHA-256 digest of the
+resume credential and its absolute expiry. Waiting, rejected, blocked and never
+admitted clients cannot create or restore this record.
+
+When an admitted client is fully offline it may restore only that last snapshot
+and its drafts, with a persistent icon-and-text “Sin conexión” status. Offline
+state is recovery data, never live authority: it cannot synthesize new slides,
+admissions, permissions or Live Audio. Reconnection first revalidates the
+credential/session and obtains a fresh versioned snapshot. Revocation performed
+while a device is offline can only be learned after connectivity returns; the
+project does not promise DRM or removal of resources already downloaded.
+
 Main message types live in `src/types/sync.ts`:
 
 - `SYNC_STATE`: full state needed to initialize or resynchronize clients.

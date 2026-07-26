@@ -15,6 +15,7 @@ import {
   getServerEpoch,
   getSessionAccessMode,
   issueAudienceSseTicket,
+  logoutAudienceCredential,
   isLiveAudioControlAuthorized,
   isAudienceParticipantAdmitted,
 } from './ws-server.mjs'
@@ -682,6 +683,12 @@ const handleApi = async (req, res, url) => {
       return true
     }
     sendJson(res, 200, { ticket, expiresInSeconds: 30 })
+    return true
+  }
+
+  if (url.pathname === '/api/audience/access/logout' && req.method === 'POST') {
+    const removed = logoutAudienceCredential(getBearerCredential(req))
+    sendJson(res, removed ? 200 : 401, { success: removed })
     return true
   }
 
