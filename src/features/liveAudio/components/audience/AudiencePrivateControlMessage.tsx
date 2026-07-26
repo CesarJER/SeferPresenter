@@ -4,13 +4,11 @@ import { X, Send } from 'lucide-react';
 interface AudiencePrivateControlMessageProps {
   onClose: () => void;
   onSend: (message: string) => boolean | Promise<boolean>;
-  onSent?: () => void;
 }
 
 export const AudiencePrivateControlMessage: React.FC<AudiencePrivateControlMessageProps> = ({
   onClose,
   onSend,
-  onSent = () => {},
 }) => {
   const [message, setMessage] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -66,7 +64,6 @@ export const AudiencePrivateControlMessage: React.FC<AudiencePrivateControlMessa
         return;
       }
       setMessage('');
-      onSent();
       onClose();
     } finally {
       setIsSending(false);
@@ -115,11 +112,6 @@ export const AudiencePrivateControlMessage: React.FC<AudiencePrivateControlMessa
               maxLength={500}
             />
             {error && <p role="alert" className="mt-2 text-xs text-red-300">{error}</p>}
-            {isSending && (
-              <p role="status" aria-live="polite" className="mt-2 text-xs text-blue-200">
-                Enviando mensaje privado…
-              </p>
-            )}
           </form>
         </div>
 

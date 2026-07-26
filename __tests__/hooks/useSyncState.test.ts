@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { arePresentationsEqual, getProjectionSyncEndpoints } from '../../src/hooks/useSyncState';
+import { arePresentationsEqual } from '../../src/hooks/useSyncState';
 import type { Presentation } from '../../src/types/presentation';
 
 const presentation: Presentation = {
@@ -34,21 +34,5 @@ describe('arePresentationsEqual', () => {
       ...structuredClone(presentation),
       slides: [{ ...structuredClone(presentation.slides[0]), scriptureVerses: [['Changed']] }],
     })).toBe(false);
-  });
-});
-
-describe('getProjectionSyncEndpoints', () => {
-  it('keeps Audience on the public projection endpoints', () => {
-    expect(getProjectionSyncEndpoints(true)).toEqual({
-      state: '/api/audience/state',
-      events: '/api/audience/events',
-    });
-  });
-
-  it('keeps Control and Presenter on the protected full-state endpoints', () => {
-    expect(getProjectionSyncEndpoints(false)).toEqual({
-      state: '/api/state',
-      events: '/api/state-events',
-    });
   });
 });

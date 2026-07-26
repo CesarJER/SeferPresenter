@@ -2,11 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import {
-  readJsonWithRecovery,
-  restoreJsonSafely,
-  writeJsonSafely,
-} from '../server/json-persistence.mjs';
+import { writeJsonSafely } from '../server/json-persistence.mjs';
 
 const temporaryDirectories: string[] = [];
 
@@ -51,62 +47,5 @@ describe('safe JSON persistence', () => {
     expect(() => writeJsonSafely(filePath, { unsupported: 1n })).toThrow();
     expect(fs.readFileSync(filePath, 'utf8')).toBe('{"version":"old"}\n');
     expect(fs.existsSync(`${filePath}.bak`)).toBe(false);
-  });
-
-  it('restores a validated value without overwriting its recovery backup', () => {
-    const { filePath } = makeFixture();
-    const backupPath = `${filePath}.bak`;
-    fs.writeFileSync(filePath, '{broken', 'utf8');
-    fs.writeFileSync(backupPath, '{"version":"known-good"}\n', 'utf8');
-
-    const result = restoreJsonSafely(filePath, { version: 'known-good' });
-
-    expect(['atomic-rename', 'bind-mount-in-place']).toContain(result.mode);
-    expect(JSON.parse(fs.readFileSync(filePath, 'utf8'))).toEqual({ version: 'known-good' });
-    expect(JSON.parse(fs.readFileSync(backupPath, 'utf8'))).toEqual({ version: 'known-good' });
-  });
-
-  it('recovers a corrupt primary only from a validated backup', () => {
-    const { filePath } = makeFixture();
-    const backupPath = `${filePath}.bak`;
-    fs.writeFileSync(filePath, '{broken', 'utf8');
-    fs.writeFileSync(backupPath, '{"version":"known-good"}\n', 'utf8');
-
-    const result = readJsonWithRecovery({
-      filePath,
-      backupPath,
-      fallback: {},
-      validate: (value: unknown) => {
-        if (
-          typeof value !== 'object' ||
-          value === null ||
-          typeof (value as { version?: unknown }).version !== 'string'
-        ) {
-          throw new Error('version is required');
-        }
-        return value as { version: string };
-      },
-    });
-
-    expect(result).toEqual({ value: { version: 'known-good' }, recovered: true });
-    expect(JSON.parse(fs.readFileSync(filePath, 'utf8'))).toEqual({ version: 'known-good' });
-  });
-
-  it('fails closed when neither primary nor backup is valid', () => {
-    const { filePath } = makeFixture();
-    const backupPath = `${filePath}.bak`;
-    fs.writeFileSync(filePath, '{broken', 'utf8');
-    fs.writeFileSync(backupPath, '[]\n', 'utf8');
-
-    expect(() => readJsonWithRecovery({
-      filePath,
-      backupPath,
-      fallback: {},
-      validate: (value: unknown) => {
-        if (!value || Array.isArray(value)) throw new Error('object required');
-        return value;
-      },
-    })).toThrow(/Primary and backup are invalid/);
-    expect(fs.readFileSync(filePath, 'utf8')).toBe('{broken');
   });
 });

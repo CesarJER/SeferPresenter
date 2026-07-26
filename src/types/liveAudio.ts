@@ -35,67 +35,9 @@ export interface LiveAudioMicrophoneDiagnostics {
 }
 
 export type ControlPrincipalState = 'PRINCIPAL';
-export type ControlSecondaryState = 'PENDING' | 'AUTHORIZED_SYNCING' | 'AUTHORIZED';
+export type ControlSecondaryState = 'PENDING' | 'AUTHORIZED';
 export type LiveAudioControlState = ControlPrincipalState | ControlSecondaryState;
 export type SpeakerState = 'LISTENER' | 'REQUESTED' | 'GRANTED' | 'MUTED' | 'REVOKED';
-export type RecordingState = 'NOT_RECORDING' | 'RECORDING';
-
-export interface SessionRecordingPolicyMessage {
-  type: 'SESSION_RECORDING_POLICY';
-  presentationSessionId: string;
-  serverEpoch: string;
-  stateRevision: number;
-  eventId: string;
-  recordingAvailable: boolean;
-  recordingMutable: boolean;
-  recordingState: RecordingState;
-  recordingEpoch: number;
-  changedDuringSession: boolean;
-  updatedAt: number;
-}
-
-export interface SessionRecordingPolicyUpdateMessage {
-  type: 'SESSION_RECORDING_POLICY_UPDATE';
-  presentationSessionId: string;
-  expectedStateRevision: number;
-  recordingState: RecordingState;
-  commandId: string;
-}
-
-export interface SessionRecordingPolicyResultMessage {
-  type: 'SESSION_RECORDING_POLICY_RESULT';
-  commandId: string;
-  result: 'ACK' | 'NACK';
-  reason?:
-    | 'FORBIDDEN'
-    | 'REVISION_CONFLICT'
-    | 'LIVEKIT_REVOCATION_FAILED'
-    | 'TRANSITION_IN_PROGRESS';
-  presentationSessionId: string;
-  serverEpoch: string;
-  stateRevision: number;
-  recordingState: RecordingState;
-  recordingEpoch: number;
-}
-
-export interface AudienceRecordingConfirmationMessage {
-  type: 'AUDIENCE_RECORDING_CONFIRMATION';
-  participantId: string;
-  presentationSessionId: string;
-  recordingEpoch: number;
-  requestId: string;
-}
-
-export interface AudienceRecordingConfirmationResultMessage {
-  type: 'AUDIENCE_RECORDING_CONFIRMATION_RESULT';
-  result: 'ACK' | 'NACK';
-  participantId?: string;
-  presentationSessionId: string;
-  serverEpoch?: string;
-  stateRevision: number;
-  eventId?: string;
-  recordingEpoch: number;
-}
 
 export interface LiveAudioRemoteTrack {
   id: string;
@@ -111,14 +53,13 @@ export interface PendingControlAuthorization {
   verificationCode: string;
   codeExpiresAt: number;
   connectedAt: number;
-  recipientPublicKey?: string;
-  joinRequestId?: string;
 }
 
 export interface LiveAudioParticipantStatusMessage {
   type: 'LIVE_AUDIO_PARTICIPANT_STATUS';
   participantId: string;
   role: LiveAudioParticipantRole;
+  alias?: string;
   operationalRole?: LiveAudioOperationalRole;
   microphonePermissionState?: MicrophonePermissionState;
   microphoneTrackState?: MicrophoneTrackState;
@@ -133,7 +74,7 @@ export interface LiveAudioParticipantStatusMessage {
   isAliasVisibleToActiveParticipants?: boolean;
   canViewActiveParticipants?: boolean;
   isAliasHiddenByControl?: boolean;
-  recordingConfirmationEpoch?: number;
+  activeListPublicKey?: string;
   connected?: boolean;
   updatedAt?: number;
 }
@@ -212,6 +153,8 @@ export interface LiveAudioRemoveActiveParticipantMessage {
 export interface LiveAudioActiveParticipantProfileMessage {
   type: 'LIVE_AUDIO_ACTIVE_PARTICIPANT_PROFILE';
   participantId: string;
+  alias: string;
+  activeListPublicKey: string;
   isAliasVisibleToActiveParticipants: boolean;
   createdAt?: number;
 }
@@ -243,22 +186,11 @@ export interface LiveAudioControlAuthorizedMessage {
   type: 'LIVE_AUDIO_CONTROL_AUTHORIZED';
   controlSessionId: string;
   authorizedByControlSessionId: string;
-  transferId: string;
-  keyId: string;
-  sessionPublicKey: string;
-  transferPublicKey: string;
-  encryptedSessionPrivateKey: string;
-  nonce: string;
-  createdAt?: number;
-}
-
-export interface LiveAudioControlKeyTransferResultMessage {
-  type: 'LIVE_AUDIO_CONTROL_KEY_TRANSFER_RESULT';
-  controlSessionId: string;
-  transferId: string;
-  keyId: string;
-  result: 'ACK' | 'NACK';
-  reason?: 'IMPORT_FAILED' | 'INVALID_TRANSFER' | 'KEY_MISMATCH';
+  keyId?: string;
+  sessionPublicKey?: string;
+  transferPublicKey?: string;
+  encryptedSessionPrivateKey?: string;
+  nonce?: string;
   createdAt?: number;
 }
 
@@ -293,7 +225,6 @@ export interface ControlKeyRotatedMessage {
 
 export interface PrivateControlSignalMessage {
   type: 'PRIVATE_CONTROL_SIGNAL';
-  signalClass: 'PROFILE_STATE' | 'PRIVATE_MESSAGE' | 'CONTROL_STATE';
   fromParticipantId: string;
   toControlSessionId?: string;
   toParticipantId?: string;
@@ -301,57 +232,6 @@ export interface PrivateControlSignalMessage {
   ephemeralPublicKey: string;
   ciphertext: string;
   nonce: string;
-  messageId?: string;
-  createdAt?: number;
-}
-
-export interface LiveAudioControlResumeMessage {
-  type: 'LIVE_AUDIO_CONTROL_RESUME';
-  controlSessionId: string;
-  credential: string;
-}
-
-export interface LiveAudioControlResumeResultMessage {
-  type: 'LIVE_AUDIO_CONTROL_RESUME_RESULT';
-  accepted: boolean;
-  code?: 'CONTROL_RESUME_INVALID';
-  controlSessionId?: string;
-  controlState?: LiveAudioControlState;
-  credential?: string;
-  connectionEpoch?: string;
-}
-
-export interface LiveAudioPrivateOverlayPublishMessage {
-  type: 'LIVE_AUDIO_PRIVATE_OVERLAY_PUBLISH';
-  messageId: string;
-  keyId: string;
-  privateStateRevision: number;
-  basedOnStateRevision: number;
-  ciphertext: string;
-  nonce: string;
-}
-
-export interface LiveAudioPrivateOverlaySnapshotMessage
-  extends Omit<LiveAudioPrivateOverlayPublishMessage, 'type'> {
-  type: 'LIVE_AUDIO_PRIVATE_OVERLAY_SNAPSHOT';
-  createdAt?: number;
-}
-
-export interface LiveAudioPrivateOverlayResultMessage {
-  type: 'LIVE_AUDIO_PRIVATE_OVERLAY_RESULT';
-  messageId?: string;
-  result: 'ACK' | 'NACK';
-  keyId?: string;
-  privateStateRevision?: number;
-  reason?: string;
-}
-
-export interface PrivateControlSignalResultMessage {
-  type: 'PRIVATE_CONTROL_SIGNAL_RESULT';
-  messageId: string;
-  result: 'ACK' | 'NACK';
-  reason?: 'INVALID_SIGNAL' | 'RATE_LIMIT' | 'NO_RECIPIENT';
-  retryAfterMs?: number;
   createdAt?: number;
 }
 
@@ -363,6 +243,7 @@ export interface LiveAudioRequestAliasesMessage {
 export interface LiveAudioOperationalParticipantSnapshot {
   participantId: string;
   role: LiveAudioParticipantRole;
+  alias?: string;
   operationalRole: LiveAudioOperationalRole;
   microphonePermissionState: MicrophonePermissionState;
   microphoneTrackState: MicrophoneTrackState;
@@ -376,6 +257,7 @@ export interface LiveAudioOperationalParticipantSnapshot {
   isAliasVisibleToActiveParticipants?: boolean;
   canViewActiveParticipants?: boolean;
   isAliasHiddenByControl?: boolean;
+  activeListPublicKey?: string;
   connected: boolean;
   connectedAt?: number;
   disconnectedAt?: number;
@@ -401,9 +283,6 @@ export interface LiveAudioOperationalQuizAggregateSnapshot {
 export interface LiveAudioOperationalSnapshot {
   snapshotId: string;
   createdAt: number;
-  presentationSessionId: string;
-  serverEpoch: string;
-  stateRevision: number;
   connectionCounts: {
     totalConnections: number;
     audienceConnections: number;
@@ -413,17 +292,6 @@ export interface LiveAudioOperationalSnapshot {
   };
   participants: LiveAudioOperationalParticipantSnapshot[];
   interventionQueue: string[];
-  policies: {
-    accessMode: 'PUBLIC' | 'CONTROLLED';
-    recordingAvailable: boolean;
-    recordingMutable: boolean;
-    recordingState: RecordingState;
-    recordingEpoch: number;
-  };
-  audienceAccessRequests: Array<{
-    participantId: string;
-    requestedAt: number;
-  }>;
   authorizations: {
     principalControlSessionId: string | null;
     controls: LiveAudioOperationalControlSnapshot[];
@@ -452,8 +320,6 @@ export interface LiveAudioOperationalSnapshot {
 export interface LiveAudioSnapshotRequestMessage {
   type: 'LIVE_AUDIO_SNAPSHOT_REQUEST';
   controlSessionId?: string;
-  lastAppliedStateRevision?: number;
-  reason?: 'CONNECT' | 'RECONNECT' | 'GAP' | 'STALE_SNAPSHOT' | 'NACK';
   createdAt?: number;
 }
 
@@ -501,23 +367,11 @@ export type LiveAudioBroadcastMessage =
   | LiveAudioControlPublicKeyMessage
   | LiveAudioControlJoinRequestMessage
   | LiveAudioControlAuthorizedMessage
-  | LiveAudioControlKeyTransferResultMessage
   | LiveAudioControlAuthorizationStateMessage
   | LiveAudioControlAuthorizationDecisionMessage
-  | LiveAudioControlResumeMessage
-  | LiveAudioControlResumeResultMessage
-  | LiveAudioPrivateOverlayPublishMessage
-  | LiveAudioPrivateOverlaySnapshotMessage
-  | LiveAudioPrivateOverlayResultMessage
   | ControlKeyRotatedMessage
   | PrivateControlSignalMessage
-  | PrivateControlSignalResultMessage
   | LiveAudioRequestAliasesMessage
   | LiveAudioSnapshotRequestMessage
   | LiveAudioSnapshotMessage
-  | LiveAudioSnapshotPatchMessage
-  | SessionRecordingPolicyMessage
-  | SessionRecordingPolicyUpdateMessage
-  | SessionRecordingPolicyResultMessage
-  | AudienceRecordingConfirmationMessage
-  | AudienceRecordingConfirmationResultMessage;
+  | LiveAudioSnapshotPatchMessage;

@@ -15,24 +15,14 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
   quiz, PWA/media and optional Live Audio wiring.
 - `src/main-control.tsx` - standalone React root for control mode; orchestrates control state and sync wiring without presenter/media elements.
 - `src/main-catalog.tsx` - standalone React root for the public catalog interface.
-- `vite.config.ts` - Vite multi-entry input configuration plus validated,
-  build-time operator manifest emission.
-- `server/operator-config.mjs` - shared build/startup validation for the public
-  operator manifest and bounded UTF-8 `privacy.local.md`.
-- `src/utils/operatorConfig.ts` - typed, immutable access to the public operator
-  configuration embedded by Vite.
-- `DataProtectionPage` - `src/components/shared/DataProtectionPage.tsx`: public
-  technical/operator privacy view and safe rendering of optional local Markdown.
+- `vite.config.ts` - Vite multi-entry input configuration.
 - `public/audience-sw.js` - shared PWA service worker for `/audience` and `/control`, versioned as `1.2.0`; arbitrary runtime media is network-only.
 - `public/manifest.webmanifest` - Audience PWA manifest scoped to `/audience` and using `public/logo.svg`.
 - `public/control-manifest.webmanifest` - Control PWA manifest scoped to `/control` and using `public/logo.svg`.
-- `server/audience-projection-state.mjs` - allowlisted derivation of the public
-  Audience projection snapshot; exposes only the active slide plus required
-  display, media, scripture, and quiz state.
 
 ## Hooks
 
-- [useSyncState](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useSyncState.ts) - `src/hooks/useSyncState.ts`: role-aware BroadcastChannel/SSE/API sync, reduced public Audience endpoints, local persistence, remote state application, calling `onAudioTimelineState` and exposing `wsStatus`.
+- [useSyncState](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useSyncState.ts) - `src/hooks/useSyncState.ts`: BroadcastChannel, SSE/API sync, local persistence, remote state application, calling `onAudioTimelineState` and exposing `wsStatus`.
 - [useWebSocket](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useWebSocket.ts) - `src/hooks/useWebSocket.ts`: standalone WebSocket connection helper with safe JSON send, typed receive callback, status, cleanup, and exponential reconnect.
 - [useServerClock](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useServerClock.ts) - `src/hooks/useServerClock.ts`: WebSocket server clock offset and RTT estimation from `SERVER_TIME_PING` / `SERVER_TIME_PONG`.
 - [useAudioTimeline](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useAudioTimeline.ts) - `src/hooks/useAudioTimeline.ts`: local audio timeline tracking, status estimation, action dispatching over WebSocket.
@@ -51,16 +41,6 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
 - `useSeferReader` - `src/hooks/useSeferReader.ts`: book/chapter/verse reader state and data loading.
 - `useQuizTimer` - `src/hooks/useQuizTimer.ts`: quiz timer state and transitions.
 - [useAudienceSession](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useAudienceSession.ts) - `src/hooks/useAudienceSession.ts`: ephemeral audience identity/alias state, logout purge, and presentation-session rotation.
-- `useAudienceAccess` - `src/hooks/useAudienceAccess.ts`: Audience credential
-  bootstrap, admission state, one-use SSE tickets, session rotation and
-  credential cleanup.
-- `AudienceAccessGate` -
-  `src/components/audience/AudienceAccessGate.tsx`: encrypted-alias waiting
-  room UI that keeps protected session content unmounted until admission.
-- `saveProtectedAudienceSnapshot` / `loadProtectedAudienceSnapshot` /
-  `clearProtectedAudienceSnapshot` -
-  `src/utils/protectedAudienceStore.ts`: credential-bound IndexedDB recovery
-  for the last admitted projection snapshot and quiz drafts.
 - Quiz answer hooks - `src/hooks/useQuizAnswers.ts`: presentation-scoped audience answer sessions and controller aggregation through `useAudienceAnswers` and `useControllerAnswers`.
 - `useQuizAudio` - `src/hooks/useQuizAudio.ts`: quiz feedback sounds.
 - `scriptureNumerals` helpers - `src/hooks/scriptureNumerals.ts`: scripture numeral utilities.
@@ -88,9 +68,7 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
 - `AudienceScreen` - `src/components/audience/AudienceScreen.tsx`: audience route projection/quiz selection.
 - `CatalogApp` - `src/components/catalog/CatalogApp.tsx`: public catalog root component, handles routing.
 - `CatalogIndex` - `src/components/catalog/CatalogIndex.tsx`: displays available public catalogs.
-- `CatalogViewer` - `src/components/catalog/CatalogViewer.tsx`: displays presentations for a given public catalog with safe excerpts and search highlighting.
-- `src/utils/catalogCards.ts` - pure catalog card count, title-slide,
-  plain-text excerpt, and accent-insensitive highlight helpers.
+- `CatalogViewer` - `src/components/catalog/CatalogViewer.tsx`: displays presentations for a given public catalog.
 - `ActiveParticipantsPanel` - `src/features/liveAudio/components/audience/ActiveParticipantsPanel.tsx`: audience-side alias-sharing checkbox and authorized visible participant list.
 - `PwaRestartButton` - `src/components/shared/PwaRestartButton.tsx`: confirmed reload/update action for installed audience/control PWAs.
 - Proposed Live Audio components - future optional runtime components under
@@ -163,27 +141,11 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
   projection commands, media telemetry, quiz events, assets, persistence.
 - `server/ws-server.mjs`: WebSocket `/ws` server for F2 audio timeline messages.
 - `server/livekit-server.mjs`: optional Fase 5.4/5.11 LiveKit self-hosted
-  status, token, refresh-token, and moderation endpoints with memory-only state.
-  Tokens include ephemeral
+  status, token, refresh-token, and moderation endpoints with memory-only state
+  and no top-level server SDK dependency. Tokens include ephemeral
   `participantId` metadata and no alias; refresh keeps the same participant
   identity while reflecting current speaker permission and muted speaker state;
-  refresh possession is proved by a rotating, hashed credential. Recording
-  activation uses the server SDK RoomService API to revoke Audience publishing
-  and mute connected microphone tracks before the policy is committed.
-- `getRecordingPolicy` / `hasCurrentRecordingConfirmation` -
-  `server/ws-server.mjs`: authoritative session-scoped recording policy and
-  confirmation checks shared with token issuance and refresh.
-- `RecordingConfirmationDialog` -
-  `src/features/liveAudio/components/audience/RecordingConfirmationDialog.tsx`:
-  focus-managed, keyboard-operable recording confirmation shown before an
-  Audience participant can use the microphone in the active epoch.
-- `AudienceLiveAudioPanel` / `LiveAudioControlPanel` /
-  `LiveAudioParticipantRow`: accessible Live Audio disclosures, named range and
-  toggle controls, reduced-motion-safe status animation, and keyboard-visible
-  participant actions.
-- `docs/audits/2026-07-24/ACCESSIBILITY_CERTIFICATION_MATRIX.md`: required
-  automated and physical NVDA, VoiceOver, and TalkBack evidence for Base and
-  Live Audio certification.
+  refresh possession is proved by a rotating, hashed credential.
 - `server/content-validation.mjs`: bounded deep validation for persisted
   presentation and audio-sync payloads.
 - `server/json-persistence.mjs`: fsynced temp/backup persistence with atomic
@@ -213,22 +175,6 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
   `hasVisibleParticipantsChanged` -
   `src/features/liveAudio/utils/activeParticipants.ts`: pure helpers for
   Control-owned visible alias list filtering, A-Z ordering, and send suppression.
-- `createControlAuthorizationAttempt` / `advanceControlAuthorizationAttempt` -
-  `src/features/liveAudio/utils/controlAuthorizationFlow.ts`: pure correlated
-  ACK/NACK/timeout state machine used to prevent E2E key-transfer failure from
-  authorizing a secondary Control.
-- `createControlSyncReducerState` / `reduceControlSyncEnvelope` -
-  `src/features/liveAudio/utils/controlSyncReducer.ts`: authoritative snapshot
-  replacement, monotonic delta application, deduplication, gap buffering, and
-  stream/session reset for multi-Control synchronization.
-- `validatePrivateControlOverlaySnapshot` / `replacePrivateControlOverlay` /
-  `applyPrivateControlOverlayDelta` -
-  `src/features/liveAudio/utils/privateControlOverlay.ts`: strict current-state
-  E2E overlay validation and monotonic application without message history.
-- `normalizeAliasForOrdinal` / `assignStableAliasOrdinal` /
-  `formatAliasForControl` -
-  `src/features/liveAudio/utils/aliasOrdinals.ts`: Control-only duplicate alias
-  grouping and stable, non-reused session ordinals.
 
 ## Types
 

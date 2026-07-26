@@ -11,8 +11,6 @@ import type {
   SpeakerState,
 } from '../../../../types/liveAudio';
 import { LiveAudioTrackOutput } from '../shared/LiveAudioTrackOutput';
-import { RecordingConfirmationDialog } from './RecordingConfirmationDialog';
-import { CircleAlert } from 'lucide-react';
 import type { useAudienceSession } from '../../../../hooks/useAudienceSession';
 import {
   AudienceLiveAudioContext,
@@ -27,9 +25,6 @@ interface LiveAudioAudienceContainerProps {
   subscribeToWsMessage: (handler: (type: string, payload: Record<string, unknown>) => void) => () => void;
   clientId: string; // Used as fallback or session identifier if needed
   audienceSession: ReturnType<typeof useAudienceSession>;
-  presentationSessionId: string;
-  initialRecordingConfirmedEpoch?: number;
-  audienceAccessCredential: string;
   children?: ReactNode;
 }
 
@@ -49,9 +44,6 @@ export default function LiveAudioAudienceContainer({
   subscribeToWsMessage,
   clientId,
   audienceSession,
-  presentationSessionId,
-  initialRecordingConfirmedEpoch,
-  audienceAccessCredential,
   children
 }: LiveAudioAudienceContainerProps) {
   const [isActive, setIsActive] = useState(false);
@@ -71,18 +63,6 @@ export default function LiveAudioAudienceContainer({
   const [volume, setVolume] = useState(1);
   const [microphoneVolume, setMicrophoneVolume] = useState(100);
   const [isMusicMode, setIsMusicMode] = useState(false);
-  const [recordingPolicy, setRecordingPolicy] = useState({
-    recordingState: 'NOT_RECORDING' as 'NOT_RECORDING' | 'RECORDING',
-    recordingEpoch: 0,
-    stateRevision: -1,
-  });
-  const [recordingConfirmedEpoch, setRecordingConfirmedEpoch] = useState(initialRecordingConfirmedEpoch);
-  const [showRecordingToast, setShowRecordingToast] = useState(false);
-  const [showRecordingConfirmation, setShowRecordingConfirmation] = useState(false);
-  const [recordingConfirmationPending, setRecordingConfirmationPending] = useState(false);
-  const [recordingConfirmationError, setRecordingConfirmationError] = useState<string | null>(null);
-  const [privateMessageAnnouncement, setPrivateMessageAnnouncement] = useState('');
-  const pendingRecordingActionRef = useRef<'REQUEST_WORD' | 'MICROPHONE' | null>(null);
   const isStartingAudioRef = useRef(false);
   const silenceAudioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -117,7 +97,6 @@ export default function LiveAudioAudienceContainer({
     role: 'audience',
     autoConnect: availability === 'enabled',
     microphoneVolumePercent: microphoneVolume,
-    audienceAccessCredential,
   });
 
   useEffect(() => {
@@ -180,7 +159,7 @@ export default function LiveAudioAudienceContainer({
   }, [participantId, wsSend]);
 
   // 2. Setup private signals
-  const { sendPrivateSignal, ready: privateSignalReady } = usePrivateControlSignals({
+  const { sendPrivateSignal, ready: privateSignalReady, getAudiencePublicKey } = usePrivateControlSignals({
     role: 'audience',
     participantId: participantId || clientId,
     sendMessage: wsSend,
@@ -203,66 +182,28 @@ export default function LiveAudioAudienceContainer({
     }
   });
 
-  useEffect(() => {
-    setRecordingConfirmedEpoch(initialRecordingConfirmedEpoch);
-  }, [initialRecordingConfirmedEpoch, presentationSessionId]);
-
-  useEffect(() => {
-    if (
-      recordingPolicy.recordingState !== 'RECORDING' ||
-      !audienceSession.nick ||
-      !presentationSessionId
-    ) {
-      setShowRecordingToast(false);
-      return;
-    }
-    const storageKey = `sefer-recording-notice:${presentationSessionId}:${recordingPolicy.recordingEpoch}`;
-    if (localStorage.getItem(storageKey) === 'seen') return;
-    localStorage.setItem(storageKey, 'seen');
-    setShowRecordingToast(true);
-    const timer = window.setTimeout(() => setShowRecordingToast(false), 4_500);
-    return () => window.clearTimeout(timer);
-  }, [
-    audienceSession.nick,
-    presentationSessionId,
-    recordingPolicy.recordingEpoch,
-    recordingPolicy.recordingState,
-  ]);
-
   const publishActiveProfile = useCallback(async (
     alias: string | null = activeAlias,
     isAliasVisible: boolean = isAliasVisibleToOthers,
   ) => {
     if (!participantId || !alias) return false;
-    const technicalStateSent = wsSend('LIVE_AUDIO_ACTIVE_PARTICIPANT_PROFILE', {
+    const activeListPublicKey = await getAudiencePublicKey();
+    if (!activeListPublicKey) return false;
+
+    return wsSend('LIVE_AUDIO_ACTIVE_PARTICIPANT_PROFILE', {
       type: 'LIVE_AUDIO_ACTIVE_PARTICIPANT_PROFILE',
       participantId,
+      alias,
+      activeListPublicKey,
       isAliasVisibleToActiveParticipants: isAliasVisible,
       createdAt: Date.now(),
     });
-    if (!privateSignalReady) return technicalStateSent;
-    const aliasSent = await sendPrivateSignal({
-      type: 'ACTIVE_PROFILE',
-      alias,
-      isAliasVisibleToActiveParticipants: isAliasVisible,
-    });
-    return technicalStateSent && aliasSent;
-  }, [activeAlias, isAliasVisibleToOthers, participantId, privateSignalReady, sendPrivateSignal, wsSend]);
+  }, [activeAlias, getAudiencePublicKey, isAliasVisibleToOthers, participantId, wsSend]);
 
   // Listen for grant/revoke messages
   useEffect(() => {
     const unsubscribe = subscribeToWsMessage((type, payload) => {
-      if (type === 'PRESENTATION_SESSION_ROTATED') {
-        setRecordingConfirmedEpoch(undefined);
-        pendingRecordingActionRef.current = null;
-        setShowRecordingConfirmation(false);
-        setRecordingPolicy({
-          recordingState: payload.recordingState === 'RECORDING' ? 'RECORDING' : 'NOT_RECORDING',
-          recordingEpoch: typeof payload.recordingEpoch === 'number' ? payload.recordingEpoch : 0,
-          stateRevision: typeof payload.stateRevision === 'number' ? payload.stateRevision : 0,
-        });
-        void unpublishMicrophone();
-      } else if (type === 'LIVE_AUDIO_REQUEST_ALIASES') {
+      if (type === 'LIVE_AUDIO_REQUEST_ALIASES') {
         if (participantId && activeAlias) {
           const speakerState = isWordGranted ? 'GRANTED' : (isPendingWord ? 'REQUESTED' : 'LISTENER');
           void publishActiveProfile(activeAlias, isAliasVisibleToOthers);
@@ -276,66 +217,6 @@ export default function LiveAudioAudienceContainer({
               isKicked: isKicked
             }
           );
-        }
-      } else if (type === 'SESSION_RECORDING_POLICY') {
-        const nextRevision = typeof payload.stateRevision === 'number' ? payload.stateRevision : -1;
-        const nextEpoch = typeof payload.recordingEpoch === 'number' ? payload.recordingEpoch : 0;
-        const nextState = payload.recordingState === 'RECORDING' ? 'RECORDING' : 'NOT_RECORDING';
-        if (
-          payload.presentationSessionId !== presentationSessionId ||
-          nextRevision < recordingPolicy.stateRevision
-        ) return;
-        setRecordingPolicy({
-          recordingState: nextState,
-          recordingEpoch: nextEpoch,
-          stateRevision: nextRevision,
-        });
-        if (nextState === 'RECORDING' && recordingConfirmedEpoch !== nextEpoch) {
-          setRecordingConfirmedEpoch(undefined);
-          setShowRecordingConfirmation(false);
-          pendingRecordingActionRef.current = null;
-          void unpublishMicrophone();
-        }
-      } else if (
-        type === 'AUDIENCE_RECORDING_CONFIRMATION_RESULT' &&
-        payload.participantId === participantId
-      ) {
-        setRecordingConfirmationPending(false);
-        if (
-          payload.result === 'ACK' &&
-          payload.presentationSessionId === presentationSessionId &&
-          payload.recordingEpoch === recordingPolicy.recordingEpoch
-        ) {
-          setRecordingConfirmedEpoch(recordingPolicy.recordingEpoch);
-          setShowRecordingConfirmation(false);
-          setRecordingConfirmationError(null);
-          const pendingAction = pendingRecordingActionRef.current;
-          pendingRecordingActionRef.current = null;
-          if (pendingAction === 'REQUEST_WORD') {
-            setIsPendingWord(true);
-            sendParticipantStatus('REQUESTED', {
-              canPublishAudio: false,
-              isMuted: true,
-              isActiveAudience: true,
-              isMicrophoneActive: false,
-            });
-            void sendPrivateSignal({
-              type: 'REQUEST_WORD',
-              alias: activeAlias ?? undefined,
-            });
-          } else if (pendingAction === 'MICROPHONE') {
-            void publishMicrophone({ musicMode: isMusicMode })
-              .then(() => sendParticipantStatus('GRANTED', {
-                canPublishAudio: true,
-                isMuted: false,
-                isActiveAudience: true,
-                isMicrophoneActive: true,
-              }))
-              .catch(() => setRecordingConfirmationError('No se pudo habilitar el micrófono.'));
-          }
-        } else {
-          pendingRecordingActionRef.current = null;
-          setRecordingConfirmationError('La confirmación quedó obsoleta. Vuelve a intentarlo.');
         }
       } else if (type === 'LIVE_AUDIO_ACTIVE_LIST_VIEW_PERMISSION' && payload.participantId === participantId) {
         const canView = payload.canViewActiveParticipants === true;
@@ -452,12 +333,6 @@ export default function LiveAudioAudienceContainer({
     isAliasVisibleToOthers,
     isMicrophoneActive,
     audienceSession,
-    isMusicMode,
-    presentationSessionId,
-    publishMicrophone,
-    recordingConfirmedEpoch,
-    recordingPolicy.recordingEpoch,
-    recordingPolicy.stateRevision,
   ]);
 
   // Sync session state to active state
@@ -618,15 +493,6 @@ export default function LiveAudioAudienceContainer({
 
   const handleRequestWord = useCallback(() => {
     if (isKicked) return;
-    if (
-      recordingPolicy.recordingState === 'RECORDING' &&
-      recordingConfirmedEpoch !== recordingPolicy.recordingEpoch
-    ) {
-      pendingRecordingActionRef.current = 'REQUEST_WORD';
-      setRecordingConfirmationError(null);
-      setShowRecordingConfirmation(true);
-      return;
-    }
     setIsPendingWord(true);
     sendParticipantStatus('REQUESTED', {
       canPublishAudio: false,
@@ -638,15 +504,7 @@ export default function LiveAudioAudienceContainer({
       type: 'REQUEST_WORD',
       alias: activeAlias ?? undefined,
     });
-  }, [
-    activeAlias,
-    isKicked,
-    recordingConfirmedEpoch,
-    recordingPolicy.recordingEpoch,
-    recordingPolicy.recordingState,
-    sendParticipantStatus,
-    sendPrivateSignal,
-  ]);
+  }, [activeAlias, isKicked, sendParticipantStatus, sendPrivateSignal]);
 
   const handleToggleMicrophone = useCallback(() => {
     if (isMicrophoneActive) {
@@ -658,15 +516,6 @@ export default function LiveAudioAudienceContainer({
         isMicrophoneActive: false,
       });
     } else {
-      if (
-        recordingPolicy.recordingState === 'RECORDING' &&
-        recordingConfirmedEpoch !== recordingPolicy.recordingEpoch
-      ) {
-        pendingRecordingActionRef.current = 'MICROPHONE';
-        setRecordingConfirmationError(null);
-        setShowRecordingConfirmation(true);
-        return;
-      }
       void publishMicrophone({ musicMode: isMusicMode })
         .then(() => sendParticipantStatus('GRANTED', {
           canPublishAudio: true,
@@ -678,33 +527,7 @@ export default function LiveAudioAudienceContainer({
           console.error("Failed to publish mic:", err);
         });
     }
-  }, [
-    isMicrophoneActive,
-    publishMicrophone,
-    isMusicMode,
-    recordingConfirmedEpoch,
-    recordingPolicy.recordingEpoch,
-    recordingPolicy.recordingState,
-    sendParticipantStatus,
-    unpublishMicrophone,
-  ]);
-
-  const handleConfirmRecording = useCallback(() => {
-    if (!participantId || recordingPolicy.recordingState !== 'RECORDING') return;
-    setRecordingConfirmationPending(true);
-    setRecordingConfirmationError(null);
-    const sent = wsSend('AUDIENCE_RECORDING_CONFIRMATION', {
-      type: 'AUDIENCE_RECORDING_CONFIRMATION',
-      requestId: crypto.randomUUID(),
-      participantId,
-      presentationSessionId,
-      recordingEpoch: recordingPolicy.recordingEpoch,
-    });
-    if (!sent) {
-      setRecordingConfirmationPending(false);
-      setRecordingConfirmationError('Sin conexión. No se puede confirmar todavía.');
-    }
-  }, [participantId, presentationSessionId, recordingPolicy.recordingEpoch, recordingPolicy.recordingState, wsSend]);
+  }, [isMicrophoneActive, publishMicrophone, isMusicMode, sendParticipantStatus, unpublishMicrophone]);
 
   const handleRetryAudio = useCallback(() => {
     void retryAudio();
@@ -773,10 +596,6 @@ export default function LiveAudioAudienceContainer({
     visibleParticipants,
     availability,
     microphoneDiagnostics,
-    recordingState: recordingPolicy.recordingState,
-    recordingEpoch: recordingPolicy.recordingEpoch,
-    recordingConfirmed: recordingPolicy.recordingState !== 'RECORDING' ||
-      recordingConfirmedEpoch === recordingPolicy.recordingEpoch,
   };
 
   return (
@@ -815,41 +634,7 @@ export default function LiveAudioAudienceContainer({
         <AudiencePrivateControlMessage
           onClose={() => setShowPrivateMessageModal(false)}
           onSend={handleSendPrivateMessage}
-          onSent={() => setPrivateMessageAnnouncement('Mensaje privado enviado a Control')}
         />
-      )}
-      <p role="status" aria-live="polite" aria-atomic="true" className="sr-only">
-        {privateMessageAnnouncement}
-      </p>
-
-      {showRecordingToast && (
-        <div
-          role="status"
-          aria-live="polite"
-          className="fixed left-1/2 top-4 z-[115] flex -translate-x-1/2 items-center gap-2 rounded-xl border border-red-500 bg-slate-950 px-4 py-3 font-bold text-white shadow-2xl"
-        >
-          <CircleAlert className="h-5 w-5 text-red-400" aria-hidden="true" />
-          <span>Esta sesión está siendo grabada.</span>
-        </div>
-      )}
-
-      {showRecordingConfirmation && (
-        <RecordingConfirmationDialog
-          pending={recordingConfirmationPending}
-          onCancel={() => {
-            pendingRecordingActionRef.current = null;
-            setShowRecordingConfirmation(false);
-          }}
-          onConfirm={handleConfirmRecording}
-        />
-      )}
-      {recordingConfirmationError && (
-        <p
-          role="alert"
-          className="fixed left-1/2 top-20 z-[115] -translate-x-1/2 rounded-lg bg-red-950 px-4 py-2 text-sm text-red-100"
-        >
-          {recordingConfirmationError}
-        </p>
       )}
     </AudienceLiveAudioContext.Provider>
   );

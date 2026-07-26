@@ -13,8 +13,6 @@ import { DataProtectionLink } from './components/shared/DataProtectionLink';
 import { useLiveAudioAvailability } from './features/liveAudio/hooks/useLiveAudioAvailability';
 import { useAudienceAudioPlayback } from './hooks/useAudienceAudioPlayback';
 import { useAudienceSession } from './hooks/useAudienceSession';
-import { useAudienceAccess } from './hooks/useAudienceAccess';
-import { AudienceAccessGate } from './components/audience/AudienceAccessGate';
 import { useQuizAudio } from './hooks/useQuizAudio';
 import { registerScopedServiceWorker } from './utils/pwaUpdate';
 import { isMediaPlaybackBlockedError, resumeManagedMediaAudio } from './utils/mediaVolume';
@@ -32,7 +30,6 @@ const LiveAudioContainer = import.meta.env.VITE_SEFER_LIVE_AUDIO_BUILD !== 'fals
   : null;
 
 function AudienceApp() {
-  const audienceAccess = useAudienceAccess();
   const [currentPresentation, setCurrentPresentation] = useState<Presentation | null>(null);
   const [currentSlideIndex, setCurrentSlideIndex] = useState<number>(-1);
   const [currentStepIndex, setCurrentStepIndex] = useState<number>(0);
@@ -155,15 +152,6 @@ function AudienceApp() {
     autoduckStateRef,
     setAutoduckState,
     onAudioTimelineState: setAudioTimeline,
-    audienceAccessCredential: audienceAccess.credential,
-    audienceAuthorized: audienceAccess.authorized,
-    audienceSseTicket: audienceAccess.stateSseTicket,
-    onAudienceSseReconnect: audienceAccess.refreshTickets,
-    onWsMessage: audienceAccess.handleWsMessage,
-    audienceParticipantId: audienceAccess.participantId,
-    audiencePresentationSessionId: audienceAccess.presentationSessionId,
-    audienceCredentialExpiresAt: audienceAccess.expiresAt,
-    audienceOffline: audienceAccess.offline,
   });
 
   const { serverNow } = useServerClock(wsSend, wsStatus, subscribeToWsMessage);
@@ -301,23 +289,6 @@ function AudienceApp() {
     />
   );
 
-  if (
-    !audienceAccess.authorized ||
-    (!audienceAccess.offline && (!audienceAccess.stateSseTicket || !audienceAccess.quizSseTicket))
-  ) {
-    return (
-      <AudienceAccessGate
-        accessState={audienceAccess.accessState}
-        participantId={audienceAccess.participantId}
-        retryAt={audienceAccess.retryAt}
-        wsStatus={wsStatus}
-        wsSend={wsSend}
-        subscribeToWsMessage={subscribeToWsMessage}
-        onAliasAccepted={audienceSession.login}
-      />
-    );
-  }
-
   return (
     <>
       {LiveAudioContainer ? (
@@ -328,9 +299,6 @@ function AudienceApp() {
             subscribeToWsMessage={subscribeToWsMessage}
             clientId={clientIdRef.current}
             audienceSession={audienceSession}
-            presentationSessionId={audienceAccess.presentationSessionId}
-            initialRecordingConfirmedEpoch={audienceAccess.recordingConfirmedEpoch}
-            audienceAccessCredential={audienceAccess.credential ?? ''}
           >
             {audienceScreenElement}
           </LiveAudioContainer>
@@ -345,14 +313,6 @@ function AudienceApp() {
           <Play className="h-4 w-4" />
           <span>Activar audio y video</span>
         </button>
-      )}
-      {audienceAccess.offline && (
-        <div
-          role="status"
-          className="fixed left-1/2 top-3 z-[100] -translate-x-1/2 rounded-full border border-amber-500 bg-slate-950/95 px-4 py-2 text-sm font-bold text-amber-200 shadow-xl"
-        >
-          ⛔ Sin conexión — mostrando el último estado autorizado
-        </div>
       )}
       
       {/* Hidden audio element for audience audio sync */}

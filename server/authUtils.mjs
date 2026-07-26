@@ -1,13 +1,11 @@
 export const isAuthRequired = () => process.env.SEFER_REQUIRE_AUTH === 'true'
 
 const publicApiGetPaths = new Set([
-  '/api/health',
   '/api/audience/state',
   '/api/audience/events',
   '/api/quiz-events',
   '/api/public-catalogs',
   '/api/audience-cache-assets',
-  '/api/privacy-document',
 ])
 
 const firstHeaderValue = (value) => {
@@ -28,14 +26,6 @@ const normalizeOrigin = (value) => {
 
 export const isPublicApiRequest = (pathname, method = 'GET') => {
   if (pathname.startsWith('/api/livekit/')) return true
-  if (
-    method === 'POST' &&
-    (
-      pathname === '/api/audience/access/bootstrap' ||
-      pathname === '/api/audience/access/logout' ||
-      pathname === '/api/audience/sse-ticket'
-    )
-  ) return true
   if (method === 'POST' && pathname === '/api/quiz-answer') return true
   if (method !== 'GET') return false
   if (publicApiGetPaths.has(pathname)) return true
@@ -78,10 +68,4 @@ export const hasValidBasicAuth = (req) => {
   const separatorIndex = decoded.indexOf(':')
   const password = separatorIndex >= 0 ? decoded.slice(separatorIndex + 1) : decoded
   return password === expectedPassword
-}
-
-export const classifyQuizSseRequest = (req, ticketAccess) => {
-  if (ticketAccess) return 'audience'
-  if (hasValidBasicAuth(req) || !isAuthRequired()) return 'control'
-  return null
 }

@@ -25,23 +25,13 @@ Fast map for agents. Use real paths only; this repo does not currently have
   projection rendering; route-specific Control/Audience roots live separately.
 - `README.md`: human overview, routes, scripts, backend endpoints, verification.
 - `server/local-server.mjs`: local backend, static serving, SSE, persistence endpoints, auth gate, and WebSocket attachment.
-- `server/dev.mjs`: loads the same Vite-mode `.env` values for the development
-  backend and frontend so operator-policy validation cannot diverge.
-- `server/audience-projection-state.mjs`: allowlisted public snapshot containing
-  only the active projected slide and the functional state Audience needs.
 - `server/ws-server.mjs`: WebSocket `/ws` server for backend-owned audio timeline messages.
 - `server/livekit-server.mjs`: optional self-hosted LiveKit token and moderation endpoints with memory-only state.
 - `server/timelineManager.mjs`: isolated audio timeline state and action reducer.
 - `server/projection-state-reducer.mjs`: pure backend-consumable reducer for supported projection `REMOTE_COMMAND` payloads into canonical `SYNC_STATE` state.
 - `server/authUtils.mjs`: shared utility checking if basic authentication is required or valid under `SEFER_REQUIRE_AUTH` and `SEFER_CONTROL_PASSWORD`.
 - `src/types/liveAudio.ts`: optional Live Audio protocol contracts and role state types; no LiveKit connection code.
-- `vite.config.ts`: Vite config, development proxy, multi-entry build inputs,
-  validated public operator constants, and `operator-manifest.json` emission.
-- `server/operator-config.mjs`: validates required structured operator policy at
-  build and startup, checks build/runtime access-mode consistency, and reads the
-  optional bounded UTF-8 `privacy.local.md`.
-- `src/utils/operatorConfig.ts`: typed frontend access to the operator
-  configuration embedded at build time.
+- `vite.config.ts`: Vite config, development proxy, and multi-entry build inputs.
 
 ## Folder Responsibilities
 
@@ -68,11 +58,6 @@ Fast map for agents. Use real paths only; this repo does not currently have
 - `scripts/`: generated data and utility scripts.
 - `__tests__/`: Vitest tests for utils and selected hooks.
 - `public/`: static assets, PWA files, generated book TSVs and metadata.
-
-Operator-specific narrative belongs only in ignored `privacy.local.md` (see
-`docs/examples/privacy.example.md`). The canonical repository must contain
-variable names, validation and neutral product facts, never deployment-specific
-identity or legal assertions.
 
 ## Common Change Paths
 
@@ -173,10 +158,10 @@ so `/proteccion-datos` works without LiveKit. Keep Live Audio optional: disabled
 or misconfigured LiveKit must leave `/presenter`, `/control`, and `/audience`
 usable in presentation-only mode.
 
-For active participant visibility, Audience sends only its sharing preference
-through `LIVE_AUDIO_ACTIVE_PARTICIPANT_PROFILE`; alias and ephemeral public key
-travel in `PRIVATE_CONTROL_SIGNAL`. `LiveAudioControlContainer.tsx` keeps the
-alias map in memory and distributes only the encrypted `VISIBLE_ACTIVE_PARTICIPANTS` list,
+For active participant visibility, Audience sends
+`LIVE_AUDIO_ACTIVE_PARTICIPANT_PROFILE` with alias, sharing preference, and
+public key when it joins or changes visibility. `LiveAudioControlContainer.tsx`
+computes and distributes only the encrypted `VISIBLE_ACTIVE_PARTICIPANTS` list,
 while `AudienceLiveAudioPanel.tsx` and `ActiveParticipantsPanel.tsx` render the
 audience-side checkbox/list. Authorization state is clear WebSocket state;
 only the list of visible nicks is encrypted.

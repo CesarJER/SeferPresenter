@@ -1,6 +1,5 @@
 import { createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'
 import { hasValidBasicAuth } from './authUtils.mjs'
-import { RoomServiceClient } from 'livekit-server-sdk'
 
 const roles = new Set(['audience', 'control', 'presenter'])
 const mutatingPaths = new Set([
@@ -43,32 +42,9 @@ const parsePositiveInt = (value, fallback) => {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
 }
 
-const toLiveKitHttpUrl = (value) => {
-  const url = new URL(value)
-  if (url.protocol === 'ws:') url.protocol = 'http:'
-  if (url.protocol === 'wss:') url.protocol = 'https:'
-  return url.toString().replace(/\/$/, '')
-}
-
-const withTimeout = async (promise, timeoutMs) => {
-  let timeout
-  try {
-    return await Promise.race([
-      promise,
-      new Promise((_, reject) => {
-        timeout = setTimeout(() => reject(new Error('LiveKit readiness timeout')), timeoutMs)
-        timeout.unref?.()
-      }),
-    ])
-  } finally {
-    clearTimeout(timeout)
-  }
-}
-
 const getConfig = () => {
   const liveAudioEnabled = parseBoolean(process.env.SEFER_LIVE_AUDIO_ENABLED, false)
   const livekitUrl = process.env.LIVEKIT_URL
-  const livekitApiUrl = process.env.LIVEKIT_API_URL || livekitUrl
   const apiKey = process.env.LIVEKIT_API_KEY
   const apiSecret = process.env.LIVEKIT_API_SECRET
   const roomName = process.env.LIVEKIT_ROOM_NAME || 'sefer-live-audio'
@@ -85,7 +61,6 @@ const getConfig = () => {
     enabled: true,
     available: true,
     livekitUrl,
-    livekitApiUrl,
     apiKey,
     apiSecret,
     roomName,
@@ -93,6 +68,16 @@ const getConfig = () => {
     tokenTtlMinutes: parsePositiveInt(process.env.SEFER_LIVE_AUDIO_TOKEN_TTL_MINUTES, 30),
     rejoinGraceSeconds: parsePositiveInt(process.env.SEFER_LIVE_AUDIO_REJOIN_GRACE_SECONDS, 60),
   }
+}
+
+const statusPayload = () => {
+  const config = getConfig()
+  if (!config.enabled) {
+    return config.reason === 'disabled'
+      ? { enabled: false }
+      : { enabled: false, available: false, reason: config.reason }
+  }
+  return { enabled: true, available: true }
 }
 
 const base64url = (value) =>
@@ -130,15 +115,16 @@ const getRoomName = (config, roomSession) => {
   return safeSession ? `${config.roomName}-${safeSession}` : config.roomName
 }
 
-const canAudiencePublish = (participantId, existingParticipant, authoritativePermission = false) => {
+const canAudiencePublish = (participantId, existingParticipant) => {
   if (participantId && roomState.kicked.has(participantId)) return false
-  return authoritativePermission === true &&
-    (existingParticipant?.speakerState !== 'REVOKED')
+  return Boolean(participantId && roomState.speakers.has(participantId)) ||
+    existingParticipant?.speakerState === 'GRANTED' ||
+    existingParticipant?.canPublish === true
 }
 
-const getVideoGrant = (role, room, config, participantId, existingParticipant, audienceCanPublish) => {
+const getVideoGrant = (role, room, config, participantId, existingParticipant) => {
   if (role === 'audience') {
-    const canPublish = canAudiencePublish(participantId, existingParticipant, audienceCanPublish)
+    const canPublish = canAudiencePublish(participantId, existingParticipant)
     return {
       room,
       roomJoin: true,
@@ -159,14 +145,7 @@ const getVideoGrant = (role, room, config, participantId, existingParticipant, a
   }
 }
 
-const issueToken = ({
-  role,
-  roomSession,
-  controlSessionId,
-  existingParticipant,
-  participantId: requestedParticipantId,
-  audienceCanPublish = false,
-}) => {
+const issueToken = ({ role, roomSession, controlSessionId, existingParticipant }) => {
   const config = getConfig()
   if (!config.enabled) {
     return { ok: false, status: 503, error: 'Live Audio is disabled or misconfigured' }
@@ -178,10 +157,10 @@ const issueToken = ({
 
   const nowSeconds = Math.floor(Date.now() / 1000)
   const expiresAt = Date.now() + config.tokenTtlMinutes * 60_000
-  const participantId = existingParticipant?.participantId || requestedParticipantId || randomUUID()
+  const participantId = existingParticipant?.participantId || randomUUID()
   const participantIdentity = existingParticipant?.participantIdentity || `${role}-${participantId}`
   const room = getRoomName(config, roomSession || existingParticipant?.roomSession)
-  const video = getVideoGrant(role, room, config, participantId, existingParticipant, audienceCanPublish)
+  const video = getVideoGrant(role, room, config, participantId, existingParticipant)
   const payload = {
     iss: config.apiKey,
     sub: participantIdentity,
@@ -294,14 +273,7 @@ const handleToken = async ({ req, res, readBody, sendJson, controlApi }) => {
   const body = await readJson(req, readBody)
   const requestedRole = roles.has(body.role) ? body.role : 'audience'
 
-  let audienceAccess = null
-  if (requestedRole === 'audience') {
-    audienceAccess = controlApi?.authorizeAudienceCredential?.(body.audienceAccessCredential)
-    if (!audienceAccess && controlApi?.getSessionAccessMode?.() === 'CONTROLLED') {
-      sendJson(res, 403, { error: 'Audience admission is required for Live Audio' })
-      return true
-    }
-  } else {
+  if (requestedRole !== 'audience') {
     if (!hasValidBasicAuth(req)) {
       sendJson(res, 403, { error: 'Privileged Live Audio roles require authentication' })
       return true
@@ -319,12 +291,6 @@ const handleToken = async ({ req, res, readBody, sendJson, controlApi }) => {
     role: requestedRole,
     roomSession: body.roomSession,
     controlSessionId: requestedRole === 'control' ? body.controlSessionId : undefined,
-    participantId: audienceAccess?.participantId,
-    audienceCanPublish: requestedRole !== 'audience' || Boolean(
-      audienceAccess &&
-      controlApi?.getLiveAudioParticipantState?.(audienceAccess.participantId)?.canPublishAudio === true &&
-      controlApi?.hasCurrentRecordingConfirmation?.(audienceAccess.participantId)
-    ),
   })
 
   if (!result.ok) {
@@ -364,21 +330,10 @@ const handleRefreshToken = async ({ req, res, readBody, sendJson, controlApi }) 
     sendJson(res, 403, { error: 'Control is no longer authorized for Live Audio' })
     return true
   }
-  let audienceAccess = null
-  if (existingParticipant.role === 'audience') {
-    if (typeof controlApi?.authorizeAudienceCredential === 'function') {
-      audienceAccess = controlApi.authorizeAudienceCredential(body.audienceAccessCredential)
-      if (!audienceAccess || audienceAccess.participantId !== existingParticipant.participantId) {
-        sendJson(res, 403, { error: 'Audience credential does not belong to this Live Audio participant' })
-        return true
-      }
-    }
-  }
   const wsParticipant = controlApi?.getLiveAudioParticipantState?.(body.participantId)
   if (wsParticipant) {
     existingParticipant.speakerState = wsParticipant.speakerState
-    existingParticipant.canPublish = wsParticipant.canPublishAudio &&
-      controlApi?.hasCurrentRecordingConfirmation?.(body.participantId)
+    existingParticipant.canPublish = wsParticipant.canPublishAudio
     existingParticipant.canSubscribe = wsParticipant.canSubscribe
     if (wsParticipant.speakerState === 'GRANTED' || wsParticipant.canPublishAudio) {
       roomState.speakers.add(body.participantId)
@@ -397,8 +352,6 @@ const handleRefreshToken = async ({ req, res, readBody, sendJson, controlApi }) 
     roomSession: existingParticipant.roomSession,
     controlSessionId: existingParticipant.controlSessionId,
     existingParticipant,
-    audienceCanPublish: existingParticipant.role !== 'audience' ||
-      controlApi?.hasCurrentRecordingConfirmation?.(existingParticipant.participantId),
   })
 
   console.log(`[LIVEKIT] livekit:token:refresh role=${existingParticipant.role}`)
@@ -428,11 +381,6 @@ const handleModeration = async ({ req, res, url, readBody, sendJson, controlApi 
     }
     console.log(`[LIVEKIT] origin=control action=mute-all`)
     sendJson(res, 200, { success: true })
-    return true
-  }
-
-  if (url.pathname === '/api/livekit/grant-speak') {
-    sendJson(res, 409, { error: 'Grant speaking permission through the authoritative WebSocket protocol' })
     return true
   }
 
@@ -487,35 +435,6 @@ const handleModeration = async ({ req, res, url, readBody, sendJson, controlApi 
 export const createLiveKitApi = (controlApi) => {
   const cleanupTimer = setInterval(cleanupExpiredState, 30_000)
   cleanupTimer.unref?.()
-  let reachabilityCache = null
-
-  const getStatus = async () => {
-    const config = getConfig()
-    if (!config.enabled) {
-      return config.reason === 'disabled'
-        ? { enabled: false }
-        : { enabled: false, available: false, reason: config.reason }
-    }
-    if (reachabilityCache && reachabilityCache.expiresAt > Date.now()) {
-      return reachabilityCache.value
-    }
-    try {
-      const roomService = controlApi?.createRoomServiceClient?.(config) ||
-        new RoomServiceClient(
-          toLiveKitHttpUrl(config.livekitApiUrl),
-          config.apiKey,
-          config.apiSecret,
-        )
-      await withTimeout(roomService.listRooms(), 1_500)
-      const value = { enabled: true, available: true }
-      reachabilityCache = { value, expiresAt: Date.now() + 5_000 }
-      return value
-    } catch {
-      const value = { enabled: true, available: false, reason: 'livekit-unreachable' }
-      reachabilityCache = { value, expiresAt: Date.now() + 5_000 }
-      return value
-    }
-  }
 
   return {
     close: () => clearInterval(cleanupTimer),
@@ -535,53 +454,11 @@ export const createLiveKitApi = (controlApi) => {
       muted: Array.from(roomState.muted),
       kicked: Array.from(roomState.kicked),
     }),
-    revokeAudiencePublishingForRecording: async () => {
-      const config = getConfig()
-      if (!config.enabled) return
-      const roomService = controlApi?.createRoomServiceClient?.(config) ||
-        new RoomServiceClient(
-          toLiveKitHttpUrl(config.livekitApiUrl),
-          config.apiKey,
-          config.apiSecret,
-        )
-      const audienceByRoom = new Map()
-      for (const participant of participants.values()) {
-        if (participant.role !== 'audience') continue
-        const roomParticipants = audienceByRoom.get(participant.room) || []
-        roomParticipants.push(participant)
-        audienceByRoom.set(participant.room, roomParticipants)
-      }
-      for (const [room, issuedAudience] of audienceByRoom) {
-        const connected = await roomService.listParticipants(room)
-        const connectedByIdentity = new Map(connected.map((participant) => [participant.identity, participant]))
-        for (const participant of issuedAudience) {
-          const active = connectedByIdentity.get(participant.participantIdentity)
-          participant.canPublish = false
-          roomState.speakers.delete(participant.participantId)
-          roomState.muted.add(participant.participantId)
-          if (!active) continue
-          const updated = await roomService.updateParticipant(room, participant.participantIdentity, {
-            permission: {
-              canSubscribe: participant.canSubscribe,
-              canPublish: false,
-              canPublishData: false,
-              canPublishSources: [],
-            },
-          })
-          for (const track of updated.tracks || active.tracks || []) {
-            if (track.source === 2 && !track.muted) {
-              await roomService.mutePublishedTrack(room, participant.participantIdentity, track.sid, true)
-            }
-          }
-        }
-      }
-    },
     handle: async ({ req, res, url, readBody, sendJson }) => {
       try {
         if (url.pathname === '/api/livekit/status' && req.method === 'GET') {
           if (getConfig().enabled) void checkOptionalLiveKitSdk()
-          const status = await getStatus()
-          sendJson(res, status.enabled && status.available === false ? 503 : 200, status)
+          sendJson(res, 200, statusPayload())
           return true
         }
 

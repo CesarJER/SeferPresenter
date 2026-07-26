@@ -8,15 +8,8 @@ SeferPresenter es una aplicacion React/Vite para proyectar presentaciones con so
 - **Control**: abre `/control`. Permite seleccionar presentaciones, editar slides, cambiar fondos, controlar audio/video y navegar textos.
 - **Editor de audio**: abre `/audio-editor`. Permite asociar pistas de audio a presentaciones y cues de diapositiva.
 - **Audiencia**: abre `/audience`. Muestra la misma proyeccion visual que presenter, en modo solo lectura y sincronizada.
-- **Catálogo Público**: rutas dinámicas configurables mediante
-  `SEFER_PUBLIC_CATALOGS_JSON` en `.env`. Muestra una versión pública, segura y
-  de solo lectura de las presentaciones, omitiendo metadatos privados y bloques
-  de medios. Cada catálogo acepta `count_sefer: true|false`; decide únicamente
-  si las referencias Tanaj/Sefer cuentan en el número mostrado, sin ocultarlas
-  ni excluirlas de búsqueda.
-- **Proteccion de datos**: `/proteccion-datos` es una ruta publica que combina
-  los hechos tecnicos del producto, la configuracion estructurada del operador y
-  su documento organizativo local opcional.
+- **Catálogo Público**: rutas dinámicas configurables vía `SEFER_PUBLIC_CATALOG_TAGS` en `.env` (ej: `/himnos`). Muestra una versión pública, segura y de solo lectura de las presentaciones, omitiendo metadatos privados y bloques de medios.
+- **Proteccion de datos**: `/proteccion-datos` queda como ruta publica (accesible sin autenticacion) para el aviso de privacidad del futuro modulo de voz en vivo.
 - **Modo sin LiveKit**: la aplicacion conserva el uso solo presentacion. Si LiveKit esta desactivado, mal configurado o no soportado, `/presenter`, `/control`, `/audio-editor`, `/audience` y catálogos deben seguir cargando sin requerir voz en vivo.
 
 ## Scripts
@@ -57,14 +50,6 @@ El backend local vive en `server/local-server.mjs`. Mantiene inicialmente la mis
 - `GET /api/audience/state`
 - `GET /api/audience/events`
 - `GET /api/audience-cache-assets`
-- `GET /api/privacy-document` (Markdown organizativo local opcional; no expone
-  secretos ni sustituye el manifiesto publico integrado en el build)
-
-Los dos endpoints de estado de Audience son públicos y reducidos: incluyen solo
-la diapositiva proyectada actualmente y el estado funcional necesario para
-fondo, multimedia, textos, quiz y audio. No exponen el catálogo, etiquetas ni
-diapositivas anteriores o futuras. `/api/state` y `/api/state-events` conservan
-el estado completo y son administrativos.
 - `GET /api/livekit/status`
 - `POST /api/livekit/token`
 - `POST /api/livekit/refresh-token`
@@ -85,14 +70,8 @@ endpoints HTTP existentes siguen activos.
 
 Si necesitas probar el stack completo con proxy, Redis y LiveKit, activa el
 perfil opcional con `docker compose --profile live-audio up --build`. El perfil
-requiere `LIVEKIT_API_KEY` y `LIVEKIT_API_SECRET`. `LIVEKIT_NODE_IP` tiene
-prioridad cuando se define; si queda vacío,
-`SEFER_LIVEKIT_AUTO_DISCOVER_IP=true` habilita un fallback mediante proveedores
-HTTPS, con timeout, reintentos acotados y validación de IPv4 pública.
-El router y el cortafuegos deben reenviar TCP 7881 y UDP 50000-50050 al host.
-UDP es la ruta preferida y TCP 7881 actúa como fallback ICE cuando UDP no está
-disponible. El perfil no habilita TURN/TLS: esa ruta exige un dominio TURN,
-certificado y puertos propios configurados por el operador.
+requiere `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` y `LIVEKIT_NODE_IP`; no usa
+credenciales de desarrollo ni consulta servicios publicos para descubrir la IP.
 Antes de construirlo, activa tambien `SEFER_LIVE_AUDIO_ENABLED=true` y
 `VITE_SEFER_LIVE_AUDIO_BUILD=true` en el entorno.
 `npm run dev` sigue siendo util
@@ -113,28 +92,6 @@ npm run start:local
 
 Con `SEFER_REQUIRE_AUTH=true`, `/control`, `/audio-editor` y endpoints mutantes bajo `/api` quedan protegidos con Basic Auth.
 
-## Configuracion publica del operador
-
-Cada build de produccion debe declarar en `.env` los datos publicos minimos
-documentados en `.env.example`: entidad, contacto para derechos, base juridica,
-URL de privacidad, disponibilidad/estado inicial/mutabilidad de grabacion y modo
-de acceso inicial. No introduzcas secretos en variables `VITE_*`.
-
-Vite valida esos campos e incorpora `operator-manifest.json` a `dist`. El
-servidor vuelve a validar el manifiesto al arrancar y comprueba que el modo de
-acceso integrado coincide con `SEFER_SESSION_ACCESS_DEFAULT`; una configuracion
-ausente, invalida o incoherente detiene build o arranque con un diagnostico.
-Esto mantiene la configuracion publica en el artefacto estatico, sin añadir
-`GET /api/public-config`.
-
-La narrativa legal completa puede montarse como `privacy.local.md`, sin
-reconstruir la imagen. Docker Compose lee
-`${DATA_DIR}/config/privacy.local.md` en modo solo lectura. El archivo es
-opcional, debe ser UTF-8 valido y tener entre 1 byte y 128 KiB; si existe y es
-invalido el servidor no arranca. Solo se interpretan titulos, parrafos, listas y
-enlaces validados, nunca HTML crudo. Hay una plantilla neutral en
-`docs/examples/privacy.example.md`.
-
 ## PWA de audiencia y control
 
 `/audience` y `/control` pueden instalarse como PWA con manifests separados:
@@ -149,7 +106,7 @@ El service worker `public/audience-sw.js` sirve ambos scopes. Cachea:
 - TSV biblicos bajo demanda;
 - assets extra listados manualmente en `public/audience-cache-assets.txt`.
 
-El archivo `public/audience-cache-assets.txt` acepta una ruta publica por linea y comentarios con `#`. No cachea endpoints vivos (`/api/*`, SSE, `/ws`, `/rtc/*`, LiveKit/tokens) ni videos/audios pesados. El build genera `audience-sw-build.js` con todos los JS/CSS hash del bundle, de modo que el primer arranque instalado puede cargar el shell sin red. Un worker nuevo permanece en espera hasta que el boton de reinicio de la PWA lo activa antes de recargar, sin borrar nick, respuestas de quiz ni estado local persistente.
+El archivo `public/audience-cache-assets.txt` acepta una ruta publica por linea y comentarios con `#`. No cachea endpoints vivos (`/api/*`, SSE, `/ws`, `/rtc/*`, LiveKit/tokens) ni videos/audios pesados. Si hay una actualizacion de service worker esperando, el boton de reinicio de la PWA la activa antes de recargar, sin borrar nick, respuestas de quiz ni estado local persistente.
 
 ### Diagnostico de permisos de microfono
 
@@ -227,9 +184,9 @@ Canales principales:
 - `LIVE_AUDIO_SNAPSHOT_REQUEST` / `LIVE_AUDIO_SNAPSHOT`: snapshot operacional
   efimero para Controles autorizados, con participantes, cola, autorizaciones,
   estado LiveKit y agregados anonimos de quiz. Controles pendientes no lo reciben.
-- `LIVE_AUDIO_ACTIVE_PARTICIPANT_PROFILE`: estado técnico claro, sin alias ni
-  claves, que comunica únicamente la preferencia de visibilidad. El alias y la
-  clave efímera viajan dentro del sobre E2E `PRIVATE_CONTROL_SIGNAL`.
+- `LIVE_AUDIO_ACTIVE_PARTICIPANT_PROFILE`: perfil activo claro enviado solo a
+  Controles autorizados con alias, preferencia de visibilidad y clave publica
+  para cifrar la lista visible de nicks.
 
 La audiencia muestra la misma imagen viva del presenter, sin controles de navegacion ni apertura del panel de control.
 
@@ -242,7 +199,7 @@ puntuaciones en cada recalculo.
 
 `PRIVATE_CONTROL_SIGNAL` es un contenedor tecnico cifrado para senales privadas
 entre Audience y controles autorizados. No contiene alias, mensajes ni
-configuracion de micro en texto claro, y el servidor debe limitarse a validar/rutear
+configuracion de micro en claro, y el servidor debe limitarse a validar/rutear
 sin descifrar ni persistir contenido.
 La capa E2E simplificada usa Web Crypto: Control publica una clave publica ECDH
 P-256, Audience cifra con una clave AES-GCM 256 derivada y un nonce aleatorio de
@@ -278,11 +235,7 @@ Fase 5.4 agrega endpoints backend para tokens y moderacion, con estado solo en
 memoria. Si `SEFER_LIVE_AUDIO_ENABLED=false` o faltan `LIVEKIT_URL`,
 `LIVEKIT_API_KEY` o `LIVEKIT_API_SECRET`, el servidor sigue arrancando y
 `GET /api/livekit/status` responde que Live Audio esta desactivado o no
-disponible. Cuando está configurado, el endpoint comprueba la comunicación real
-con RoomService y responde 503 si LiveKit no es alcanzable. La salud de la pila
-Base se comprueba por separado en `GET /api/health`, por lo que una caída de
-LiveKit no impide servir Presentación, Control, Audience, Quiz o Multimedia.
-Las respuestas de estado no exponen secretos.
+disponible. Las respuestas de estado no exponen secretos.
 
 Para validar Live Audio end-to-end con LiveKit real, el camino soportado es
 Docker Compose (`npm run docker:up`), porque el stack incluye `caddy`, `redis`
@@ -297,35 +250,13 @@ SEFER_LIVE_AUDIO_TOKEN_TTL_MINUTES=30
 SEFER_LIVE_AUDIO_REJOIN_GRACE_SECONDS=60
 SEFER_LIVE_AUDIO_ALLOW_DELEGATED_MODERATORS=true
 SEFER_LIVE_AUDIO_CONTROL_CODE_TTL_SECONDS=90
-SEFER_SESSION_ACCESS_DEFAULT=PUBLIC
-SEFER_AUDIENCE_RESUME_TTL_HOURS=24
-SEFER_AUDIENCE_ACCESS_CAPACITY=500
 VITE_SEFER_ACTIVE_ALIAS_VISIBLE_BY_DEFAULT=false
 SEFER_ACTIVE_ALIAS_MODERATION_DEFAULT_VISIBLE=true
-VITE_SEFER_RECORDING_AVAILABLE=false
-VITE_SEFER_RECORDING_DEFAULT=NOT_RECORDING
-VITE_SEFER_RECORDING_MUTABLE=false
 LIVEKIT_URL=
-LIVEKIT_API_URL=http://livekit:7880
 LIVEKIT_API_KEY=
 LIVEKIT_API_SECRET=
 LIVEKIT_ROOM_NAME=sefer-live-audio
-LIVEKIT_NODE_IP=
-SEFER_LIVEKIT_AUTO_DISCOVER_IP=true
 ```
-
-La arquitectura soportada publica TCP 7881 y UDP 50000-50050 directamente desde
-LiveKit. En redes con IP pública dinámica, `LIVEKIT_NODE_IP` explícita conserva
-la prioridad y el descubrimiento HTTPS es el fallback de arranque. Después de
-que DDNS apunte a una IP pública nueva, reinicia el servicio `livekit` para que
-vuelva a descubrirla y anunciarla. TURN/TLS no está preconfigurado porque
-requiere una identidad DNS y un certificado distintos decididos por cada
-operador.
-
-`LIVEKIT_URL` es la URL WebSocket pública que reciben los clientes.
-`LIVEKIT_API_URL` es la ruta servidor-a-servidor de RoomService; Compose usa
-`http://livekit:7880` por la red privada. No publiques la API administrativa ni
-reutilices necesariamente la URL pública para esa comunicación.
 
 Endpoints:
 
@@ -339,29 +270,20 @@ Endpoints:
   mediante `{ participantId, refreshCredential }`, preserva la identidad y rota
   la credencial en cada éxito. Los roles privilegiados vuelven a demostrar su
   autorización; credenciales ajenas, expiradas o reutilizadas se rechazan.
-- `POST /api/livekit/revoke-speak`, `mute-participant`,
+- `POST /api/livekit/grant-speak`, `revoke-speak`, `mute-participant`,
   `mute-all`, `kick-participant`, `rescue-participant`: requieren
   `role: "control"` y un `controlSessionId` autorizado por WebSocket.
   `audience` recibe 403. `rescue-participant` devuelve al usuario expulsado a
   audiencia activa muda (`LISTENER`) sin abrir ni publicar microfono.
-- La concesion de palabra y los cambios de grabacion se realizan exclusivamente
-  por el WebSocket autoritativo. Cada cambio de grabacion usa `stateRevision`;
-  `recordingEpoch` aumenta solo al comenzar una nueva etapa de grabacion. Las
-  confirmaciones de microfono quedan ligadas a la sesion, epoca y credencial
-  admitida. SeferPresenter declara el estado, pero no controla grabadores
-  externos.
 
 No hay endpoints de consentimiento, alias legible ni chat legible. El backend no
 persiste claves, alias, tokens ni mensajes privados en archivos o base de datos.
-El snapshot operacional vive solo en memoria y es no nominal: rechaza alias y
-claves efímeras de Audience, y conserva únicamente estado técnico de conexión,
-moderación, visibilidad y micrófono.
+El snapshot operacional vive solo en memoria; las partes sensibles que el
+servidor llega a conocer por parches de Control autorizado se cifran con una
+clave derivada de `SEFER_CONTROL_PASSWORD` y no se guardan en disco.
 
 Compose conserva copias de recuperación fsync de `presentations.json` y
-`audio_sync.json` en el volumen `sefer_backups`. El arranque valida el primario,
-restaura automáticamente una copia válida cuando sea necesario y se niega a
-iniciar si ambos archivos están dañados. El contenedor prepara el volumen y
-después ejecuta la aplicación como usuario `node`. En un montaje individual de
+`audio_sync.json` en el volumen `sefer_backups`. En un montaje individual de
 archivo, Docker puede impedir el `rename` atómico del primario; el backend lo
 registra y solo usa escritura in-place después de crear esa copia durable.
 
@@ -369,28 +291,7 @@ registra y solo usa escritura in-place después de crear esa copia durable.
 
 `legacy/` es registro local de desarrollo. No forma parte del producto, no debe ir al build y queda fuera de ESLint.
 
-Los patrones `*.local` y `*.local.*` están reservados para adaptaciones privadas
-de una instalación. Nunca deben contener código, pruebas o documentación
-canónica del producto.
-
-La imagen de producción se construye deliberadamente con Vite y sirve `dist`.
-Cada operador puede realizar su propio build para incorporar logos y variables
-`VITE_*` públicas; multimedia, fondos y datos se montan en tiempo de ejecución.
-Tras un cambio de IP pública actualizado mediante DDNS, hay que reiniciar
-LiveKit para que anuncie la dirección nueva; no es necesario reconstruir la
-imagen.
-
 ## Verificacion recomendada
-
-El registro de estabilización previo a la auditoría de producción está en
-`docs/audits/2026-07-24/PRE_AUDIT_STABILIZATION.md`.
-La auditoría y el plan bloqueante de sincronización multi-Control están en
-`docs/audits/2026-07-24/MULTI_CONTROL_SYNC_AUDIT.md`.
-La matriz de certificación de teclado y lectores de pantalla está en
-`docs/audits/2026-07-24/ACCESSIBILITY_CERTIFICATION_MATRIX.md`.
-El expediente consolidado, la trazabilidad y los dictámenes separados Base y
-Live Audio están en
-`docs/audits/2026-07-24/final-certification/README.md`.
 
 Antes de cerrar cambios importantes:
 

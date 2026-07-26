@@ -52,7 +52,7 @@ const audioTimelineUpdatedBy = new Set<AudioTimelineState['updatedBy']>(['contro
 const liveAudioParticipantRoles = new Set<LiveAudioParticipantRole>(['audience', 'control', 'presenter']);
 const liveAudioPrivateSignalSenderRoles = new Set<LiveAudioParticipantRole>(['audience', 'control']);
 const liveAudioSpeakerStates = new Set(['LISTENER', 'REQUESTED', 'GRANTED', 'MUTED', 'REVOKED']);
-const liveAudioControlStates = new Set(['PRINCIPAL', 'PENDING', 'AUTHORIZED_SYNCING', 'AUTHORIZED']);
+const liveAudioControlStates = new Set(['PRINCIPAL', 'PENDING', 'AUTHORIZED']);
 const liveAudioOperationalRoles = new Set(['pasivo', 'activo', 'cola', 'orador', 'control', 'presenter']);
 const liveAudioMicrophonePermissionStates = new Set(['unknown', 'prompt', 'denied', 'granted', 'unavailable']);
 const liveAudioMicrophoneTrackStates = new Set(['notRequested', 'off', 'publishing', 'mutedByUser', 'mutedByControl', 'error']);
@@ -68,12 +68,10 @@ const liveAudioMessageTypes = new Set([
   'LIVE_AUDIO_CONTROL_PUBLIC_KEY',
   'LIVE_AUDIO_CONTROL_JOIN_REQUEST',
   'LIVE_AUDIO_CONTROL_AUTHORIZED',
-  'LIVE_AUDIO_CONTROL_KEY_TRANSFER_RESULT',
   'LIVE_AUDIO_CONTROL_AUTHORIZATION_STATE',
   'LIVE_AUDIO_CONTROL_AUTHORIZATION_DECISION',
   'CONTROL_KEY_ROTATED',
   'PRIVATE_CONTROL_SIGNAL',
-  'PRIVATE_CONTROL_SIGNAL_RESULT',
   'LIVE_AUDIO_REQUEST_ALIASES',
   'LIVE_AUDIO_SNAPSHOT_REQUEST',
   'LIVE_AUDIO_SNAPSHOT',
@@ -81,7 +79,6 @@ const liveAudioMessageTypes = new Set([
 ]);
 const privateControlSignalAllowedKeys = new Set([
   'type',
-  'signalClass',
   'fromParticipantId',
   'toControlSessionId',
   'toParticipantId',
@@ -162,13 +159,6 @@ const validatePrivateControlSignalValue = (
     if (!privateControlSignalAllowedKeys.has(key)) errors.push(`PRIVATE_CONTROL_SIGNAL.${key} no esta permitido.`);
   });
   if (msg.type !== 'PRIVATE_CONTROL_SIGNAL') errors.push('PRIVATE_CONTROL_SIGNAL.type no es valido.');
-  if (
-    msg.signalClass !== 'PROFILE_STATE' &&
-    msg.signalClass !== 'PRIVATE_MESSAGE' &&
-    msg.signalClass !== 'CONTROL_STATE'
-  ) {
-    errors.push('PRIVATE_CONTROL_SIGNAL.signalClass no es valido.');
-  }
   validatePrivateSignalSenderId(msg.fromParticipantId, senderRole, msg.toParticipantId !== undefined, errors);
   if (msg.toControlSessionId !== undefined && typeof msg.toControlSessionId !== 'string') {
     errors.push('PRIVATE_CONTROL_SIGNAL.toControlSessionId debe ser texto.');
@@ -226,8 +216,7 @@ const validateOperationalParticipantSnapshot = (
   if (typeof value.role !== 'string' || !liveAudioParticipantRoles.has(value.role as LiveAudioParticipantRole)) {
     errors.push(`${path}.role no es valido.`);
   }
-  if (value.alias !== undefined) errors.push(`${path}.alias no puede formar parte del snapshot del servidor.`);
-  if (value.activeListPublicKey !== undefined) errors.push(`${path}.activeListPublicKey no puede formar parte del snapshot del servidor.`);
+  if (value.alias !== undefined && typeof value.alias !== 'string') errors.push(`${path}.alias debe ser texto.`);
   if (typeof value.operationalRole !== 'string' || !liveAudioOperationalRoles.has(value.operationalRole)) {
     errors.push(`${path}.operationalRole no es valido.`);
   }
@@ -253,12 +242,6 @@ const validateOperationalParticipantSnapshot = (
   });
   if (value.connectedAt !== undefined && !isFiniteNumber(value.connectedAt)) errors.push(`${path}.connectedAt debe ser numero.`);
   if (value.disconnectedAt !== undefined && !isFiniteNumber(value.disconnectedAt)) errors.push(`${path}.disconnectedAt debe ser numero.`);
-  if (
-    value.recordingConfirmationEpoch !== undefined &&
-    (!Number.isInteger(value.recordingConfirmationEpoch) || Number(value.recordingConfirmationEpoch) < 0)
-  ) {
-    errors.push(`${path}.recordingConfirmationEpoch debe ser entero no negativo.`);
-  }
   if (!isFiniteNumber(value.updatedAt)) errors.push(`${path}.updatedAt debe ser numero.`);
 };
 
@@ -269,15 +252,6 @@ const validateOperationalSnapshot = (snapshot: unknown, path: string, errors: st
   }
   if (typeof snapshot.snapshotId !== 'string' || snapshot.snapshotId.trim() === '') errors.push(`${path}.snapshotId debe ser texto no vacio.`);
   if (!isFiniteNumber(snapshot.createdAt)) errors.push(`${path}.createdAt debe ser numero.`);
-  if (typeof snapshot.presentationSessionId !== 'string' || snapshot.presentationSessionId.trim() === '') {
-    errors.push(`${path}.presentationSessionId debe ser texto no vacio.`);
-  }
-  if (typeof snapshot.serverEpoch !== 'string' || snapshot.serverEpoch.trim() === '') {
-    errors.push(`${path}.serverEpoch debe ser texto no vacio.`);
-  }
-  if (!Number.isInteger(snapshot.stateRevision) || Number(snapshot.stateRevision) < 0) {
-    errors.push(`${path}.stateRevision debe ser entero no negativo.`);
-  }
   if (!isRecord(snapshot.connectionCounts)) {
     errors.push(`${path}.connectionCounts debe ser un objeto.`);
   } else {
@@ -297,28 +271,6 @@ const validateOperationalSnapshot = (snapshot: unknown, path: string, errors: st
     });
   }
   validateStringArray(snapshot.interventionQueue, `${path}.interventionQueue`, errors);
-  if (!isRecord(snapshot.policies)) {
-    errors.push(`${path}.policies debe ser un objeto.`);
-  } else {
-    if (snapshot.policies.accessMode !== 'PUBLIC' && snapshot.policies.accessMode !== 'CONTROLLED') {
-      errors.push(`${path}.policies.accessMode no es valido.`);
-    }
-    if (typeof snapshot.policies.recordingAvailable !== 'boolean') {
-      errors.push(`${path}.policies.recordingAvailable debe ser booleano.`);
-    }
-    if (typeof snapshot.policies.recordingMutable !== 'boolean') {
-      errors.push(`${path}.policies.recordingMutable debe ser booleano.`);
-    }
-    if (
-      snapshot.policies.recordingState !== 'NOT_RECORDING' &&
-      snapshot.policies.recordingState !== 'RECORDING'
-    ) {
-      errors.push(`${path}.policies.recordingState no es valido.`);
-    }
-    if (!Number.isInteger(snapshot.policies.recordingEpoch) || Number(snapshot.policies.recordingEpoch) < 0) {
-      errors.push(`${path}.policies.recordingEpoch debe ser entero no negativo.`);
-    }
-  }
 
   if (!isRecord(snapshot.authorizations)) {
     errors.push(`${path}.authorizations debe ser un objeto.`);
@@ -770,17 +722,17 @@ const validateAudioTimelineState = (value: unknown, path: string): ValidationRes
 const validateAudiencePublicState = (value: unknown, path: string): ValidationResult<unknown> => {
   if (!isRecord(value)) return fail([`${path} debe ser un objeto.`]);
 
-  const remote = validateRemoteStatePayload(value);
-  const errors = [...remote.errors];
-  if (value.presentation === undefined) errors.push(`${path}.presentation es requerido.`);
-  if (value.slideIndex === undefined) errors.push(`${path}.slideIndex es requerido.`);
-  if (value.backgroundLock === undefined) errors.push(`${path}.backgroundLock es requerido.`);
-  if (value.lockedBackgroundValue === undefined) errors.push(`${path}.lockedBackgroundValue es requerido.`);
-  if (value.userSelectedBackground === undefined) errors.push(`${path}.userSelectedBackground es requerido.`);
-  if (value.videoState === undefined) errors.push(`${path}.videoState es requerido.`);
-  if (value.appMode === undefined) errors.push(`${path}.appMode es requerido.`);
-  if (value.scriptureState === undefined) errors.push(`${path}.scriptureState es requerido.`);
-  if (value.audioState === undefined) errors.push(`${path}.audioState es requerido.`);
+  const errors: string[] = [];
+  if (typeof value.mode !== 'string' || !appModes.has(value.mode)) errors.push(`${path}.mode no es valido.`);
+  if (typeof value.presentationTitle !== 'string') errors.push(`${path}.presentationTitle debe ser texto.`);
+  if (value.slide !== null && !isRecord(value.slide)) errors.push(`${path}.slide debe ser objeto o null.`);
+  if (value.scripture !== null && !isRecord(value.scripture)) errors.push(`${path}.scripture debe ser objeto o null.`);
+  if (!isRecord(value.background)) {
+    errors.push(`${path}.background debe ser un objeto.`);
+  } else {
+    if (value.background.kind !== 'image' && value.background.kind !== 'color') errors.push(`${path}.background.kind no es valido.`);
+    if (typeof value.background.value !== 'string') errors.push(`${path}.background.value debe ser texto.`);
+  }
   if (!isFiniteNumber(value.updatedAt)) errors.push(`${path}.updatedAt debe ser numero.`);
 
   return errors.length > 0 ? fail(errors) : ok(value);
@@ -861,32 +813,18 @@ const validateLiveAudioBroadcastMessage = (value: Record<string, unknown>): Vali
       if (typeof value.authorizedByControlSessionId !== 'string' || value.authorizedByControlSessionId.trim() === '') {
         errors.push('authorizedByControlSessionId debe ser texto no vacio.');
       }
-      if (typeof value.transferId !== 'string' || value.transferId.trim() === '') errors.push('transferId debe ser texto no vacio.');
-      if (typeof value.keyId !== 'string' || value.keyId.trim() === '') errors.push('keyId debe ser texto no vacio.');
-      if (!isValidBase64(value.sessionPublicKey)) errors.push('sessionPublicKey debe ser base64.');
-      if (!isValidBase64(value.transferPublicKey)) errors.push('transferPublicKey debe ser base64.');
-      if (!isValidBase64(value.encryptedSessionPrivateKey)) {
+      if (value.keyId !== undefined && (typeof value.keyId !== 'string' || value.keyId.trim() === '')) errors.push('keyId debe ser texto no vacio.');
+      if (value.sessionPublicKey !== undefined && !isValidBase64(value.sessionPublicKey)) errors.push('sessionPublicKey debe ser base64.');
+      if (value.transferPublicKey !== undefined && !isValidBase64(value.transferPublicKey)) errors.push('transferPublicKey debe ser base64.');
+      if (value.encryptedSessionPrivateKey !== undefined && !isValidBase64(value.encryptedSessionPrivateKey)) {
         errors.push('encryptedSessionPrivateKey debe ser base64.');
       }
-      if (!isValidBase64(value.nonce)) {
-        errors.push('nonce debe ser base64.');
-      } else if (getBase64ByteLength(value.nonce) !== 12) {
-        errors.push('nonce debe codificar 12 bytes.');
-      }
-      validateOptionalCreatedAt(value, value.type, errors);
-      break;
-    case 'LIVE_AUDIO_CONTROL_KEY_TRANSFER_RESULT':
-      if (typeof value.controlSessionId !== 'string' || value.controlSessionId.trim() === '') errors.push('controlSessionId debe ser texto no vacio.');
-      if (typeof value.transferId !== 'string' || value.transferId.trim() === '') errors.push('transferId debe ser texto no vacio.');
-      if (typeof value.keyId !== 'string' || value.keyId.trim() === '') errors.push('keyId debe ser texto no vacio.');
-      if (value.result !== 'ACK' && value.result !== 'NACK') errors.push('result debe ser ACK o NACK.');
-      if (
-        value.reason !== undefined &&
-        value.reason !== 'IMPORT_FAILED' &&
-        value.reason !== 'INVALID_TRANSFER' &&
-        value.reason !== 'KEY_MISMATCH'
-      ) {
-        errors.push('reason no es valido.');
+      if (value.nonce !== undefined) {
+        if (!isValidBase64(value.nonce)) {
+          errors.push('nonce debe ser base64.');
+        } else if (getBase64ByteLength(value.nonce) !== 12) {
+          errors.push('nonce debe codificar 12 bytes.');
+        }
       }
       validateOptionalCreatedAt(value, value.type, errors);
       break;
@@ -918,12 +856,6 @@ const validateLiveAudioBroadcastMessage = (value: Record<string, unknown>): Vali
             }
             if (!isFiniteNumber(pending.codeExpiresAt)) errors.push(`pendingControls[${index}].codeExpiresAt debe ser numero.`);
             if (!isFiniteNumber(pending.connectedAt)) errors.push(`pendingControls[${index}].connectedAt debe ser numero.`);
-            if (pending.recipientPublicKey !== undefined && !isValidBase64(pending.recipientPublicKey)) {
-              errors.push(`pendingControls[${index}].recipientPublicKey debe ser base64.`);
-            }
-            if (pending.joinRequestId !== undefined && (typeof pending.joinRequestId !== 'string' || pending.joinRequestId.trim() === '')) {
-              errors.push(`pendingControls[${index}].joinRequestId debe ser texto no vacio.`);
-            }
           });
         }
       }
@@ -948,83 +880,12 @@ const validateLiveAudioBroadcastMessage = (value: Record<string, unknown>): Vali
       }
       validateOptionalCreatedAt(value, value.type, errors);
       break;
-    case 'PRIVATE_CONTROL_SIGNAL_RESULT':
-      if (typeof value.messageId !== 'string' || value.messageId.trim() === '') errors.push('messageId debe ser texto no vacio.');
-      if (value.result !== 'ACK' && value.result !== 'NACK') errors.push('result debe ser ACK o NACK.');
-      if (
-        value.reason !== undefined &&
-        value.reason !== 'INVALID_SIGNAL' &&
-        value.reason !== 'RATE_LIMIT' &&
-        value.reason !== 'NO_RECIPIENT'
-      ) {
-        errors.push('reason no es valido.');
-      }
-      if (value.retryAfterMs !== undefined && (!isFiniteNumber(value.retryAfterMs) || value.retryAfterMs < 0)) {
-        errors.push('retryAfterMs debe ser un numero no negativo.');
-      }
-      validateOptionalCreatedAt(value, value.type, errors);
-      break;
     case 'LIVE_AUDIO_REQUEST_ALIASES':
       validateOptionalCreatedAt(value, value.type, errors);
-      break;
-    case 'SESSION_RECORDING_POLICY':
-      if (typeof value.presentationSessionId !== 'string' || value.presentationSessionId.trim() === '') {
-        errors.push('presentationSessionId debe ser texto no vacio.');
-      }
-      if (typeof value.serverEpoch !== 'string' || value.serverEpoch.trim() === '') errors.push('serverEpoch debe ser texto no vacio.');
-      if (!Number.isInteger(value.stateRevision) || Number(value.stateRevision) < 0) errors.push('stateRevision debe ser entero no negativo.');
-      if (typeof value.eventId !== 'string' || value.eventId.trim() === '') errors.push('eventId debe ser texto no vacio.');
-      if (typeof value.recordingAvailable !== 'boolean') errors.push('recordingAvailable debe ser booleano.');
-      if (typeof value.recordingMutable !== 'boolean') errors.push('recordingMutable debe ser booleano.');
-      if (value.recordingState !== 'NOT_RECORDING' && value.recordingState !== 'RECORDING') errors.push('recordingState no es valido.');
-      if (!Number.isInteger(value.recordingEpoch) || Number(value.recordingEpoch) < 0) errors.push('recordingEpoch debe ser entero no negativo.');
-      if (typeof value.changedDuringSession !== 'boolean') errors.push('changedDuringSession debe ser booleano.');
-      if (!isFiniteNumber(value.updatedAt)) errors.push('updatedAt debe ser numero.');
-      break;
-    case 'SESSION_RECORDING_POLICY_RESULT':
-      if (typeof value.commandId !== 'string' || value.commandId.trim() === '') errors.push('commandId debe ser texto no vacio.');
-      if (value.result !== 'ACK' && value.result !== 'NACK') errors.push('result debe ser ACK o NACK.');
-      if (
-        value.reason !== undefined &&
-        value.reason !== 'FORBIDDEN' &&
-        value.reason !== 'REVISION_CONFLICT' &&
-        value.reason !== 'LIVEKIT_REVOCATION_FAILED' &&
-        value.reason !== 'TRANSITION_IN_PROGRESS'
-      ) {
-        errors.push('reason no es valido.');
-      }
-      if (typeof value.presentationSessionId !== 'string' || value.presentationSessionId.trim() === '') errors.push('presentationSessionId debe ser texto no vacio.');
-      if (typeof value.serverEpoch !== 'string' || value.serverEpoch.trim() === '') errors.push('serverEpoch debe ser texto no vacio.');
-      if (!Number.isInteger(value.stateRevision) || Number(value.stateRevision) < 0) errors.push('stateRevision debe ser entero no negativo.');
-      if (value.recordingState !== 'NOT_RECORDING' && value.recordingState !== 'RECORDING') errors.push('recordingState no es valido.');
-      if (!Number.isInteger(value.recordingEpoch) || Number(value.recordingEpoch) < 0) errors.push('recordingEpoch debe ser entero no negativo.');
-      break;
-    case 'AUDIENCE_RECORDING_CONFIRMATION_RESULT':
-      if (value.result !== 'ACK' && value.result !== 'NACK') errors.push('result debe ser ACK o NACK.');
-      if (typeof value.presentationSessionId !== 'string' || value.presentationSessionId.trim() === '') errors.push('presentationSessionId debe ser texto no vacio.');
-      if (!Number.isInteger(value.stateRevision) || Number(value.stateRevision) < 0) errors.push('stateRevision debe ser entero no negativo.');
-      if (!Number.isInteger(value.recordingEpoch) || Number(value.recordingEpoch) < 0) errors.push('recordingEpoch debe ser entero no negativo.');
-      if (value.participantId !== undefined) validateParticipantId(value.participantId, 'participantId', errors);
       break;
     case 'LIVE_AUDIO_SNAPSHOT_REQUEST':
       if (value.controlSessionId !== undefined && typeof value.controlSessionId !== 'string') {
         errors.push('controlSessionId debe ser texto.');
-      }
-      if (
-        value.lastAppliedStateRevision !== undefined &&
-        (!Number.isInteger(value.lastAppliedStateRevision) || Number(value.lastAppliedStateRevision) < 0)
-      ) {
-        errors.push('lastAppliedStateRevision debe ser entero no negativo.');
-      }
-      if (
-        value.reason !== undefined &&
-        value.reason !== 'CONNECT' &&
-        value.reason !== 'RECONNECT' &&
-        value.reason !== 'GAP' &&
-        value.reason !== 'STALE_SNAPSHOT' &&
-        value.reason !== 'NACK'
-      ) {
-        errors.push('reason no es valido.');
       }
       validateOptionalCreatedAt(value, value.type, errors);
       break;
@@ -1033,17 +894,7 @@ const validateLiveAudioBroadcastMessage = (value: Record<string, unknown>): Vali
       validateOptionalCreatedAt(value, value.type, errors);
       break;
     case 'LIVE_AUDIO_SNAPSHOT_PATCH':
-      if (!isRecord(value.snapshot)) {
-        errors.push('snapshot debe ser un objeto.');
-      } else if (
-        Array.isArray(value.snapshot.participants) &&
-        value.snapshot.participants.some((participant) => (
-          isRecord(participant) &&
-          (participant.alias !== undefined || participant.activeListPublicKey !== undefined)
-        ))
-      ) {
-        errors.push('snapshot no puede contener alias ni claves efimeras de Audience.');
-      }
+      if (!isRecord(value.snapshot)) errors.push('snapshot debe ser un objeto.');
       validateOptionalCreatedAt(value, value.type, errors);
       break;
     default:

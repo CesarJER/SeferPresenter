@@ -332,8 +332,6 @@ describe('runtime validation', () => {
   it('accepts valid private control signals as separate Live Audio messages', () => {
     const result = validateSyncMessage({
       type: 'PRIVATE_CONTROL_SIGNAL',
-      signalClass: 'PROFILE_STATE',
-      messageId: 'message-1',
       fromParticipantId: '550e8400-e29b-41d4-a716-446655440000',
       toControlSessionId: 'control-session-1',
       keyId: 'key-1',
@@ -349,8 +347,6 @@ describe('runtime validation', () => {
   it('accepts valid control-to-audience private control signals', () => {
     expect(validateSyncMessage({
       type: 'PRIVATE_CONTROL_SIGNAL',
-      signalClass: 'CONTROL_STATE',
-      messageId: 'message-2',
       fromParticipantId: 'control-session-1',
       toParticipantId: '550e8400-e29b-41d4-a716-446655440000',
       keyId: 'key-1',
@@ -362,8 +358,6 @@ describe('runtime validation', () => {
 
     expect(isValidPrivateControlSignal({
       type: 'PRIVATE_CONTROL_SIGNAL',
-      signalClass: 'CONTROL_STATE',
-      messageId: 'message-3',
       fromParticipantId: 'control-session-1',
       toParticipantId: '550e8400-e29b-41d4-a716-446655440000',
       keyId: 'key-1',
@@ -431,9 +425,6 @@ describe('runtime validation', () => {
       snapshot: {
         snapshotId: 'snapshot-1',
         createdAt: Date.now(),
-        presentationSessionId: 'session-1',
-        serverEpoch: 'server-1',
-        stateRevision: 3,
         connectionCounts: {
           totalConnections: 1,
           audienceConnections: 1,
@@ -444,6 +435,7 @@ describe('runtime validation', () => {
         participants: [{
           participantId,
           role: 'audience',
+          alias: 'Temporal',
           operationalRole: 'activo',
           microphonePermissionState: 'unknown',
           microphoneTrackState: 'off',
@@ -458,13 +450,6 @@ describe('runtime validation', () => {
           updatedAt: Date.now(),
         }],
         interventionQueue: [],
-        policies: {
-          accessMode: 'PUBLIC',
-          recordingAvailable: true,
-          recordingMutable: true,
-          recordingState: 'NOT_RECORDING',
-          recordingEpoch: 0,
-        },
         authorizations: {
           principalControlSessionId: 'control-1',
           controls: [{
@@ -494,20 +479,6 @@ describe('runtime validation', () => {
       },
       createdAt: Date.now(),
     }).ok).toBe(true);
-  });
-
-  it('rejects clear aliases in server snapshot patches', () => {
-    expect(validateSyncMessage({
-      type: 'LIVE_AUDIO_SNAPSHOT_PATCH',
-      snapshot: {
-        participants: [{
-          participantId: '550e8400-e29b-41d4-a716-446655440000',
-          role: 'audience',
-          alias: 'No debe llegar al servidor',
-        }],
-      },
-      createdAt: Date.now(),
-    }).ok).toBe(false);
   });
 
   it('rejects malformed private control signals', () => {

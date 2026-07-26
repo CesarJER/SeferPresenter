@@ -1,38 +1,20 @@
 import fs from 'node:fs'
 import http from 'node:http'
 import path from 'node:path'
-import { randomUUID } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import { createLiveKitApi } from './livekit-server.mjs'
 import {
   createWsServer,
-  authorizeAudienceCredential,
-  bootstrapAudienceAccess,
-  consumeAudienceSseTicket,
   getLiveAudioControlSnapshot,
   getLiveAudioParticipantState,
-  getPresentationSessionId,
-  getRecordingPolicy,
-  hasCurrentRecordingConfirmation,
-  getServerEpoch,
-  getSessionAccessMode,
-  issueAudienceSseTicket,
-  logoutAudienceCredential,
   isLiveAudioControlAuthorized,
-  isAudienceParticipantAdmitted,
-  canReceiveAudienceSessionContent,
 } from './ws-server.mjs'
 import {
-  classifyQuizSseRequest,
   hasAllowedRequestOrigin,
   hasValidBasicAuth,
   isAuthRequired,
   isProtectedRequestPath,
 } from './authUtils.mjs'
-import {
-  clearQuizAggregateState,
-  quizSessionMatchesAudience,
-} from './quiz-aggregate-state.mjs'
 import {
   getDefaultProjectionState,
   makeProjectionSyncStateMessage,
@@ -54,48 +36,21 @@ import {
   validateAudioSyncPayload,
   validatePresentationsPayload,
 } from './content-validation.mjs'
-import { readJsonWithRecovery, writeJsonSafely } from './json-persistence.mjs'
+import { writeJsonSafely } from './json-persistence.mjs'
 import { resolvePathInsideRoot } from './path-containment.mjs'
-import { createFixedWindowRateLimiter } from './request-rate-limit.mjs'
-import { deriveAudienceProjectionState } from './audience-projection-state.mjs'
-import {
-  buildOperatorManifest,
-  readPrivacyLocalMarkdown,
-  validateOperatorManifestFile,
-} from './operator-config.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const rootDir = path.resolve(__dirname, '..')
 const publicDir = path.join(rootDir, 'public')
-
-const getBearerCredential = (req) => {
-  const authorization = Array.isArray(req.headers.authorization)
-    ? req.headers.authorization[0]
-    : req.headers.authorization
-  if (typeof authorization !== 'string' || !authorization.startsWith('Bearer ')) return null
-  return authorization.slice('Bearer '.length).trim()
-}
 const port = Number(process.env.SEFER_PORT || 8787)
 const staticArgIndex = process.argv.indexOf('--static')
 const staticDir = path.resolve(rootDir, staticArgIndex >= 0 ? process.argv[staticArgIndex + 1] || 'dist' : 'dist')
-const operatorManifest = staticArgIndex >= 0
-  ? validateOperatorManifestFile(staticDir)
-  : buildOperatorManifest(process.env)
-const privacyLocalPath = process.env.SEFER_PRIVACY_LOCAL_PATH?.trim() ||
-  path.join(rootDir, 'privacy.local.md')
-const privacyLocalMarkdown = readPrivacyLocalMarkdown(privacyLocalPath)
 const sseHeartbeatMs = 30_000
-const checkAudienceBootstrapRate = createFixedWindowRateLimiter({
-  limit: 120,
-  windowMs: 60_000,
-})
 
 let currentState = makeProjectionSyncStateMessage(getDefaultProjectionState(), {
   clientId: 'server',
   origin: 'control',
 })
-let audienceStateRevision = 0
-let audienceEventId = randomUUID()
 
 let clients = new Set()
 let audienceClients = new Set()
@@ -246,16 +201,17 @@ const readBody = (req, maxBytes = 5 * 1024 * 1024) =>
     req.on('error', reject)
   })
 
-const getBackupPath = (filePath) => {
-  const configuredBackupDir = process.env.SEFER_BACKUP_DIR?.trim()
-  return configuredBackupDir
-    ? path.join(configuredBackupDir, `${path.basename(filePath)}.bak`)
-    : `${filePath}.bak`
+const readJsonFile = (filePath, fallback) => {
+  if (!fs.existsSync(filePath)) return fallback
+  const content = fs.readFileSync(filePath, 'utf-8').replace(/^\uFEFF/, '')
+  return JSON.parse(content)
 }
 
 const persistJson = (filePath, value) => {
   const configuredBackupDir = process.env.SEFER_BACKUP_DIR?.trim()
-  const backupPath = getBackupPath(filePath)
+  const backupPath = configuredBackupDir
+    ? path.join(configuredBackupDir, `${path.basename(filePath)}.bak`)
+    : `${filePath}.bak`
   if (configuredBackupDir) fs.mkdirSync(configuredBackupDir, { recursive: true })
   const result = writeJsonSafely(filePath, value, {
     backupPath,
@@ -267,47 +223,28 @@ const persistJson = (filePath, value) => {
   return result
 }
 
-const readValidatedJsonWithRecovery = (filePath, fallback, validate, label) => {
-  const validateValue = (value) => {
-    const validation = validate(value)
-    if (!validation.ok) throw new Error(formatValidationError(validation))
-    return validation.value
-  }
-
-  const backupPath = getBackupPath(filePath)
-  try {
-    const result = readJsonWithRecovery({
-      filePath,
-      backupPath,
-      fallback,
-      validate: validateValue,
-    })
-    if (result.recovered) {
-      console.warn(`[${label}] Primary data restored from validated backup: ${backupPath}`)
-    }
-    return result.value
-  } catch (error) {
-    throw new Error(`${label} data rejected; refusing to continue. ${error.message}`)
-  }
-}
-
 const readPresentationsCache = () => {
-  const filePath = path.join(rootDir, 'presentations.json')
-  presentationsCache = normalizePresentations(
-    readValidatedJsonWithRecovery(filePath, [], validatePresentationsPayload, 'PRESENTATIONS')
-  )
+  try {
+    const validation = validatePresentationsPayload(readJsonFile(path.join(rootDir, 'presentations.json'), []))
+    if (!validation.ok) throw new Error(formatValidationError(validation))
+    presentationsCache = normalizePresentations(validation.value)
+  } catch (error) {
+    console.error(`[PRESENTATIONS] Stored data rejected: ${error.message}`)
+    presentationsCache = []
+  }
   publicPresentationsCache = buildPublicPresentations(presentationsCache, getPublicCatalogs())
   return presentationsCache
 }
 
 const readAudioSyncMapsCache = () => {
-  const filePath = path.join(rootDir, 'audio_sync.json')
-  audioSyncMapsCache = readValidatedJsonWithRecovery(
-    filePath,
-    [],
-    validateAudioSyncPayload,
-    'AUDIO_SYNC'
-  )
+  try {
+    const validation = validateAudioSyncPayload(readJsonFile(path.join(rootDir, 'audio_sync.json'), []))
+    if (!validation.ok) throw new Error(formatValidationError(validation))
+    audioSyncMapsCache = validation.value
+  } catch (error) {
+    console.error(`[AUDIO_SYNC] Stored data rejected: ${error.message}`)
+    audioSyncMapsCache = []
+  }
   return audioSyncMapsCache
 }
 
@@ -336,28 +273,10 @@ const walkAssets = (directories, matcher) => {
   return results
 }
 
-const makeAudienceStateSnapshot = () => ({
-  ...deriveAudienceProjectionState(currentState),
-  presentationSessionId: getPresentationSessionId(),
-  serverEpoch: getServerEpoch(),
-  stateRevision: audienceStateRevision,
-  eventId: audienceEventId,
-})
-
 const broadcast = (body) => {
   writeSseSet(clients, body)
-  const audienceBody = JSON.stringify(makeAudienceStateSnapshot())
-  for (const client of audienceClients) {
-    if (
-      getSessionAccessMode() === 'CONTROLLED' &&
-      !isAudienceParticipantAdmitted(client.audienceParticipantId)
-    ) {
-      audienceClients.delete(client)
-      client.end()
-      continue
-    }
-    writeSse(audienceClients, client, audienceBody)
-  }
+  const audienceBody = JSON.stringify(deriveAudienceState(currentState))
+  writeSseSet(audienceClients, audienceBody)
 }
 
 const broadcastQuizAnswer = (body, parsed) => {
@@ -365,15 +284,6 @@ const broadcastQuizAnswer = (body, parsed) => {
   const isSensitive = type === 'QUIZ_ANSWER' || type === 'QUIZ_FINAL_SCORE'
 
   for (const client of quizClients) {
-    if (
-      getSessionAccessMode() === 'CONTROLLED' &&
-      client.audienceParticipantId &&
-      !isAudienceParticipantAdmitted(client.audienceParticipantId)
-    ) {
-      quizClients.delete(client)
-      client.end()
-      continue
-    }
     if (isSensitive && !client.isControl) {
       continue
     }
@@ -458,6 +368,7 @@ const updateQuizAggregate = (message) => {
     }
     quizAggregateState.answerSessions.set(sessionKey, {
       ...existingSession,
+      displayName: typeof message.displayName === 'string' ? message.displayName.slice(0, 80) : existingSession.displayName,
       answers: {
         ...existingSession.answers,
         [message.slideId]: {
@@ -582,8 +493,6 @@ const commitState = (state, metadata = {}) => {
     now: metadata.now,
     messageId: metadata.messageId,
   })
-  audienceStateRevision += 1
-  audienceEventId = randomUUID()
   logStateChange(currentState)
   broadcast(JSON.stringify(currentState))
   return currentState
@@ -600,7 +509,7 @@ const broadcastTimelineState = () => {
   broadcastWs({
     type: 'AUDIO_TIMELINE_STATE',
     timeline: getTimeline(),
-  }, canReceiveAudienceSessionContent)
+  })
 }
 
 const syncTimelineToSlideSelection = (payload, now = Date.now()) => {
@@ -649,7 +558,8 @@ const reduceRemoteCommandMessage = (message, sourceMeta) => {
   }
 
   if (message.payload.command === 'RESET_STATE' && message.payload.clearSession === true) {
-    clearQuizAggregateState(quizAggregateState)
+    const presentationId = currentState.presentation?.id
+    if (presentationId) clearQuizScope(presentationId)
   }
 
   const committedState = commitState(result.state, {
@@ -674,6 +584,52 @@ const heartbeatSseClients = () => {
   writeSseSet(quizClients, 'heartbeat')
 }
 
+const isVideoAsset = (value) => /\.(mp4|webm)$/i.test(value || '')
+const isImageAsset = (value) => /\.(png|jpe?g|gif|webp|svg)$/i.test(value || '')
+
+const deriveBackground = (state, slide) => {
+  let value = ''
+  if (state.backgroundLock) {
+    value = state.lockedBackgroundValue || state.presentation?.background || ''
+  } else {
+    value = state.userSelectedBackground || slide?.background || state.presentation?.background || ''
+  }
+
+  if (isImageAsset(value) && !isVideoAsset(value)) return { kind: 'image', value }
+  return { kind: 'color', value: '#07111f' }
+}
+
+const deriveAudienceState = (state) => {
+  const presentation = state.presentation || null
+  const slideIndex = Number.isInteger(state.slideIndex) ? state.slideIndex : -1
+  const slide = presentation && slideIndex >= 0 ? presentation.slides?.[slideIndex] || null : null
+  const scripture = state.scriptureState
+    ? {
+      reference: `${state.scriptureState.bookAbbrevEs || state.scriptureState.bookEs} ${state.scriptureState.chapter}:${state.scriptureState.verse}`,
+      verseNikud: state.scriptureState.verseNikud,
+      transliteration: state.scriptureState.transliteration,
+      translation: state.scriptureState.translation,
+    }
+    : null
+  const isMediaSlide = slide?.type === 'video' || slide?.lines?.[0]?.trim() === '[IMAGE]'
+
+  return {
+    mode: state.appMode || 'slides',
+    presentationTitle: presentation?.title || '',
+    slide: slide
+      ? {
+        id: slide.id,
+        label: slide.label,
+        lines: isMediaSlide ? [] : slide.lines || [],
+        type: isMediaSlide ? 'media' : scripture ? 'scripture' : 'text',
+      }
+      : null,
+    scripture,
+    background: deriveBackground(state, slide),
+    updatedAt: Date.now(),
+  }
+}
+
 const requireAuth = (req, res, url) => {
   if (!isProtectedRequestPath(url.pathname, req.method || 'GET')) return false
   if (hasValidBasicAuth(req)) return false
@@ -692,78 +648,7 @@ const requireAuth = (req, res, url) => {
   return true
 }
 
-const getRequestClientKey = (req) => {
-  const forwarded = Array.isArray(req.headers['x-forwarded-for'])
-    ? req.headers['x-forwarded-for'][0]
-    : req.headers['x-forwarded-for']
-  return typeof forwarded === 'string' && forwarded.trim()
-    ? forwarded.split(',')[0].trim()
-    : req.socket.remoteAddress || 'unknown'
-}
-
 const handleApi = async (req, res, url) => {
-  if (url.pathname === '/api/health' && req.method === 'GET') {
-    sendJson(res, 200, { status: 'ok' })
-    return true
-  }
-
-  if (url.pathname === '/api/audience/access/bootstrap' && req.method === 'POST') {
-    const rate = checkAudienceBootstrapRate(getRequestClientKey(req))
-    if (!rate.allowed) {
-      res.setHeader('Retry-After', String(Math.ceil(rate.retryAfterMs / 1000)))
-      sendJson(res, 429, { error: 'Audience access bootstrap rate limit reached' })
-      return true
-    }
-    try {
-      const raw = await readBody(req)
-      const body = raw ? JSON.parse(raw) : {}
-      sendJson(res, 200, bootstrapAudienceAccess(body.credential))
-    } catch (err) {
-      sendJson(
-        res,
-        err?.code === 'AUDIENCE_CAPACITY_REACHED' ? 429 : 400,
-        { error: err.message || 'Invalid access bootstrap request' },
-      )
-    }
-    return true
-  }
-
-  if (url.pathname === '/api/privacy-document' && req.method === 'GET') {
-    sendJson(res, 200, {
-      operator: operatorManifest,
-      markdown: privacyLocalMarkdown,
-    })
-    return true
-  }
-
-  if (url.pathname === '/api/audience/sse-ticket' && req.method === 'POST') {
-    const credential = getBearerCredential(req)
-    let purpose = 'STATE'
-    try {
-      const raw = await readBody(req)
-      if (raw) {
-        const body = JSON.parse(raw)
-        if (body.purpose === 'QUIZ') purpose = 'QUIZ'
-      }
-    } catch {
-      sendJson(res, 400, { error: 'Invalid SSE ticket request' })
-      return true
-    }
-    const ticket = issueAudienceSseTicket(credential, purpose)
-    if (!ticket) {
-      sendJson(res, 403, { error: 'Audience admission is required' })
-      return true
-    }
-    sendJson(res, 200, { ticket, expiresInSeconds: 30 })
-    return true
-  }
-
-  if (url.pathname === '/api/audience/access/logout' && req.method === 'POST') {
-    const removed = logoutAudienceCredential(getBearerCredential(req))
-    sendJson(res, removed ? 200 : 401, { success: removed })
-    return true
-  }
-
   if (url.pathname.startsWith('/api/livekit/')) {
     const handled = await liveKitApi.handle({ req, res, url, readBody, sendJson })
     if (handled) return true
@@ -786,50 +671,28 @@ const handleApi = async (req, res, url) => {
   }
 
   if (url.pathname === '/api/audience/state' && req.method === 'GET') {
-    if (
-      getSessionAccessMode() === 'CONTROLLED' &&
-      !authorizeAudienceCredential(getBearerCredential(req))
-    ) {
-      sendJson(res, 403, { error: 'Audience admission is required' })
-      return true
-    }
-    sendJson(res, 200, makeAudienceStateSnapshot())
+    sendJson(res, 200, deriveAudienceState(currentState))
     return true
   }
 
   if (url.pathname === '/api/audience/events' && req.method === 'GET') {
-    const ticket = url.searchParams.get('ticket')
-    const ticketAccess = ticket ? consumeAudienceSseTicket(ticket, 'STATE') : null
-    if (getSessionAccessMode() === 'CONTROLLED' && !ticketAccess) {
-      sendJson(res, 403, { error: 'A valid one-use Audience SSE ticket is required' })
-      return true
-    }
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
       Connection: 'keep-alive',
     })
     registerSseClient(audienceClients, res)
-    res.audienceParticipantId = ticketAccess?.participantId
-    writeSse(audienceClients, res, JSON.stringify(makeAudienceStateSnapshot()))
+    writeSse(audienceClients, res, JSON.stringify(deriveAudienceState(currentState)))
     return true
   }
 
   if (url.pathname === '/api/quiz-events' && req.method === 'GET') {
-    const ticket = url.searchParams.get('ticket')
-    const ticketAccess = ticket ? consumeAudienceSseTicket(ticket, 'QUIZ') : null
-    const streamRole = classifyQuizSseRequest(req, ticketAccess)
-    if (!streamRole) {
-      sendJson(res, 403, { error: 'A valid Control authorization or one-use Audience quiz ticket is required' })
-      return true
-    }
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
       Connection: 'keep-alive',
     })
-    res.isControl = streamRole === 'control'
-    res.audienceParticipantId = ticketAccess?.participantId
+    res.isControl = hasValidBasicAuth(req) || !isAuthRequired()
     registerSseClient(quizClients, res)
     return true
   }
@@ -849,11 +712,6 @@ const handleApi = async (req, res, url) => {
   }
 
   if (url.pathname === '/api/quiz-answer' && req.method === 'POST') {
-    const audienceAccess = authorizeAudienceCredential(getBearerCredential(req))
-    if (getSessionAccessMode() === 'CONTROLLED' && !audienceAccess) {
-      sendJson(res, 403, { error: 'Audience admission is required' })
-      return true
-    }
     try {
       const body = await readBody(req)
       const parsed = JSON.parse(body)
@@ -864,10 +722,6 @@ const handleApi = async (req, res, url) => {
       }
       if (parsed.type === 'QUIZ_CLEAR_ANSWERS' && isAuthRequired() && !hasValidBasicAuth(req)) {
         sendJson(res, 401, { error: 'Authentication required to clear quiz answers' })
-        return true
-      }
-      if (!quizSessionMatchesAudience(parsed, audienceAccess)) {
-        sendJson(res, 409, { error: 'Quiz session does not match the admitted Audience credential' })
         return true
       }
       const aggregateError = canAcceptQuizAggregateMessage(parsed)
@@ -1265,10 +1119,7 @@ const handleWsMessageFromClient = (msg, meta) => {
         : tl.basePositionSec;
       if (Math.abs(currentEstimated - msg.audioState.currentTime) > 1.0) {
         applyAction({ type: 'SEEK', positionSec: msg.audioState.currentTime });
-        broadcastWs(
-          { type: 'AUDIO_TIMELINE_STATE', timeline: getTimeline() },
-          canReceiveAudienceSessionContent,
-        );
+        broadcastWs({ type: 'AUDIO_TIMELINE_STATE', timeline: getTimeline() });
       }
     }
     return true
@@ -1341,20 +1192,16 @@ server.on('close', () => {
 })
 
 liveKitApi = createLiveKitApi({
-  authorizeAudienceCredential,
-  getSessionAccessMode,
   getLiveAudioControlSnapshot,
   getLiveAudioParticipantState,
   isLiveAudioControlAuthorized,
-  getRecordingPolicy,
-  hasCurrentRecordingConfirmation,
 })
 
 let wsServer
 
-readAudioSyncMapsCache()
-readPresentationsCache()
 server.listen(port, () => {
+  readAudioSyncMapsCache()
+  readPresentationsCache()
   const staticLabel = staticDir ? `, serving ${path.relative(rootDir, staticDir)}` : ''
   wsServer = createWsServer(server, handleWsMessageFromClient, {
     getLiveKitState: () => liveKitApi?.getState?.() || {
@@ -1366,9 +1213,6 @@ server.listen(port, () => {
       kicked: [],
     },
     getQuizAggregateSnapshot,
-    recordingPolicy: operatorManifest,
-    revokeLiveAudioPublishingForRecording: () =>
-      liveKitApi?.revokeAudiencePublishingForRecording?.(),
   })
   console.log(`SeferPresenter local backend listening on http://localhost:${port}${staticLabel}`)
   console.log(`SeferPresenter WebSocket disponible en ws://localhost:${port}/ws`)

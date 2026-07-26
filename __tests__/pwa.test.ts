@@ -31,13 +31,10 @@ const loadServiceWorkerHelpers = () => {
 };
 
 describe('PWA service worker policy', () => {
-  it('exports a development version and explicit cache helper decisions', () => {
-    const source = readFileSync('public/audience-sw.js', 'utf8');
+  it('exports version 1.2.0 and explicit cache helper decisions', () => {
     const helpers = loadServiceWorkerHelpers();
 
-    expect(helpers.SW_VERSION).toBe('dev');
-    expect(source).not.toContain('cacheConfiguredAssets().then(() => self.skipWaiting())');
-    expect(source).toContain("event.data?.type === 'SKIP_WAITING'");
+    expect(helpers.SW_VERSION).toBe('1.2.0');
 
     [
       '/api/state',
@@ -45,8 +42,6 @@ describe('PWA service worker policy', () => {
       '/api/quiz-events',
       '/api/livekit/token',
       '/api/livekit/refresh-token',
-      '/api/audience/access/bootstrap',
-      '/api/audience/events?ticket=short-lived',
       '/ws',
       '/rtc/validate',
       '/twirp/livekit.RoomService/ListRooms',
