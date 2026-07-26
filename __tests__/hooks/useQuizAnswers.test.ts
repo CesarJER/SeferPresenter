@@ -114,7 +114,7 @@ describe('useQuizAnswers - Audience', () => {
     });
     const firstRequest = vi.mocked(fetch).mock.calls.find(([url]) => url === '/api/quiz-answer');
     const firstPayload = JSON.parse(String((firstRequest?.[1] as RequestInit).body));
-    expect(firstPayload.displayName).toBe('Alias temporal');
+    expect(firstPayload.displayName).toBeUndefined();
 
     act(() => window.dispatchEvent(new CustomEvent('sefer-audience-logout')));
     expect(result.current.getAnswers()).toEqual({});

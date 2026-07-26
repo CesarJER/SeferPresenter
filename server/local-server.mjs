@@ -22,11 +22,16 @@ import {
   isAudienceParticipantAdmitted,
 } from './ws-server.mjs'
 import {
+  classifyQuizSseRequest,
   hasAllowedRequestOrigin,
   hasValidBasicAuth,
   isAuthRequired,
   isProtectedRequestPath,
 } from './authUtils.mjs'
+import {
+  clearQuizAggregateState,
+  quizSessionMatchesAudience,
+} from './quiz-aggregate-state.mjs'
 import {
   getDefaultProjectionState,
   makeProjectionSyncStateMessage,
@@ -447,7 +452,6 @@ const updateQuizAggregate = (message) => {
     }
     quizAggregateState.answerSessions.set(sessionKey, {
       ...existingSession,
-      displayName: typeof message.displayName === 'string' ? message.displayName.slice(0, 80) : existingSession.displayName,
       answers: {
         ...existingSession.answers,
         [message.slideId]: {
@@ -639,8 +643,7 @@ const reduceRemoteCommandMessage = (message, sourceMeta) => {
   }
 
   if (message.payload.command === 'RESET_STATE' && message.payload.clearSession === true) {
-    const presentationId = currentState.presentation?.id
-    if (presentationId) clearQuizScope(presentationId)
+    clearQuizAggregateState(quizAggregateState)
   }
 
   const committedState = commitState(result.state, {
@@ -785,8 +788,9 @@ const handleApi = async (req, res, url) => {
   if (url.pathname === '/api/quiz-events' && req.method === 'GET') {
     const ticket = url.searchParams.get('ticket')
     const ticketAccess = ticket ? consumeAudienceSseTicket(ticket, 'QUIZ') : null
-    if (getSessionAccessMode() === 'CONTROLLED' && !ticketAccess) {
-      sendJson(res, 403, { error: 'A valid one-use Audience quiz ticket is required' })
+    const streamRole = classifyQuizSseRequest(req, ticketAccess)
+    if (!streamRole) {
+      sendJson(res, 403, { error: 'A valid Control authorization or one-use Audience quiz ticket is required' })
       return true
     }
     res.writeHead(200, {
@@ -794,7 +798,7 @@ const handleApi = async (req, res, url) => {
       'Cache-Control': 'no-cache',
       Connection: 'keep-alive',
     })
-    res.isControl = !ticketAccess && (hasValidBasicAuth(req) || !isAuthRequired())
+    res.isControl = streamRole === 'control'
     res.audienceParticipantId = ticketAccess?.participantId
     registerSseClient(quizClients, res)
     return true
@@ -815,10 +819,8 @@ const handleApi = async (req, res, url) => {
   }
 
   if (url.pathname === '/api/quiz-answer' && req.method === 'POST') {
-    if (
-      getSessionAccessMode() === 'CONTROLLED' &&
-      !authorizeAudienceCredential(getBearerCredential(req))
-    ) {
+    const audienceAccess = authorizeAudienceCredential(getBearerCredential(req))
+    if (getSessionAccessMode() === 'CONTROLLED' && !audienceAccess) {
       sendJson(res, 403, { error: 'Audience admission is required' })
       return true
     }
@@ -832,6 +834,10 @@ const handleApi = async (req, res, url) => {
       }
       if (parsed.type === 'QUIZ_CLEAR_ANSWERS' && isAuthRequired() && !hasValidBasicAuth(req)) {
         sendJson(res, 401, { error: 'Authentication required to clear quiz answers' })
+        return true
+      }
+      if (!quizSessionMatchesAudience(parsed, audienceAccess)) {
+        sendJson(res, 409, { error: 'Quiz session does not match the admitted Audience credential' })
         return true
       }
       const aggregateError = canAcceptQuizAggregateMessage(parsed)

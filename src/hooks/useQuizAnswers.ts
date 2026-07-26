@@ -114,6 +114,17 @@ const getAudienceCredential = (): string | null => {
   }
 };
 
+const getAudienceParticipantId = (): string | null => {
+  try {
+    const parsed = JSON.parse(localStorage.getItem('sefer-audience-resume-credential') || 'null') as {
+      participantId?: unknown;
+    } | null;
+    return typeof parsed?.participantId === 'string' ? parsed.participantId : null;
+  } catch {
+    return null;
+  }
+};
+
 const getAudienceHeaders = () => {
   const credential = getAudienceCredential();
   return {
@@ -296,7 +307,7 @@ export function useAudienceAnswers(
     const msg: QuizAnswerMessage = {
       type: 'QUIZ_ANSWER',
       presentationId,
-      sessionId,
+      sessionId: getAudienceParticipantId() ?? sessionId,
       displayName: displayName?.trim().slice(0, 80) || undefined,
       slideId,
       answer,
@@ -304,10 +315,12 @@ export function useAudienceAnswers(
     channel.postMessage(msg);
 
     // Also send via SSE endpoint for cross-device sync
+    const { displayName: _displayName, ...serverMessage } = msg;
+    void _displayName;
     fetch('/api/quiz-answer', {
       method: 'POST',
       headers: getAudienceHeaders(),
-      body: JSON.stringify(msg),
+      body: JSON.stringify(serverMessage),
     }).catch(() => {}); // Non-critical — local state is source of truth
   }, [channel, displayName, presentationId, sessionId]);
 
@@ -389,7 +402,7 @@ export function useAudienceAnswers(
     const msg: QuizFinalScoreMessage = {
       type: 'QUIZ_FINAL_SCORE',
       presentationId,
-      sessionId,
+      sessionId: getAudienceParticipantId() ?? sessionId,
       totalCentipunts,
     };
     channel.postMessage(msg);

@@ -115,7 +115,7 @@ const DataProtectionPage: React.FC = () => {
           <h2 className="text-2xl font-semibold">Hechos técnicos del software</h2>
           <ul className="list-disc space-y-2 pl-6">
             <li>No se requieren cuentas personales para Audience; un alias no verifica identidad real.</li>
-            <li>El servidor conserva estado técnico efímero de sesión y huellas criptográficas de credenciales, no alias en claro.</li>
+            <li>El servidor conserva estado técnico efímero y huellas criptográficas de credenciales, pero no recibe alias en claro. Las respuestas y puntuaciones de quiz se asocian en memoria al identificador técnico de la credencial; se eliminan al rotar la sesión y no se escriben en archivos ni bases de datos.</li>
             <li>Alias y configuración privada entre Controles se comparten mediante un overlay cifrado de extremo a extremo.</li>
             <li>Las respuestas de quiz y el último estado offline autorizado pueden conservarse localmente hasta logout, rotación o expiración.</li>
             <li>Live Audio es opcional y usa tokens efímeros. La activación del micrófono requiere una acción del participante.</li>

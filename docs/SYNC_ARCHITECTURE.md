@@ -553,8 +553,11 @@ Backend-owned or backend-mirrored pieces:
 - `/api/presentations`
 - `/api/audio-sync`
 - `/api/quiz-answer` and `/api/quiz-events` (POST accepts only bounded answer or
-  score shapes publicly; clear commands require authentication when enabled;
-  GET filters individual answers/scores to authenticated Control connections)
+  score shapes with no readable alias; in controlled sessions the technical
+  `sessionId` must match the admitted credential; clear commands require
+  authentication when enabled; the SSE endpoint explicitly classifies a
+  Basic-authenticated Control stream or a one-use Audience ticket and only
+  Control receives individual answers/scores)
 - `/api/audience/state` and `/api/audience/events`
 - `/api/backgrounds` (lists all available image and video background files)
 - `/api/audio` (lists all available audio tracks)
@@ -617,7 +620,11 @@ Quiz answers and personal scoring are fundamentally anonymous and decoupled from
 - **Presentation Scope:** Answer and score maps are nested by `presentationId`.
   `QUIZ_ANSWER`, `QUIZ_FINAL_SCORE`, and `QUIZ_CLEAR_ANSWERS` also carry that ID,
   and Control ignores messages from any presentation other than the active one.
-- **Separate Session IDs:** The quiz module generates its own ephemeral `sessionId` on first interaction. This ID is strictly separated from the LiveKit `participantId`. The quiz hook (`useQuizAnswers`) does not share state with `useLiveAudio` or `usePrivateControlSignals`.
+- **Credential-bound technical identity:** once Audience has bootstrapped, quiz
+  messages use the opaque `participantId` bound to its resume credential. The
+  server rejects a mismatched `sessionId` and never accepts `displayName` in the
+  HTTP payload. A page-scoped fallback ID exists only before bootstrap/local
+  offline use. Readable aliases remain in client memory or the E2E overlay.
 - **Aggregated Results:** The controller receives aggregated session scores and answers to calculate overall ranges and statistics for the results slide. The controller does not project nominal rankings, aliases, or performance history.
 - **Partial Quiz Results:** Questions with submitted answers are marked in green
   in Control. From the results slide, Control may emit `QUIZ_RECALCULATE_RESULTS`
@@ -629,7 +636,10 @@ Quiz answers and personal scoring are fundamentally anonymous and decoupled from
   recomputes each received session total from only those selected answers, so
   category counts update immediately. Clearing a question removes its stored
   answers, result inclusion, and green marker.
-- **No Participant Profiling:** There is no historical performance tracking by participant. Quiz session data is ephemeral and disappears when the server session is cleared or the server process stops.
+- **No Participant Profiling:** There is no historical performance tracking by
+  participant. A presentation-session rotation clears every quiz scope, not
+  only the currently projected presentation. Quiz session data is ephemeral
+  and also disappears when the server process stops.
 - **Special Activities:** Any future activity (like a named contest) that requires deviating from this anonymous aggregated model must not be implemented in the base MVP and requires explicit documentation and user consent flows prior to participation.
 
 Synchronization protocol:

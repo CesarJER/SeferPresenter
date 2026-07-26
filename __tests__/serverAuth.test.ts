@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import {
+  classifyQuizSseRequest,
   hasAllowedRequestOrigin,
   isProtectedRequestPath,
   isPublicApiRequest,
@@ -14,6 +15,7 @@ describe('server HTTP security policy', () => {
   afterEach(() => {
     delete process.env.SEFER_REQUIRE_AUTH;
     delete process.env.SEFER_ALLOWED_ORIGINS;
+    delete process.env.SEFER_CONTROL_PASSWORD;
   });
 
   it.each([
@@ -68,5 +70,17 @@ describe('server HTTP security policy', () => {
     process.env.SEFER_ALLOWED_ORIGINS = 'https://control.example, https://backup.example';
     expect(hasAllowedRequestOrigin(request({ host: 'internal:8787', origin: 'https://control.example' }))).toBe(true);
     expect(hasAllowedRequestOrigin(request({ host: 'internal:8787', origin: 'https://evil.example' }))).toBe(false);
+  });
+
+  it('separates Control quiz streams from one-use Audience ticket streams', () => {
+    process.env.SEFER_REQUIRE_AUTH = 'true';
+    process.env.SEFER_CONTROL_PASSWORD = 'secret';
+    const controlRequest = request({
+      authorization: `Basic ${Buffer.from('operator:secret').toString('base64')}`,
+    });
+
+    expect(classifyQuizSseRequest(controlRequest, null)).toBe('control');
+    expect(classifyQuizSseRequest(request({}), { participantId: 'audience-1' })).toBe('audience');
+    expect(classifyQuizSseRequest(request({}), null)).toBeNull();
   });
 });

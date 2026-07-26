@@ -78,3 +78,9 @@ export const hasValidBasicAuth = (req) => {
   const password = separatorIndex >= 0 ? decoded.slice(separatorIndex + 1) : decoded
   return password === expectedPassword
 }
+
+export const classifyQuizSseRequest = (req, ticketAccess) => {
+  if (ticketAccess) return 'audience'
+  if (hasValidBasicAuth(req) || !isAuthRequired()) return 'control'
+  return null
+}

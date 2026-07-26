@@ -25,7 +25,7 @@ export const validatePublicQuizMessage = (message) => {
       return 'Invalid selectedOptionIds'
     }
     if (!message.answer.selectedOptionIds.every(isSafeIdentifier)) return 'Invalid selectedOptionIds'
-    if (!isOptionalBoundedString(message.displayName, 80)) return 'Invalid displayName'
+    if (message.displayName !== undefined) return 'displayName is not accepted by the server'
     for (const field of ['citaBook', 'citaChapter', 'citaVerseStart', 'citaVerseEnd']) {
       if (!isOptionalBoundedString(message.answer[field], field === 'citaBook' ? 80 : 16)) {
         return `Invalid ${field}`

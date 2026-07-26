@@ -25,7 +25,7 @@ describe('public quiz message validation', () => {
     [{ ...validAnswer, slideId: '__proto__' }, 'Invalid slideId'],
     [{ ...validAnswer, answer: { submitted: true, selectedOptionIds: Array(21).fill('a') } }, 'Invalid selectedOptionIds'],
     [{ ...validAnswer, answer: { submitted: true, selectedOptionIds: ['<script>'] } }, 'Invalid selectedOptionIds'],
-    [{ ...validAnswer, displayName: 'x'.repeat(81) }, 'Invalid displayName'],
+    [{ ...validAnswer, displayName: 'Alias' }, 'displayName is not accepted by the server'],
     [{ type: 'QUIZ_FINAL_SCORE', presentationId: 'p', sessionId: 's', totalCentipunts: 100_000_001 }, 'Invalid totalCentipunts'],
   ])('rejects malformed or unbounded messages', (message, error) => {
     expect(validatePublicQuizMessage(message)).toBe(error);
