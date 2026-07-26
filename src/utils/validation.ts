@@ -52,7 +52,7 @@ const audioTimelineUpdatedBy = new Set<AudioTimelineState['updatedBy']>(['contro
 const liveAudioParticipantRoles = new Set<LiveAudioParticipantRole>(['audience', 'control', 'presenter']);
 const liveAudioPrivateSignalSenderRoles = new Set<LiveAudioParticipantRole>(['audience', 'control']);
 const liveAudioSpeakerStates = new Set(['LISTENER', 'REQUESTED', 'GRANTED', 'MUTED', 'REVOKED']);
-const liveAudioControlStates = new Set(['PRINCIPAL', 'PENDING', 'AUTHORIZED']);
+const liveAudioControlStates = new Set(['PRINCIPAL', 'PENDING', 'AUTHORIZED_SYNCING', 'AUTHORIZED']);
 const liveAudioOperationalRoles = new Set(['pasivo', 'activo', 'cola', 'orador', 'control', 'presenter']);
 const liveAudioMicrophonePermissionStates = new Set(['unknown', 'prompt', 'denied', 'granted', 'unavailable']);
 const liveAudioMicrophoneTrackStates = new Set(['notRequested', 'off', 'publishing', 'mutedByUser', 'mutedByControl', 'error']);
@@ -68,10 +68,12 @@ const liveAudioMessageTypes = new Set([
   'LIVE_AUDIO_CONTROL_PUBLIC_KEY',
   'LIVE_AUDIO_CONTROL_JOIN_REQUEST',
   'LIVE_AUDIO_CONTROL_AUTHORIZED',
+  'LIVE_AUDIO_CONTROL_KEY_TRANSFER_RESULT',
   'LIVE_AUDIO_CONTROL_AUTHORIZATION_STATE',
   'LIVE_AUDIO_CONTROL_AUTHORIZATION_DECISION',
   'CONTROL_KEY_ROTATED',
   'PRIVATE_CONTROL_SIGNAL',
+  'PRIVATE_CONTROL_SIGNAL_RESULT',
   'LIVE_AUDIO_REQUEST_ALIASES',
   'LIVE_AUDIO_SNAPSHOT_REQUEST',
   'LIVE_AUDIO_SNAPSHOT',
@@ -79,6 +81,7 @@ const liveAudioMessageTypes = new Set([
 ]);
 const privateControlSignalAllowedKeys = new Set([
   'type',
+  'signalClass',
   'fromParticipantId',
   'toControlSessionId',
   'toParticipantId',
@@ -159,6 +162,13 @@ const validatePrivateControlSignalValue = (
     if (!privateControlSignalAllowedKeys.has(key)) errors.push(`PRIVATE_CONTROL_SIGNAL.${key} no esta permitido.`);
   });
   if (msg.type !== 'PRIVATE_CONTROL_SIGNAL') errors.push('PRIVATE_CONTROL_SIGNAL.type no es valido.');
+  if (
+    msg.signalClass !== 'PROFILE_STATE' &&
+    msg.signalClass !== 'PRIVATE_MESSAGE' &&
+    msg.signalClass !== 'CONTROL_STATE'
+  ) {
+    errors.push('PRIVATE_CONTROL_SIGNAL.signalClass no es valido.');
+  }
   validatePrivateSignalSenderId(msg.fromParticipantId, senderRole, msg.toParticipantId !== undefined, errors);
   if (msg.toControlSessionId !== undefined && typeof msg.toControlSessionId !== 'string') {
     errors.push('PRIVATE_CONTROL_SIGNAL.toControlSessionId debe ser texto.');
@@ -814,18 +824,32 @@ const validateLiveAudioBroadcastMessage = (value: Record<string, unknown>): Vali
       if (typeof value.authorizedByControlSessionId !== 'string' || value.authorizedByControlSessionId.trim() === '') {
         errors.push('authorizedByControlSessionId debe ser texto no vacio.');
       }
-      if (value.keyId !== undefined && (typeof value.keyId !== 'string' || value.keyId.trim() === '')) errors.push('keyId debe ser texto no vacio.');
-      if (value.sessionPublicKey !== undefined && !isValidBase64(value.sessionPublicKey)) errors.push('sessionPublicKey debe ser base64.');
-      if (value.transferPublicKey !== undefined && !isValidBase64(value.transferPublicKey)) errors.push('transferPublicKey debe ser base64.');
-      if (value.encryptedSessionPrivateKey !== undefined && !isValidBase64(value.encryptedSessionPrivateKey)) {
+      if (typeof value.transferId !== 'string' || value.transferId.trim() === '') errors.push('transferId debe ser texto no vacio.');
+      if (typeof value.keyId !== 'string' || value.keyId.trim() === '') errors.push('keyId debe ser texto no vacio.');
+      if (!isValidBase64(value.sessionPublicKey)) errors.push('sessionPublicKey debe ser base64.');
+      if (!isValidBase64(value.transferPublicKey)) errors.push('transferPublicKey debe ser base64.');
+      if (!isValidBase64(value.encryptedSessionPrivateKey)) {
         errors.push('encryptedSessionPrivateKey debe ser base64.');
       }
-      if (value.nonce !== undefined) {
-        if (!isValidBase64(value.nonce)) {
-          errors.push('nonce debe ser base64.');
-        } else if (getBase64ByteLength(value.nonce) !== 12) {
-          errors.push('nonce debe codificar 12 bytes.');
-        }
+      if (!isValidBase64(value.nonce)) {
+        errors.push('nonce debe ser base64.');
+      } else if (getBase64ByteLength(value.nonce) !== 12) {
+        errors.push('nonce debe codificar 12 bytes.');
+      }
+      validateOptionalCreatedAt(value, value.type, errors);
+      break;
+    case 'LIVE_AUDIO_CONTROL_KEY_TRANSFER_RESULT':
+      if (typeof value.controlSessionId !== 'string' || value.controlSessionId.trim() === '') errors.push('controlSessionId debe ser texto no vacio.');
+      if (typeof value.transferId !== 'string' || value.transferId.trim() === '') errors.push('transferId debe ser texto no vacio.');
+      if (typeof value.keyId !== 'string' || value.keyId.trim() === '') errors.push('keyId debe ser texto no vacio.');
+      if (value.result !== 'ACK' && value.result !== 'NACK') errors.push('result debe ser ACK o NACK.');
+      if (
+        value.reason !== undefined &&
+        value.reason !== 'IMPORT_FAILED' &&
+        value.reason !== 'INVALID_TRANSFER' &&
+        value.reason !== 'KEY_MISMATCH'
+      ) {
+        errors.push('reason no es valido.');
       }
       validateOptionalCreatedAt(value, value.type, errors);
       break;
@@ -857,6 +881,12 @@ const validateLiveAudioBroadcastMessage = (value: Record<string, unknown>): Vali
             }
             if (!isFiniteNumber(pending.codeExpiresAt)) errors.push(`pendingControls[${index}].codeExpiresAt debe ser numero.`);
             if (!isFiniteNumber(pending.connectedAt)) errors.push(`pendingControls[${index}].connectedAt debe ser numero.`);
+            if (pending.recipientPublicKey !== undefined && !isValidBase64(pending.recipientPublicKey)) {
+              errors.push(`pendingControls[${index}].recipientPublicKey debe ser base64.`);
+            }
+            if (pending.joinRequestId !== undefined && (typeof pending.joinRequestId !== 'string' || pending.joinRequestId.trim() === '')) {
+              errors.push(`pendingControls[${index}].joinRequestId debe ser texto no vacio.`);
+            }
           });
         }
       }
@@ -878,6 +908,22 @@ const validateLiveAudioBroadcastMessage = (value: Record<string, unknown>): Vali
       if (value.controlSessionId !== undefined && typeof value.controlSessionId !== 'string') errors.push('controlSessionId debe ser texto.');
       if (value.reason !== undefined && value.reason !== 'CONTROL_ROTATION' && value.reason !== 'NO_AUTHORIZED_CONTROLS') {
         errors.push('reason no es valido.');
+      }
+      validateOptionalCreatedAt(value, value.type, errors);
+      break;
+    case 'PRIVATE_CONTROL_SIGNAL_RESULT':
+      if (typeof value.messageId !== 'string' || value.messageId.trim() === '') errors.push('messageId debe ser texto no vacio.');
+      if (value.result !== 'ACK' && value.result !== 'NACK') errors.push('result debe ser ACK o NACK.');
+      if (
+        value.reason !== undefined &&
+        value.reason !== 'INVALID_SIGNAL' &&
+        value.reason !== 'RATE_LIMIT' &&
+        value.reason !== 'NO_RECIPIENT'
+      ) {
+        errors.push('reason no es valido.');
+      }
+      if (value.retryAfterMs !== undefined && (!isFiniteNumber(value.retryAfterMs) || value.retryAfterMs < 0)) {
+        errors.push('retryAfterMs debe ser un numero no negativo.');
       }
       validateOptionalCreatedAt(value, value.type, errors);
       break;

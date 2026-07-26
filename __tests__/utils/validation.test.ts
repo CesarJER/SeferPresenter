@@ -332,6 +332,8 @@ describe('runtime validation', () => {
   it('accepts valid private control signals as separate Live Audio messages', () => {
     const result = validateSyncMessage({
       type: 'PRIVATE_CONTROL_SIGNAL',
+      signalClass: 'PROFILE_STATE',
+      messageId: 'message-1',
       fromParticipantId: '550e8400-e29b-41d4-a716-446655440000',
       toControlSessionId: 'control-session-1',
       keyId: 'key-1',
@@ -347,6 +349,8 @@ describe('runtime validation', () => {
   it('accepts valid control-to-audience private control signals', () => {
     expect(validateSyncMessage({
       type: 'PRIVATE_CONTROL_SIGNAL',
+      signalClass: 'CONTROL_STATE',
+      messageId: 'message-2',
       fromParticipantId: 'control-session-1',
       toParticipantId: '550e8400-e29b-41d4-a716-446655440000',
       keyId: 'key-1',
@@ -358,6 +362,8 @@ describe('runtime validation', () => {
 
     expect(isValidPrivateControlSignal({
       type: 'PRIVATE_CONTROL_SIGNAL',
+      signalClass: 'CONTROL_STATE',
+      messageId: 'message-3',
       fromParticipantId: 'control-session-1',
       toParticipantId: '550e8400-e29b-41d4-a716-446655440000',
       keyId: 'key-1',

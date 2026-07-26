@@ -180,7 +180,12 @@ Control uses `lastSentListRef` to avoid re-sending unchanged visible lists.
 - Audience participant status is reduced to technical fields and routed only to
   presenter and authorized Controls; audience clients do not receive a full
   participant list.
-- `PENDING` Controls do not receive `PRIVATE_CONTROL_SIGNAL`.
+- `PENDING` and `AUTHORIZED_SYNCING` Controls do not receive
+  `PRIVATE_CONTROL_SIGNAL`. A secondary enters `AUTHORIZED_SYNCING` when the
+  encrypted Control key transfer starts and becomes `AUTHORIZED` only after the
+  recipient imports the key and returns a correlated
+  `LIVE_AUDIO_CONTROL_KEY_TRANSFER_RESULT` ACK. NACK, timeout, mismatched IDs,
+  or a failed send never authorize the Control.
 - `PENDING` Controls cannot send private signals or moderation messages such as
   grant, mute, or kick; the server returns an `ERROR`.
 - Authorized Controls can publish the current Control public key and can send
@@ -188,6 +193,11 @@ Control uses `lastSentListRef` to avoid re-sending unchanged visible lists.
   are routed to presenter/authorized Controls, and are also delivered to the
   affected audience participant so its local microphone state can react. They
   are not folded into `SYNC_STATE`.
+- Every `PRIVATE_CONTROL_SIGNAL` carries a stable `messageId` and a routing-only
+  `signalClass`. The server returns `PRIVATE_CONTROL_SIGNAL_RESULT` ACK/NACK,
+  deduplicates retransmission, reports rate limits instead of silently dropping
+  data, and applies separate budgets to human messages and technical
+  profile/recovery traffic.
 - Authorized Controls can send `PRIVATE_CONTROL_SIGNAL` only with a valid
   `toParticipantId`; the server routes it solely to the active WebSocket bound
   to that audience participant and does not inspect the ciphertext.

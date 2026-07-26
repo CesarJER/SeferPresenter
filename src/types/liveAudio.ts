@@ -35,7 +35,7 @@ export interface LiveAudioMicrophoneDiagnostics {
 }
 
 export type ControlPrincipalState = 'PRINCIPAL';
-export type ControlSecondaryState = 'PENDING' | 'AUTHORIZED';
+export type ControlSecondaryState = 'PENDING' | 'AUTHORIZED_SYNCING' | 'AUTHORIZED';
 export type LiveAudioControlState = ControlPrincipalState | ControlSecondaryState;
 export type SpeakerState = 'LISTENER' | 'REQUESTED' | 'GRANTED' | 'MUTED' | 'REVOKED';
 
@@ -53,6 +53,8 @@ export interface PendingControlAuthorization {
   verificationCode: string;
   codeExpiresAt: number;
   connectedAt: number;
+  recipientPublicKey?: string;
+  joinRequestId?: string;
 }
 
 export interface LiveAudioParticipantStatusMessage {
@@ -182,11 +184,22 @@ export interface LiveAudioControlAuthorizedMessage {
   type: 'LIVE_AUDIO_CONTROL_AUTHORIZED';
   controlSessionId: string;
   authorizedByControlSessionId: string;
-  keyId?: string;
-  sessionPublicKey?: string;
-  transferPublicKey?: string;
-  encryptedSessionPrivateKey?: string;
-  nonce?: string;
+  transferId: string;
+  keyId: string;
+  sessionPublicKey: string;
+  transferPublicKey: string;
+  encryptedSessionPrivateKey: string;
+  nonce: string;
+  createdAt?: number;
+}
+
+export interface LiveAudioControlKeyTransferResultMessage {
+  type: 'LIVE_AUDIO_CONTROL_KEY_TRANSFER_RESULT';
+  controlSessionId: string;
+  transferId: string;
+  keyId: string;
+  result: 'ACK' | 'NACK';
+  reason?: 'IMPORT_FAILED' | 'INVALID_TRANSFER' | 'KEY_MISMATCH';
   createdAt?: number;
 }
 
@@ -221,6 +234,7 @@ export interface ControlKeyRotatedMessage {
 
 export interface PrivateControlSignalMessage {
   type: 'PRIVATE_CONTROL_SIGNAL';
+  signalClass: 'PROFILE_STATE' | 'PRIVATE_MESSAGE' | 'CONTROL_STATE';
   fromParticipantId: string;
   toControlSessionId?: string;
   toParticipantId?: string;
@@ -228,6 +242,16 @@ export interface PrivateControlSignalMessage {
   ephemeralPublicKey: string;
   ciphertext: string;
   nonce: string;
+  messageId?: string;
+  createdAt?: number;
+}
+
+export interface PrivateControlSignalResultMessage {
+  type: 'PRIVATE_CONTROL_SIGNAL_RESULT';
+  messageId: string;
+  result: 'ACK' | 'NACK';
+  reason?: 'INVALID_SIGNAL' | 'RATE_LIMIT' | 'NO_RECIPIENT';
+  retryAfterMs?: number;
   createdAt?: number;
 }
 
@@ -361,10 +385,12 @@ export type LiveAudioBroadcastMessage =
   | LiveAudioControlPublicKeyMessage
   | LiveAudioControlJoinRequestMessage
   | LiveAudioControlAuthorizedMessage
+  | LiveAudioControlKeyTransferResultMessage
   | LiveAudioControlAuthorizationStateMessage
   | LiveAudioControlAuthorizationDecisionMessage
   | ControlKeyRotatedMessage
   | PrivateControlSignalMessage
+  | PrivateControlSignalResultMessage
   | LiveAudioRequestAliasesMessage
   | LiveAudioSnapshotRequestMessage
   | LiveAudioSnapshotMessage

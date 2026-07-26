@@ -11,6 +11,7 @@ let presentationSessionId = randomUUID()
 let liveAudioControlPublicKeyMessage = null
 const PRIVATE_CONTROL_SIGNAL_MAX_CIPHERTEXT_BYTES = 4096
 const PRIVATE_CONTROL_SIGNAL_RATE_LIMIT = 5
+const PRIVATE_CONTROL_TECHNICAL_SIGNAL_RATE_LIMIT = 60
 const PRIVATE_CONTROL_SIGNAL_RATE_WINDOW_MS = 60_000
 const WS_MAX_PAYLOAD_BYTES = 64 * 1024
 const WS_MAX_BUFFERED_BYTES = 512 * 1024
@@ -113,12 +114,17 @@ const findPrincipalControl = () =>
 const getPendingControls = () => {
   const now = Date.now()
   return Array.from(liveAudioControls.values())
-    .filter((control) => control.controlState === 'PENDING' && control.codeExpiresAt > now)
+    .filter((control) => (
+      (control.controlState === 'PENDING' || control.controlState === 'AUTHORIZED_SYNCING') &&
+      control.codeExpiresAt > now
+    ))
     .map((control) => ({
       controlSessionId: control.controlSessionId,
       verificationCode: control.verificationCode,
       codeExpiresAt: control.codeExpiresAt,
       connectedAt: control.connectedAt,
+      recipientPublicKey: control.recipientPublicKey,
+      joinRequestId: control.joinRequestId,
     }))
 }
 
@@ -151,7 +157,9 @@ const getLiveAudioControlSnapshot = () => ({
     controlState: control.controlState,
     connectedAt: control.connectedAt,
     authorizedAt: control.authorizedAt,
-    codeExpiresAt: control.controlState === 'PENDING' ? control.codeExpiresAt : undefined,
+    codeExpiresAt: (
+      control.controlState === 'PENDING' || control.controlState === 'AUTHORIZED_SYNCING'
+    ) ? control.codeExpiresAt : undefined,
   })),
 })
 
@@ -423,6 +431,19 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
     sendJson(client, { type: 'ERROR', code, message })
   }
 
+  const sendPrivateSignalResult = (client, msg, result, reason, retryAfterMs) => {
+    const response = {
+      type: 'PRIVATE_CONTROL_SIGNAL_RESULT',
+      messageId: msg.messageId,
+      result,
+      createdAt: Date.now(),
+    }
+    if (reason) response.reason = reason
+    if (retryAfterMs !== undefined) response.retryAfterMs = retryAfterMs
+    sendJson(client, response)
+    return response
+  }
+
   const sendAuthorizationState = (control) => {
     const principal = findPrincipalControl()
     const message = {
@@ -434,7 +455,7 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
       updatedAt: Date.now(),
     }
 
-    if (control.controlState === 'PENDING') {
+    if (control.controlState === 'PENDING' || control.controlState === 'AUTHORIZED_SYNCING') {
       message.verificationCode = control.verificationCode
       message.codeExpiresAt = control.codeExpiresAt
     }
@@ -521,7 +542,7 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
 
   const expirePendingControl = (controlSessionId) => {
     const control = liveAudioControls.get(controlSessionId)
-    if (!control || control.controlState !== 'PENDING') return
+    if (!control || (control.controlState !== 'PENDING' && control.controlState !== 'AUTHORIZED_SYNCING')) return
     control.verificationCode = undefined
     control.codeExpiresAt = Date.now()
     sendAuthorizationState(control)
@@ -541,6 +562,11 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
       controlState: hasPrincipal ? 'PENDING' : 'PRINCIPAL',
       verificationCode: undefined,
       codeExpiresAt: undefined,
+      recipientPublicKey: undefined,
+      joinRequestId: undefined,
+      pendingTransfer: undefined,
+      keyTransferAck: false,
+      privateSignalResults: new Map(),
     }
 
     if (control.controlState === 'PENDING') {
@@ -565,7 +591,7 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
       return
     }
 
-    if (!target || target.controlState !== 'PENDING') {
+    if (!target || (target.controlState !== 'PENDING' && target.controlState !== 'AUTHORIZED_SYNCING')) {
       sendError(meta.ws, 'CONTROL_AUTH_TARGET_INVALID', 'Pending control was not found')
       return
     }
@@ -578,6 +604,10 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
     }
 
     if (msg.decision === 'APPROVE') {
+      if (target.controlState !== 'AUTHORIZED_SYNCING' || target.keyTransferAck !== true) {
+        sendError(meta.ws, 'CONTROL_E2E_NOT_READY', 'Control E2E key transfer has not been acknowledged')
+        return
+      }
       clearTimeout(target.expiryTimer)
       target.controlState = 'AUTHORIZED'
       target.authorizedAt = Date.now()
@@ -603,6 +633,8 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
   }
 
   const forwardToAuthorizingControls = (msg, sourceControl) => {
+    sourceControl.recipientPublicKey = msg.recipientPublicKey
+    sourceControl.joinRequestId = msg.messageId
     const enriched = {
       ...msg,
       controlSessionId: sourceControl.controlSessionId,
@@ -618,33 +650,88 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
 
   const forwardAuthorizedControlMessage = (msg, issuer) => {
     const target = liveAudioControls.get(msg.controlSessionId)
-    if (!isControlAuthorized(issuer) || !target) return
+    if (
+      !isControlAuthorized(issuer) ||
+      !target ||
+      (target.controlState !== 'PENDING' && target.controlState !== 'AUTHORIZED_SYNCING') ||
+      typeof msg.transferId !== 'string' ||
+      msg.transferId.trim() === '' ||
+      typeof msg.keyId !== 'string' ||
+      msg.keyId.trim() === ''
+    ) return
+    target.controlState = 'AUTHORIZED_SYNCING'
+    target.keyTransferAck = false
+    target.pendingTransfer = {
+      transferId: msg.transferId,
+      keyId: msg.keyId,
+      issuerControlSessionId: issuer.controlSessionId,
+    }
     sendJson(target.ws, {
       ...msg,
       authorizedByControlSessionId: issuer.controlSessionId,
       createdAt: msg.createdAt || Date.now(),
     })
+    broadcastAuthorizationState()
+  }
+
+  const handleControlKeyTransferResult = (meta, msg) => {
+    const target = liveAudioControls.get(meta.controlSessionId)
+    const transfer = target?.pendingTransfer
+    if (
+      !target ||
+      target.controlState !== 'AUTHORIZED_SYNCING' ||
+      msg.controlSessionId !== target.controlSessionId ||
+      !transfer ||
+      msg.transferId !== transfer.transferId ||
+      msg.keyId !== transfer.keyId ||
+      (msg.result !== 'ACK' && msg.result !== 'NACK')
+    ) {
+      sendError(meta.ws, 'CONTROL_KEY_TRANSFER_INVALID', 'Control key transfer result is not correlated')
+      return
+    }
+
+    const issuer = liveAudioControls.get(transfer.issuerControlSessionId)
+    if (issuer && isControlAuthorized(issuer)) {
+      sendJson(issuer.ws, {
+        ...msg,
+        createdAt: msg.createdAt || Date.now(),
+      })
+    }
+
+    if (msg.result === 'ACK') {
+      target.keyTransferAck = true
+    } else {
+      target.controlState = 'PENDING'
+      target.keyTransferAck = false
+      target.pendingTransfer = undefined
+    }
+    broadcastAuthorizationState()
   }
 
   const routePrivateControlSignalToControls = (msg) => {
-    broadcast(msg, (meta) => {
-      if (meta.role !== 'control') return false
-      const control = liveAudioControls.get(meta.controlSessionId)
-      if (!isControlAuthorized(control)) return false
-      return !msg.toControlSessionId || msg.toControlSessionId === control.controlSessionId
-    })
+    let recipients = 0
+    for (const control of liveAudioControls.values()) {
+      if (!isControlAuthorized(control)) continue
+      if (msg.toControlSessionId && msg.toControlSessionId !== control.controlSessionId) continue
+      if (sendJson(control.ws, msg)) recipients += 1
+    }
+    return recipients
   }
 
   const routePrivateControlSignalToParticipant = (msg) => {
-    broadcast(msg, (meta) => (
-      meta.role === 'audience' &&
-      meta.participantId === msg.toParticipantId
-    ))
+    let recipients = 0
+    for (const [client, targetMeta] of wsClients) {
+      if (targetMeta.role !== 'audience' || targetMeta.participantId !== msg.toParticipantId) continue
+      if (sendJson(client, msg)) recipients += 1
+    }
+    return recipients
   }
 
   const validatePrivateControlSignal = (msg, senderRole = 'audience') => {
     if (!msg || typeof msg !== 'object' || Array.isArray(msg)) return false
     if (msg.type !== 'PRIVATE_CONTROL_SIGNAL') return false
+    if (!['PROFILE_STATE', 'PRIVATE_MESSAGE', 'CONTROL_STATE'].includes(msg.signalClass)) return false
+    if (typeof msg.messageId !== 'string' || msg.messageId.trim() === '') return false
     if (senderRole === 'control') {
       if (typeof msg.fromParticipantId !== 'string' || msg.fromParticipantId.trim() === '') return false
     } else if (!isValidParticipantId(msg.fromParticipantId)) {
@@ -742,7 +829,9 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
       disconnectedAt: undefined,
       cleanupDueAt: undefined,
       cleanupTimer: undefined,
-      privateSignalTimestamps: existing?.privateSignalTimestamps || [],
+      privateMessageTimestamps: existing?.privateMessageTimestamps || [],
+      technicalSignalTimestamps: existing?.technicalSignalTimestamps || [],
+      privateSignalResults: existing?.privateSignalResults || new Map(),
     }
     liveAudioParticipants.set(participantId, participant)
     meta.participantId = participantId
@@ -809,18 +898,30 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
     }
   }
 
-  const canAcceptPrivateSignal = (meta, msg) => {
-    const participant = bindParticipantToConnection(meta, msg.fromParticipantId)
-    if (!participant) return false
+  const canAcceptPrivateSignal = (meta, msg, existingParticipant) => {
+    const participant = existingParticipant || bindParticipantToConnection(meta, msg.fromParticipantId)
+    if (!participant) return { accepted: false, reason: 'INVALID_SIGNAL' }
 
     const now = Date.now()
-    participant.privateSignalTimestamps = participant.privateSignalTimestamps
+    const timestampsKey = msg.signalClass === 'PRIVATE_MESSAGE'
+      ? 'privateMessageTimestamps'
+      : 'technicalSignalTimestamps'
+    const rateLimit = msg.signalClass === 'PRIVATE_MESSAGE'
+      ? PRIVATE_CONTROL_SIGNAL_RATE_LIMIT
+      : PRIVATE_CONTROL_TECHNICAL_SIGNAL_RATE_LIMIT
+    participant[timestampsKey] = participant[timestampsKey]
       .filter((timestamp) => now - timestamp < PRIVATE_CONTROL_SIGNAL_RATE_WINDOW_MS)
-    if (participant.privateSignalTimestamps.length >= PRIVATE_CONTROL_SIGNAL_RATE_LIMIT) return false
+    if (participant[timestampsKey].length >= rateLimit) {
+      const retryAfterMs = Math.max(
+        1,
+        PRIVATE_CONTROL_SIGNAL_RATE_WINDOW_MS - (now - participant[timestampsKey][0]),
+      )
+      return { accepted: false, reason: 'RATE_LIMIT', retryAfterMs, participant }
+    }
 
-    participant.privateSignalTimestamps.push(now)
+    participant[timestampsKey].push(now)
     participant.updatedAt = now
-    return true
+    return { accepted: true, participant }
   }
 
   const canAcceptControlPrivateSignal = (meta, msg) => {
@@ -1095,9 +1196,39 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
 
         case 'PRIVATE_CONTROL_SIGNAL':
           if (meta.role === 'audience') {
-            if (!validatePrivateControlSignal(msg, 'audience')) break
-            if (!canAcceptPrivateSignal(meta, msg)) break
-            routePrivateControlSignalToControls(msg)
+            if (!validatePrivateControlSignal(msg, 'audience')) {
+              if (typeof msg.messageId === 'string') {
+                sendPrivateSignalResult(ws, msg, 'NACK', 'INVALID_SIGNAL')
+              }
+              break
+            }
+            const participant = bindParticipantToConnection(meta, msg.fromParticipantId)
+            const cachedResult = participant?.privateSignalResults.get(msg.messageId)
+            if (cachedResult) {
+              sendJson(ws, cachedResult)
+              break
+            }
+            const acceptance = canAcceptPrivateSignal(meta, msg, participant)
+            if (!acceptance.accepted) {
+              const result = sendPrivateSignalResult(
+                ws,
+                msg,
+                'NACK',
+                acceptance.reason,
+                acceptance.retryAfterMs,
+              )
+              acceptance.participant?.privateSignalResults.set(msg.messageId, result)
+              break
+            }
+            const recipients = routePrivateControlSignalToControls(msg)
+            const result = recipients > 0
+              ? sendPrivateSignalResult(ws, msg, 'ACK')
+              : sendPrivateSignalResult(ws, msg, 'NACK', 'NO_RECIPIENT')
+            acceptance.participant.privateSignalResults.set(msg.messageId, result)
+            if (acceptance.participant.privateSignalResults.size > 100) {
+              const oldest = acceptance.participant.privateSignalResults.keys().next().value
+              if (oldest) acceptance.participant.privateSignalResults.delete(oldest)
+            }
             break
           }
           if (meta.role === 'control') {
@@ -1106,9 +1237,28 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
               sendError(ws, 'CONTROL_PENDING_FORBIDDEN', 'Pending controls cannot send private signals')
               break
             }
-            if (!validatePrivateControlSignal(msg, 'control')) break
-            if (!canAcceptControlPrivateSignal(meta, msg)) break
-            routePrivateControlSignalToParticipant(msg)
+            if (!validatePrivateControlSignal(msg, 'control')) {
+              if (typeof msg.messageId === 'string') {
+                sendPrivateSignalResult(ws, msg, 'NACK', 'INVALID_SIGNAL')
+              }
+              break
+            }
+            const cachedResult = controlMeta.privateSignalResults.get(msg.messageId)
+            if (cachedResult) {
+              sendJson(ws, cachedResult)
+              break
+            }
+            const recipients = canAcceptControlPrivateSignal(meta, msg)
+              ? routePrivateControlSignalToParticipant(msg)
+              : 0
+            const result = recipients > 0
+              ? sendPrivateSignalResult(ws, msg, 'ACK')
+              : sendPrivateSignalResult(ws, msg, 'NACK', 'NO_RECIPIENT')
+            controlMeta.privateSignalResults.set(msg.messageId, result)
+            if (controlMeta.privateSignalResults.size > 100) {
+              const oldest = controlMeta.privateSignalResults.keys().next().value
+              if (oldest) controlMeta.privateSignalResults.delete(oldest)
+            }
           }
           break
 
@@ -1181,6 +1331,11 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
           forwardAuthorizedControlMessage(msg, issuer)
           break
         }
+
+        case 'LIVE_AUDIO_CONTROL_KEY_TRANSFER_RESULT':
+          if (meta?.role !== 'control') break
+          handleControlKeyTransferResult(meta, msg)
+          break
 
         case 'LIVE_AUDIO_CONTROL_PUBLIC_KEY': {
           if (meta?.role !== 'control') break
