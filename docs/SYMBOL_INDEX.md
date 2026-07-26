@@ -177,6 +177,13 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
   `src/features/liveAudio/components/audience/RecordingConfirmationDialog.tsx`:
   focus-managed, keyboard-operable recording confirmation shown before an
   Audience participant can use the microphone in the active epoch.
+- `AudienceLiveAudioPanel` / `LiveAudioControlPanel` /
+  `LiveAudioParticipantRow`: accessible Live Audio disclosures, named range and
+  toggle controls, reduced-motion-safe status animation, and keyboard-visible
+  participant actions.
+- `docs/audits/2026-07-24/ACCESSIBILITY_CERTIFICATION_MATRIX.md`: required
+  automated and physical NVDA, VoiceOver, and TalkBack evidence for Base and
+  Live Audio certification.
 - `server/content-validation.mjs`: bounded deep validation for persisted
   presentation and audio-sync payloads.
 - `server/json-persistence.mjs`: fsynced temp/backup persistence with atomic

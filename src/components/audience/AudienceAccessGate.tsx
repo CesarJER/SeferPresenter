@@ -107,9 +107,10 @@ export function AudienceAccessGate({
         )}
 
         {accessState === 'REJECTED' && retrySeconds > 0 && (
-          <p role="status" className="rounded-lg border border-amber-700 bg-amber-950/40 p-3 text-sm text-amber-100">
-            La solicitud fue rechazada. Podrás corregir el alias y repetirla en {retrySeconds} segundos.
-          </p>
+          <div className="rounded-lg border border-amber-700 bg-amber-950/40 p-3 text-sm text-amber-100">
+            <p role="status">La solicitud fue rechazada. Podrás corregir el alias y repetirla cuando finalice la espera.</p>
+            <p aria-hidden="true" className="mt-1 text-xs">Disponible en {retrySeconds} segundos.</p>
+          </div>
         )}
 
         {mayRequest && (

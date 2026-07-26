@@ -25,6 +25,7 @@ interface PrivateControlInboxProps {
   onApproveRequest: (sessionId: string) => void;
   onRejectRequest: (sessionId: string) => void;
   onDismissMessage: (id: string) => void;
+  onClose?: () => void;
   onAudienceAccessDecision?: (
     participantId: string,
     decision: 'ADMIT' | 'REJECT' | 'BLOCK',
@@ -40,6 +41,7 @@ export const PrivateControlInbox: React.FC<PrivateControlInboxProps> = ({
   onApproveRequest,
   onRejectRequest,
   onDismissMessage,
+  onClose = () => {},
   onAudienceAccessDecision = () => {},
 }) => {
   const { availability } = useLiveAudioAvailability();
@@ -48,9 +50,17 @@ export const PrivateControlInbox: React.FC<PrivateControlInboxProps> = ({
 
   if (!isControlAuthorized) {
     return (
-      <div className="fixed top-16 right-0 md:right-4 w-full md:w-[400px] bg-gray-900 border border-red-800 md:rounded-lg shadow-xl z-50 overflow-hidden">
+      <div id="private-control-inbox" role="alert" className="fixed top-16 right-0 md:right-4 w-full md:w-[400px] bg-gray-900 border border-red-800 md:rounded-lg shadow-xl z-50 overflow-hidden">
         <div className="p-3 bg-red-900/50 flex items-center justify-between">
           <h3 className="font-bold text-red-200 text-sm">Acceso Denegado</h3>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Cerrar bandeja privada"
+            className="rounded p-1 text-red-200 hover:bg-red-900"
+          >
+            <X size={16} aria-hidden="true" />
+          </button>
         </div>
         <div className="p-4 text-sm text-gray-400">
           No eres un Control Autorizado. No tienes acceso a la bandeja privada ni a los alias descifrados.
@@ -62,12 +72,30 @@ export const PrivateControlInbox: React.FC<PrivateControlInboxProps> = ({
   const hasItems = messages.length > 0 || authorizationRequests.length > 0 || audienceAccessRequests.length > 0;
 
   return (
-    <div className="fixed top-16 right-0 md:right-4 w-full md:w-[400px] max-h-[70vh] bg-gray-900 border border-gray-700 md:rounded-lg shadow-2xl z-50 flex flex-col">
+    <div
+      id="private-control-inbox"
+      role="region"
+      aria-labelledby="private-control-inbox-title"
+      className="fixed top-16 right-0 md:right-4 w-full md:w-[400px] max-h-[70vh] bg-gray-900 border border-gray-700 md:rounded-lg shadow-2xl z-50 flex flex-col"
+    >
       <div className="p-3 bg-gray-800 border-b border-gray-700 flex items-center justify-between shrink-0">
-        <h3 className="font-bold text-gray-200 text-sm flex items-center gap-2">
+        <h3 id="private-control-inbox-title" className="font-bold text-gray-200 text-sm flex items-center gap-2">
           <MessageSquare size={16} /> Bandeja Privada
         </h3>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Cerrar bandeja privada"
+          className="rounded p-1 text-gray-400 hover:bg-gray-700 hover:text-white"
+        >
+          <X size={16} aria-hidden="true" />
+        </button>
       </div>
+      <p role="status" aria-live="polite" aria-atomic="true" className="sr-only">
+        {hasItems
+          ? `${messages.length + authorizationRequests.length + audienceAccessRequests.length} notificaciones privadas pendientes`
+          : 'No hay notificaciones privadas pendientes'}
+      </p>
 
       <div className="overflow-y-auto p-2 space-y-3">
         {availability === 'unsupported' && (

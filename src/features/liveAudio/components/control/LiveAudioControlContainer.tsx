@@ -282,6 +282,7 @@ export default function LiveAudioControlContainer({
   const privateOverlayRef = useRef<PrivateControlOverlaySnapshot | null>(null);
   const privateOverlayRevisionRef = useRef(0);
   const overlayPublishSequenceRef = useRef<Promise<void>>(Promise.resolve());
+  const inboxButtonRef = useRef<HTMLButtonElement>(null);
 
   const { availability } = useLiveAudioAvailability();
 
@@ -1124,7 +1125,11 @@ export default function LiveAudioControlContainer({
       <PwaRestartButton controlMenu={true} connectionState={state} connectionQuality={connectionQuality} />
       <div className="relative">
         <button
+          ref={inboxButtonRef}
           onClick={() => setIsInboxOpen(!isInboxOpen)}
+          aria-expanded={isInboxOpen}
+          aria-controls="private-control-inbox"
+          aria-label={`Bandeja privada, ${messages.length + authorizationRequests.length + accessRequestItems.length} pendientes`}
           className={`flex items-center justify-center p-2 text-xs font-semibold rounded border transition-all cursor-pointer ${hasUnread
             ? 'bg-red-600 border-red-500 text-white animate-pulse'
             : isInboxOpen
@@ -1150,6 +1155,10 @@ export default function LiveAudioControlContainer({
         onApproveRequest={handleApproveRequest}
         onRejectRequest={onRejectRequest}
         onDismissMessage={handleDismissMessage}
+        onClose={() => {
+          setIsInboxOpen(false);
+          window.requestAnimationFrame(() => inboxButtonRef.current?.focus());
+        }}
         onAudienceAccessDecision={handleAudienceAccessDecision}
       />
     </div>,

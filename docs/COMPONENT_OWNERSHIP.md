@@ -206,6 +206,11 @@ Live Audio state:
   `RecordingConfirmationDialog.tsx` owns the accessible modal interaction. A
   local “seen” marker suppresses duplicate toast announcements, but never acts
   as authoritative consent.
+- Live Audio panels own the accessible disclosure state for their own popovers
+  and drawers. Hidden drawers must be removed from the accessibility tree;
+  native buttons expose `aria-expanded`/`aria-controls`, and sliders/toggles
+  expose names and current values. Dynamic queue, reconnect, recording, and
+  delivery status uses concise live regions without reading private content.
 - The LiveKit browser SDK may only be imported inside `src/features/liveAudio/` or via
   dynamic import from that module. Core files such as `src/App.tsx`,
   `src/hooks/useSyncState.ts`, existing `src/components/shared/`, and shared

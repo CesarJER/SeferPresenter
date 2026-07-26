@@ -16,11 +16,12 @@ export const ActiveParticipantsPanel: React.FC<ActiveParticipantsPanelProps> = (
   onAliasVisibilityChange,
   onClose,
 }) => (
-  <div className="w-full rounded-lg border border-white/10 bg-gray-900/95 p-4 text-gray-100 shadow-2xl backdrop-blur-md">
+  <div role="region" aria-labelledby="active-participants-title" className="w-full rounded-lg border border-white/10 bg-gray-900/95 p-4 text-gray-100 shadow-2xl backdrop-blur-md">
     <div className="flex items-center justify-between gap-3">
-      <h2 className="text-sm font-semibold">Participantes</h2>
+      <h2 id="active-participants-title" className="text-sm font-semibold">Participantes</h2>
       <button
         onClick={onClose}
+        aria-label="Cerrar participantes"
         className="rounded p-1 text-gray-400 transition-colors hover:bg-gray-800 hover:text-white"
         title="Cerrar"
       >
