@@ -76,7 +76,14 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
   const [isParticipantsOpen, setIsParticipantsOpen] = useState(false);
   const hasAudioStartedRef = useRef(hasAudioStarted);
   const panelRootRef = useRef<HTMLDivElement>(null);
+  const interactionStatusRef = useRef<HTMLParagraphElement>(null);
   const isFirstMountRef = useRef(true);
+  const previousInteractionStateRef = useRef({
+    isActive,
+    isParticipationBlocked,
+    isWordGranted,
+    isPendingWord,
+  });
   const participantsPanelId = useId();
   const volumePanelId = useId();
 
@@ -199,13 +206,43 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
     return () => window.removeEventListener('click', handleGlobalClick);
   }, []);
 
-  if (state !== 'connected' && state !== 'reconnecting' && state !== 'reconnected' && state !== 'reconnectFailed') {
-    return null;
-  }
-
   const handlePanelClick = (e: React.MouseEvent) => {
     e.stopPropagation();
   };
+  const interactionStatus = isParticipationBlocked
+    ? 'Participación bloqueada por Control'
+    : isWordGranted
+      ? 'Control te ha concedido la palabra'
+      : isPendingWord
+        ? 'Solicitud enviada; en espera'
+        : isActive
+          ? 'Participación activa; puedes pedir la palabra'
+          : 'Puedes entrar en el modo de participación';
+
+  useEffect(() => {
+    const previous = previousInteractionStateRef.current;
+    const changed = previous.isActive !== isActive ||
+      previous.isParticipationBlocked !== isParticipationBlocked ||
+      previous.isWordGranted !== isWordGranted ||
+      previous.isPendingWord !== isPendingWord;
+    previousInteractionStateRef.current = {
+      isActive,
+      isParticipationBlocked,
+      isWordGranted,
+      isPendingWord,
+    };
+    if (!changed) return;
+    const frame = window.requestAnimationFrame(() => {
+      if (document.activeElement === document.body) {
+        interactionStatusRef.current?.focus();
+      }
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [isActive, isParticipationBlocked, isWordGranted, isPendingWord]);
+
+  if (state !== 'connected' && state !== 'reconnecting' && state !== 'reconnected' && state !== 'reconnectFailed') {
+    return null;
+  }
 
   const wrapperClass = variant === 'inline'
     ? "flex items-center justify-center w-full pointer-events-none z-[60]"
@@ -297,6 +334,16 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
     return (
       <div ref={panelRootRef} className={wrapperClass} onClick={handlePanelClick} id="audience-bottom-panel">
         <div className={panelClass}>
+          <p
+            ref={interactionStatusRef}
+            role={isParticipationBlocked ? 'alert' : 'status'}
+            aria-live={isParticipationBlocked ? 'assertive' : 'polite'}
+            aria-atomic="true"
+            tabIndex={-1}
+            className="sr-only"
+          >
+            {interactionStatus}
+          </p>
           {reconnectStatus}
           {!hasAudioStarted && (
             <button
@@ -327,14 +374,15 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
   return (
     <div ref={panelRootRef} className={wrapperClass} onClick={handlePanelClick}>
       <div className={`${panelClass} relative bg-gray-900/70 backdrop-blur-lg border border-white/10 px-2 rounded-2xl shadow-2xl`}>
-        <p role="status" aria-live="polite" aria-atomic="true" className="sr-only">
-          {isParticipationBlocked
-            ? 'Participación bloqueada por Control'
-            : isWordGranted
-              ? 'Control te ha concedido la palabra'
-              : isPendingWord
-                ? 'Solicitud enviada; en espera'
-                : 'Participación activa; puedes pedir la palabra'}
+        <p
+          ref={interactionStatusRef}
+          role={isParticipationBlocked ? 'alert' : 'status'}
+          aria-live={isParticipationBlocked ? 'assertive' : 'polite'}
+          aria-atomic="true"
+          tabIndex={-1}
+          className="sr-only"
+        >
+          {interactionStatus}
         </p>
         {diagnostics}
         {isParticipantsOpen && (

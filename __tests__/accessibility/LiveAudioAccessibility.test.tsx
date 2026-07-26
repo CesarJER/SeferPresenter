@@ -5,11 +5,16 @@ import { AudienceLiveAudioPanel } from '../../src/features/liveAudio/components/
 import { AudiencePrivateControlMessage } from '../../src/features/liveAudio/components/audience/AudiencePrivateControlMessage';
 import { LiveAudioControlPanel } from '../../src/features/liveAudio/components/control/LiveAudioControlPanel';
 import { LiveAudioParticipantRow } from '../../src/features/liveAudio/components/control/LiveAudioParticipantRow';
-import { PrivateControlInbox } from '../../src/features/liveAudio/components/control/PrivateControlInbox';
+import {
+  PrivateControlInbox,
+  PrivateInboxNotificationStatus,
+} from '../../src/features/liveAudio/components/control/PrivateControlInbox';
 import { AudienceAccessGate } from '../../src/components/audience/AudienceAccessGate';
 
+const accessibilityMocks = vi.hoisted(() => ({ availability: 'enabled' }));
+
 vi.mock('../../src/features/liveAudio/hooks/useLiveAudioAvailability', () => ({
-  useLiveAudioAvailability: () => ({ availability: 'enabled' }),
+  useLiveAudioAvailability: () => ({ availability: accessibilityMocks.availability }),
 }));
 vi.mock('../../src/hooks/usePrivateControlSignals', () => ({
   usePrivateControlSignals: () => ({
@@ -22,6 +27,7 @@ afterEach(() => {
   cleanup();
   sessionStorage.clear();
   vi.useRealTimers();
+  accessibilityMocks.availability = 'enabled';
 });
 
 const audiencePanelProps = {
@@ -134,24 +140,105 @@ describe('Live Audio accessible dynamic state', () => {
     expect(screen.getByRole('button', { name: /reconexión de audio falló/i })).toBeTruthy();
   });
 
+  it('announces blocking and restores focus after a remote phase change', async () => {
+    const view = render(<AudienceLiveAudioPanel {...audiencePanelProps} />);
+    screen.getByRole('button', { name: 'Activar micrófono' }).focus();
+
+    view.rerender(
+      <AudienceLiveAudioPanel
+        {...audiencePanelProps}
+        isActive={false}
+        isWordGranted={false}
+        isParticipationBlocked
+      />,
+    );
+
+    const blocked = screen.getByRole('alert');
+    expect(blocked.textContent).toContain('Participación bloqueada por Control');
+    await waitFor(() => expect(document.activeElement).toBe(blocked));
+  });
+
   it('announces only a neutral private inbox count and supports closing', () => {
     const onClose = vi.fn();
     render(
-      <PrivateControlInbox
-        isOpen
-        isControlAuthorized
-        messages={[{ id: 'm1', fromAlias: 'Alias privado', content: 'Contenido privado', timestamp: 1 }]}
-        authorizationRequests={[]}
-        onApproveRequest={vi.fn()}
-        onRejectRequest={vi.fn()}
-        onDismissMessage={vi.fn()}
-        onClose={onClose}
-      />,
+      <>
+        <PrivateInboxNotificationStatus count={1} />
+        <PrivateControlInbox
+          isOpen
+          isControlAuthorized
+          messages={[{ id: 'm1', fromAlias: 'Alias privado', content: 'Contenido privado', timestamp: 1 }]}
+          authorizationRequests={[]}
+          onApproveRequest={vi.fn()}
+          onRejectRequest={vi.fn()}
+          onDismissMessage={vi.fn()}
+          onClose={onClose}
+        />
+      </>,
     );
 
     expect(screen.getByRole('status').textContent).toBe('1 notificaciones privadas pendientes');
     fireEvent.click(screen.getByRole('button', { name: 'Cerrar bandeja privada' }));
     expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it('announces a neutral private count while the inbox remains closed', () => {
+    const view = render(<PrivateInboxNotificationStatus count={0} />);
+    view.rerender(<PrivateInboxNotificationStatus count={2} />);
+    const status = screen.getByRole('status');
+    expect(status.textContent).toBe('2 notificaciones privadas pendientes');
+    expect(status.textContent).not.toContain('alias');
+  });
+
+  it('uniquely names inbox decisions and restores focus when a request disappears', async () => {
+    const commonProps = {
+      isOpen: true,
+      isControlAuthorized: true,
+      messages: [],
+      authorizationRequests: [],
+      onApproveRequest: vi.fn(),
+      onRejectRequest: vi.fn(),
+      onDismissMessage: vi.fn(),
+      onClose: vi.fn(),
+      onAudienceAccessDecision: vi.fn(),
+    };
+    const view = render(
+      <PrivateControlInbox
+        {...commonProps}
+        audienceAccessRequests={[
+          { participantId: 'a', alias: 'Ana', requestedAt: 1 },
+          { participantId: 'b', alias: 'Berta', requestedAt: 2 },
+        ]}
+      />,
+    );
+    const admitAna = screen.getByRole('button', { name: 'Admitir a Ana' });
+    expect(screen.getByRole('button', { name: 'Admitir a Berta' })).toBeTruthy();
+    admitAna.focus();
+
+    view.rerender(
+      <PrivateControlInbox
+        {...commonProps}
+        audienceAccessRequests={[{ participantId: 'b', alias: 'Berta', requestedAt: 2 }]}
+      />,
+    );
+    await waitFor(() => expect(document.activeElement).toBe(
+      screen.getByRole('button', { name: 'Cerrar bandeja privada' }),
+    ));
+  });
+
+  it('announces Live Audio availability failures in the private inbox', () => {
+    accessibilityMocks.availability = 'unsupported';
+    render(
+      <PrivateControlInbox
+        isOpen
+        isControlAuthorized
+        messages={[]}
+        authorizationRequests={[]}
+        onApproveRequest={vi.fn()}
+        onRejectRequest={vi.fn()}
+        onDismissMessage={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole('alert').textContent).toContain('Audio no compatible');
   });
 
   it('announces message sending and reports success before closing', async () => {

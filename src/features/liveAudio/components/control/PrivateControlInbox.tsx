@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { X, MessageSquare, KeyRound, Check, Trash2, ShieldAlert } from 'lucide-react';
 import { useLiveAudioAvailability } from '../../hooks/useLiveAudioAvailability';
 import type { PendingControlAuthorization } from '../../../../types/liveAudio';
@@ -15,6 +15,14 @@ export interface AudienceAccessRequestItem {
   alias: string;
   requestedAt: number;
 }
+
+export const PrivateInboxNotificationStatus = ({ count }: { count: number }) => (
+  <p role="status" aria-live="polite" aria-atomic="true" className="sr-only">
+    {count === 0
+      ? 'No hay notificaciones privadas pendientes'
+      : `${count} notificaciones privadas pendientes`}
+  </p>
+);
 
 interface PrivateControlInboxProps {
   isOpen: boolean;
@@ -45,6 +53,21 @@ export const PrivateControlInbox: React.FC<PrivateControlInboxProps> = ({
   onAudienceAccessDecision = () => {},
 }) => {
   const { availability } = useLiveAudioAvailability();
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const itemCount = messages.length + authorizationRequests.length + audienceAccessRequests.length;
+  const previousItemCountRef = useRef(itemCount);
+
+  useEffect(() => {
+    const previousItemCount = previousItemCountRef.current;
+    previousItemCountRef.current = itemCount;
+    if (
+      isOpen &&
+      itemCount < previousItemCount &&
+      document.activeElement === document.body
+    ) {
+      closeButtonRef.current?.focus();
+    }
+  }, [isOpen, itemCount]);
 
   if (!isOpen) return null;
 
@@ -54,6 +77,7 @@ export const PrivateControlInbox: React.FC<PrivateControlInboxProps> = ({
         <div className="p-3 bg-red-900/50 flex items-center justify-between">
           <h3 className="font-bold text-red-200 text-sm">Acceso Denegado</h3>
           <button
+            ref={closeButtonRef}
             type="button"
             onClick={onClose}
             aria-label="Cerrar bandeja privada"
@@ -83,6 +107,7 @@ export const PrivateControlInbox: React.FC<PrivateControlInboxProps> = ({
           <MessageSquare size={16} /> Bandeja Privada
         </h3>
         <button
+          ref={closeButtonRef}
           type="button"
           onClick={onClose}
           aria-label="Cerrar bandeja privada"
@@ -91,21 +116,15 @@ export const PrivateControlInbox: React.FC<PrivateControlInboxProps> = ({
           <X size={16} aria-hidden="true" />
         </button>
       </div>
-      <p role="status" aria-live="polite" aria-atomic="true" className="sr-only">
-        {hasItems
-          ? `${messages.length + authorizationRequests.length + audienceAccessRequests.length} notificaciones privadas pendientes`
-          : 'No hay notificaciones privadas pendientes'}
-      </p>
-
       <div className="overflow-y-auto p-2 space-y-3">
         {availability === 'unsupported' && (
-          <div className="bg-red-950/30 border border-red-900/50 rounded-md p-2 flex items-start gap-2">
+          <div role="alert" className="bg-red-950/30 border border-red-900/50 rounded-md p-2 flex items-start gap-2">
             <ShieldAlert size={14} className="text-red-400 mt-0.5 shrink-0" />
             <p className="text-xs text-red-300">Audio no compatible en este navegador o contexto inseguro (requiere HTTPS o localhost).</p>
           </div>
         )}
         {(availability === 'disabled' || availability === 'misconfigured') && (
-          <div className="bg-orange-950/30 border border-orange-900/50 rounded-md p-2 flex items-start gap-2">
+          <div role="status" aria-live="polite" className="bg-orange-950/30 border border-orange-900/50 rounded-md p-2 flex items-start gap-2">
             <ShieldAlert size={14} className="text-orange-400 mt-0.5 shrink-0" />
             <p className="text-xs text-orange-300">El servicio de Live Audio no está configurado o está deshabilitado en el servidor.</p>
           </div>
@@ -130,12 +149,14 @@ export const PrivateControlInbox: React.FC<PrivateControlInboxProps> = ({
             <div className="flex gap-2">
               <button
                 onClick={() => onApproveRequest(req.controlSessionId)}
+                aria-label={`Aprobar Control con código ${req.verificationCode}`}
                 className="flex-1 flex items-center justify-center gap-1 bg-blue-600 hover:bg-blue-500 text-white py-1.5 rounded text-xs transition-colors"
               >
                 <Check size={14} /> Aprobar
               </button>
               <button
                 onClick={() => onRejectRequest(req.controlSessionId)}
+                aria-label={`Rechazar Control con código ${req.verificationCode}`}
                 className="flex-1 flex items-center justify-center gap-1 bg-gray-700 hover:bg-gray-600 text-gray-200 py-1.5 rounded text-xs transition-colors"
               >
                 <X size={14} /> Rechazar
@@ -152,6 +173,7 @@ export const PrivateControlInbox: React.FC<PrivateControlInboxProps> = ({
               <button
                 type="button"
                 onClick={() => onAudienceAccessDecision(request.participantId, 'ADMIT')}
+                aria-label={`Admitir a ${request.alias}`}
                 className="rounded bg-emerald-700 px-2 py-1.5 text-xs font-bold text-white"
               >
                 Admitir
@@ -159,6 +181,7 @@ export const PrivateControlInbox: React.FC<PrivateControlInboxProps> = ({
               <button
                 type="button"
                 onClick={() => onAudienceAccessDecision(request.participantId, 'REJECT')}
+                aria-label={`Rechazar a ${request.alias}`}
                 className="rounded bg-slate-700 px-2 py-1.5 text-xs font-bold text-white"
               >
                 Rechazar
@@ -166,6 +189,7 @@ export const PrivateControlInbox: React.FC<PrivateControlInboxProps> = ({
               <button
                 type="button"
                 onClick={() => onAudienceAccessDecision(request.participantId, 'BLOCK')}
+                aria-label={`Bloquear a ${request.alias}`}
                 className="rounded bg-red-800 px-2 py-1.5 text-xs font-bold text-white"
               >
                 Bloquear
