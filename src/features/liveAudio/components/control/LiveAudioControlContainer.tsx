@@ -2,7 +2,11 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Bell } from 'lucide-react';
 import { LiveAudioControlPanel } from './LiveAudioControlPanel';
-import { PrivateControlInbox, type PrivateMessage } from './PrivateControlInbox';
+import {
+  PrivateControlInbox,
+  PrivateInboxNotificationStatus,
+  type PrivateMessage,
+} from './PrivateControlInbox';
 import type { LiveAudioParticipant } from './LiveAudioParticipantRow';
 import { PwaRestartButton } from '../../../../components/shared/PwaRestartButton';
 import type {
@@ -24,6 +28,20 @@ import {
   hasVisibleParticipantsChanged,
   serializeVisibleParticipants,
 } from '../../utils/activeParticipants';
+import {
+  createControlSyncReducerState,
+  reduceControlSyncEnvelope,
+  type ControlSyncReducerState,
+} from '../../utils/controlSyncReducer';
+import {
+  assignStableAliasOrdinal,
+  formatAliasForControl,
+  type AliasOrdinalState,
+} from '../../utils/aliasOrdinals';
+import {
+  replacePrivateControlOverlay,
+  type PrivateControlOverlaySnapshot,
+} from '../../utils/privateControlOverlay';
 
 type ModerationEndpoint =
   | 'grant-speak'
@@ -85,10 +103,136 @@ const snapshotParticipantToStatus = (
   isAliasVisibleToActiveParticipants: participant.isAliasVisibleToActiveParticipants,
   canViewActiveParticipants: participant.canViewActiveParticipants,
   isAliasHiddenByControl: participant.isAliasHiddenByControl,
-  activeListPublicKey: participant.activeListPublicKey,
   connected: participant.connected,
   updatedAt: participant.updatedAt,
 });
+
+interface ControlOperationalView {
+  participants: Record<string, LiveAudioParticipantStatusMessage>;
+  connectionCounts: LiveAudioConnectionCountsMessage | null;
+  accessMode: 'PUBLIC' | 'CONTROLLED';
+  recordingAvailable: boolean;
+  recordingMutable: boolean;
+  recordingState: 'NOT_RECORDING' | 'RECORDING';
+  recordingEpoch: number;
+  audienceAccessRequests: Record<string, number>;
+}
+
+interface ControlOperationalDelta {
+  type: string;
+  payload: Record<string, unknown>;
+}
+
+const snapshotToOperationalView = (snapshot: LiveAudioOperationalSnapshot): ControlOperationalView => {
+  const participants: Record<string, LiveAudioParticipantStatusMessage> = {};
+  for (const participant of snapshot.participants) {
+    if (participant.role !== 'audience') continue;
+    participants[participant.participantId] = snapshotParticipantToStatus(participant);
+  }
+  return {
+    participants,
+    connectionCounts: {
+      type: 'LIVE_AUDIO_CONNECTION_COUNTS',
+      ...snapshot.connectionCounts,
+    },
+    accessMode: snapshot.policies.accessMode,
+    recordingAvailable: snapshot.policies.recordingAvailable,
+    recordingMutable: snapshot.policies.recordingMutable,
+    recordingState: snapshot.policies.recordingState,
+    recordingEpoch: snapshot.policies.recordingEpoch,
+    audienceAccessRequests: Object.fromEntries(
+      snapshot.audienceAccessRequests.map((request) => [request.participantId, request.requestedAt]),
+    ),
+  };
+};
+
+const applyOperationalDelta = (
+  state: ControlOperationalView,
+  delta: ControlOperationalDelta,
+): ControlOperationalView => {
+  if (delta.type === 'LIVE_AUDIO_PARTICIPANT_STATUS') {
+    const participant = delta.payload as unknown as LiveAudioParticipantStatusMessage;
+    return {
+      ...state,
+      participants: {
+        ...state.participants,
+        [participant.participantId]: participant,
+      },
+    };
+  }
+  if (delta.type === 'LIVE_AUDIO_CONNECTION_COUNTS') {
+    return {
+      ...state,
+      connectionCounts: delta.payload as unknown as LiveAudioConnectionCountsMessage,
+    };
+  }
+  if (
+    delta.type === 'SESSION_ACCESS_POLICY' &&
+    (delta.payload.accessMode === 'PUBLIC' || delta.payload.accessMode === 'CONTROLLED')
+  ) {
+    return {
+      ...state,
+      accessMode: delta.payload.accessMode,
+      ...(delta.payload.accessMode === 'PUBLIC' ? { audienceAccessRequests: {} } : {}),
+    };
+  }
+  if (
+    delta.type === 'SESSION_RECORDING_POLICY' &&
+    (delta.payload.recordingState === 'NOT_RECORDING' || delta.payload.recordingState === 'RECORDING')
+  ) {
+    const nextParticipants = Object.fromEntries(
+      Object.entries(state.participants).map(([participantId, participant]) => [
+        participantId,
+        delta.payload.recordingState === 'RECORDING'
+          ? {
+              ...participant,
+              canPublishAudio: false,
+              isMicrophoneActive: false,
+              isMuted: true,
+              microphoneTrackState: participant.speakerState === 'GRANTED'
+                ? 'mutedByControl'
+                : participant.microphoneTrackState,
+            }
+          : participant.speakerState === 'GRANTED'
+            ? { ...participant, canPublishAudio: true }
+            : participant,
+      ]),
+    );
+    return {
+      ...state,
+      participants: nextParticipants,
+      recordingAvailable: delta.payload.recordingAvailable === true,
+      recordingMutable: delta.payload.recordingMutable === true,
+      recordingState: delta.payload.recordingState,
+      recordingEpoch: typeof delta.payload.recordingEpoch === 'number'
+        ? delta.payload.recordingEpoch
+        : state.recordingEpoch,
+    };
+  }
+  if (
+    delta.type === 'AUDIENCE_ACCESS_REQUEST' &&
+    typeof delta.payload.participantId === 'string'
+  ) {
+    return {
+      ...state,
+      audienceAccessRequests: {
+        ...state.audienceAccessRequests,
+        [delta.payload.participantId]: typeof delta.payload.requestedAt === 'number'
+          ? delta.payload.requestedAt
+          : Date.now(),
+      },
+    };
+  }
+  if (
+    delta.type === 'AUDIENCE_ACCESS_DECISION_RESULT' &&
+    typeof delta.payload.participantId === 'string'
+  ) {
+    const next = { ...state.audienceAccessRequests };
+    delete next[delta.payload.participantId];
+    return { ...state, audienceAccessRequests: next };
+  }
+  return state;
+};
 
 export default function LiveAudioControlContainer({
   isControlAuthorized,
@@ -109,15 +253,40 @@ export default function LiveAudioControlContainer({
   const [isModeratorMusicMode, setIsModeratorMusicMode] = useState(false);
   const [participantsMap, setParticipantsMap] = useState<Record<string, LiveAudioParticipantStatusMessage>>({});
   const [participantAliases, setParticipantAliases] = useState<Record<string, string>>({});
+  const [participantAliasOrdinals, setParticipantAliasOrdinals] = useState<Record<string, number>>({});
   const [participantEphemeralKeys, setParticipantEphemeralKeys] = useState<Record<string, string>>({});
   const [participantMicrophoneConfigs, setParticipantMicrophoneConfigs] = useState<Record<string, { volume: number; musicMode: boolean }>>({});
   const [connectionCounts, setConnectionCounts] = useState<LiveAudioConnectionCountsMessage | null>(null);
   const [messages, setMessages] = useState<PrivateMessage[]>([]);
   const [joinRequests, setJoinRequests] = useState<Record<string, LiveAudioControlJoinRequestMessage>>({});
+  const [accessMode, setAccessMode] = useState<'PUBLIC' | 'CONTROLLED'>('PUBLIC');
+  const [recordingPolicy, setRecordingPolicy] = useState<{
+    recordingAvailable: boolean;
+    recordingMutable: boolean;
+    recordingState: 'NOT_RECORDING' | 'RECORDING';
+    recordingEpoch: number;
+  }>({
+    recordingAvailable: false,
+    recordingMutable: false,
+    recordingState: 'NOT_RECORDING',
+    recordingEpoch: 0,
+  });
+  const [audienceAccessRequests, setAudienceAccessRequests] = useState<Record<string, number>>({});
   const participantAliasesRef = useRef(participantAliases);
   const aliasRequestSignatureRef = useRef('');
   const lastSentListRef = useRef('');
   const requestedAuthRef = useRef<string | null>(null);
+  const operationalSyncRef = useRef<ControlSyncReducerState<ControlOperationalView, ControlOperationalDelta>>(
+    createControlSyncReducerState(),
+  );
+  const aliasOrdinalStateRef = useRef<AliasOrdinalState>({
+    assignments: {},
+    nextByNormalizedAlias: {},
+  });
+  const privateOverlayRef = useRef<PrivateControlOverlaySnapshot | null>(null);
+  const privateOverlayRevisionRef = useRef(0);
+  const overlayPublishSequenceRef = useRef<Promise<void>>(Promise.resolve());
+  const inboxButtonRef = useRef<HTMLButtonElement>(null);
 
   const { availability } = useLiveAudioAvailability();
 
@@ -132,6 +301,7 @@ export default function LiveAudioControlContainer({
     startRemoteAudio,
   } = useLiveAudio({
     role: 'control',
+    controlSessionId: controlSessionId || undefined,
     autoConnect: availability === 'enabled' && isControlAuthorized,
     microphoneVolumePercent: microphoneVolume,
   });
@@ -147,51 +317,115 @@ export default function LiveAudioControlContainer({
   useEffect(() => {
     if (!subscribeToWsMessage) return;
     const unsubscribe = subscribeToWsMessage((type, payload) => {
+      if (type === 'PRESENTATION_SESSION_ROTATED') {
+        setParticipantsMap({});
+        setParticipantAliases({});
+        setParticipantAliasOrdinals({});
+        setParticipantEphemeralKeys({});
+        setMessages([]);
+        setJoinRequests({});
+        setConnectionCounts(null);
+        setAudienceAccessRequests({});
+        operationalSyncRef.current = createControlSyncReducerState();
+        aliasOrdinalStateRef.current = { assignments: {}, nextByNormalizedAlias: {} };
+        privateOverlayRef.current = null;
+        privateOverlayRevisionRef.current = 0;
+        lastSentListRef.current = '';
+        setRecordingPolicy((current) => ({
+          ...current,
+          recordingState: payload.recordingState === 'RECORDING' ? 'RECORDING' : 'NOT_RECORDING',
+          recordingEpoch: typeof payload.recordingEpoch === 'number' ? payload.recordingEpoch : 0,
+        }));
+        return;
+      }
+      if (type === 'WELCOME' || type === 'SESSION_ACCESS_POLICY') {
+        if (payload.accessMode === 'PUBLIC' || payload.accessMode === 'CONTROLLED') {
+          setAccessMode(payload.accessMode);
+        }
+      }
       if (type === 'LIVE_AUDIO_SNAPSHOT') {
         const snapshot = payload.snapshot as LiveAudioOperationalSnapshot | undefined;
         if (!snapshot || !Array.isArray(snapshot.participants)) return;
-        setParticipantsMap(prev => {
-          const next = { ...prev };
-          snapshot.participants.forEach((participant) => {
-            if (participant.role !== 'audience') return;
-            const existing = next[participant.participantId];
-            if (existing?.updatedAt && existing.updatedAt > participant.updatedAt) return;
-            next[participant.participantId] = snapshotParticipantToStatus(participant);
+        if (
+          typeof snapshot.presentationSessionId !== 'string' ||
+          typeof snapshot.serverEpoch !== 'string' ||
+          !Number.isInteger(snapshot.stateRevision)
+        ) return;
+        const result = reduceControlSyncEnvelope(
+          operationalSyncRef.current,
+          {
+            type: 'SNAPSHOT',
+            sessionId: snapshot.presentationSessionId,
+            serverEpoch: snapshot.serverEpoch,
+            stateRevision: snapshot.stateRevision,
+            state: snapshotToOperationalView(snapshot),
+          },
+          applyOperationalDelta,
+        );
+        operationalSyncRef.current = result.sync;
+        if (result.sync.value) {
+          setParticipantsMap(result.sync.value.participants);
+          setConnectionCounts(result.sync.value.connectionCounts);
+          setAccessMode(result.sync.value.accessMode);
+          setRecordingPolicy({
+            recordingAvailable: result.sync.value.recordingAvailable,
+            recordingMutable: result.sync.value.recordingMutable,
+            recordingState: result.sync.value.recordingState,
+            recordingEpoch: result.sync.value.recordingEpoch,
           });
-          return next;
-        });
-        setParticipantAliases(prev => {
-          const next = { ...prev };
-          snapshot.participants.forEach((participant) => {
-            if (participant.role === 'audience' && participant.alias) {
-              next[participant.participantId] = participant.alias;
-            } else if (
-              participant.role === 'audience' &&
-              participant.isActiveAudience === false &&
-              participant.isKicked !== true
-            ) {
-              delete next[participant.participantId];
-            }
-          });
-          return next;
-        });
-        setParticipantEphemeralKeys(prev => {
-          const next = { ...prev };
-          snapshot.participants.forEach((participant) => {
-            if (participant.role !== 'audience') return;
-            if (participant.activeListPublicKey) {
-              next[participant.participantId] = participant.activeListPublicKey;
-            } else if (participant.isActiveAudience === false && participant.isKicked !== true) {
-              delete next[participant.participantId];
-            }
-          });
-          return next;
-        });
-        setConnectionCounts({
-          type: 'LIVE_AUDIO_CONNECTION_COUNTS',
-          ...snapshot.connectionCounts,
-        });
+          setAudienceAccessRequests(result.sync.value.audienceAccessRequests);
+        }
         return;
+      }
+
+      const revision = payload.stateRevision;
+      const eventId = payload.eventId;
+      const sessionId = payload.presentationSessionId;
+      const serverEpoch = payload.serverEpoch;
+      if (
+        Number.isInteger(revision) &&
+        typeof eventId === 'string' &&
+        typeof sessionId === 'string' &&
+        typeof serverEpoch === 'string'
+      ) {
+        const result = reduceControlSyncEnvelope(
+          operationalSyncRef.current,
+          {
+            type: 'DELTA',
+            sessionId,
+            serverEpoch,
+            stateRevision: Number(revision),
+            eventId,
+            delta: { type, payload },
+          },
+          applyOperationalDelta,
+        );
+        operationalSyncRef.current = result.sync;
+        if (result.requestSnapshot) {
+          wsSend?.('LIVE_AUDIO_SNAPSHOT_REQUEST', {
+            type: 'LIVE_AUDIO_SNAPSHOT_REQUEST',
+            controlSessionId: controlSessionId || undefined,
+            lastAppliedStateRevision: result.sync.stateRevision < 0 ? 0 : result.sync.stateRevision,
+            reason: 'GAP',
+            createdAt: Date.now(),
+          });
+        }
+        if (result.sync.value) {
+          setParticipantsMap(result.sync.value.participants);
+          setConnectionCounts(result.sync.value.connectionCounts);
+          setAccessMode(result.sync.value.accessMode);
+          setRecordingPolicy({
+            recordingAvailable: result.sync.value.recordingAvailable,
+            recordingMutable: result.sync.value.recordingMutable,
+            recordingState: result.sync.value.recordingState,
+            recordingEpoch: result.sync.value.recordingEpoch,
+          });
+          setAudienceAccessRequests(result.sync.value.audienceAccessRequests);
+        }
+        if (
+          type === 'LIVE_AUDIO_PARTICIPANT_STATUS' ||
+          type === 'LIVE_AUDIO_CONNECTION_COUNTS'
+        ) return;
       }
 
       if (
@@ -206,34 +440,13 @@ export default function LiveAudioControlContainer({
       if (type === 'LIVE_AUDIO_PARTICIPANT_STATUS') {
         const msg = payload as unknown as LiveAudioParticipantStatusMessage;
         setParticipantsMap(prev => ({ ...prev, [msg.participantId]: msg }));
-        if (msg.activeListPublicKey) {
-          setParticipantEphemeralKeys(prev => ({ ...prev, [msg.participantId]: msg.activeListPublicKey! }));
-        }
-        if (msg.isActiveAudience === false && msg.isKicked !== true) {
-          setParticipantAliases(prev => {
-            const next = { ...prev };
-            delete next[msg.participantId];
-            return next;
-          });
-          setParticipantEphemeralKeys(prev => {
-            const next = { ...prev };
-            delete next[msg.participantId];
-            return next;
-          });
-        }
         return;
       }
 
       if (type === 'LIVE_AUDIO_ACTIVE_PARTICIPANT_PROFILE') {
         const participantId = typeof payload.participantId === 'string' ? payload.participantId : '';
-        const alias = sanitizeAlias(payload.alias);
-        const activeListPublicKey = typeof payload.activeListPublicKey === 'string'
-          ? payload.activeListPublicKey
-          : '';
-        if (!participantId || !alias || !activeListPublicKey) return;
+        if (!participantId) return;
         const isAliasVisibleToActiveParticipants = payload.isAliasVisibleToActiveParticipants === true;
-        setParticipantAliases(prev => ({ ...prev, [participantId]: alias }));
-        setParticipantEphemeralKeys(prev => ({ ...prev, [participantId]: activeListPublicKey }));
         setParticipantsMap(prev => {
           const existing = prev[participantId];
           if (!existing) return prev;
@@ -242,7 +455,6 @@ export default function LiveAudioControlContainer({
             [participantId]: {
               ...existing,
               isAliasVisibleToActiveParticipants,
-              activeListPublicKey,
             },
           };
         });
@@ -252,7 +464,6 @@ export default function LiveAudioControlContainer({
             participants: [{
               participantId,
               role: 'audience',
-              alias,
               isAliasVisibleToActiveParticipants,
             }],
           },
@@ -296,35 +507,50 @@ export default function LiveAudioControlContainer({
         }
         return;
       }
+      if (type === 'AUDIENCE_ACCESS_REQUEST' && typeof payload.participantId === 'string') {
+        setAudienceAccessRequests((current) => ({
+          ...current,
+          [payload.participantId as string]: typeof payload.requestedAt === 'number'
+            ? payload.requestedAt
+            : Date.now(),
+        }));
+        return;
+      }
+      if (type === 'AUDIENCE_ACCESS_DECISION_RESULT' && typeof payload.participantId === 'string') {
+        setAudienceAccessRequests((current) => {
+          const next = { ...current };
+          delete next[payload.participantId as string];
+          return next;
+        });
+      }
     });
     return unsubscribe;
   }, [controlSessionId, subscribeToWsMessage, wsSend]);
 
   useEffect(() => {
-    if (!isControlAuthorized || !wsSend) return;
+    if (!isControlAuthorized || !wsSend || wsStatus !== 'open') return;
     wsSend('LIVE_AUDIO_SNAPSHOT_REQUEST', {
       type: 'LIVE_AUDIO_SNAPSHOT_REQUEST',
       controlSessionId: controlSessionId || undefined,
+      lastAppliedStateRevision: operationalSyncRef.current.stateRevision < 0
+        ? 0
+        : operationalSyncRef.current.stateRevision,
+      reason: operationalSyncRef.current.identity ? 'RECONNECT' : 'CONNECT',
       createdAt: Date.now(),
     });
-  }, [controlSessionId, isControlAuthorized, wsSend]);
+  }, [controlSessionId, isControlAuthorized, wsSend, wsStatus]);
 
   const handlePrivateSignal = useCallback((signal: DecryptedPrivateControlSignal) => {
     const data = getSignalRecord(signal);
     const alias = sanitizeAlias(data.alias);
     if (alias) {
+      aliasOrdinalStateRef.current = assignStableAliasOrdinal(
+        aliasOrdinalStateRef.current,
+        signal.fromParticipantId,
+        alias,
+      );
+      setParticipantAliasOrdinals({ ...aliasOrdinalStateRef.current.assignments });
       setParticipantAliases(prev => ({ ...prev, [signal.fromParticipantId]: alias }));
-      wsSend?.('LIVE_AUDIO_SNAPSHOT_PATCH', {
-        type: 'LIVE_AUDIO_SNAPSHOT_PATCH',
-        snapshot: {
-          participants: [{
-            participantId: signal.fromParticipantId,
-            role: 'audience',
-            alias,
-          }],
-        },
-        createdAt: Date.now(),
-      });
     }
 
     if (signal.ephemeralPublicKey) {
@@ -364,7 +590,7 @@ export default function LiveAudioControlContainer({
         : '';
 
     if ((signalType === 'PRIVATE_MESSAGE' || signalType === 'message') && content) {
-      const fromAlias = alias || participantAliasesRef.current[signal.fromParticipantId] || 'Sin nick';
+      const fromAlias = alias || participantAliasesRef.current[signal.fromParticipantId] || 'Alias no recuperable';
       setMessages(prev => [...prev, {
         id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
         fromAlias,
@@ -378,8 +604,11 @@ export default function LiveAudioControlContainer({
     sendPrivateSignalToParticipant,
     requestAliases,
     ready: privateSignalsReady,
+    keyId: privateKeyId,
     requestControlAuthorization,
-    authorizeSecondaryControl
+    authorizeSecondaryControl,
+    encryptControlOverlay,
+    decryptControlOverlay,
   } = usePrivateControlSignals({
     role: 'control',
     participantId: participantId || controlSessionId || 'control',
@@ -392,6 +621,139 @@ export default function LiveAudioControlContainer({
   });
 
   useEffect(() => {
+    if (!subscribeToWsMessage) return;
+    return subscribeToWsMessage((type, payload) => {
+      if (type !== 'LIVE_AUDIO_PRIVATE_OVERLAY_SNAPSHOT') return;
+      if (
+        typeof payload.keyId !== 'string' ||
+        typeof payload.ciphertext !== 'string' ||
+        typeof payload.nonce !== 'string' ||
+        !Number.isSafeInteger(payload.privateStateRevision)
+      ) return;
+      const overlayKeyId = payload.keyId;
+      const overlayCiphertext = payload.ciphertext;
+      const overlayNonce = payload.nonce;
+      const overlayRevision = Number(payload.privateStateRevision);
+
+      void decryptControlOverlay({
+        keyId: overlayKeyId,
+        ciphertext: overlayCiphertext,
+        nonce: overlayNonce,
+      }).then((decrypted) => {
+        const applied = replacePrivateControlOverlay(privateOverlayRef.current, decrypted, {
+          expectedKeyId: overlayKeyId,
+          currentTechnicalStateRevision: operationalSyncRef.current.stateRevision,
+        });
+        if (!applied.ok) {
+          wsSend?.('LIVE_AUDIO_PRIVATE_OVERLAY_RESULT', {
+            result: 'NACK',
+            keyId: overlayKeyId,
+            privateStateRevision: overlayRevision,
+            reason: applied.reason,
+          });
+          return;
+        }
+        privateOverlayRef.current = applied.value;
+        privateOverlayRevisionRef.current = applied.value.privateStateRevision;
+        const aliases: Record<string, string> = {};
+        const ordinals: Record<string, number> = {};
+        const ephemeralKeys: Record<string, string> = {};
+        const microphoneConfigs: Record<string, { volume: number; musicMode: boolean }> = {};
+        const nextByNormalizedAlias: Record<string, number> = {};
+        Object.entries(applied.value.participants).forEach(([id, participant]) => {
+          aliases[id] = participant.alias;
+          ordinals[id] = participant.aliasOrdinal;
+          const normalized = participant.alias.trim().replace(/\s+/gu, ' ').normalize('NFC').toLocaleLowerCase();
+          nextByNormalizedAlias[normalized] = Math.max(
+            nextByNormalizedAlias[normalized] ?? 0,
+            participant.aliasOrdinal + 1,
+          );
+          if (participant.ephemeralPublicKey) ephemeralKeys[id] = participant.ephemeralPublicKey;
+          if (participant.microphoneConfig) microphoneConfigs[id] = participant.microphoneConfig;
+        });
+        aliasOrdinalStateRef.current = { assignments: ordinals, nextByNormalizedAlias };
+        setParticipantAliases(aliases);
+        setParticipantAliasOrdinals(ordinals);
+        setParticipantEphemeralKeys(ephemeralKeys);
+        setParticipantMicrophoneConfigs(microphoneConfigs);
+        wsSend?.('LIVE_AUDIO_PRIVATE_OVERLAY_RESULT', {
+          result: 'ACK',
+          keyId: applied.value.keyId,
+          privateStateRevision: applied.value.privateStateRevision,
+        });
+      }).catch(() => {
+        wsSend?.('LIVE_AUDIO_PRIVATE_OVERLAY_RESULT', {
+          result: 'NACK',
+          keyId: overlayKeyId,
+          privateStateRevision: overlayRevision,
+          reason: 'DECRYPT_FAILED',
+        });
+      });
+    });
+  }, [decryptControlOverlay, subscribeToWsMessage, wsSend]);
+
+  useEffect(() => {
+    if (
+      controlState !== 'PRINCIPAL' ||
+      !privateSignalsReady ||
+      !privateKeyId ||
+      !wsSend
+    ) return;
+    const timer = window.setTimeout(() => {
+      overlayPublishSequenceRef.current = overlayPublishSequenceRef.current.then(async () => {
+        const privateStateRevision = privateOverlayRevisionRef.current + 1;
+        const participants = Object.fromEntries(
+          Object.entries(participantAliases).map(([id, alias]) => [
+            id,
+            {
+              alias,
+              aliasOrdinal: participantAliasOrdinals[id] ?? 0,
+              ...(participantEphemeralKeys[id]
+                ? { ephemeralPublicKey: participantEphemeralKeys[id] }
+                : {}),
+              ...(participantMicrophoneConfigs[id]
+                ? { microphoneConfig: participantMicrophoneConfigs[id] }
+                : {}),
+            },
+          ]),
+        );
+        const snapshot: PrivateControlOverlaySnapshot = {
+          type: 'PRIVATE_CONTROL_OVERLAY_SNAPSHOT',
+          keyId: privateKeyId,
+          privateStateRevision,
+          basedOnStateRevision: Math.max(0, operationalSyncRef.current.stateRevision),
+          participants,
+        };
+        const encrypted = await encryptControlOverlay(snapshot);
+        if (!encrypted || encrypted.keyId !== privateKeyId) return;
+        privateOverlayRef.current = snapshot;
+        privateOverlayRevisionRef.current = privateStateRevision;
+        wsSend('LIVE_AUDIO_PRIVATE_OVERLAY_PUBLISH', {
+          messageId: crypto.randomUUID(),
+          keyId: encrypted.keyId,
+          privateStateRevision,
+          basedOnStateRevision: snapshot.basedOnStateRevision,
+          ciphertext: encrypted.ciphertext,
+          nonce: encrypted.nonce,
+        });
+      }).catch((error) => {
+        console.warn('LiveAudioControl: private overlay publication failed', error);
+      });
+    }, 50);
+    return () => window.clearTimeout(timer);
+  }, [
+    controlState,
+    encryptControlOverlay,
+    participantAliasOrdinals,
+    participantAliases,
+    participantEphemeralKeys,
+    participantMicrophoneConfigs,
+    privateKeyId,
+    privateSignalsReady,
+    wsSend,
+  ]);
+
+  useEffect(() => {
     if (controlState === 'PENDING' && verificationCode && requestedAuthRef.current !== verificationCode) {
       requestedAuthRef.current = verificationCode;
       void requestControlAuthorization(verificationCode).catch((err) => {
@@ -401,24 +763,75 @@ export default function LiveAudioControlContainer({
   }, [controlState, verificationCode, requestControlAuthorization]);
 
   const handleApproveRequest = useCallback((sessionId: string) => {
-    const joinReq = joinRequests[sessionId];
-    if (joinReq) {
-      void authorizeSecondaryControl(joinReq)
-        .catch(err => console.error('Failed to authorize secondary control crypto', err))
-        .finally(() => onApproveRequest(sessionId));
-    } else {
-      onApproveRequest(sessionId);
+    const pending = authorizationRequests.find(request => request.controlSessionId === sessionId);
+    const joinReq = joinRequests[sessionId] ?? (
+      pending?.recipientPublicKey
+        ? {
+            type: 'LIVE_AUDIO_CONTROL_JOIN_REQUEST' as const,
+            controlSessionId: pending.controlSessionId,
+            verificationCode: pending.verificationCode,
+            recipientPublicKey: pending.recipientPublicKey,
+            messageId: pending.joinRequestId,
+          }
+        : null
+    );
+    if (!joinReq) {
+      console.error('Cannot authorize Control without its current E2E public key');
+      return;
     }
-    setJoinRequests(prev => {
-      const next = { ...prev };
-      delete next[sessionId];
-      return next;
-    });
-  }, [authorizeSecondaryControl, joinRequests, onApproveRequest]);
+
+    void authorizeSecondaryControl(joinReq)
+      .then((transferred) => {
+        if (!transferred) return;
+        onApproveRequest(sessionId);
+        setJoinRequests(prev => {
+          const next = { ...prev };
+          delete next[sessionId];
+          return next;
+        });
+      })
+      .catch(err => console.error('Failed to authorize secondary control crypto', err));
+  }, [authorizationRequests, authorizeSecondaryControl, joinRequests, onApproveRequest]);
 
   const handleDismissMessage = useCallback((id: string) => {
     setMessages(prev => prev.filter(m => m.id !== id));
   }, []);
+
+  const handleAudienceAccessDecision = useCallback((
+    targetParticipantId: string,
+    decision: 'ADMIT' | 'REJECT' | 'BLOCK',
+  ) => {
+    wsSend?.('AUDIENCE_ACCESS_DECISION', {
+      participantId: targetParticipantId,
+      decision,
+      createdAt: Date.now(),
+    });
+  }, [wsSend]);
+
+  const handleAccessModeChange = useCallback(() => {
+    if (controlState !== 'PRINCIPAL') return;
+    wsSend?.('SESSION_ACCESS_POLICY_UPDATE', {
+      accessMode: accessMode === 'PUBLIC' ? 'CONTROLLED' : 'PUBLIC',
+      createdAt: Date.now(),
+    });
+  }, [accessMode, controlState, wsSend]);
+
+  const handleRecordingStateChange = useCallback((nextState: 'NOT_RECORDING' | 'RECORDING') => {
+    const sessionId = operationalSyncRef.current.identity?.sessionId;
+    if (
+      controlState !== 'PRINCIPAL' ||
+      !recordingPolicy.recordingMutable ||
+      nextState === recordingPolicy.recordingState ||
+      !sessionId
+    ) return;
+    wsSend?.('SESSION_RECORDING_POLICY_UPDATE', {
+      type: 'SESSION_RECORDING_POLICY_UPDATE',
+      commandId: crypto.randomUUID(),
+      presentationSessionId: sessionId,
+      expectedStateRevision: operationalSyncRef.current.stateRevision,
+      recordingState: nextState,
+    });
+  }, [controlState, recordingPolicy.recordingMutable, recordingPolicy.recordingState, wsSend]);
 
   const computeVisibleList = useCallback((): string[] => (
     computeVisibleActiveParticipants(participantsMap, participantAliases)
@@ -490,7 +903,9 @@ export default function LiveAudioControlContainer({
         const isMicrophoneActive = p.isMicrophoneActive ?? (p.speakerState === 'GRANTED' && p.isMuted === false);
         return {
           participantId: p.participantId,
-          alias: alias || 'Sin nick',
+          alias: alias
+            ? formatAliasForControl(alias, participantAliasOrdinals[p.participantId] ?? 0)
+            : 'Sincronizando alias…',
           speakerState: p.speakerState,
           isMuted: p.isMuted ?? !isMicrophoneActive,
           isMicrophoneActive,
@@ -503,7 +918,7 @@ export default function LiveAudioControlContainer({
           isMusicMode: participantMicrophoneConfigs[p.participantId]?.musicMode ?? false,
         };
       })
-  ), [participantAliases, participantMicrophoneConfigs, participantsMap]);
+  ), [participantAliasOrdinals, participantAliases, participantMicrophoneConfigs, participantsMap]);
 
   const activeUsers = participants.filter(p => p.isActiveAudience && !p.isKicked).length;
   const pendingWordCount = participants.filter(p => p.speakerState === 'REQUESTED' && !p.isKicked).length;
@@ -588,22 +1003,10 @@ export default function LiveAudioControlContainer({
     }
   }, [participantId, wsSend]);
 
-  const doModerationAction = useCallback(async (endpoint: ModerationEndpoint, pid?: string) => {
+  const doModerationAction = useCallback((endpoint: ModerationEndpoint, pid?: string) => {
     if (!controlSessionId) return;
-    try {
-      const response = await fetch(`/api/livekit/${endpoint}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          role: 'control',
-          controlSessionId,
-          participantId: pid,
-        }),
-      });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      sendModerationMessage(endpoint, pid);
-    } catch (err) {
-      console.error(`Error in moderation action ${endpoint}`, err);
+    if (!sendModerationMessage(endpoint, pid)) {
+      console.error(`Error sending authoritative moderation action ${endpoint}`);
     }
   }, [controlSessionId, sendModerationMessage]);
 
@@ -703,12 +1106,74 @@ export default function LiveAudioControlContainer({
     });
   }, [wsSend]);
 
-  if (availability !== 'enabled') {
-    return null;
-  }
-
   const portalTarget = document.getElementById('live-audio-inbox-portal-target');
-  const hasUnread = messages.length > 0 || authorizationRequests.length > 0;
+  const accessRequestItems = Object.entries(audienceAccessRequests).map(([id, requestedAt]) => ({
+    participantId: id,
+    alias: participantAliases[id]
+      ? formatAliasForControl(participantAliases[id], participantAliasOrdinals[id] ?? 0)
+      : 'Sincronizando alias…',
+    requestedAt,
+  }));
+  const notificationCount = messages.length + authorizationRequests.length + accessRequestItems.length;
+  const hasUnread = notificationCount > 0;
+  const inboxPortal = portalTarget ? createPortal(
+    <div className="flex items-center gap-2">
+      <PrivateInboxNotificationStatus count={notificationCount} />
+      <button
+        type="button"
+        onClick={handleAccessModeChange}
+        disabled={controlState !== 'PRINCIPAL'}
+        className="rounded border border-slate-600 bg-slate-800 px-2 py-1.5 text-xs font-bold text-white disabled:opacity-50"
+        title="Solo el Control principal puede cambiar el modo de acceso"
+      >
+        Acceso: {accessMode === 'PUBLIC' ? 'Público' : 'Controlado'}
+      </button>
+      <PwaRestartButton controlMenu={true} connectionState={state} connectionQuality={connectionQuality} />
+      <div className="relative">
+        <button
+          ref={inboxButtonRef}
+          onClick={() => setIsInboxOpen(!isInboxOpen)}
+          aria-expanded={isInboxOpen}
+          aria-controls="private-control-inbox"
+          aria-label={`Bandeja privada, ${notificationCount} pendientes`}
+          className={`flex items-center justify-center p-2 text-xs font-semibold rounded border transition-all cursor-pointer ${hasUnread
+            ? 'bg-red-600 border-red-500 text-white animate-pulse'
+            : isInboxOpen
+              ? 'bg-blue-600 border-blue-500 text-white'
+              : 'bg-gray-800 border-gray-700 hover:bg-gray-700 text-gray-300 hover:text-white'
+            }`}
+          title="Bandeja Privada"
+        >
+          <Bell size={14} />
+          {hasUnread && (
+            <span className="absolute -top-1 -right-1 bg-white text-red-600 text-[10px] font-bold px-1 rounded-full">
+              {notificationCount}
+            </span>
+          )}
+        </button>
+      </div>
+      <PrivateControlInbox
+        isOpen={isInboxOpen}
+        isControlAuthorized={isControlAuthorized}
+        messages={messages}
+        authorizationRequests={authorizationRequests}
+        audienceAccessRequests={accessRequestItems}
+        onApproveRequest={handleApproveRequest}
+        onRejectRequest={onRejectRequest}
+        onDismissMessage={handleDismissMessage}
+        onClose={() => {
+          setIsInboxOpen(false);
+          window.requestAnimationFrame(() => inboxButtonRef.current?.focus());
+        }}
+        onAudienceAccessDecision={handleAudienceAccessDecision}
+      />
+    </div>,
+    portalTarget,
+  ) : null;
+
+  if (availability !== 'enabled') {
+    return inboxPortal;
+  }
 
   return (
     <>
@@ -720,42 +1185,7 @@ export default function LiveAudioControlContainer({
         />
       ))}
 
-      {portalTarget && createPortal(
-        <div className="flex items-center gap-2">
-          <PwaRestartButton controlMenu={true} connectionState={state} connectionQuality={connectionQuality} />
-
-          <div className="relative">
-            <button
-              onClick={() => setIsInboxOpen(!isInboxOpen)}
-              className={`flex items-center justify-center p-2 text-xs font-semibold rounded border transition-all cursor-pointer ${hasUnread
-                ? 'bg-red-600 border-red-500 text-white animate-pulse'
-                : isInboxOpen
-                  ? 'bg-blue-600 border-blue-500 text-white'
-                  : 'bg-gray-800 border-gray-700 hover:bg-gray-700 text-gray-300 hover:text-white'
-                }`}
-              title="Bandeja Privada"
-            >
-              <Bell size={14} />
-              {hasUnread && (
-                <span className="absolute -top-1 -right-1 bg-white text-red-600 text-[10px] font-bold px-1 rounded-full">
-                  {messages.length + authorizationRequests.length}
-                </span>
-              )}
-            </button>
-          </div>
-
-          <PrivateControlInbox
-            isOpen={isInboxOpen}
-            isControlAuthorized={isControlAuthorized}
-            messages={messages}
-            authorizationRequests={authorizationRequests}
-            onApproveRequest={handleApproveRequest}
-            onRejectRequest={onRejectRequest}
-            onDismissMessage={handleDismissMessage}
-          />
-        </div>,
-        portalTarget
-      )}
+      {inboxPortal}
 
       <LiveAudioControlPanel
         totalAudience={totalAudience}
@@ -766,6 +1196,10 @@ export default function LiveAudioControlContainer({
         listenVolume={listenVolume}
         onListenVolumeChange={(volume) => setListenVolume(clampListenVolume(volume))}
         microphoneVolume={microphoneVolume}
+        recordingState={recordingPolicy.recordingState}
+        recordingEpoch={recordingPolicy.recordingEpoch}
+        recordingMutable={recordingPolicy.recordingAvailable && recordingPolicy.recordingMutable && controlState === 'PRINCIPAL'}
+        onRecordingStateChange={handleRecordingStateChange}
         onMicrophoneVolumeChange={(volume) => setMicrophoneVolume(clampVolume(volume))}
         isModeratorMusicMode={isModeratorMusicMode}
         onModeratorMusicModeChange={handleModeratorMusicModeChange}

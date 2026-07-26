@@ -23,6 +23,7 @@ describe('Public Catalogs Config Parser', () => {
     expect(result[0].title).toBe('Test Catalog')
     expect(result[0].description).toBe('A catalog for testing')
     expect(result[0].tags).toEqual(['tag1', 'tag2'])
+    expect(result[0].count_sefer).toBe(false)
     expect(consoleErrorSpy).not.toHaveBeenCalled()
   })
 
@@ -101,5 +102,18 @@ describe('Public Catalogs Config Parser', () => {
 
     const json2 = JSON.stringify([{ id: 'cat1', path: '/cat1', tags: ['t1'] }])
     expect(parsePublicCatalogs(json2)).toHaveLength(0)
+  })
+
+  it('accepts only boolean count_sefer values', () => {
+    const enabled = parsePublicCatalogs(JSON.stringify([
+      { id: 'cat1', path: '/cat1', title: 'Cat 1', tags: ['t1'], count_sefer: true }
+    ]))
+    expect(enabled[0].count_sefer).toBe(true)
+
+    const invalid = parsePublicCatalogs(JSON.stringify([
+      { id: 'cat1', path: '/cat1', title: 'Cat 1', tags: ['t1'], count_sefer: 'true' }
+    ]))
+    expect(invalid).toEqual([])
+    expect(consoleErrorSpy).toHaveBeenCalledWith(expect.stringContaining('count_sefer must be boolean'))
   })
 })

@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Users, UserCheck, Mic, MicOff, Volume2, VolumeX, ChevronUp, ChevronDown, ShieldAlert } from 'lucide-react';
+import React, { useId, useState } from 'react';
+import { Users, UserCheck, Mic, MicOff, Volume2, VolumeX, ChevronUp, ChevronDown, ShieldAlert, Circle } from 'lucide-react';
 import { LiveAudioQueue } from './LiveAudioQueue';
 import { LiveAudioSpeakers } from './LiveAudioSpeakers';
 import { LiveAudioListeners } from './LiveAudioListeners';
@@ -14,6 +14,10 @@ interface LiveAudioControlPanelProps {
   listenVolume: number;
   onListenVolumeChange: (volume: number) => void;
   microphoneVolume: number;
+  recordingState: 'NOT_RECORDING' | 'RECORDING';
+  recordingEpoch: number;
+  recordingMutable: boolean;
+  onRecordingStateChange: (state: 'NOT_RECORDING' | 'RECORDING') => void;
   onMicrophoneVolumeChange: (volume: number) => void;
   isModeratorMusicMode?: boolean;
   onModeratorMusicModeChange?: (mode: boolean) => void;
@@ -42,6 +46,10 @@ export const LiveAudioControlPanel: React.FC<LiveAudioControlPanelProps> = ({
   listenVolume,
   onListenVolumeChange,
   microphoneVolume,
+  recordingState,
+  recordingEpoch,
+  recordingMutable,
+  onRecordingStateChange,
   onMicrophoneVolumeChange,
   isModeratorMusicMode,
   onModeratorMusicModeChange,
@@ -63,16 +71,57 @@ export const LiveAudioControlPanel: React.FC<LiveAudioControlPanelProps> = ({
   const [isExpanded, setIsExpanded] = useState(false);
   const [isListenVolOpen, setIsListenVolOpen] = useState(false);
   const [isMicVolOpen, setIsMicVolOpen] = useState(false);
+  const drawerId = useId();
+  const listenVolumeId = useId();
+  const microphoneVolumeId = useId();
 
   return (
     <div className="fixed bottom-0 right-0 md:bottom-4 md:right-4 w-full md:w-[400px] flex flex-col z-40">
       
       {/* Drawer Panel (Expanded) */}
-      <div 
-        className={`bg-gray-900 border border-gray-700 md:rounded-t-lg shadow-2xl transition-all duration-300 overflow-hidden flex flex-col
-          ${isExpanded ? 'h-[60vh] max-h-[calc(100vh-80px)] md:h-[450px] opacity-100' : 'h-0 max-h-0 opacity-0 border-none'}`}
+      {isExpanded && (
+      <div
+        id={drawerId}
+        className="h-[60vh] max-h-[calc(100vh-80px)] md:h-[450px] bg-gray-900 border border-gray-700 md:rounded-t-lg shadow-2xl overflow-hidden flex flex-col"
       >
         <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
+          <div
+            role="status"
+            className={`rounded-lg border p-3 text-sm ${
+              recordingState === 'RECORDING'
+                ? 'border-red-500 bg-red-950/60 text-red-100'
+                : 'border-slate-600 bg-slate-800 text-slate-200'
+            }`}
+          >
+            <div className="flex items-center justify-between gap-3">
+              <span className="flex items-center gap-2 font-bold">
+                <Circle
+                  aria-hidden="true"
+                  className={`h-3 w-3 ${
+                    recordingState === 'RECORDING'
+                      ? 'fill-red-400 text-red-400'
+                      : 'text-slate-300'
+                  }`}
+                />
+                {recordingState === 'RECORDING'
+                  ? `Se está grabando (época ${recordingEpoch})`
+                  : 'No se está grabando'}
+              </span>
+              <button
+                type="button"
+                disabled={!recordingMutable}
+                onClick={() => onRecordingStateChange(
+                  recordingState === 'RECORDING' ? 'NOT_RECORDING' : 'RECORDING',
+                )}
+                className="rounded bg-slate-950 px-3 py-1.5 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {recordingState === 'RECORDING' ? 'Finalizar' : 'Declarar grabación'}
+              </button>
+            </div>
+            <p className="mt-1 text-xs">
+              Estado declarativo: SeferPresenter no controla un grabador externo.
+            </p>
+          </div>
           
           {/* Global Actions */}
           <div className="flex gap-2 shrink-0">
@@ -136,6 +185,7 @@ export const LiveAudioControlPanel: React.FC<LiveAudioControlPanelProps> = ({
           </div>
         </div>
       </div>
+      )}
 
       {/* Bottom Bar (Always visible) */}
       <div className="bg-gray-800 border-t border-l border-r border-gray-700 md:rounded-b-lg shadow-xl p-2 flex items-center justify-between">
@@ -147,7 +197,7 @@ export const LiveAudioControlPanel: React.FC<LiveAudioControlPanelProps> = ({
           </div>
           <div className="w-px h-4 bg-gray-600"></div>
           {pendingWordCount > 0 ? (
-             <div className="flex items-center gap-1 text-yellow-400 animate-pulse" title="Manos levantadas">
+             <div className="flex items-center gap-1 text-yellow-400 motion-safe:animate-pulse" title="Manos levantadas">
                <UserCheck size={16} /> {pendingWordCount}
              </div>
           ) : (
@@ -156,6 +206,11 @@ export const LiveAudioControlPanel: React.FC<LiveAudioControlPanelProps> = ({
              </div>
           )}
         </div>
+        <p role="status" aria-live="polite" aria-atomic="true" className="sr-only">
+          {pendingWordCount === 0
+            ? 'No hay solicitudes de palabra'
+            : `${pendingWordCount} ${pendingWordCount === 1 ? 'solicitud' : 'solicitudes'} de palabra`}
+        </p>
 
         {/* Moderator Controls */}
         <div className="flex items-center gap-2">
@@ -165,6 +220,9 @@ export const LiveAudioControlPanel: React.FC<LiveAudioControlPanelProps> = ({
                 onStartListening();
                 setIsListenVolOpen(!isListenVolOpen);
               }}
+              aria-expanded={isListenVolOpen}
+              aria-controls={listenVolumeId}
+              aria-label={`Ajustar volumen de escucha. Valor actual ${listenVolume} por ciento`}
               className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors shadow-lg ${
                 listenVolume === 0 ? 'bg-gray-700 text-gray-400' : 'bg-gray-900 text-blue-200 border border-gray-700'
               }`}
@@ -175,6 +233,9 @@ export const LiveAudioControlPanel: React.FC<LiveAudioControlPanelProps> = ({
 
             {isListenVolOpen && (
               <div
+                id={listenVolumeId}
+                role="group"
+                aria-label="Volumen de escucha"
                 className="absolute bottom-full mb-2 -left-6 bg-gray-800 border border-gray-700 p-3 rounded shadow-xl flex flex-col items-center gap-2 z-[100]"
                 onClick={e => e.stopPropagation()}
               >
@@ -186,6 +247,8 @@ export const LiveAudioControlPanel: React.FC<LiveAudioControlPanelProps> = ({
                     max="100"
                     value={listenVolume}
                     onChange={(e) => onListenVolumeChange(parseInt(e.target.value, 10))}
+                    aria-label="Volumen de escucha"
+                    aria-valuetext={`${listenVolume} por ciento`}
                     className="w-32 h-1 -rotate-90 origin-center accent-blue-500 cursor-pointer"
                   />
                 </div>
@@ -195,6 +258,8 @@ export const LiveAudioControlPanel: React.FC<LiveAudioControlPanelProps> = ({
 
           <button
             onClick={onToggleModeratorMic}
+            aria-pressed={!isModeratorMuted}
+            aria-label={isModeratorMuted ? 'Abrir tu micrófono' : 'Silenciar tu micrófono'}
             className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors shadow-lg
               ${isModeratorMuted ? 'bg-gray-600 text-gray-300' : 'bg-blue-600 text-white'}`}
             title={isModeratorMuted ? "Abrir tu micrófono" : "Silenciar tu micrófono"}
@@ -202,15 +267,23 @@ export const LiveAudioControlPanel: React.FC<LiveAudioControlPanelProps> = ({
             {isModeratorMuted ? <MicOff size={20} /> : <Mic size={20} />}
           </button>
 
-          <div
-            className="relative flex items-center bg-gray-900 border border-gray-700 rounded px-2 h-10 cursor-pointer"
-            onClick={() => setIsMicVolOpen(!isMicVolOpen)}
-            title="Regular volumen de salida de tu micro"
-          >
-            <span className="text-white text-xs w-10 text-center font-semibold">{microphoneVolume}%</span>
+          <div className="relative flex items-center">
+            <button
+              type="button"
+              className="flex items-center bg-gray-900 border border-gray-700 rounded px-2 h-10 cursor-pointer"
+              onClick={() => setIsMicVolOpen(!isMicVolOpen)}
+              aria-expanded={isMicVolOpen}
+              aria-controls={microphoneVolumeId}
+              aria-label={`Ajustar volumen de salida del micrófono. Valor actual ${microphoneVolume} por ciento`}
+            >
+              <span className="text-white text-xs w-10 text-center font-semibold">{microphoneVolume}%</span>
+            </button>
 
             {isMicVolOpen && (
               <div
+                id={microphoneVolumeId}
+                role="group"
+                aria-label="Configuración del micrófono de Control"
                 className="absolute bottom-full mb-2 -right-4 bg-gray-800 border border-gray-700 p-3 rounded shadow-xl flex flex-col items-center gap-2 z-[100]"
                 onClick={e => e.stopPropagation()}
               >
@@ -220,6 +293,7 @@ export const LiveAudioControlPanel: React.FC<LiveAudioControlPanelProps> = ({
                       type="checkbox" 
                       checked={isModeratorMusicMode} 
                       onChange={(e) => onModeratorMusicModeChange(e.target.checked)}
+                      aria-label="Modo música del micrófono de Control"
                       className="accent-purple-500 w-3 h-3"
                     />
                     <span className="text-[10px]">🎵</span>
@@ -233,6 +307,8 @@ export const LiveAudioControlPanel: React.FC<LiveAudioControlPanelProps> = ({
                     max="300"
                     value={microphoneVolume}
                     onChange={(e) => onMicrophoneVolumeChange(parseInt(e.target.value, 10))}
+                    aria-label="Volumen de salida del micrófono de Control"
+                    aria-valuetext={`${microphoneVolume} por ciento`}
                     className="w-32 h-1 -rotate-90 origin-center accent-blue-500 cursor-pointer"
                   />
                 </div>
@@ -244,6 +320,9 @@ export const LiveAudioControlPanel: React.FC<LiveAudioControlPanelProps> = ({
         {/* Expand Toggle */}
         <button 
           onClick={() => setIsExpanded(!isExpanded)}
+          aria-expanded={isExpanded}
+          aria-controls={drawerId}
+          aria-label={isExpanded ? 'Cerrar panel de usuarios' : 'Abrir panel de usuarios'}
           className="bg-gray-700 hover:bg-gray-600 text-white px-3 py-2 rounded transition-colors flex items-center gap-1 text-sm font-semibold"
           title="Ver panel de usuarios"
         >

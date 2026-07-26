@@ -28,8 +28,10 @@ import { useLiveAudioAvailability } from './useLiveAudioAvailability';
 interface UseLiveAudioOptions {
   role: LiveAudioParticipantRole;
   roomSession?: string;
+  controlSessionId?: string;
   autoConnect?: boolean;
   microphoneVolumePercent?: number;
+  audienceAccessCredential?: string;
 }
 
 interface UseLiveAudioResult {
@@ -174,22 +176,31 @@ const createMicrophoneGainProcessor = (
   return processor;
 };
 
-const requestToken = async (role: LiveAudioParticipantRole, roomSession?: string) => {
+const requestToken = async (
+  role: LiveAudioParticipantRole,
+  roomSession?: string,
+  controlSessionId?: string,
+  audienceAccessCredential?: string,
+) => {
   const response = await fetch('/api/livekit/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify({ role, roomSession }),
+    body: JSON.stringify({ role, roomSession, controlSessionId, audienceAccessCredential }),
   });
 
   if (!response.ok) throw new Error('Live Audio token request failed');
   return (await response.json()) as LiveAudioTokenResponse;
 };
 
-const refreshToken = async (participantId: string) => {
+const refreshToken = async (
+  participantId: string,
+  refreshCredential: string,
+  audienceAccessCredential?: string,
+) => {
   const response = await fetch('/api/livekit/refresh-token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify({ participantId }),
+    body: JSON.stringify({ participantId, refreshCredential, audienceAccessCredential }),
   });
 
   if (!response.ok) throw new Error('Live Audio token refresh failed');
@@ -207,8 +218,10 @@ const stopAllLocalTracks = (room: Room | null, localAudioTrack: LocalAudioTrack 
 export const useLiveAudio = ({
   role,
   roomSession,
+  controlSessionId,
   autoConnect = true,
   microphoneVolumePercent = 100,
+  audienceAccessCredential,
 }: UseLiveAudioOptions): UseLiveAudioResult => {
   const { availability } = useLiveAudioAvailability();
   const [state, setState] = useState<LiveAudioConnectionState>('disconnected');
@@ -436,7 +449,7 @@ export const useLiveAudio = ({
       const activeParticipantId = participantIdRef.current;
       if (!activeParticipantId || connectionRunRef.current !== runId) return;
 
-      void refreshToken(activeParticipantId)
+      void refreshToken(activeParticipantId, tokenResponse.refreshCredential, audienceAccessCredential)
         .then((nextToken) => {
           if (connectionRunRef.current !== runId) return;
           if (nextToken.participantId !== activeParticipantId) {
@@ -450,7 +463,7 @@ export const useLiveAudio = ({
           if (connectionRunRef.current === runId) setState('reconnectFailed');
         });
     }, delayMs);
-  }, []);
+  }, [audienceAccessCredential]);
 
   const publishMicrophone = useCallback(async (options?: { musicMode?: boolean }) => {
     if (!canRolePublish(role)) {
@@ -613,8 +626,8 @@ export const useLiveAudio = ({
         const existingParticipantId = participantIdRef.current;
         console.log(`[LIVEKIT] livekit:connect:start role=${role}`);
         const tokenResponse = existingParticipantId
-          ? await refreshToken(existingParticipantId)
-          : await requestToken(role, roomSession);
+          ? await refreshToken(existingParticipantId, tokenRef.current?.refreshCredential || '', audienceAccessCredential)
+          : await requestToken(role, roomSession, controlSessionId, audienceAccessCredential);
         if (cancelled || connectionRunRef.current !== runId) return;
         tokenRef.current = tokenResponse;
         setParticipantId(tokenResponse.participantId);
@@ -638,7 +651,7 @@ export const useLiveAudio = ({
           participantIdRef.current = null;
           
           try {
-            const tokenResponse = await requestToken(role, roomSession);
+            const tokenResponse = await requestToken(role, roomSession, controlSessionId, audienceAccessCredential);
             if (cancelled || connectionRunRef.current !== runId) return;
             tokenRef.current = tokenResponse;
             setParticipantId(tokenResponse.participantId);
@@ -679,6 +692,7 @@ export const useLiveAudio = ({
     };
   }, [
     addRemoteTrack,
+    audienceAccessCredential,
     autoConnect,
     availability,
     clearMicrophoneProcessor,
@@ -693,6 +707,7 @@ export const useLiveAudio = ({
     subscribePublication,
     unpublishMicrophone,
     clearLifecycleTimers,
+    controlSessionId,
   ]);
 
   const retryAudio = useCallback(async () => {
@@ -762,8 +777,8 @@ export const useLiveAudio = ({
       const activeParticipantId = participantIdRef.current;
       console.log(`[LIVEKIT] livekit:connect:start role=${role} (retryAudio)`);
       const tokenResponse = activeParticipantId
-        ? await refreshToken(activeParticipantId)
-        : await requestToken(role, roomSession);
+        ? await refreshToken(activeParticipantId, tokenRef.current?.refreshCredential || '', audienceAccessCredential)
+        : await requestToken(role, roomSession, controlSessionId, audienceAccessCredential);
       if (connectionRunRef.current !== runId) return;
       tokenRef.current = tokenResponse;
       setParticipantId(tokenResponse.participantId);
@@ -784,8 +799,10 @@ export const useLiveAudio = ({
     }
   }, [
     addRemoteTrack,
+    audienceAccessCredential,
     clearMicrophoneProcessor,
     clearLifecycleTimers,
+    controlSessionId,
     removeRemoteTrack,
     role,
     roomSession,
@@ -802,12 +819,17 @@ export const useLiveAudio = ({
   }, [retryAudio]);
 
   useEffect(() => {
-    let wakeLock: any = null;
+    type WakeLockSentinelLike = { release: () => Promise<void> };
+    type NavigatorWithWakeLock = Navigator & {
+      wakeLock?: { request: (type: 'screen') => Promise<WakeLockSentinelLike> };
+    };
+    let wakeLock: WakeLockSentinelLike | null = null;
 
     const requestWakeLock = async () => {
-      if (isMicrophoneActive && typeof navigator !== 'undefined' && 'wakeLock' in navigator) {
+      const wakeLockManager = (navigator as NavigatorWithWakeLock).wakeLock;
+      if (isMicrophoneActive && wakeLockManager) {
         try {
-          wakeLock = await (navigator as any).wakeLock.request('screen');
+          wakeLock = await wakeLockManager.request('screen');
           console.log('[LIVEKIT] wakeLock active (screen)');
         } catch (err) {
           console.error('[LIVEKIT] wakeLock failed:', err);

@@ -26,6 +26,7 @@
         "dompurify": "^3.4.3",
         "framer-motion": "^12.38.0",
         "livekit-client": "^2.19.2",
+        "livekit-server-sdk": "^2.17.0",
         "lucide-react": "^1.16.0",
         "papaparse": "^5.5.2",
         "qrcode.react": "^4.2.0",

@@ -155,6 +155,82 @@ describe('runtime validation', () => {
     expect(result.errors.join('\n')).toContain('volume');
   });
 
+  it('rejects malformed media, scripture and quiz result fields', () => {
+    const invalidPresentation = {
+      ...validPresentation,
+      slides: [{
+        id: 's1',
+        label: '1',
+        lines: ['Texto'],
+        mediaFit: 'stretch',
+        scriptureVerses: [['valid'], [1]],
+        type: 'quiz',
+        quizData: {
+          question: 'Resultados',
+          options: [],
+          timerSeconds: 30,
+          randomize: false,
+          multiSelect: false,
+          isResultsSlide: true,
+          resultProfiles: [{ rank: 1, title: 'Titulo' }],
+        },
+      }],
+    };
+
+    const result = validatePresentationList([invalidPresentation]);
+    expect(result.ok).toBe(false);
+    expect(result.errors.join('\n')).toContain('mediaFit');
+    expect(result.errors.join('\n')).toContain('scriptureVerses');
+    expect(result.errors.join('\n')).toContain('description');
+    expect(result.errors.join('\n')).toContain('giftText');
+  });
+
+  it('deeply validates synchronized quiz state', () => {
+    const baseMessage = {
+      type: 'SYNC_STATE',
+      clientId: 'c1',
+      origin: 'control',
+      presentation: validPresentation,
+      slideIndex: 0,
+      backgroundLock: false,
+      lockedBackgroundValue: null,
+      userSelectedBackground: null,
+      videoState: null,
+      appMode: 'slides',
+      scriptureState: null,
+      audioState: DEFAULT_AUDIO_STATE,
+    };
+
+    expect(validateSyncMessage({ ...baseMessage, quizState: {} }).ok).toBe(false);
+    expect(validateSyncMessage({
+      ...baseMessage,
+      quizState: {
+        currentSubslideIndex: 0,
+        timerState: {
+          status: 'running',
+          timerStartedAt: Date.now(),
+          timerDurationMs: 30_000,
+          pausedRemainingMs: null,
+        },
+        presenterDemoSelection: { q1: 'A' },
+        feedbackSound: { type: 'bip', timestamp: Date.now() },
+      },
+    }).ok).toBe(true);
+    expect(validateSyncMessage({
+      ...baseMessage,
+      quizState: {
+        currentSubslideIndex: -1,
+        timerState: {
+          status: 'invalid',
+          timerStartedAt: null,
+          timerDurationMs: -1,
+          pausedRemainingMs: null,
+        },
+        presenterDemoSelection: { q1: 'Z' },
+      },
+    }).ok).toBe(false);
+  });
+
   it('validates timeline duration, loop, and end actions', () => {
     expect(validateSyncMessage({
       type: 'AUDIO_TIMELINE_ACTION',
@@ -256,6 +332,8 @@ describe('runtime validation', () => {
   it('accepts valid private control signals as separate Live Audio messages', () => {
     const result = validateSyncMessage({
       type: 'PRIVATE_CONTROL_SIGNAL',
+      signalClass: 'PROFILE_STATE',
+      messageId: 'message-1',
       fromParticipantId: '550e8400-e29b-41d4-a716-446655440000',
       toControlSessionId: 'control-session-1',
       keyId: 'key-1',
@@ -271,6 +349,8 @@ describe('runtime validation', () => {
   it('accepts valid control-to-audience private control signals', () => {
     expect(validateSyncMessage({
       type: 'PRIVATE_CONTROL_SIGNAL',
+      signalClass: 'CONTROL_STATE',
+      messageId: 'message-2',
       fromParticipantId: 'control-session-1',
       toParticipantId: '550e8400-e29b-41d4-a716-446655440000',
       keyId: 'key-1',
@@ -282,6 +362,8 @@ describe('runtime validation', () => {
 
     expect(isValidPrivateControlSignal({
       type: 'PRIVATE_CONTROL_SIGNAL',
+      signalClass: 'CONTROL_STATE',
+      messageId: 'message-3',
       fromParticipantId: 'control-session-1',
       toParticipantId: '550e8400-e29b-41d4-a716-446655440000',
       keyId: 'key-1',
@@ -349,6 +431,9 @@ describe('runtime validation', () => {
       snapshot: {
         snapshotId: 'snapshot-1',
         createdAt: Date.now(),
+        presentationSessionId: 'session-1',
+        serverEpoch: 'server-1',
+        stateRevision: 3,
         connectionCounts: {
           totalConnections: 1,
           audienceConnections: 1,
@@ -359,7 +444,6 @@ describe('runtime validation', () => {
         participants: [{
           participantId,
           role: 'audience',
-          alias: 'Temporal',
           operationalRole: 'activo',
           microphonePermissionState: 'unknown',
           microphoneTrackState: 'off',
@@ -374,6 +458,13 @@ describe('runtime validation', () => {
           updatedAt: Date.now(),
         }],
         interventionQueue: [],
+        policies: {
+          accessMode: 'PUBLIC',
+          recordingAvailable: true,
+          recordingMutable: true,
+          recordingState: 'NOT_RECORDING',
+          recordingEpoch: 0,
+        },
         authorizations: {
           principalControlSessionId: 'control-1',
           controls: [{
@@ -403,6 +494,20 @@ describe('runtime validation', () => {
       },
       createdAt: Date.now(),
     }).ok).toBe(true);
+  });
+
+  it('rejects clear aliases in server snapshot patches', () => {
+    expect(validateSyncMessage({
+      type: 'LIVE_AUDIO_SNAPSHOT_PATCH',
+      snapshot: {
+        participants: [{
+          participantId: '550e8400-e29b-41d4-a716-446655440000',
+          role: 'audience',
+          alias: 'No debe llegar al servidor',
+        }],
+      },
+      createdAt: Date.now(),
+    }).ok).toBe(false);
   });
 
   it('rejects malformed private control signals', () => {

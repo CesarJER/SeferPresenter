@@ -25,6 +25,7 @@ export const SeferFlowView = ({
 }: SeferFlowViewProps) => (
   <motion.div
     dir={bookDir}
+    lang={bookDir === 'rtl' ? 'he' : undefined}
     className="sefer-mode max-w-screen-xl mx-auto text-[3.5rem] leading-[1.8] text-justify break-keep"
     style={{ fontSize: hebrewFontSize ? `${hebrewFontSize}px` : '42px' }}
     initial={{ opacity: 0 }}

@@ -104,6 +104,30 @@ describe('useQuizAnswers - Audience', () => {
     expect(result.current.getAnswer('shared-slide').selectedOptionIds).toEqual(['A']);
     expect(result.current.getScores()['shared-slide'].totalCentipunts).toBe(50);
   });
+
+  it('purga respuestas y rota la identidad efímera al salir', () => {
+    const { result } = renderHook(() => useAudienceAnswers('presentation-1', 'Alias temporal'));
+
+    act(() => {
+      result.current.selectRadioOption('slide-1', 'A');
+      result.current.submitAnswer('slide-1');
+    });
+    const firstRequest = vi.mocked(fetch).mock.calls.find(([url]) => url === '/api/quiz-answer');
+    const firstPayload = JSON.parse(String((firstRequest?.[1] as RequestInit).body));
+    expect(firstPayload.displayName).toBeUndefined();
+
+    act(() => window.dispatchEvent(new CustomEvent('sefer-audience-logout')));
+    expect(result.current.getAnswers()).toEqual({});
+    expect(result.current.getScores()).toEqual({});
+
+    act(() => {
+      result.current.selectRadioOption('slide-2', 'B');
+      result.current.submitAnswer('slide-2');
+    });
+    const requests = vi.mocked(fetch).mock.calls.filter(([url]) => url === '/api/quiz-answer');
+    const rotatedPayload = JSON.parse(String((requests.at(-1)?.[1] as RequestInit).body));
+    expect(rotatedPayload.sessionId).not.toBe(firstPayload.sessionId);
+  });
 });
 
 describe('useQuizAnswers - Control', () => {

@@ -54,7 +54,9 @@ Catalog:
 
 - `src/components/catalog/CatalogApp.tsx`: React root for the public catalog interface, parsing route paths and fetching public index data.
 - `src/components/catalog/CatalogIndex.tsx`: displays the list of all available public catalogs and their tags.
-- `src/components/catalog/CatalogViewer.tsx`: renders public, safe-for-web presentation copies, hiding internal metadata and removing media/quiz slides.
+- `src/components/catalog/CatalogViewer.tsx`: renders public, safe-for-web presentation copies, card excerpts, configurable counts, and safe search highlights.
+- `src/utils/catalogCards.ts`: owns reusable pure card/count/excerpt/search
+  derivation; catalog components own only rendering and interaction.
   `LiveAudioTrackOutput.tsx` belong under
   `src/features/liveAudio/components/shared/`. Future `LiveAudioNotice.tsx`,
   `CollapsiblePrivacyNotice.tsx`, `LiveAudioAliasInput.tsx`, and
@@ -173,7 +175,7 @@ Live Audio state:
   per-participant microphone boost, temporary aliases, and privacy notice
   checkbox state are session/local state owned by `src/features/liveAudio/`.
   Active participant list visibility is split deliberately: Audience owns its
-  local `isAliasVisibleToActiveParticipants` preference through
+  ephemeral `isAliasVisibleToActiveParticipants` preference through
   `useAudienceSession`, Audience publishes alias plus active-list public key in
   `LIVE_AUDIO_ACTIVE_PARTICIPANT_PROFILE`, Control owns visible alias-list
   computation and encrypted list distribution, and `server/ws-server.mjs` owns
@@ -194,6 +196,21 @@ Live Audio state:
   quiz aggregates from `LIVE_AUDIO_SNAPSHOT`, but should not persist that data
   locally beyond the active session. Sensitive snapshot overlays are encrypted
   in server memory with a key derived from `SEFER_CONTROL_PASSWORD`.
+- Recording policy, epoch, confirmation validity, and microphone publication
+  authority are server-owned. `server/ws-server.mjs` versions the policy and
+  confirmations; `server/livekit-server.mjs` enforces token grants and connected
+  participant revocation through LiveKit RoomService. Control UI may request a
+  policy change but must not optimistically make it canonical.
+- `LiveAudioAudienceContainer.tsx` owns only the participant-facing recording
+  notice, pending user action, and local focus flow.
+  `RecordingConfirmationDialog.tsx` owns the accessible modal interaction. A
+  local “seen” marker suppresses duplicate toast announcements, but never acts
+  as authoritative consent.
+- Live Audio panels own the accessible disclosure state for their own popovers
+  and drawers. Hidden drawers must be removed from the accessibility tree;
+  native buttons expose `aria-expanded`/`aria-controls`, and sliders/toggles
+  expose names and current values. Dynamic queue, reconnect, recording, and
+  delivery status uses concise live regions without reading private content.
 - The LiveKit browser SDK may only be imported inside `src/features/liveAudio/` or via
   dynamic import from that module. Core files such as `src/App.tsx`,
   `src/hooks/useSyncState.ts`, existing `src/components/shared/`, and shared

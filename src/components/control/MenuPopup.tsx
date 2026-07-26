@@ -27,7 +27,9 @@ import type { PendingControlAuthorization, LiveAudioControlState } from '../../t
 import type { WebSocketConnectionStatus } from '../../hooks/useWebSocket';
 import type { RemoteCommandPayload } from '../../types/sync';
 
-const LiveAudioControlContainer = lazy(() => import('../../features/liveAudio/components/control/LiveAudioControlContainer'));
+const LiveAudioControlContainer = import.meta.env.VITE_SEFER_LIVE_AUDIO_BUILD !== 'false'
+  ? lazy(() => import('../../features/liveAudio/components/control/LiveAudioControlContainer'))
+  : null;
 import { useControllerAnswers } from '../../hooks/useQuizAnswers';
 import { QuizControllerView } from '../quiz/QuizControllerView';
 import {
@@ -234,6 +236,41 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
   const [resolvedScriptureState, setResolvedScriptureState] = useState<any>(null);
 
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const resetDialogRef = useRef<HTMLDivElement>(null);
+  const resetCancelButtonRef = useRef<HTMLButtonElement>(null);
+  const resetTriggerRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (!showResetConfirm) return;
+    resetTriggerRef.current = document.activeElement as HTMLElement | null;
+    resetCancelButtonRef.current?.focus();
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setShowResetConfirm(false);
+        return;
+      }
+      if (event.key !== 'Tab') return;
+      const focusable = Array.from(
+        resetDialogRef.current?.querySelectorAll<HTMLElement>('button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])') || [],
+      );
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      resetTriggerRef.current?.focus();
+    };
+  }, [showResetConfirm]);
 
   // ────────────────────────────────────────────────────────────────
   // Effects
@@ -2014,15 +2051,23 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
       </div>
       {showResetConfirm && (
         <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/75 backdrop-blur-sm p-4">
-          <div className="bg-gray-900 border border-gray-700 rounded-lg max-w-sm w-full p-5 shadow-2xl space-y-4">
-            <h3 className="text-base font-bold text-red-500 flex items-center gap-2">
+          <div
+            ref={resetDialogRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="reset-dialog-title"
+            aria-describedby="reset-dialog-description"
+            className="bg-gray-900 border border-gray-700 rounded-lg max-w-sm w-full p-5 shadow-2xl space-y-4"
+          >
+            <h3 id="reset-dialog-title" className="text-base font-bold text-red-500 flex items-center gap-2">
               ⚠️ ¿Restablecer aplicación?
             </h3>
-            <p className="text-xs text-gray-300 leading-relaxed font-sans">
+            <p id="reset-dialog-description" className="text-xs text-gray-300 leading-relaxed font-sans">
               Esto borrará la memoria temporal de la presentación activa, desbloqueará los fondos y reiniciará el presentador a la pantalla inicial en todos los dispositivos conectados.
             </p>
             <div className="flex justify-end gap-2 text-xs">
               <button
+                ref={resetCancelButtonRef}
                 type="button"
                 onClick={() => setShowResetConfirm(false)}
                 className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded border border-gray-700 font-semibold cursor-pointer"
@@ -2060,20 +2105,22 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
       )}
 
       {/* Live Audio Control Container */}
-      <Suspense fallback={null}>
-        <LiveAudioControlContainer
-          isControlAuthorized={controlAuthorization?.role === 'principal' || controlAuthorization?.role === 'delegated'}
-          authorizationRequests={controlAuthorization?.pendingControls || []}
-          onApproveRequest={onApproveControlRequest}
-          onRejectRequest={onRejectControlRequest}
-          wsSend={wsSend}
-          subscribeToWsMessage={subscribeToWsMessage}
-          wsStatus={wsStatus}
-          controlSessionId={controlSessionId}
-          controlState={controlAuthorization?.controlState}
-          verificationCode={controlAuthorization?.verificationCode}
-        />
-      </Suspense>
+      {LiveAudioControlContainer && (
+        <Suspense fallback={null}>
+          <LiveAudioControlContainer
+            isControlAuthorized={controlAuthorization?.role === 'principal' || controlAuthorization?.role === 'delegated'}
+            authorizationRequests={controlAuthorization?.pendingControls || []}
+            onApproveRequest={onApproveControlRequest}
+            onRejectRequest={onRejectControlRequest}
+            wsSend={wsSend}
+            subscribeToWsMessage={subscribeToWsMessage}
+            wsStatus={wsStatus}
+            controlSessionId={controlSessionId}
+            controlState={controlAuthorization?.controlState}
+            verificationCode={controlAuthorization?.verificationCode}
+          />
+        </Suspense>
+      )}
     </div>
   );
 };

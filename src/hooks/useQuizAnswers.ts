@@ -9,11 +9,11 @@
  * 3. On the controller side: receiving and aggregating all answers
  *
  * Architecture:
- * - Audience side: stores answers in localStorage (persist across page refresh/PWA restart).
+ * - Audience side: stores answers locally for the current presentation session.
  *   On answer submit, broadcasts via a dedicated 'sefer-quiz' channel.
  * - Controller side: listens on 'sefer-quiz' channel and accumulates session answers.
  *
- * Session ID: Generated once per audience device, stored in localStorage.
+ * Session ID: Ephemeral for the active page/session and rotated on logout.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -25,22 +25,14 @@ import type {
   QuizQuestionScore,
 } from '../types/quiz';
 import { makeEmptyAudienceAnswer } from '../types/quiz';
+import { refreshProtectedAudienceDrafts } from '../utils/protectedAudienceStore';
 
 // ── Session ID ────────────────────────────────────────────────────────────────
 
-function getOrCreateSessionId(): string {
-  // Trata de usar el device ID de la audiencia si existe
-  let id = localStorage.getItem('sefer-audience-device-id');
-  if (id) return id;
-
-  const key = 'sefer-quiz-session-id';
-  id = localStorage.getItem(key);
-  if (!id) {
-    id = `qs-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-    localStorage.setItem(key, id);
-  }
-  return id;
-}
+const makeQuizSessionId = (): string =>
+  typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+    ? `qs-${crypto.randomUUID()}`
+    : `qs-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 
 // ── Message types ─────────────────────────────────────────────────────────────
 
@@ -109,9 +101,44 @@ type ScoresByPresentation = Record<string, Record<string, QuizQuestionScore>>;
 
 const ANSWERS_STORAGE_KEY = 'sefer-quiz-answers-by-presentation';
 const SCORES_STORAGE_KEY = 'sefer-quiz-scores-by-presentation';
+const QUIZ_SSE_TICKET_KEY = 'sefer-audience-quiz-sse-ticket';
 
-export function useAudienceAnswers(presentationId: string | null): UseAudienceAnswersReturn {
-  const sessionId = useMemo(() => getOrCreateSessionId(), []);
+const getAudienceCredential = (): string | null => {
+  try {
+    const parsed = JSON.parse(localStorage.getItem('sefer-audience-resume-credential') || 'null') as {
+      credential?: unknown;
+    } | null;
+    return typeof parsed?.credential === 'string' ? parsed.credential : null;
+  } catch {
+    return null;
+  }
+};
+
+const getAudienceParticipantId = (): string | null => {
+  try {
+    const parsed = JSON.parse(localStorage.getItem('sefer-audience-resume-credential') || 'null') as {
+      participantId?: unknown;
+    } | null;
+    return typeof parsed?.participantId === 'string' ? parsed.participantId : null;
+  } catch {
+    return null;
+  }
+};
+
+const getAudienceHeaders = () => {
+  const credential = getAudienceCredential();
+  return {
+    'Content-Type': 'application/json',
+    ...(credential ? { Authorization: `Bearer ${credential}` } : {}),
+  };
+};
+
+export function useAudienceAnswers(
+  presentationId: string | null,
+  displayName?: string,
+): UseAudienceAnswersReturn {
+  const [sessionId, setSessionId] = useState(makeQuizSessionId);
+  const [ticketRevision, setTicketRevision] = useState(0);
   const channel = useMemo(() => new BroadcastChannel('sefer-quiz'), []);
   const scopeId = presentationId ?? '';
 
@@ -143,8 +170,15 @@ export function useAudienceAnswers(presentationId: string | null): UseAudienceAn
   );
 
   useEffect(() => {
+    const handleTicketUpdate = () => setTicketRevision((value) => value + 1);
+    window.addEventListener('sefer-audience-tickets-updated', handleTicketUpdate);
+    return () => window.removeEventListener('sefer-audience-tickets-updated', handleTicketUpdate);
+  }, []);
+
+  useEffect(() => {
     try {
       localStorage.setItem(ANSWERS_STORAGE_KEY, JSON.stringify(answersByPresentation));
+      void refreshProtectedAudienceDrafts();
     } catch {
       // Storage quota exceeded — silently ignore
     }
@@ -154,10 +188,37 @@ export function useAudienceAnswers(presentationId: string | null): UseAudienceAn
   useEffect(() => {
     try {
       localStorage.setItem(SCORES_STORAGE_KEY, JSON.stringify(scoresByPresentation));
+      void refreshProtectedAudienceDrafts();
     } catch {
       // Ignore
     }
   }, [scoresByPresentation]);
+
+  useEffect(() => {
+    const handleLogout = () => {
+      localStorage.removeItem(ANSWERS_STORAGE_KEY);
+      localStorage.removeItem(SCORES_STORAGE_KEY);
+      localStorage.removeItem('sefer-quiz-session-id');
+      setAnswersByPresentation({});
+      setScoresByPresentation({});
+      setSessionId(makeQuizSessionId());
+    };
+    const handleProtectedRestore = () => {
+      try {
+        setAnswersByPresentation(JSON.parse(localStorage.getItem(ANSWERS_STORAGE_KEY) || '{}'));
+        setScoresByPresentation(JSON.parse(localStorage.getItem(SCORES_STORAGE_KEY) || '{}'));
+      } catch {
+        setAnswersByPresentation({});
+        setScoresByPresentation({});
+      }
+    };
+    window.addEventListener('sefer-audience-logout', handleLogout);
+    window.addEventListener('sefer-protected-quiz-restored', handleProtectedRestore);
+    return () => {
+      window.removeEventListener('sefer-audience-logout', handleLogout);
+      window.removeEventListener('sefer-protected-quiz-restored', handleProtectedRestore);
+    };
+  }, []);
 
   // Listen for CLEAR commands from controller and LOGOUT events from PWA identity
   useEffect(() => {
@@ -193,7 +254,15 @@ export function useAudienceAnswers(presentationId: string | null): UseAudienceAn
 
     channel.addEventListener('message', handleChannelMessage);
 
-    const eventSource = new EventSource('/api/quiz-events');
+    const credential = getAudienceCredential();
+    const ticket = sessionStorage.getItem(QUIZ_SSE_TICKET_KEY);
+    if (credential && !ticket) {
+      channel.removeEventListener('message', handleChannelMessage);
+      return;
+    }
+    const eventSource = new EventSource(
+      ticket ? `/api/quiz-events?ticket=${encodeURIComponent(ticket)}` : '/api/quiz-events',
+    );
     eventSource.onmessage = (event) => {
       try {
         if (event.data === 'heartbeat') return;
@@ -205,12 +274,17 @@ export function useAudienceAnswers(presentationId: string | null): UseAudienceAn
         // intentional no-op
       }
     };
+    eventSource.onerror = () => {
+      if (!credential) return;
+      eventSource.close();
+      window.dispatchEvent(new CustomEvent('sefer-audience-sse-refresh-request'));
+    };
 
     return () => {
       channel.removeEventListener('message', handleChannelMessage);
       eventSource.close();
     };
-  }, [channel, scopeId]);
+  }, [channel, scopeId, ticketRevision]);
 
   const getAnswers = useCallback(() => answers, [answers]);
 
@@ -233,20 +307,22 @@ export function useAudienceAnswers(presentationId: string | null): UseAudienceAn
     const msg: QuizAnswerMessage = {
       type: 'QUIZ_ANSWER',
       presentationId,
-      sessionId,
-      displayName: localStorage.getItem('sefer-audience-nick') || undefined,
+      sessionId: getAudienceParticipantId() ?? sessionId,
+      displayName: displayName?.trim().slice(0, 80) || undefined,
       slideId,
       answer,
     };
     channel.postMessage(msg);
 
     // Also send via SSE endpoint for cross-device sync
+    const { displayName: _displayName, ...serverMessage } = msg;
+    void _displayName;
     fetch('/api/quiz-answer', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(msg),
+      headers: getAudienceHeaders(),
+      body: JSON.stringify(serverMessage),
     }).catch(() => {}); // Non-critical — local state is source of truth
-  }, [channel, presentationId, sessionId]);
+  }, [channel, displayName, presentationId, sessionId]);
 
   const selectRadioOption = useCallback((slideId: string, optionId: QuizOptionId) => {
     updateAnswer(slideId, prev => ({ ...prev, selectedOptionIds: [optionId] }));
@@ -326,7 +402,7 @@ export function useAudienceAnswers(presentationId: string | null): UseAudienceAn
     const msg: QuizFinalScoreMessage = {
       type: 'QUIZ_FINAL_SCORE',
       presentationId,
-      sessionId,
+      sessionId: getAudienceParticipantId() ?? sessionId,
       totalCentipunts,
     };
     channel.postMessage(msg);
@@ -334,7 +410,7 @@ export function useAudienceAnswers(presentationId: string | null): UseAudienceAn
     // Also send via SSE endpoint for cross-device sync
     fetch('/api/quiz-answer', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAudienceHeaders(),
       body: JSON.stringify(msg),
     }).catch(() => {});
   }, [channel, presentationId, sessionId]);
