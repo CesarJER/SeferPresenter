@@ -1,18 +1,11 @@
 import { spawn } from 'node:child_process'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { loadEnv } from 'vite'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const rootDir = path.resolve(__dirname, '..')
 const viteBin = path.join(rootDir, 'node_modules', 'vite', 'bin', 'vite.js')
 const viteArgs = process.argv.slice(2)
-const modeIndex = viteArgs.indexOf('--mode')
-const mode = modeIndex >= 0 ? viteArgs[modeIndex + 1] || 'development' : 'development'
-const developmentEnv = {
-  ...process.env,
-  ...loadEnv(mode, rootDir, ''),
-}
 
 const children = []
 
@@ -21,7 +14,7 @@ const start = (label, command, args) => {
     cwd: rootDir,
     stdio: 'inherit',
     shell: false,
-    env: developmentEnv,
+    env: process.env,
   })
 
   children.push(child)

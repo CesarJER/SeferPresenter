@@ -10,7 +10,7 @@ const LiveAudioPresenter = import.meta.env.VITE_SEFER_LIVE_AUDIO_BUILD !== 'fals
 
 import type { AudioState, AudioSyncMap, AudioTimelineState } from './types/audio';
 import { DEFAULT_AUDIO_STATE } from './types/audio';
-import type { AppMode, Presentation, ScriptureNavState, Slide, VideoState } from './types/presentation';
+import type { AppMode, Presentation, ScriptureNavState, Slide, VideoState, QuizData } from './types/presentation';
 import type { QuizOptionId, QuizSyncState } from './types/quiz';
 import type { RemoteCommandPayload, AutoduckState } from './types/sync';
 
@@ -101,23 +101,9 @@ function App() {
   const [quizCurrentSubslideIndex, setQuizCurrentSubslideIndex] = useState(0);
   const [quizPresenterDemoSelection, setQuizPresenterDemoSelection] = useState<QuizOptionId | null>(null);
   const [incomingFeedbackSound, setIncomingFeedbackSound] = useState<QuizSyncState['feedbackSound']>(null);
-  const [quizCompletedSlideIds, setQuizCompletedSlideIds] = useState<string[]>([]);
-  const [quizResultSlideIds, setQuizResultSlideIds] = useState<string[] | undefined>(undefined);
-  const [quizScoreRequestId, setQuizScoreRequestId] = useState(0);
-  const [syncedQuizMaxBaseCentipunts, setSyncedQuizMaxBaseCentipunts] = useState<number | undefined>(undefined);
   const quizTimer = useQuizTimer({
     timerSeconds: activeQuizData?.timerSeconds ?? 30,
   });
-  const {
-    timerState: quizTimerState,
-    startTimer: startQuizTimer,
-    pauseTimer: pauseQuizTimer,
-    resumeTimer: resumeQuizTimer,
-    resetTimer: resetQuizTimer,
-    setTimerState: setQuizTimerState,
-    completeTimer: completeQuizTimer,
-    adjustTimer: adjustQuizTimer,
-  } = quizTimer;
   const activeQuizSubslide = quizSubslides[quizCurrentSubslideIndex];
   const isQuizCitaVerse = activeQuizSubslide?.kind === 'cita-verse';
   const quizScriptureState = useMemo<ScriptureNavState | null>(() => {
@@ -162,7 +148,7 @@ function App() {
       const slide = currentPresentationRef.current?.slides[step.slideIndex];
       const subslides = slide?.quizData ? generateQuizSubslides(slide.quizData) : [];
       if (subslides[step.subslideIndex]?.kind === 'respuesta') {
-        completeQuizTimer();
+        quizTimer.completeTimer();
       }
     } else if (step.type === 'scripture') {
       setAppMode('scripture');
@@ -185,7 +171,7 @@ function App() {
         });
       }
     }
-  }, [completeQuizTimer, steps]);
+  }, [steps, quizTimer]);
 
   const applyStepIndexRef = useRef(applyStepIndex);
   useEffect(() => {
@@ -202,11 +188,7 @@ function App() {
       if (subslides.length > 0) initialIndex = subslides.length - 1;
     }
 
-    const previous = quizStateRef.current;
-    const presentationId = currentPresentationRef.current?.id;
-    const canPreserveRun = Boolean(presentationId && previous?.presentationId === presentationId);
     return {
-      presentationId,
       currentSubslideIndex: initialIndex,
       timerState: {
         status: 'idle',
@@ -215,18 +197,13 @@ function App() {
         pausedRemainingMs: null,
       },
       presenterDemoSelection: {
-        ...(canPreserveRun ? previous?.presenterDemoSelection : {}),
         [slide.id]: null,
       },
-      completedQuizSlideIds: canPreserveRun ? previous?.completedQuizSlideIds ?? [] : [],
-      resultQuizSlideIds: canPreserveRun ? previous?.resultQuizSlideIds : undefined,
-      scoreRequestId: canPreserveRun ? previous?.scoreRequestId ?? 0 : 0,
-      maxBaseCentipunts: canPreserveRun ? previous?.maxBaseCentipunts : undefined,
     };
   }, []);
   const quizAudio = useQuizAudio({
     isPresenterOrControl: !isAudienceMode && !isControlMode,
-    timerStatus: quizTimerState.status,
+    timerStatus: quizTimer.timerState.status,
     isQuestionSubslide: quizSubslides[quizCurrentSubslideIndex]?.kind === 'pregunta',
     feedbackSound: incomingFeedbackSound,
     isMediaMaster: isMediaMasterRef.current,
@@ -238,23 +215,18 @@ function App() {
       .map(s => s.quizData!);
     return calcMaxBaseCentipunts(allQuizData);
   }, [currentPresentation]);
-  const effectiveMaxBaseCentipunts = syncedQuizMaxBaseCentipunts ?? maxBaseCentipunts;
 
   const activeQuizState = useMemo<QuizSyncState | null>(() => {
     if (!activeQuizData || !activeSlide) return null;
     return {
       currentSubslideIndex: quizCurrentSubslideIndex,
-      timerState: quizTimerState,
+      timerState: quizTimer.timerState,
       presenterDemoSelection: {
         [activeSlide.id]: quizPresenterDemoSelection,
       },
-      presentationId: currentPresentation?.id,
-      completedQuizSlideIds: quizCompletedSlideIds,
-      resultQuizSlideIds: quizResultSlideIds,
-      scoreRequestId: quizScoreRequestId,
-      maxBaseCentipunts: effectiveMaxBaseCentipunts,
+      maxBaseCentipunts,
     };
-  }, [activeQuizData, activeSlide, quizCurrentSubslideIndex, quizTimerState, quizPresenterDemoSelection, currentPresentation?.id, quizCompletedSlideIds, quizResultSlideIds, quizScoreRequestId, effectiveMaxBaseCentipunts]);
+  }, [activeQuizData, activeSlide, quizCurrentSubslideIndex, quizTimer.timerState, quizPresenterDemoSelection, maxBaseCentipunts]);
 
   const applyRemoteQuizState = useCallback((state: QuizSyncState | null) => {
     if (!state) {
@@ -262,11 +234,7 @@ function App() {
       setQuizCurrentSubslideIndex(0);
       setQuizPresenterDemoSelection(null);
       setIncomingFeedbackSound(null);
-      setQuizCompletedSlideIds([]);
-      setQuizResultSlideIds(undefined);
-      setQuizScoreRequestId(0);
-      setSyncedQuizMaxBaseCentipunts(undefined);
-      resetQuizTimer((activeQuizData?.timerSeconds ?? 30) * 1000);
+      quizTimer.resetTimer((activeQuizData?.timerSeconds ?? 30) * 1000);
       return;
     }
 
@@ -276,14 +244,10 @@ function App() {
     const fallbackSelection = Object.values(state.presenterDemoSelection ?? {})[0] ?? null;
 
     setQuizCurrentSubslideIndex(rawIndex);
-    setQuizTimerState(state.timerState);
+    quizTimer.setTimerState(state.timerState);
     setQuizPresenterDemoSelection(activeSlide ? state.presenterDemoSelection?.[activeSlide.id] ?? fallbackSelection : fallbackSelection);
     setIncomingFeedbackSound(state.feedbackSound ?? null);
-    setQuizCompletedSlideIds(state.completedQuizSlideIds ?? []);
-    setQuizResultSlideIds(state.resultQuizSlideIds);
-    setQuizScoreRequestId(state.scoreRequestId ?? 0);
-    setSyncedQuizMaxBaseCentipunts(state.maxBaseCentipunts);
-  }, [activeQuizData?.timerSeconds, activeSlide, resetQuizTimer, setQuizTimerState, setIncomingFeedbackSound]);
+  }, [activeQuizData?.timerSeconds, activeSlide, quizTimer.resetTimer, quizTimer.setTimerState, setIncomingFeedbackSound]);
 
   useEffect(() => {
     currentPresentationRef.current = currentPresentation;
@@ -351,22 +315,22 @@ function App() {
         }
         break;
       case 'QUIZ_START_TIMER':
-        startQuizTimer();
+        quizTimer.startTimer();
         break;
       case 'QUIZ_PAUSE_TIMER':
-        pauseQuizTimer();
+        quizTimer.pauseTimer();
         break;
       case 'QUIZ_RESUME_TIMER':
-        resumeQuizTimer();
+        quizTimer.resumeTimer();
         break;
       case 'QUIZ_RESET_TIMER':
-        resetQuizTimer(activeQuizData?.timerSeconds ? activeQuizData.timerSeconds * 1000 : 30000);
+        quizTimer.resetTimer(activeQuizData?.timerSeconds ? activeQuizData.timerSeconds * 1000 : 30000);
         break;
       case 'QUIZ_ADJUST_TIMER':
-        adjustQuizTimer(payload.seconds);
+        quizTimer.adjustTimer(payload.seconds);
         break;
       case 'QUIZ_COMPLETE': {
-        completeQuizTimer();
+        quizTimer.completeTimer();
         const subslides = activeQuizData ? generateQuizSubslides(activeQuizData) : [];
         const answerIndex = subslides.findIndex(s => s.kind === 'respuesta');
         if (answerIndex >= 0) {
@@ -383,7 +347,7 @@ function App() {
       case 'QUIZ_SELECT_SUBSLIDE': {
         const subslides = activeQuizData ? generateQuizSubslides(activeQuizData) : [];
         if (subslides[payload.index]?.kind === 'respuesta') {
-          completeQuizTimer();
+          quizTimer.completeTimer();
         }
         setQuizCurrentSubslideIndex(payload.index);
         const foundIdx = steps.findIndex(
@@ -439,7 +403,7 @@ function App() {
         handleResetStateRef.current?.();
         break;
     }
-  }, [activeQuizData, adjustQuizTimer, completeQuizTimer, pauseQuizTimer, quizAudio, resetQuizTimer, resumeQuizTimer, startQuizTimer, steps]);
+  }, [quizTimer, activeQuizData, quizAudio]);
 
   const { syncState, emitCommand, emitAudioTelemetry, emitVideoTelemetry, emitDisplayTelemetry, wsStatus, wsSend, subscribeToWsMessage, isMediaMaster } = useSyncState({
     isControlMode, isPresenterMode, onRemoteCommand: handleRemoteCommand, clientIdRef,
@@ -456,9 +420,7 @@ function App() {
   isMediaMasterRef.current = isMediaMaster;
 
   const { serverNow } = useServerClock(wsSend, wsStatus, subscribeToWsMessage);
-  // Presenter only dispatches actions here; it does not render the estimated
-  // position, so avoid subscribing the root to a playback ticker.
-  const audioTimelineControls = useAudioTimeline(audioTimeline, serverNow, wsSend, false);
+  const audioTimelineControls = useAudioTimeline(audioTimeline, serverNow, wsSend);
   const dispatchAudioTimelineAction = audioTimelineControls.dispatchAction;
   const audioTimelineApplicatorOptions = useMemo(() => ({
     onDurationChange: (durationSec: number | null) => {
@@ -490,8 +452,8 @@ function App() {
     if (isNewSlide && activeSlide?.id !== navigatedSlideIdRef.current) {
       setQuizPresenterDemoSelection(null);
     }
-    resetQuizTimer((activeQuizData?.timerSeconds ?? 30) * 1000);
-  }, [isPresenterMode, activeSlide?.id, activeQuizData?.timerSeconds, resetQuizTimer]);
+    quizTimer.resetTimer((activeQuizData?.timerSeconds ?? 30) * 1000);
+  }, [isPresenterMode, activeSlide?.id, activeQuizData?.timerSeconds, quizTimer.resetTimer]);
 
   type SelectPresentationAndSlideHandler = (
     presentation: Presentation | null,
@@ -573,7 +535,7 @@ function App() {
     setQuizCurrentSubslideIndex(nextQuizState?.currentSubslideIndex ?? 0);
     setQuizPresenterDemoSelection(null);
     if (slide?.type === 'quiz' && slide.quizData) {
-      resetQuizTimer(slide.quizData.timerSeconds * 1000);
+      quizTimer.resetTimer(slide.quizData.timerSeconds * 1000);
     }
 
     setAppMode(nextAppMode);
@@ -599,7 +561,7 @@ function App() {
         stepIndex: stepIdx >= 0 ? stepIdx : 0,
       });
     }
-  }, [syncState, buildScriptureSlideState, makeInitialQuizState, resetQuizTimer, backgroundLockRef, lockedBackgroundValueRef, userSelectedBackgroundRef, scriptureStateRef, getFirstStepIndexForSlide]);
+  }, [syncState, buildScriptureSlideState, makeInitialQuizState, quizTimer.resetTimer, backgroundLockRef, lockedBackgroundValueRef, userSelectedBackgroundRef, scriptureStateRef, getFirstStepIndexForSlide]);
   handleSelectPresentationAndSlideRef.current = handleSelectPresentationAndSlide;
 
   const savePresentations = async (updated: Presentation[]) => {
@@ -713,9 +675,9 @@ function App() {
 
   useEffect(() => {
     if (currentPresentation) {
-      document.title = `Presentador — ${currentPresentation.title} — SeferPresenter`;
+      document.title = `SeferPresenter - ${currentPresentation.title}`;
     } else {
-      document.title = 'Presentador — SeferPresenter';
+      document.title = `SeferPresenter`;
     }
   }, [currentPresentation]);
 
@@ -875,9 +837,9 @@ function App() {
             onVideoStateChange={handleVideoStateChange}
             quizSubslides={quizSubslides}
             quizCurrentSubslideIndex={quizCurrentSubslideIndex}
-            quizTimerState={quizTimerState}
+            quizTimerState={quizTimer.timerState}
             quizPresenterDemoSelection={quizPresenterDemoSelection}
-            quizMaxBaseCentipunts={effectiveMaxBaseCentipunts}
+            quizMaxBaseCentipunts={calcMaxBaseCentipunts(currentPresentation?.slides.map(s => s.quizData).filter(Boolean) as QuizData[] || [])}
             autoduckState={autoduckState}
           />
         </div>

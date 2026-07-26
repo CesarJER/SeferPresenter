@@ -1,26 +1,15 @@
-# Deny by default: only inputs explicitly copied by Dockerfile enter the build
-# context. This keeps secrets, user data, legacy assets, tests, and local agent
-# metadata out of the Docker daemon and builder cache.
-*
+.git
+.gitignore
+node_modules
+dist
+coverage
+.vite
+.cache
+*.log
+npm-debug.log*
 
-!package.json
-!package-lock.json
-!tsconfig.json
-!tsconfig.app.json
-!tsconfig.node.json
-!vite.config.ts
-!postcss.config.js
-!tailwind.config.js
-!*.html
+audio_sync.json
 
-!src/
-!src/**
-!server/
-!server/**
-!public/
-!public/**
-
-# Runtime media is supplied through read-only bind mounts.
-public/audio/
-public/backgrounds/
-public/videos/
+public/audio
+public/backgrounds
+public/videos

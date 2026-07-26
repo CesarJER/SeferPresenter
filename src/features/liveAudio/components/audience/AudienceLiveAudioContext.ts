@@ -35,9 +35,6 @@ export interface AudienceLiveAudioContextValue {
   visibleParticipants: string[];
   availability: LiveAudioAvailability;
   microphoneDiagnostics?: LiveAudioMicrophoneDiagnostics;
-  recordingState: 'NOT_RECORDING' | 'RECORDING';
-  recordingEpoch: number;
-  recordingConfirmed: boolean;
 }
 
 export const AudienceLiveAudioContext = createContext<AudienceLiveAudioContextValue | null>(null);

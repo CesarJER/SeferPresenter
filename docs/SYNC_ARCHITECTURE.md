@@ -24,65 +24,6 @@ The local backend keeps SSE connections alive with `data: heartbeat\n\n` every
 `/api/quiz-events`. Closed or errored SSE responses are removed from the server
 client sets, and failed SSE writes are dropped from future broadcasts.
 
-### Public And Controlled Audience Access
-
-Each presentation session has a canonical `accessMode` (`PUBLIC` or
-`CONTROLLED`) initialized from `SEFER_SESSION_ACCESS_DEFAULT`. Only the ready
-principal Control may change it; the policy is included in the authoritative
-Control snapshot and every accepted change advances `stateRevision`.
-
-Audience bootstraps through `/api/audience/access/bootstrap`. The client keeps a
-256-bit opaque resume credential in localStorage, while the server keeps only
-its SHA-256 digest and non-nominal admission state. The credential is sent in an
-Authorization header or WebSocket message body, never in a URL or log.
-Persistent credentials are exchanged for 30-second, one-use SSE tickets.
-
-In `CONTROLLED`, projection state/SSE, quiz submission/events, Live Audio
-tokens, participant status and other live session functions require an admitted
-credential. Static application resources, privacy information and public
-catalogs remain available. A waiting client sends its alias only inside the E2E
-Control channel; the server sees the technical `AUDIENCE_ACCESS_REQUEST` but
-never the alias.
-
-Any ready Control may `ADMIT`, `REJECT` (30-second retry) or `BLOCK` a request.
-Changing Public to Controlled preserves admitted records that already supplied
-an alias and moves anonymous records to `REQUEST_REQUIRED`. Changing back to
-Public admits waiting/rejected records and clears blocks. A new Control obtains
-the current waiting set from the technical snapshot and the aliases from the
-private E2E overlay.
-
-Audience projection snapshots carry `presentationSessionId`, `serverEpoch`,
-`stateRevision` and `eventId`. Audience replaces state from the authoritative
-snapshot on connect/reconnect or a revision gap; it does not reconstruct missed
-projection state from historical events.
-
-Audience resume credentials use an absolute
-`SEFER_AUDIENCE_RESUME_TTL_HOURS` lifetime: 24 hours by default and capped at
-168. Logout, expiry, obsolete credentials and presentation-session rotation
-remove the local credential and the matching server digest. Reject/Block keeps
-the credential so the server can enforce the state, but removes protected local
-content.
-
-### Protected Offline Recovery
-
-The service worker continues to cache only the application shell, scripture,
-images and explicitly configured static resources. Every `/api` route, SSE/WS,
-ticket, token and LiveKit path remains network-only.
-
-After verified admission, Audience mirrors the latest authorized projection
-snapshot and quiz drafts into a separate IndexedDB record bound to
-`presentationSessionId`, technical participant ID, the SHA-256 digest of the
-resume credential and its absolute expiry. Waiting, rejected, blocked and never
-admitted clients cannot create or restore this record.
-
-When an admitted client is fully offline it may restore only that last snapshot
-and its drafts, with a persistent icon-and-text “Sin conexión” status. Offline
-state is recovery data, never live authority: it cannot synthesize new slides,
-admissions, permissions or Live Audio. Reconnection first revalidates the
-credential/session and obtains a fresh versioned snapshot. Revocation performed
-while a device is offline can only be learned after connectivity returns; the
-project does not promise DRM or removal of resources already downloaded.
-
 Main message types live in `src/types/sync.ts`:
 
 - `SYNC_STATE`: full state needed to initialize or resynchronize clients.
@@ -92,9 +33,8 @@ Main message types live in `src/types/sync.ts`:
 - `DISPLAY_TELEMETRY`: background lock/override updates.
 - `AUDIO_SYNC_MAPS_UPDATE`: audio cue map updates.
 - `SET_AUTODUCK_STATE`: Autoduck status and fade factor to lower media volume automatically when active speakers are detected.
-- `REQUEST_STATE`: Control and Presenter ask for a fresh backend snapshot and
-  fetch `/api/state` directly on startup. Audience instead fetches the reduced
-  `/api/audience/state` snapshot.
+- `REQUEST_STATE`: clients ask for a fresh backend snapshot; clients also fetch
+  `/api/state` directly on startup.
 - `WELCOME`: sent by the server upon WebSocket connection, providing client ID, role, server time, and presentation session ID.
 - `PRESENTATION_SESSION_ROTATED`: announces a new presentation session ID, which forces clients to update/sync.
 - `SERVER_TIME_PING` / `SERVER_TIME_PONG`: round-trip clock sync messages for estimating client-to-server clock offset.
@@ -190,20 +130,19 @@ authorization.
 ### Participantes Activos Visibles (E2E)
 
 Active audience participants may voluntarily share their alias with other active
-participants. Alias, technical audience ID and
-`isAliasVisibleToActiveParticipants` are page-session state and are not stored
-in `localStorage`; startup removes keys left by older versions. Logout and
-presentation-session rotation purge them, rotate the technical ID and clear quiz
-identity/state. `VITE_SEFER_ACTIVE_ALIAS_VISIBLE_BY_DEFAULT=false` keeps the
-checkbox off unless explicitly configured otherwise.
+participants. The user preference is `isAliasVisibleToActiveParticipants`, saved
+in `localStorage` as `sefer-audience-alias-visible` alongside
+`sefer-audience-nick`; logout, session rotation, kick, and remove reset it to
+false. `VITE_SEFER_ACTIVE_ALIAS_VISIBLE_BY_DEFAULT=false` keeps the checkbox
+off unless explicitly configured otherwise.
 
 The readable list is never computed or broadcast by the server. Audience sends
-only its sharing preference in clear via
-`LIVE_AUDIO_ACTIVE_PARTICIPANT_PROFILE`; clear alias and ephemeral-key fields
-are rejected. The alias and audience ephemeral public key reach authorized
-Control only through the E2E `PRIVATE_CONTROL_SIGNAL` envelope. Control keeps
-the alias map in page memory, computes the visible A-Z list with
-`computeVisibleActiveParticipants`, and sends
+its active profile to authorized Control in clear via
+`LIVE_AUDIO_ACTIVE_PARTICIPANT_PROFILE`; that profile contains the current alias,
+the user's sharing preference, and the audience public key that Control needs
+to encrypt the visible list back to that participant. Control patches only the
+technical preference and operational alias into `LIVE_AUDIO_SNAPSHOT_PATCH`,
+computes the visible A-Z list with `computeVisibleActiveParticipants`, and sends
 `{ type: 'VISIBLE_ACTIVE_PARTICIPANTS', participants, updatedAt }` back as a
 targeted encrypted private signal to each active viewer whose
 `canViewActiveParticipants` flag is true. Only the list payload is encrypted;
@@ -211,8 +150,7 @@ authorization changes travel as clear technical WebSocket messages.
 
 The server owns only technical fields in memory and snapshots:
 `isAliasVisibleToActiveParticipants`, `canViewActiveParticipants`,
-`isAliasHiddenByControl`, microphone state, and admission/moderation state.
-Operational snapshots reject `alias` and `activeListPublicKey`. Control may grant/revoke
+`isAliasHiddenByControl`, and `activeListPublicKey`. Control may grant/revoke
 list-view permission with `LIVE_AUDIO_SET_ACTIVE_LIST_VIEW_PERMISSION`; the
 server confirms that state to the target audience client with clear
 `LIVE_AUDIO_ACTIVE_LIST_VIEW_PERMISSION`. Control may put a consenting
@@ -239,14 +177,7 @@ Control uses `lastSentListRef` to avoid re-sending unchanged visible lists.
 - Audience participant status is reduced to technical fields and routed only to
   presenter and authorized Controls; audience clients do not receive a full
   participant list.
-- `PENDING` and `AUTHORIZED_SYNCING` Controls do not receive
-  `PRIVATE_CONTROL_SIGNAL`. A secondary enters `AUTHORIZED_SYNCING` when the
-  encrypted Control key transfer starts and becomes `AUTHORIZED` only after the
-  recipient imports the key, returns a correlated
-  `LIVE_AUDIO_CONTROL_KEY_TRANSFER_RESULT` ACK, atomically replaces the
-  technical snapshot and decrypts/ACKs the current private overlay. NACK,
-  timeout, mismatched IDs, a failed send, or a missing overlay never authorize
-  the Control.
+- `PENDING` Controls do not receive `PRIVATE_CONTROL_SIGNAL`.
 - `PENDING` Controls cannot send private signals or moderation messages such as
   grant, mute, or kick; the server returns an `ERROR`.
 - Authorized Controls can publish the current Control public key and can send
@@ -254,11 +185,6 @@ Control uses `lastSentListRef` to avoid re-sending unchanged visible lists.
   are routed to presenter/authorized Controls, and are also delivered to the
   affected audience participant so its local microphone state can react. They
   are not folded into `SYNC_STATE`.
-- Every `PRIVATE_CONTROL_SIGNAL` carries a stable `messageId` and a routing-only
-  `signalClass`. The server returns `PRIVATE_CONTROL_SIGNAL_RESULT` ACK/NACK,
-  deduplicates retransmission, reports rate limits instead of silently dropping
-  data, and applies separate budgets to human messages and technical
-  profile/recovery traffic.
 - Authorized Controls can send `PRIVATE_CONTROL_SIGNAL` only with a valid
   `toParticipantId`; the server routes it solely to the active WebSocket bound
   to that audience participant and does not inspect the ciphertext.
@@ -270,36 +196,11 @@ Control uses `lastSentListRef` to avoid re-sending unchanged visible lists.
   `LIVE_AUDIO_SNAPSHOT_PATCH` support Control handoff. Only authorized Controls
   receive or publish operational snapshots; pending Controls receive an error
   and no snapshot. The snapshot includes connected-user counts, participants,
-  logical roles (`pasivo`, `activo`, `cola`, `orador`, `control`, `presenter`),
-  microphone permission/track state,
+  operational aliases known to authorized Control, logical roles (`pasivo`,
+  `activo`, `cola`, `orador`, `control`, `presenter`), microphone permission/track state,
   speaker state, intervention queue, Control authorizations, relevant LiveKit
   state, and anonymous quiz aggregates. It does not include historical private
-  messages, ciphertext history, aliases, or audience ephemeral public keys.
-  A newly authorized Control receives the shared Control session key E2E,
-  the current opaque `LIVE_AUDIO_PRIVATE_OVERLAY_SNAPSHOT`, and the technical
-  snapshot before it is ready. The overlay contains only current aliases,
-  stable duplicate ordinals, participant public keys and private microphone
-  configuration; it never contains private-message history.
-- Operational state is ordered by a server-owned monotonic `stateRevision`
-  scoped to `presentationSessionId`. Snapshots include `serverEpoch` and the
-  current revision; revisioned deltas include an `eventId`. A snapshot replaces
-  client maps instead of merging them. Clients buffer out-of-order deltas,
-  ignore duplicate/stale events, and request a fresh snapshot on connect,
-  reconnect, stream change, or revision gap. Reading a snapshot never advances
-  the revision; each accepted canonical mutation advances it exactly once.
-- The private E2E overlay is enrichment only. It can never mutate or override
-  participants, admission, permissions, ownership, queues, moderation or
-  policies from the authoritative technical snapshot. The server stores only
-  the latest bounded encrypted envelope and cannot decrypt it; session or key
-  rotation clears it.
-- A WebSocket reconnect creates a temporary Control identity and then presents
-  the previous opaque 256-bit resume credential in a message body. The server
-  stores only its SHA-256 digest, rotates the credential after every successful
-  resume, fences the prior socket, and requires overlay convergence again
-  before accepting mutations. Credentials never appear in URLs or logs.
-- This snapshot-plus-revision protocol replaces reconstruction from historical
-  incrementals. A Control must not remain divergent or materialize “Sin nick”
-  merely because it joined after an event was emitted.
+  messages or ciphertext history.
 - The WebSocket server keeps the current authorized Control public key in memory
   and replays it to audience clients that connect later, so nicknames and
   private messages can be encrypted even when Control was already open.
@@ -312,10 +213,8 @@ Control uses `lastSentListRef` to avoid re-sending unchanged visible lists.
 - `allowDelegatedModerators` is controlled by
   `SEFER_LIVE_AUDIO_ALLOW_DELEGATED_MODERATORS` and defaults to true. When false,
   only the principal Control may authorize pending Controls.
-- A disconnected Control remains suspended for the bounded
-  `SEFER_LIVE_AUDIO_REJOIN_GRACE_SECONDS` interval. Only after that grace
-  expires is the oldest authorized Control by authorization timestamp promoted.
-  If no authorized Control exists, the server emits
+- If the principal disconnects, the oldest authorized Control by authorization
+  timestamp is promoted. If no authorized Control exists, the server emits
   `CONTROL_KEY_ROTATED` with reason `NO_AUTHORIZED_CONTROLS`, clears the private
   session boundary, and restarts Control ownership with the oldest pending
   Control if one remains connected.
@@ -337,54 +236,17 @@ subscriber events and ignores them on BroadcastChannel/SSE paths.
 ### Operational Snapshot Privacy
 
 `server/ws-server.mjs` keeps the Control handoff snapshot in process memory only.
-The snapshot is deliberately non-nominal: it contains technical microphone,
-visibility, moderation, connection, and authorization state, but rejects clear
-aliases and audience ephemeral public keys. The server never stores private
-message history, private signal plaintext, private keys, or clear alias maps.
-The separately bounded E2E overlay cache is opaque current-state recovery data,
-not part of the technical snapshot and not a ciphertext history.
+Sensitive snapshot overlays that the server can learn from authorized Control
+patches, such as operational aliases and microphone state hints, are encrypted
+with AES-256-GCM using a key derived from `SEFER_CONTROL_PASSWORD`. If that
+environment variable is not set, the fallback key remains local to the process
+and the snapshot still is not persisted to disk. The server never stores private
+message history, private signal plaintext, private keys, or ciphertext logs in
+the snapshot.
 
 `server/local-server.mjs` contributes only anonymous quiz aggregates to the
 snapshot: submitted-answer counts by slide and final-score buckets. It does not
 include individual answers, nominal rankings, display names, or session IDs.
-
-### Declarative recording policy
-
-`server/ws-server.mjs` is the sole authority for `recordingState` and
-`recordingEpoch`. Both fields are included in the operational snapshot and
-`SESSION_RECORDING_POLICY`; every accepted policy change advances
-`stateRevision` exactly once. Only the ready principal Control may send
-`SESSION_RECORDING_POLICY_UPDATE`, and it must provide the exact
-`presentationSessionId` and expected revision. The server returns a correlated
-`SESSION_RECORDING_POLICY_RESULT` ACK/NACK.
-
-`recordingEpoch` advances only on `NOT_RECORDING -> RECORDING`. Audience
-confirmation is bound to the admitted credential's technical participant,
-`presentationSessionId`, and active epoch. A client cannot grant itself speaker
-or publish state through `LIVE_AUDIO_PARTICIPANT_STATUS`; the server derives
-those fields from canonical moderation and confirmation state. Session rotation
-clears every confirmation even if the next session uses the same numeric epoch.
-
-Before accepting a transition to `RECORDING`, the backend uses the LiveKit
-RoomService API to remove Audience publish grants and mute connected microphone
-tracks. The short transition is serialized against other WebSocket mutations.
-If LiveKit revocation fails, the command is NACKed and neither policy nor
-revision changes. The server then invalidates confirmations, closes active
-microphones, broadcasts the new policy and a versioned mute delta. Ending
-recording preserves the epoch and speaking permission; it only removes the
-recording reminder.
-
-LiveKit token issuance and refresh consult the same authoritative participant,
-admission credential, and recording confirmation. The persistent Audience
-credential never appears in a URL. The HTTP grant endpoint is intentionally
-disabled: moderation grants travel only through the versioned WebSocket path so
-LiveKit and the technical snapshot cannot diverge.
-
-Audience presents the recording notice only after an alias has joined the
-session. It records one displayed toast per session/epoch, uses explicit text
-and an icon in a polite live region, and requires a keyboard-operable modal
-confirmation before microphone use. This policy is declarative:
-SeferPresenter does not operate an external recorder.
 
 ### Build And Runtime Optionality
 
@@ -412,8 +274,7 @@ subscription, exposes remote audio tracks, and opens the microphone only when
 is exposed so UI can keep remote playback behind a browser/user gesture.
 
 Fase 5.11 hardens long sessions and mobile networks. `useLiveAudio.ts` refreshes
-tokens through `POST /api/livekit/refresh-token` with a two-minute safety margin
-and a one-use rotating `refreshCredential`,
+tokens through `POST /api/livekit/refresh-token` with a two-minute safety margin,
 keeps the same ephemeral `participantId` on refresh, exposes reconnecting,
 reconnected, and prolonged reconnect-failure states, and stops all local tracks
 when microphone publication ends, the user disconnects, or the component
@@ -424,18 +285,16 @@ data.
 Fase 5.4 adds `server/livekit-server.mjs` for self-hosted LiveKit backend
 endpoints. It keeps participant, token, speaker, mute, kick, and rescue state in memory
 only. If `SEFER_LIVE_AUDIO_ENABLED=false` or any required `LIVEKIT_*` variable is
-missing, `/api/livekit/status` reports disabled or unavailable and the base
-application remains usable. Token generation uses
-minimum grants by role: the public endpoint can mint only minimum Audience
-grants. Control additionally requires Basic Auth plus an authorized WS
-`controlSessionId`; Presenter requires Basic Auth. Tokens include only ephemeral LiveKit identity and JSON metadata with the
+missing, `/api/livekit/status` reports disabled or unavailable and the server
+still starts without importing or requiring a LiveKit SDK. Token generation uses
+minimum grants by role: audience can subscribe only, while control can publish
+audio. Tokens include only ephemeral LiveKit identity and JSON metadata with the
 UUID `participantId`; no alias is included. Mutating moderation endpoints require
 an authorized WebSocket Control session from `server/ws-server.mjs`; audience
 requests are rejected with 403.
 
-`/api/livekit/refresh-token` requires `participantId` plus the rotating secret,
-stores only its SHA-256 hash, rejects replay/foreign/expired credentials, and
-consults the WebSocket participant state so a granted audience speaker can
+`/api/livekit/refresh-token` reissues tokens for active in-memory participants
+and consults the WebSocket participant state so a granted audience speaker can
 receive microphone-only publish permission without changing `participantId` or
 recovering any private alias/message history.
 `/api/livekit/rescue-participant` clears kicked state for an authorized Control
@@ -530,7 +389,7 @@ Current local/browser state includes:
 
 - Stored presenter state and background lock in `localStorage`.
 - Control editor UI state such as draft text, expanded rows, fullscreen, panel visibility.
-- Audience answer/session state managed by `src/hooks/useQuizAnswers.ts`, partitioned by `presentationId` in local storage and in every quiz submission/final-score message.
+- Audience answer/session state managed by `src/hooks/useQuizAnswers.ts`, with event broadcasting for quiz submissions.
 - DOM media element refs and loaded media metadata.
 
 Keep these local unless another device/mode must observe them.
@@ -552,9 +411,7 @@ Backend-owned or backend-mirrored pieces:
 - `/api/display-telemetry`
 - `/api/presentations`
 - `/api/audio-sync`
-- `/api/quiz-answer` and `/api/quiz-events` (POST accepts only bounded answer or
-  score shapes publicly; clear commands require authentication when enabled;
-  GET filters individual answers/scores to authenticated Control connections)
+- `/api/quiz-answer` and `/api/quiz-events` (POST is unauthenticated to allow audience submissions, whereas GET `/api/quiz-events` filters individual answers and scores to only broadcast them to authenticated control panel connections)
 - `/api/audience/state` and `/api/audience/events`
 - `/api/backgrounds` (lists all available image and video background files)
 - `/api/audio` (lists all available audio tracks)
@@ -566,9 +423,7 @@ Backend-owned or backend-mirrored pieces:
 - `/ws` operational Live Audio snapshots for authorized Control handoff; these
   are ephemeral, memory-only, and separate from `SYNC_STATE`
 
-With `SEFER_REQUIRE_AUTH=true`, administrative GET/POST APIs use an explicit
-protected allowlist boundary; browser mutations and WebSocket upgrades must be
-same-origin or match `SEFER_ALLOWED_ORIGINS`. Telemetry POST endpoints validate the existing message shape before broadcast:
+Telemetry POST endpoints validate the existing message shape before broadcast:
 `AUDIO_TELEMETRY` requires `audioState`, `VIDEO_TELEMETRY` requires
 `videoState` or `null`, and `DISPLAY_TELEMETRY` requires the display background
 fields with their basic types.
@@ -580,22 +435,11 @@ the code/task explicitly introduces them.
 
 Presentation state visible to audience:
 
-- Current presentation identity and current slide only. The public Audience
-  snapshot is built by `server/audience-projection-state.mjs`; it omits tags,
-  the catalogue, previous/future slides, and unknown editor-only fields.
+- Current presentation and slide.
 - Background.
 - App mode and scripture state.
 - Video/audio state needed to mirror projection.
 - Quiz subslide/timer state needed for display and answering.
-- Quiz run tracking (`completedQuizSlideIds`, the optional result cut in
-  `resultQuizSlideIds`, and its recalculated `maxBaseCentipunts`) so Control,
-  Presenter, and Audience use the same category ranges.
-
-`src/hooks/useSyncState.ts` selects `/api/audience/state` and
-`/api/audience/events` for Audience. It also ignores projection messages from
-the same-origin `BroadcastChannel`, preventing an Audience tab from receiving a
-Control tab's full presentation. Control and Presenter continue to use the
-protected `/api/state` and `/api/state-events` endpoints.
 
 Controller UI state:
 
@@ -609,27 +453,10 @@ Controller UI state:
 
 Quiz answers and personal scoring are fundamentally anonymous and decoupled from Live Audio identity. The architecture enforces the following privacy rules:
 
-- **Session Storage:** Individual answers and scoring may remain in audience
-  `localStorage` during the active presentation session, but logout or session
-  rotation clears the maps and rotates the page-scoped quiz ID. The server keeps
-  submitted answers only in volatile memory so Control can reconnect without
-  writing quiz answers to disk.
-- **Presentation Scope:** Answer and score maps are nested by `presentationId`.
-  `QUIZ_ANSWER`, `QUIZ_FINAL_SCORE`, and `QUIZ_CLEAR_ANSWERS` also carry that ID,
-  and Control ignores messages from any presentation other than the active one.
+- **Local Storage:** Individual answers and scoring remain on the audience member's device (`localStorage`). The server does not receive or persist individual, nominal answers linked to a profile.
 - **Separate Session IDs:** The quiz module generates its own ephemeral `sessionId` on first interaction. This ID is strictly separated from the LiveKit `participantId`. The quiz hook (`useQuizAnswers`) does not share state with `useLiveAudio` or `usePrivateControlSignals`.
 - **Aggregated Results:** The controller receives aggregated session scores and answers to calculate overall ranges and statistics for the results slide. The controller does not project nominal rankings, aliases, or performance history.
-- **Partial Quiz Results:** Questions with submitted answers are marked in green
-  in Control. From the results slide, Control may emit `QUIZ_RECALCULATE_RESULTS`
-  with those marked IDs; the backend validates them against the active
-  presentation, recalculates the maximum score, increments `scoreRequestId`, and
-  broadcasts the same result cut to Presenter and Audience. Audience recalculates
-  and resends its final score for every request, including repeated recalculations
-  of the same cut. Control also
-  recomputes each received session total from only those selected answers, so
-  category counts update immediately. Clearing a question removes its stored
-  answers, result inclusion, and green marker.
-- **No Participant Profiling:** There is no historical performance tracking by participant. Quiz session data is ephemeral and disappears when the server session is cleared or the server process stops.
+- **No Participant Profiling:** There is no historical performance tracking by participant. Aggregated session scores are ephemeral and disappear when the quiz session is cleared or the browser tab is closed.
 - **Special Activities:** Any future activity (like a named contest) that requires deviating from this anonymous aggregated model must not be implemented in the base MVP and requires explicit documentation and user consent flows prior to participation.
 
 Synchronization protocol:

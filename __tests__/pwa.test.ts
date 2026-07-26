@@ -25,16 +25,15 @@ const loadServiceWorkerHelpers = () => {
       isMediaUrl: (url: URL) => boolean;
       isImageUrl: (url: URL) => boolean;
       isAudienceShell: (url: URL) => boolean;
-      shouldRuntimeCacheUrl: (url: URL) => boolean;
     };
   }).__SEFER_PWA_TESTING__;
 };
 
 describe('PWA service worker policy', () => {
-  it('exports version 1.2.0 and explicit cache helper decisions', () => {
+  it('exports version 1.1.0 and explicit cache helper decisions', () => {
     const helpers = loadServiceWorkerHelpers();
 
-    expect(helpers.SW_VERSION).toBe('1.2.0');
+    expect(helpers.SW_VERSION).toBe('1.1.0');
 
     [
       '/api/state',
@@ -42,8 +41,6 @@ describe('PWA service worker policy', () => {
       '/api/quiz-events',
       '/api/livekit/token',
       '/api/livekit/refresh-token',
-      '/api/audience/access/bootstrap',
-      '/api/audience/events?ticket=short-lived',
       '/ws',
       '/rtc/validate',
       '/twirp/livekit.RoomService/ListRooms',
@@ -60,7 +57,6 @@ describe('PWA service worker policy', () => {
       const url = new URL(path, 'https://example.test');
       expect(helpers.isNeverCacheUrl(url)).toBe(false);
       expect(helpers.isMediaUrl(url)).toBe(true);
-      expect(helpers.shouldRuntimeCacheUrl(url)).toBe(false);
     });
 
     expect(helpers.isImageUrl(new URL('/images/background.webp', 'https://example.test'))).toBe(true);

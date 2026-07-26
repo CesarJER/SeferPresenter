@@ -23,7 +23,7 @@ export const LiveAudioAliasInput: React.FC<LiveAudioAliasInputProps> = ({ alias,
         maxLength={50}
       />
       <span className="text-xs text-gray-500">
-        Este alias no persistirá. Solo se mostrará a moderación, salvo que autorices compartirlo con otros participantes activos.
+        Este alias no persistirá y solo será visible para el equipo de moderación.
       </span>
     </div>
   );

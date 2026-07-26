@@ -175,14 +175,6 @@ R3: Repasar /// Bajo /// Texto 3`);
     expect(selectResultProfile(50, ranges, profiles)?.rank).toBe(3);
   });
 
-  it('does not count results slides in the maximum quiz score', () => {
-    const question = parseOk(`P: Pregunta\nA*: Sí\nB: No`);
-    expect(calcMaxBaseCentipunts([
-      question,
-      { ...question, isResultsSlide: true, resultProfiles: [] },
-    ])).toBe(50);
-  });
-
   it('formats centipunts as decimal points', () => {
     expect(formatCentipunts(50)).toBe('0.50');
     expect(formatCentipunts(125)).toBe('1.25');

@@ -174,7 +174,6 @@ const PresenterScreen: React.FC<PresenterScreenProps> = ({
     }
   }, [
     videoElement,
-    slide,
     slide?.id,
     mediaSrc,
   ]);
@@ -193,7 +192,6 @@ const PresenterScreen: React.FC<PresenterScreenProps> = ({
   }, [
     videoElement,
     mediaSrc,
-    slide,
     slide?.mediaVolume,
     slide?.mediaSpeed,
     slide?.mediaLoop,
@@ -295,7 +293,7 @@ const PresenterScreen: React.FC<PresenterScreenProps> = ({
         videoElement.removeEventListener('durationchange', handleDurationChange);
       }
     };
-  }, [slide, mediaSrc, slide?.id, slide?.mediaSrc, slide?.mediaStart, slide?.mediaEnd, videoElement, videoState?.volume]);
+  }, [slide, mediaSrc, slide?.id, slide?.mediaSrc, slide?.mediaStart, slide?.mediaEnd, videoElement]);
 
   const isVideoBg = /\.(mp4|webm)$/i.test(background);
   const isFallback1x = slide?.lines.length === 3 && slide.lines[1] === '-' && slide.lines[2] === '-';
@@ -412,8 +410,6 @@ const PresenterScreen: React.FC<PresenterScreenProps> = ({
                                 <AutoResizeText
                                   text={line}
                                   html={true}
-                                  lang={idx === 0 && /[\u0590-\u05FF]/.test(line) ? 'he' : undefined}
-                                  dir={idx === 0 && /[\u0590-\u05FF]/.test(line) ? 'rtl' : undefined}
                                   fontScale={fontScale}
                                   className={`drop-shadow-2xl font-semibold ${idx === 0
                                     ? 'hebrew-text text-[#f3c96a] text-[calc(clamp(1.8rem,4vw,5.8rem)*var(--font-scale))]'
@@ -432,8 +428,6 @@ const PresenterScreen: React.FC<PresenterScreenProps> = ({
                             <AutoResizeText
                               text={slide.lines[0]}
                               html={true}
-                              lang={/[\u0590-\u05FF]/.test(slide.lines[0] || '') ? 'he' : undefined}
-                              dir={/[\u0590-\u05FF]/.test(slide.lines[0] || '') ? 'rtl' : undefined}
                               fontScale={fontScale}
                               className="font-bold text-white drop-shadow-2xl text-[calc(clamp(2rem,4.8vw,7rem)*var(--font-scale))]"
                             />

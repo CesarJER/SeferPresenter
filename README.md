@@ -8,15 +8,8 @@ SeferPresenter es una aplicacion React/Vite para proyectar presentaciones con so
 - **Control**: abre `/control`. Permite seleccionar presentaciones, editar slides, cambiar fondos, controlar audio/video y navegar textos.
 - **Editor de audio**: abre `/audio-editor`. Permite asociar pistas de audio a presentaciones y cues de diapositiva.
 - **Audiencia**: abre `/audience`. Muestra la misma proyeccion visual que presenter, en modo solo lectura y sincronizada.
-- **Catálogo Público**: rutas dinámicas configurables mediante
-  `SEFER_PUBLIC_CATALOGS_JSON` en `.env`. Muestra una versión pública, segura y
-  de solo lectura de las presentaciones, omitiendo metadatos privados y bloques
-  de medios. Cada catálogo acepta `count_sefer: true|false`; decide únicamente
-  si las referencias Tanaj/Sefer cuentan en el número mostrado, sin ocultarlas
-  ni excluirlas de búsqueda.
-- **Proteccion de datos**: `/proteccion-datos` es una ruta publica que combina
-  los hechos tecnicos del producto, la configuracion estructurada del operador y
-  su documento organizativo local opcional.
+- **Catálogo Público**: rutas dinámicas configurables vía `SEFER_PUBLIC_CATALOG_TAGS` en `.env` (ej: `/himnos`). Muestra una versión pública, segura y de solo lectura de las presentaciones, omitiendo metadatos privados y bloques de medios.
+- **Proteccion de datos**: `/proteccion-datos` queda como ruta publica (accesible sin autenticacion) para el aviso de privacidad del futuro modulo de voz en vivo.
 - **Modo sin LiveKit**: la aplicacion conserva el uso solo presentacion. Si LiveKit esta desactivado, mal configurado o no soportado, `/presenter`, `/control`, `/audio-editor`, `/audience` y catálogos deben seguir cargando sin requerir voz en vivo.
 
 ## Scripts
@@ -25,7 +18,7 @@ SeferPresenter es una aplicacion React/Vite para proyectar presentaciones con so
 npm run dev          # backend local + servidor Vite frontend
 npm run dev:frontend # solo servidor Vite frontend
 npm run dev:backend  # backend local Node en http://localhost:8787
-npm run docker:up    # stack base (app + Caddy), sin Live Audio
+npm run docker:up    # stack completo con Docker Compose
 npm run docker:down  # detener el stack completo de Docker Compose
 npm run build        # build web
 npm run start:local  # backend local sirviendo dist/
@@ -57,14 +50,6 @@ El backend local vive en `server/local-server.mjs`. Mantiene inicialmente la mis
 - `GET /api/audience/state`
 - `GET /api/audience/events`
 - `GET /api/audience-cache-assets`
-- `GET /api/privacy-document` (Markdown organizativo local opcional; no expone
-  secretos ni sustituye el manifiesto publico integrado en el build)
-
-Los dos endpoints de estado de Audience son públicos y reducidos: incluyen solo
-la diapositiva proyectada actualmente y el estado funcional necesario para
-fondo, multimedia, textos, quiz y audio. No exponen el catálogo, etiquetas ni
-diapositivas anteriores o futuras. `/api/state` y `/api/state-events` conservan
-el estado completo y son administrativos.
 - `GET /api/livekit/status`
 - `POST /api/livekit/token`
 - `POST /api/livekit/refresh-token`
@@ -83,15 +68,8 @@ reducen en el backend a `SYNC_STATE`, por lo que Control y Audiencia pueden
 sincronizar navegacion sin requerir que `/presenter` este abierto. SSE y los
 endpoints HTTP existentes siguen activos.
 
-Si necesitas probar el stack completo con proxy, Redis y LiveKit, activa el
-perfil opcional con `docker compose --profile live-audio up --build`. El perfil
-requiere `LIVEKIT_API_KEY` y `LIVEKIT_API_SECRET`. `LIVEKIT_NODE_IP` tiene
-prioridad cuando se define; si queda vacío,
-`SEFER_LIVEKIT_AUTO_DISCOVER_IP=true` habilita un fallback mediante proveedores
-HTTPS, con timeout, reintentos acotados y validación de IPv4 pública.
-Antes de construirlo, activa tambien `SEFER_LIVE_AUDIO_ENABLED=true` y
-`VITE_SEFER_LIVE_AUDIO_BUILD=true` en el entorno.
-`npm run dev` sigue siendo util
+Si necesitas probar el stack completo con proxy, Redis y LiveKit, usa
+`docker compose` mediante `npm run docker:up`. `npm run dev` sigue siendo util
 para desarrollo local del frontend/backend, pero no sustituye el entorno
 contenedorizado cuando quieres validar la ruta completa de voz en vivo.
 
@@ -108,28 +86,6 @@ npm run start:local
 ```
 
 Con `SEFER_REQUIRE_AUTH=true`, `/control`, `/audio-editor` y endpoints mutantes bajo `/api` quedan protegidos con Basic Auth.
-
-## Configuracion publica del operador
-
-Cada build de produccion debe declarar en `.env` los datos publicos minimos
-documentados en `.env.example`: entidad, contacto para derechos, base juridica,
-URL de privacidad, disponibilidad/estado inicial/mutabilidad de grabacion y modo
-de acceso inicial. No introduzcas secretos en variables `VITE_*`.
-
-Vite valida esos campos e incorpora `operator-manifest.json` a `dist`. El
-servidor vuelve a validar el manifiesto al arrancar y comprueba que el modo de
-acceso integrado coincide con `SEFER_SESSION_ACCESS_DEFAULT`; una configuracion
-ausente, invalida o incoherente detiene build o arranque con un diagnostico.
-Esto mantiene la configuracion publica en el artefacto estatico, sin añadir
-`GET /api/public-config`.
-
-La narrativa legal completa puede montarse como `privacy.local.md`, sin
-reconstruir la imagen. Docker Compose lee
-`${DATA_DIR}/config/privacy.local.md` en modo solo lectura. El archivo es
-opcional, debe ser UTF-8 valido y tener entre 1 byte y 128 KiB; si existe y es
-invalido el servidor no arranca. Solo se interpretan titulos, parrafos, listas y
-enlaces validados, nunca HTML crudo. Hay una plantilla neutral en
-`docs/examples/privacy.example.md`.
 
 ## PWA de audiencia y control
 
@@ -223,22 +179,15 @@ Canales principales:
 - `LIVE_AUDIO_SNAPSHOT_REQUEST` / `LIVE_AUDIO_SNAPSHOT`: snapshot operacional
   efimero para Controles autorizados, con participantes, cola, autorizaciones,
   estado LiveKit y agregados anonimos de quiz. Controles pendientes no lo reciben.
-- `LIVE_AUDIO_ACTIVE_PARTICIPANT_PROFILE`: estado técnico claro, sin alias ni
-  claves, que comunica únicamente la preferencia de visibilidad. El alias y la
-  clave efímera viajan dentro del sobre E2E `PRIVATE_CONTROL_SIGNAL`.
+- `LIVE_AUDIO_ACTIVE_PARTICIPANT_PROFILE`: perfil activo claro enviado solo a
+  Controles autorizados con alias, preferencia de visibilidad y clave publica
+  para cifrar la lista visible de nicks.
 
 La audiencia muestra la misma imagen viva del presenter, sin controles de navegacion ni apertura del panel de control.
 
-Las respuestas y puntuaciones de quiz se separan por presentacion. En una
-diapositiva de resultados, Control puede recalcular las categorias usando las
-preguntas marcadas en verde, es decir, las que tienen respuestas registradas.
-El servidor conserva esas respuestas durante la sesion para que Control pueda
-recuperarlas tras una recarga, y solicita a Audience que reenvie sus nuevas
-puntuaciones en cada recalculo.
-
 `PRIVATE_CONTROL_SIGNAL` es un contenedor tecnico cifrado para senales privadas
 entre Audience y controles autorizados. No contiene alias, mensajes ni
-configuracion de micro en texto claro, y el servidor debe limitarse a validar/rutear
+configuracion de micro en claro, y el servidor debe limitarse a validar/rutear
 sin descifrar ni persistir contenido.
 La capa E2E simplificada usa Web Crypto: Control publica una clave publica ECDH
 P-256, Audience cifra con una clave AES-GCM 256 derivada y un nonce aleatorio de
@@ -289,13 +238,8 @@ SEFER_LIVE_AUDIO_TOKEN_TTL_MINUTES=30
 SEFER_LIVE_AUDIO_REJOIN_GRACE_SECONDS=60
 SEFER_LIVE_AUDIO_ALLOW_DELEGATED_MODERATORS=true
 SEFER_LIVE_AUDIO_CONTROL_CODE_TTL_SECONDS=90
-SEFER_SESSION_ACCESS_DEFAULT=PUBLIC
-SEFER_AUDIENCE_RESUME_TTL_HOURS=24
 VITE_SEFER_ACTIVE_ALIAS_VISIBLE_BY_DEFAULT=false
 SEFER_ACTIVE_ALIAS_MODERATION_DEFAULT_VISIBLE=true
-VITE_SEFER_RECORDING_AVAILABLE=false
-VITE_SEFER_RECORDING_DEFAULT=NOT_RECORDING
-VITE_SEFER_RECORDING_MUTABLE=false
 LIVEKIT_URL=
 LIVEKIT_API_KEY=
 LIVEKIT_API_SECRET=
@@ -305,63 +249,30 @@ LIVEKIT_ROOM_NAME=sefer-live-audio
 Endpoints:
 
 - `GET /api/livekit/status`: devuelve `{ enabled, available?, reason? }`.
-- `POST /api/livekit/token`: entrada Audience `{ role, roomSession? }`; Control
-  añade `controlSessionId`. Devuelve `livekitUrl`, `token`, `expiresAt`,
-  `participantIdentity`, `participantId` efímero y `refreshCredential` rotatorio.
-  Audience recibe permisos mínimos. Control exige Basic Auth y una sesión WS
-  autorizada; Presenter exige Basic Auth.
+- `POST /api/livekit/token`: entrada `{ role, roomSession? }`; devuelve
+  `livekitUrl`, `token`, `expiresAt`, `participantIdentity` y `participantId`
+  efimero. `audience` recibe permiso de solo suscripcion; `control` recibe
+  permiso de publicar audio.
 - `POST /api/livekit/refresh-token`: renueva un token para un participante activo
-  mediante `{ participantId, refreshCredential }`, preserva la identidad y rota
-  la credencial en cada éxito. Los roles privilegiados vuelven a demostrar su
-  autorización; credenciales ajenas, expiradas o reutilizadas se rechazan.
-- `POST /api/livekit/revoke-speak`, `mute-participant`,
+  en memoria antes de expirar, preservando `participantId` e identidad LiveKit
+  cuando el participante sigue dentro del margen de retorno.
+- `POST /api/livekit/grant-speak`, `revoke-speak`, `mute-participant`,
   `mute-all`, `kick-participant`, `rescue-participant`: requieren
   `role: "control"` y un `controlSessionId` autorizado por WebSocket.
   `audience` recibe 403. `rescue-participant` devuelve al usuario expulsado a
   audiencia activa muda (`LISTENER`) sin abrir ni publicar microfono.
-- La concesion de palabra y los cambios de grabacion se realizan exclusivamente
-  por el WebSocket autoritativo. Cada cambio de grabacion usa `stateRevision`;
-  `recordingEpoch` aumenta solo al comenzar una nueva etapa de grabacion. Las
-  confirmaciones de microfono quedan ligadas a la sesion, epoca y credencial
-  admitida. SeferPresenter declara el estado, pero no controla grabadores
-  externos.
 
 No hay endpoints de consentimiento, alias legible ni chat legible. El backend no
 persiste claves, alias, tokens ni mensajes privados en archivos o base de datos.
-El snapshot operacional vive solo en memoria y es no nominal: rechaza alias y
-claves efímeras de Audience, y conserva únicamente estado técnico de conexión,
-moderación, visibilidad y micrófono.
-
-Compose conserva copias de recuperación fsync de `presentations.json` y
-`audio_sync.json` en el volumen `sefer_backups`. El arranque valida el primario,
-restaura automáticamente una copia válida cuando sea necesario y se niega a
-iniciar si ambos archivos están dañados. El contenedor prepara el volumen y
-después ejecuta la aplicación como usuario `node`. En un montaje individual de
-archivo, Docker puede impedir el `rename` atómico del primario; el backend lo
-registra y solo usa escritura in-place después de crear esa copia durable.
+El snapshot operacional vive solo en memoria; las partes sensibles que el
+servidor llega a conocer por parches de Control autorizado se cifran con una
+clave derivada de `SEFER_CONTROL_PASSWORD` y no se guardan en disco.
 
 ## Legacy
 
 `legacy/` es registro local de desarrollo. No forma parte del producto, no debe ir al build y queda fuera de ESLint.
 
-Los patrones `*.local` y `*.local.*` están reservados para adaptaciones privadas
-de una instalación. Nunca deben contener código, pruebas o documentación
-canónica del producto.
-
-La imagen de producción se construye deliberadamente con Vite y sirve `dist`.
-Cada operador puede realizar su propio build para incorporar logos y variables
-`VITE_*` públicas; multimedia, fondos y datos se montan en tiempo de ejecución.
-Tras un cambio de IP pública actualizado mediante DDNS, hay que reiniciar
-LiveKit para que anuncie la dirección nueva.
-
 ## Verificacion recomendada
-
-El registro de estabilización previo a la auditoría de producción está en
-`docs/audits/2026-07-24/PRE_AUDIT_STABILIZATION.md`.
-La auditoría y el plan bloqueante de sincronización multi-Control están en
-`docs/audits/2026-07-24/MULTI_CONTROL_SYNC_AUDIT.md`.
-La matriz de certificación de teclado y lectores de pantalla está en
-`docs/audits/2026-07-24/ACCESSIBILITY_CERTIFICATION_MATRIX.md`.
 
 Antes de cerrar cambios importantes:
 

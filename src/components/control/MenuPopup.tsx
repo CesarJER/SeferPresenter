@@ -27,9 +27,7 @@ import type { PendingControlAuthorization, LiveAudioControlState } from '../../t
 import type { WebSocketConnectionStatus } from '../../hooks/useWebSocket';
 import type { RemoteCommandPayload } from '../../types/sync';
 
-const LiveAudioControlContainer = import.meta.env.VITE_SEFER_LIVE_AUDIO_BUILD !== 'false'
-  ? lazy(() => import('../../features/liveAudio/components/control/LiveAudioControlContainer'))
-  : null;
+const LiveAudioControlContainer = lazy(() => import('../../features/liveAudio/components/control/LiveAudioControlContainer'));
 import { useControllerAnswers } from '../../hooks/useQuizAnswers';
 import { QuizControllerView } from '../quiz/QuizControllerView';
 import {
@@ -83,8 +81,6 @@ interface MenuPopupProps {
   quizCurrentSubslideIndex?: number;
   quizTimerState?: QuizTimerState;
   quizPresenterDemoSelection?: QuizOptionId | null;
-  quizMaxBaseCentipunts?: number;
-  quizResultSlideIds?: string[];
   onQuizSubslideSelect?: (idx: number) => void;
   onQuizStartTimer?: () => void;
   onQuizPauseTimer?: () => void;
@@ -169,8 +165,6 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
   quizCurrentSubslideIndex = 0,
   quizTimerState,
   quizPresenterDemoSelection = null,
-  quizMaxBaseCentipunts,
-  quizResultSlideIds,
   onQuizSubslideSelect = () => { },
   onQuizStartTimer = () => { },
   onQuizPauseTimer = () => { },
@@ -189,39 +183,13 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
   wsStatus,
   controlSessionId,
 }) => {
-  const controllerAnswers = useControllerAnswers(currentPresentation?.id ?? null);
+  const controllerAnswers = useControllerAnswers();
   // ────────────────────────────────────────────────────────────────
   // States
   // ────────────────────────────────────────────────────────────────
   const activeSlide = currentPresentation && currentSlideIndex >= 0 && currentSlideIndex < currentPresentation.slides.length
     ? currentPresentation.slides[currentSlideIndex]
     : null;
-  const quizQuestionSlides = currentPresentation?.slides.filter(
-    (slide) => slide.type === 'quiz' && slide.quizData && !slide.quizData.isResultsSlide,
-  ) ?? [];
-  const fullQuizMaxBaseCentipunts = calcMaxBaseCentipunts(quizQuestionSlides.map((slide) => slide.quizData!));
-  const effectiveQuizMaxBaseCentipunts = quizMaxBaseCentipunts ?? fullQuizMaxBaseCentipunts;
-  const recalculateResultSlideIds = quizQuestionSlides
-    .filter((slide) => controllerAnswers.getSubmittedCount(slide.id) > 0)
-    .map((slide) => slide.id);
-  const handleRecalculateQuizResults = () => {
-    if (recalculateResultSlideIds.length === 0) return;
-    emitCommand?.({ command: 'QUIZ_RECALCULATE_RESULTS', slideIds: recalculateResultSlideIds });
-  };
-  const handleClearQuizAnswers = (slideId: string) => {
-    controllerAnswers.clearSlideAnswers(slideId);
-    emitCommand?.({ command: 'QUIZ_CLEAR_QUESTION_RESULTS', slideId });
-  };
-  const controllerResultScoreOverrides = quizResultSlideIds
-    ? Object.fromEntries(Object.entries(controllerAnswers.sessions).map(([sessionId, session]) => {
-      const totalCentipunts = quizQuestionSlides.reduce((total, slide) => {
-        if (!quizResultSlideIds.includes(slide.id) || !slide.quizData) return total;
-        const answer = session.answers[slide.id];
-        return answer?.submitted ? total + scoreAnswer(slide.quizData, answer).totalCentipunts : total;
-      }, 0);
-      return [sessionId, totalCentipunts];
-    }))
-    : undefined;
   const isActiveScriptureSlide = !!activeSlide && (activeSlide.type === 'sefer' || activeSlide.type === 'tanaj' || !!activeSlide.scriptureBook);
 
   const [id, setId] = useState('');
@@ -236,41 +204,6 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
   const [resolvedScriptureState, setResolvedScriptureState] = useState<any>(null);
 
   const [showResetConfirm, setShowResetConfirm] = useState(false);
-  const resetDialogRef = useRef<HTMLDivElement>(null);
-  const resetCancelButtonRef = useRef<HTMLButtonElement>(null);
-  const resetTriggerRef = useRef<HTMLElement | null>(null);
-
-  useEffect(() => {
-    if (!showResetConfirm) return;
-    resetTriggerRef.current = document.activeElement as HTMLElement | null;
-    resetCancelButtonRef.current?.focus();
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        setShowResetConfirm(false);
-        return;
-      }
-      if (event.key !== 'Tab') return;
-      const focusable = Array.from(
-        resetDialogRef.current?.querySelectorAll<HTMLElement>('button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])') || [],
-      );
-      if (focusable.length === 0) return;
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    };
-    document.addEventListener('keydown', handleKeyDown);
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown);
-      resetTriggerRef.current?.focus();
-    };
-  }, [showResetConfirm]);
 
   // ────────────────────────────────────────────────────────────────
   // Effects
@@ -431,20 +364,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
       { id: 'slide-title', label: 'Título', lines: ['', '-', '-'] }
     ]);
     setIsTableMode(true);
-  }, [
-    backgrounds,
-    setBg,
-    setFontScale,
-    setHebText,
-    setId,
-    setIsTableMode,
-    setMode,
-    setSlides,
-    setStandardText,
-    setTitle,
-    setTraText,
-    setTransText,
-  ]);
+  }, [backgrounds]);
 
   const handleStartEditing = (p: Presentation) => {
     setEditorMode('edit');
@@ -1768,23 +1688,14 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                       <div className="flex-1 flex flex-wrap gap-1.5 max-h-[4.2rem] overflow-y-auto pr-1 scrollbar-thin">
                         {currentPresentation.slides.map((slide, idx) => {
                           const isSelected = currentSlideIndex === idx;
-                          const isRegisteredQuizQuestion = slide.type === 'quiz'
-                            && slide.quizData
-                            && !slide.quizData.isResultsSlide
-                            && controllerAnswers.getSubmittedCount(slide.id) > 0;
                           return (
                             <button
                               id={`live-slide-btn-${idx}`}
                               key={slide.id}
                               onClick={() => onSelectSlide(idx)}
-                              title={isRegisteredQuizQuestion ? 'Pregunta registrada y contabilizada' : undefined}
                               className={`min-w-[2.2rem] rounded border text-xs font-semibold transition-all px-2.5 py-1 select-none ${isSelected
-                                ? isRegisteredQuizQuestion
-                                  ? 'border-yellow-400 bg-emerald-600 text-white font-bold ring-1 ring-yellow-400 shadow-[0_0_8px_rgba(16,185,129,0.4)]'
-                                  : 'border-yellow-500 bg-yellow-600 text-white font-bold shadow-[0_0_8px_rgba(234,179,8,0.3)]'
-                                : isRegisteredQuizQuestion
-                                  ? 'border-emerald-400 bg-emerald-700 hover:bg-emerald-600 text-white'
-                                  : 'border-gray-600 bg-gray-700 hover:bg-gray-600 text-gray-300'
+                                ? 'border-yellow-500 bg-yellow-600 text-white font-bold shadow-[0_0_8px_rgba(234,179,8,0.3)]'
+                                : 'border-gray-600 bg-gray-700 hover:bg-gray-600 text-gray-300'
                                 }`}
                             >
                               {slide.label}
@@ -1838,6 +1749,10 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                     />
 
                     {activeSlide?.type === 'quiz' && activeSlide.quizData && quizTimerState && (() => {
+                      const allQuizData = currentPresentation?.slides
+                        .filter(s => s.type === 'quiz' && s.quizData)
+                        .map(s => s.quizData!) || [];
+                      const maxBaseCentipunts = calcMaxBaseCentipunts(allQuizData);
                       const optionCounts: Record<string, number> = {};
                       for (const opt of activeSlide.quizData.options) {
                         optionCounts[opt.id] = 0;
@@ -1880,12 +1795,10 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                           optionCounts={optionCounts}
                           citaHits={citaHits}
                           citaMisses={citaMisses}
-                          onClearAnswers={() => handleClearQuizAnswers(activeSlide.id)}
-                          rangeStats={controllerAnswers.calcRangeStats(activeSlide.quizData.resultProfiles || [], effectiveQuizMaxBaseCentipunts, controllerResultScoreOverrides)}
+                          onClearAnswers={() => controllerAnswers.clearSlideAnswers(activeSlide.id)}
+                          rangeStats={controllerAnswers.calcRangeStats(activeSlide.quizData.resultProfiles || [], maxBaseCentipunts)}
                           totalSessions={Object.keys(controllerAnswers.sessions).length}
-                          maxBaseCentipunts={effectiveQuizMaxBaseCentipunts}
-                          registeredQuestionCount={recalculateResultSlideIds.length}
-                          onRecalculateResults={handleRecalculateQuizResults}
+                          maxBaseCentipunts={maxBaseCentipunts}
                           renderMode="top"
                           onAdjustTimer={onQuizAdjustTimer}
                         />
@@ -1913,6 +1826,10 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
             emitCommand={emitCommand}
           >
             {activeSlide?.type === 'quiz' && activeSlide.quizData && quizTimerState && (() => {
+              const allQuizData = currentPresentation?.slides
+                .filter(s => s.type === 'quiz' && s.quizData)
+                .map(s => s.quizData!) || [];
+              const maxBaseCentipunts = calcMaxBaseCentipunts(allQuizData);
               const optionCounts: Record<string, number> = {};
               for (const opt of activeSlide.quizData.options) {
                 optionCounts[opt.id] = 0;
@@ -1955,12 +1872,10 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                   optionCounts={optionCounts}
                   citaHits={citaHits}
                   citaMisses={citaMisses}
-                  onClearAnswers={() => handleClearQuizAnswers(activeSlide.id)}
-                  rangeStats={controllerAnswers.calcRangeStats(activeSlide.quizData.resultProfiles || [], effectiveQuizMaxBaseCentipunts, controllerResultScoreOverrides)}
+                  onClearAnswers={() => controllerAnswers.clearSlideAnswers(activeSlide.id)}
+                  rangeStats={controllerAnswers.calcRangeStats(activeSlide.quizData.resultProfiles || [], maxBaseCentipunts)}
                   totalSessions={Object.keys(controllerAnswers.sessions).length}
-                  maxBaseCentipunts={effectiveQuizMaxBaseCentipunts}
-                  registeredQuestionCount={recalculateResultSlideIds.length}
-                  onRecalculateResults={handleRecalculateQuizResults}
+                  maxBaseCentipunts={maxBaseCentipunts}
                   renderMode="bottom"
                   onAdjustTimer={onQuizAdjustTimer}
                 />
@@ -2051,23 +1966,15 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
       </div>
       {showResetConfirm && (
         <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/75 backdrop-blur-sm p-4">
-          <div
-            ref={resetDialogRef}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="reset-dialog-title"
-            aria-describedby="reset-dialog-description"
-            className="bg-gray-900 border border-gray-700 rounded-lg max-w-sm w-full p-5 shadow-2xl space-y-4"
-          >
-            <h3 id="reset-dialog-title" className="text-base font-bold text-red-500 flex items-center gap-2">
+          <div className="bg-gray-900 border border-gray-700 rounded-lg max-w-sm w-full p-5 shadow-2xl space-y-4">
+            <h3 className="text-base font-bold text-red-500 flex items-center gap-2">
               ⚠️ ¿Restablecer aplicación?
             </h3>
-            <p id="reset-dialog-description" className="text-xs text-gray-300 leading-relaxed font-sans">
+            <p className="text-xs text-gray-300 leading-relaxed font-sans">
               Esto borrará la memoria temporal de la presentación activa, desbloqueará los fondos y reiniciará el presentador a la pantalla inicial en todos los dispositivos conectados.
             </p>
             <div className="flex justify-end gap-2 text-xs">
               <button
-                ref={resetCancelButtonRef}
                 type="button"
                 onClick={() => setShowResetConfirm(false)}
                 className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded border border-gray-700 font-semibold cursor-pointer"
@@ -2105,22 +2012,20 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
       )}
 
       {/* Live Audio Control Container */}
-      {LiveAudioControlContainer && (
-        <Suspense fallback={null}>
-          <LiveAudioControlContainer
-            isControlAuthorized={controlAuthorization?.role === 'principal' || controlAuthorization?.role === 'delegated'}
-            authorizationRequests={controlAuthorization?.pendingControls || []}
-            onApproveRequest={onApproveControlRequest}
-            onRejectRequest={onRejectControlRequest}
-            wsSend={wsSend}
-            subscribeToWsMessage={subscribeToWsMessage}
-            wsStatus={wsStatus}
-            controlSessionId={controlSessionId}
-            controlState={controlAuthorization?.controlState}
-            verificationCode={controlAuthorization?.verificationCode}
-          />
-        </Suspense>
-      )}
+      <Suspense fallback={null}>
+        <LiveAudioControlContainer
+          isControlAuthorized={controlAuthorization?.role === 'principal' || controlAuthorization?.role === 'delegated'}
+          authorizationRequests={controlAuthorization?.pendingControls || []}
+          onApproveRequest={onApproveControlRequest}
+          onRejectRequest={onRejectControlRequest}
+          wsSend={wsSend}
+          subscribeToWsMessage={subscribeToWsMessage}
+          wsStatus={wsStatus}
+          controlSessionId={controlSessionId}
+          controlState={controlAuthorization?.controlState}
+          verificationCode={controlAuthorization?.verificationCode}
+        />
+      </Suspense>
     </div>
   );
 };
