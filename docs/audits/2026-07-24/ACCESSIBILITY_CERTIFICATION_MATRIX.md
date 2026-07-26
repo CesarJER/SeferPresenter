@@ -11,6 +11,14 @@ The phase starts from baseline `e8da9e3`. A profile cannot receive `GO` while a
 required manual case is missing or while a reproducible WCAG 2.2 A/AA failure
 remains open.
 
+## Regression closure: alias input focus
+
+Commit `c14e157` closes `A11Y-FINAL-007`. The intervention dialog now keeps one
+focus lifecycle for the complete time it remains open. Incoming live state may
+rerender its parent and replace callbacks without returning focus to the
+launcher, moving it to the dialog title, or discarding the alias being typed.
+The focused accessibility suite exercises this rerender explicitly.
+
 ## Automated evidence
 
 Run from the repository root:

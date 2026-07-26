@@ -58,8 +58,10 @@ describe('Public Presentations Builder', () => {
   })
 
   it('handles invalid inputs gracefully', () => {
-    expect(buildPublicPresentations(null as any, mockCatalogs)).toEqual([])
-    expect(buildPublicPresentations(undefined as any, mockCatalogs)).toEqual([])
-    expect(buildPublicPresentations([], null as any)).toEqual([])
+    type PresentationsInput = Parameters<typeof buildPublicPresentations>[0]
+    type CatalogsInput = Parameters<typeof buildPublicPresentations>[1]
+    expect(buildPublicPresentations(null as unknown as PresentationsInput, mockCatalogs)).toEqual([])
+    expect(buildPublicPresentations(undefined as unknown as PresentationsInput, mockCatalogs)).toEqual([])
+    expect(buildPublicPresentations([], null as unknown as CatalogsInput)).toEqual([])
   })
 })

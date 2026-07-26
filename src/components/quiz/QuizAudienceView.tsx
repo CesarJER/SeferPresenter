@@ -200,13 +200,17 @@ export const QuizAudienceView: React.FC<QuizAudienceViewProps> = ({
 
             {/* Submitted banner */}
             {answer.submitted && (
-              <div className="rounded-lg border border-emerald-600/50 bg-emerald-950/40 px-3 py-2 text-xs font-bold text-emerald-300 text-center">
+              <div role="status" aria-live="polite" className="rounded-lg border border-emerald-600/50 bg-emerald-950/40 px-3 py-2 text-xs font-bold text-emerald-300 text-center">
                 ✓ Respuesta enviada
               </div>
             )}
 
             {/* Options */}
-            <div className="flex flex-col gap-2">
+            <div
+              className="flex flex-col gap-2"
+              role={quizData.multiSelect ? 'group' : 'radiogroup'}
+              aria-label="Opciones de respuesta"
+            >
               {displayOptions.map((opt, idx) => {
                 const letter = OPTION_LETTERS[idx] ?? opt.id;
                 const isSelected = answer.selectedOptionIds.includes(opt.id);
@@ -215,6 +219,8 @@ export const QuizAudienceView: React.FC<QuizAudienceViewProps> = ({
                   <button
                     key={opt.id}
                     type="button"
+                    role={quizData.multiSelect ? 'checkbox' : 'radio'}
+                    aria-checked={isSelected}
                     disabled={isDisabled}
                     onClick={() => {
                       if (quizData.multiSelect) {
@@ -254,6 +260,7 @@ export const QuizAudienceView: React.FC<QuizAudienceViewProps> = ({
                 </p>
                 <div className="grid grid-cols-[1fr_60px_60px_60px] gap-1.5">
                   <select
+                    aria-label="Libro de la cita"
                     value={answer.citaBook ?? ''}
                     onChange={e => {
                       onSetCitaField({ citaBook: e.target.value, citaChapter: '', citaVerseStart: '', citaVerseEnd: '' });
@@ -279,6 +286,7 @@ export const QuizAudienceView: React.FC<QuizAudienceViewProps> = ({
                     return (
                       <>
                         <select
+                          aria-label="Capítulo de la cita"
                           value={answer.citaChapter ?? ''}
                           onChange={e => onSetCitaField({ citaChapter: e.target.value, citaVerseStart: '', citaVerseEnd: '' })}
                           className="rounded border border-yellow-600/30 bg-black/30 py-1.5 text-xs focus:outline-none focus:border-yellow-500 text-center disabled:appearance-none"
@@ -288,6 +296,7 @@ export const QuizAudienceView: React.FC<QuizAudienceViewProps> = ({
                           {chapters.map(c => <option key={c} value={c} className="bg-black text-white text-center">{c}</option>)}
                         </select>
                         <select
+                          aria-label="Versículo inicial de la cita"
                           value={answer.citaVerseStart ?? ''}
                           onChange={e => onSetCitaField({ citaVerseStart: e.target.value })}
                           className="rounded border border-yellow-600/30 bg-black/30 py-1.5 text-xs focus:outline-none focus:border-yellow-500 text-center disabled:appearance-none"
@@ -297,6 +306,7 @@ export const QuizAudienceView: React.FC<QuizAudienceViewProps> = ({
                           {verses.map(v => <option key={v} value={v} className="bg-black text-white text-center">{v}</option>)}
                         </select>
                         <select
+                          aria-label="Versículo final de la cita"
                           value={answer.citaVerseEnd ?? ''}
                           onChange={e => onSetCitaField({ citaVerseEnd: e.target.value })}
                           className="rounded border border-yellow-600/30 bg-black/30 py-1.5 text-xs focus:outline-none focus:border-yellow-500 text-center disabled:appearance-none"
@@ -350,7 +360,7 @@ export const QuizAudienceView: React.FC<QuizAudienceViewProps> = ({
           className="flex flex-col gap-3"
         >
           {/* Score summary */}
-          <div className={`rounded-xl border px-4 py-3 text-center ${questionScore.optionCentipunts > 0 ? 'border-emerald-600/60 bg-emerald-950/40' : 'border-red-600/40 bg-red-950/30'}`}>
+          <div role="status" aria-live="polite" className={`rounded-xl border px-4 py-3 text-center ${questionScore.optionCentipunts > 0 ? 'border-emerald-600/60 bg-emerald-950/40' : 'border-red-600/40 bg-red-950/30'}`}>
             <div className="flex items-center justify-center gap-2 mb-1">
               {questionScore.optionCentipunts > 0
                 ? <CheckCircle size={18} className="text-emerald-400" />

@@ -28,6 +28,7 @@ interface AudienceScreenProps {
   quizScoreRequestId?: number;
   autoduckState?: AutoduckState;
   onPlaybackBlocked?: (blocked: boolean) => void;
+  quizDisplayName?: string;
 }
 
 const AudienceScreen = ({
@@ -47,8 +48,9 @@ const AudienceScreen = ({
   quizScoreRequestId,
   autoduckState,
   onPlaybackBlocked,
+  quizDisplayName,
 }: AudienceScreenProps) => {
-  const audienceAnswers = useAudienceAnswers(presentationId);
+  const audienceAnswers = useAudienceAnswers(presentationId, quizDisplayName);
   const activeSubslide = quizSubslides[quizCurrentSubslideIndex];
   const isCitaVerse = activeSubslide?.kind === 'cita-verse';
 

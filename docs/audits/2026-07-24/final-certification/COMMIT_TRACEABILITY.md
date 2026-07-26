@@ -17,8 +17,8 @@
 | `3adb91d` | B-04/06, L-01/02 | Credenciales, cuotas y overlay |
 | `d5fe035` | SP-PERF-006/007 | Assets hash y activación SW |
 | `113ad32` | SP-SRE-016/018 | ICE/TCP, API interna, readiness y Docker |
+| `c14e157` | A11Y-FINAL-007 | Persistencia de foco y texto del alias durante rerenders |
 
 En cada frontera se ejecutaron pruebas dirigidas, TypeScript y ESLint. Las
 fronteras arquitectónicas incluyeron la suite completa y build. El resultado
-acumulado final fue 49 archivos y 355 pruebas aprobadas.
-
+acumulado final fue 49 archivos y 356 pruebas aprobadas.

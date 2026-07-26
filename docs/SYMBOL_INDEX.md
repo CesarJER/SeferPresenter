@@ -11,11 +11,12 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
 - `catalog.html` - Vite build entry for public catalogs; loads `src/main-catalog.tsx`.
 - `src/main.tsx` - current React root for presenter/default shell.
 - `src/main-audio-editor.tsx` - standalone audio editor root; loads and saves `/api/audio-sync` without presenter sync wiring.
-- `src/main-audience.tsx` - placeholder mode-specific root for audience mode in the MPA split.
+- `src/main-audience.tsx` - standalone Audience root with read-only projection,
+  quiz, PWA/media and optional Live Audio wiring.
 - `src/main-control.tsx` - standalone React root for control mode; orchestrates control state and sync wiring without presenter/media elements.
 - `src/main-catalog.tsx` - standalone React root for the public catalog interface.
 - `vite.config.ts` - Vite multi-entry input configuration.
-- `public/audience-sw.js` - shared PWA service worker for `/audience` and `/control`, versioned as `1.1.0` with testable cache exclusion helpers.
+- `public/audience-sw.js` - shared PWA service worker for `/audience` and `/control`, versioned as `1.2.0`; arbitrary runtime media is network-only.
 - `public/manifest.webmanifest` - Audience PWA manifest scoped to `/audience` and using `public/logo.svg`.
 - `public/control-manifest.webmanifest` - Control PWA manifest scoped to `/control` and using `public/logo.svg`.
 
@@ -39,7 +40,7 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
 - `useScriptureNavigation` - `src/hooks/useScriptureNavigation.ts`: scripture projection, slide boundary, manual Sefer mode transitions.
 - `useSeferReader` - `src/hooks/useSeferReader.ts`: book/chapter/verse reader state and data loading.
 - `useQuizTimer` - `src/hooks/useQuizTimer.ts`: quiz timer state and transitions.
-- [useAudienceSession](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useAudienceSession.ts) - `src/hooks/useAudienceSession.ts`: audience local session management, device ID, nick, and presentation session ID tracking in localStorage.
+- [useAudienceSession](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useAudienceSession.ts) - `src/hooks/useAudienceSession.ts`: ephemeral audience identity/alias state, logout purge, and presentation-session rotation.
 - Quiz answer hooks - `src/hooks/useQuizAnswers.ts`: presentation-scoped audience answer sessions and controller aggregation through `useAudienceAnswers` and `useControllerAnswers`.
 - `useQuizAudio` - `src/hooks/useQuizAudio.ts`: quiz feedback sounds.
 - `scriptureNumerals` helpers - `src/hooks/scriptureNumerals.ts`: scripture numeral utilities.
@@ -143,7 +144,14 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
   status, token, refresh-token, and moderation endpoints with memory-only state
   and no top-level server SDK dependency. Tokens include ephemeral
   `participantId` metadata and no alias; refresh keeps the same participant
-  identity while reflecting current speaker permission and muted speaker state.
+  identity while reflecting current speaker permission and muted speaker state;
+  refresh possession is proved by a rotating, hashed credential.
+- `server/content-validation.mjs`: bounded deep validation for persisted
+  presentation and audio-sync payloads.
+- `server/json-persistence.mjs`: fsynced temp/backup persistence with atomic
+  rename and an explicit single-file bind-mount fallback.
+- `server/path-containment.mjs`: static-file containment using `path.relative`.
+- `server/quiz-message-validation.mjs`: bounded public quiz message shapes.
 - `server/timelineManager.mjs`: backend-owned audio timeline state and action reducer.
 - `server/audio-timeline-sync.mjs`: pure helpers for estimating backend audio
   timeline position and mapping audio cue positions to slide/verse selections.

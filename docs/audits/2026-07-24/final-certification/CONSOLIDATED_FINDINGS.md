@@ -29,6 +29,7 @@ rendimiento y accesibilidad. No se detectaron S0.
 | SP-PERF-007 | S2 | Activación automática del Service Worker podía interrumpir sesiones. | Activación coordinada por la acción de reinicio; `d5fe035`. |
 | SP-SRE-018 | S2 | Readiness Live Audio comprobaba configuración, no LiveKit. | RoomService acotado, API interna y 503 real; `113ad32`. |
 | A11Y-FINAL-001..006 | S2 | Anuncios cerrados, bloqueo, foco remoto, nombres de acciones y errores no eran plenamente operables. | Regiones vivas neutrales, nombres únicos y restauración de foco; `d449dfc`, `cccb634`. |
+| A11Y-FINAL-007 | S1 | Las actualizaciones en vivo reiniciaban el ciclo de foco del diálogo y expulsaban el cursor mientras se escribía el alias. | Ciclo de foco estable durante toda la apertura y regresión de rerender; `c14e157`. |
 
 ## Hallazgos residuales
 
@@ -45,4 +46,3 @@ rendimiento y accesibilidad. No se detectaron S0.
 No queda ningún S0/S1 de código conocido en Base. Los S1 residuales afectan
 exclusivamente a la certificación Live Audio o a evidencia física todavía no
 ejecutada.
-

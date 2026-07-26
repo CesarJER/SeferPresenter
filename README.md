@@ -18,7 +18,7 @@ SeferPresenter es una aplicacion React/Vite para proyectar presentaciones con so
 npm run dev          # backend local + servidor Vite frontend
 npm run dev:frontend # solo servidor Vite frontend
 npm run dev:backend  # backend local Node en http://localhost:8787
-npm run docker:up    # stack completo con Docker Compose
+npm run docker:up    # stack base (app + Caddy), sin Live Audio
 npm run docker:down  # detener el stack completo de Docker Compose
 npm run build        # build web
 npm run start:local  # backend local sirviendo dist/
@@ -68,8 +68,13 @@ reducen en el backend a `SYNC_STATE`, por lo que Control y Audiencia pueden
 sincronizar navegacion sin requerir que `/presenter` este abierto. SSE y los
 endpoints HTTP existentes siguen activos.
 
-Si necesitas probar el stack completo con proxy, Redis y LiveKit, usa
-`docker compose` mediante `npm run docker:up`. `npm run dev` sigue siendo util
+Si necesitas probar el stack completo con proxy, Redis y LiveKit, activa el
+perfil opcional con `docker compose --profile live-audio up --build`. El perfil
+requiere `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` y `LIVEKIT_NODE_IP`; no usa
+credenciales de desarrollo ni consulta servicios publicos para descubrir la IP.
+Antes de construirlo, activa tambien `SEFER_LIVE_AUDIO_ENABLED=true` y
+`VITE_SEFER_LIVE_AUDIO_BUILD=true` en el entorno.
+`npm run dev` sigue siendo util
 para desarrollo local del frontend/backend, pero no sustituye el entorno
 contenedorizado cuando quieres validar la ruta completa de voz en vivo.
 
@@ -256,13 +261,15 @@ LIVEKIT_ROOM_NAME=sefer-live-audio
 Endpoints:
 
 - `GET /api/livekit/status`: devuelve `{ enabled, available?, reason? }`.
-- `POST /api/livekit/token`: entrada `{ role, roomSession? }`; devuelve
-  `livekitUrl`, `token`, `expiresAt`, `participantIdentity` y `participantId`
-  efimero. `audience` recibe permiso de solo suscripcion; `control` recibe
-  permiso de publicar audio.
+- `POST /api/livekit/token`: entrada Audience `{ role, roomSession? }`; Control
+  añade `controlSessionId`. Devuelve `livekitUrl`, `token`, `expiresAt`,
+  `participantIdentity`, `participantId` efímero y `refreshCredential` rotatorio.
+  Audience recibe permisos mínimos. Control exige Basic Auth y una sesión WS
+  autorizada; Presenter exige Basic Auth.
 - `POST /api/livekit/refresh-token`: renueva un token para un participante activo
-  en memoria antes de expirar, preservando `participantId` e identidad LiveKit
-  cuando el participante sigue dentro del margen de retorno.
+  mediante `{ participantId, refreshCredential }`, preserva la identidad y rota
+  la credencial en cada éxito. Los roles privilegiados vuelven a demostrar su
+  autorización; credenciales ajenas, expiradas o reutilizadas se rechazan.
 - `POST /api/livekit/grant-speak`, `revoke-speak`, `mute-participant`,
   `mute-all`, `kick-participant`, `rescue-participant`: requieren
   `role: "control"` y un `controlSessionId` autorizado por WebSocket.
@@ -274,6 +281,11 @@ persiste claves, alias, tokens ni mensajes privados en archivos o base de datos.
 El snapshot operacional vive solo en memoria; las partes sensibles que el
 servidor llega a conocer por parches de Control autorizado se cifran con una
 clave derivada de `SEFER_CONTROL_PASSWORD` y no se guardan en disco.
+
+Compose conserva copias de recuperación fsync de `presentations.json` y
+`audio_sync.json` en el volumen `sefer_backups`. En un montaje individual de
+archivo, Docker puede impedir el `rename` atómico del primario; el backend lo
+registra y solo usa escritura in-place después de crear esa copia durable.
 
 ## Legacy
 

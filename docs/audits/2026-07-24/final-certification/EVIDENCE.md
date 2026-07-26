@@ -3,7 +3,7 @@
 ## Línea base
 
 - Rama: `codex/final-certification`
-- Código remediado antes del expediente: `113ad32`
+- Código remediado: `c14e157`
 - Node.js: `v24.15.0`
 - npm: `11.12.1`
 - Docker Engine: `29.6.1`
@@ -18,7 +18,7 @@ Resultado final de la frontera de código:
 
 ```text
 npm.cmd run test
-49 archivos, 355 pruebas: PASS
+49 archivos, 356 pruebas: PASS
 
 npx.cmd tsc --noEmit
 PASS
@@ -35,6 +35,9 @@ Pruebas dirigidas de la última fase:
 ```text
 livekitSecurity.test.ts + serverAuth.test.ts
 2 archivos, 31 pruebas: PASS
+
+LiveAudioAccessibility.test.tsx
+1 archivo, 13 pruebas: PASS
 ```
 
 ## Docker y red interna
@@ -43,7 +46,7 @@ Imágenes verificadas:
 
 | Componente | Identificador |
 | --- | --- |
-| App | `sha256:cf5f862297c781a491137cb8c438b4db814ca0df11bd90c33187af83b56c35b3` |
+| App | `sha256:b5efe42e0d9f90dadd4b27c623a5ea12a21d41561f0ad954efe588de9a228d98` |
 | Caddy | `sha256:77c07d5ebfa5be9fd6c820d2094ae662c9e7eeb9bf98346b7f639900263ee2a2` |
 | Redis | `sha256:6ab0b6e7381779332f97b8ca76193e45b0756f38d4c0dcda72dbb3c32061ab99` |
 | LiveKit | `sha256:2c6869d2d5ff6c9c0166f47be1c92dad6928bfecfa5e4060a6ece48db8accfa3` |
@@ -75,4 +78,3 @@ No se simularon ni se declaran superadas:
 - TURN/TLS con dominio y certificado del operador;
 - certificado/HSTS del dominio de producción;
 - escaneo remoto de advisories no autorizado.
-
