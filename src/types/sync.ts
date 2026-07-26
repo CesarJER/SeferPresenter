@@ -24,24 +24,18 @@ export interface AutoduckState {
 }
 
 export interface AudiencePublicState {
-  mode: AppMode;
-  presentationTitle: string;
-  slide: {
-    id: string;
-    label: string;
-    lines: string[];
-    type: 'media' | 'scripture' | 'text';
-  } | null;
-  scripture: {
-    reference: string;
-    verseNikud: string;
-    transliteration: string;
-    translation: string;
-  } | null;
-  background: {
-    kind: 'image' | 'color';
-    value: string;
-  };
+  presentation: Presentation | null;
+  slideIndex: number;
+  stepIndex: number;
+  backgroundLock: boolean;
+  lockedBackgroundValue: string | null;
+  userSelectedBackground: string | null;
+  videoState: VideoState | null;
+  appMode: AppMode;
+  scriptureState: ScriptureNavState | null;
+  audioState: AudioState;
+  quizState: QuizSyncState | null;
+  autoduckState: AutoduckState;
   updatedAt: number;
 }
 

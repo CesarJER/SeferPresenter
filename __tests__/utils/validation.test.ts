@@ -435,7 +435,6 @@ describe('runtime validation', () => {
         participants: [{
           participantId,
           role: 'audience',
-          alias: 'Temporal',
           operationalRole: 'activo',
           microphonePermissionState: 'unknown',
           microphoneTrackState: 'off',
@@ -479,6 +478,20 @@ describe('runtime validation', () => {
       },
       createdAt: Date.now(),
     }).ok).toBe(true);
+  });
+
+  it('rejects clear aliases in server snapshot patches', () => {
+    expect(validateSyncMessage({
+      type: 'LIVE_AUDIO_SNAPSHOT_PATCH',
+      snapshot: {
+        participants: [{
+          participantId: '550e8400-e29b-41d4-a716-446655440000',
+          role: 'audience',
+          alias: 'No debe llegar al servidor',
+        }],
+      },
+      createdAt: Date.now(),
+    }).ok).toBe(false);
   });
 
   it('rejects malformed private control signals', () => {

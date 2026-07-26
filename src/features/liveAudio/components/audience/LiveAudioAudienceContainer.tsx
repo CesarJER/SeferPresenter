@@ -159,7 +159,7 @@ export default function LiveAudioAudienceContainer({
   }, [participantId, wsSend]);
 
   // 2. Setup private signals
-  const { sendPrivateSignal, ready: privateSignalReady, getAudiencePublicKey } = usePrivateControlSignals({
+  const { sendPrivateSignal, ready: privateSignalReady } = usePrivateControlSignals({
     role: 'audience',
     participantId: participantId || clientId,
     sendMessage: wsSend,
@@ -187,18 +187,20 @@ export default function LiveAudioAudienceContainer({
     isAliasVisible: boolean = isAliasVisibleToOthers,
   ) => {
     if (!participantId || !alias) return false;
-    const activeListPublicKey = await getAudiencePublicKey();
-    if (!activeListPublicKey) return false;
-
-    return wsSend('LIVE_AUDIO_ACTIVE_PARTICIPANT_PROFILE', {
+    const technicalStateSent = wsSend('LIVE_AUDIO_ACTIVE_PARTICIPANT_PROFILE', {
       type: 'LIVE_AUDIO_ACTIVE_PARTICIPANT_PROFILE',
       participantId,
-      alias,
-      activeListPublicKey,
       isAliasVisibleToActiveParticipants: isAliasVisible,
       createdAt: Date.now(),
     });
-  }, [activeAlias, getAudiencePublicKey, isAliasVisibleToOthers, participantId, wsSend]);
+    if (!privateSignalReady) return technicalStateSent;
+    const aliasSent = await sendPrivateSignal({
+      type: 'ACTIVE_PROFILE',
+      alias,
+      isAliasVisibleToActiveParticipants: isAliasVisible,
+    });
+    return technicalStateSent && aliasSent;
+  }, [activeAlias, isAliasVisibleToOthers, participantId, privateSignalReady, sendPrivateSignal, wsSend]);
 
   // Listen for grant/revoke messages
   useEffect(() => {

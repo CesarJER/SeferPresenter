@@ -99,14 +99,11 @@ const makeParticipantStatus = (
 
 const makeActiveProfile = (
   participantId: string,
-  alias: string,
-  activeListPublicKey = Buffer.from(`public-key-${alias}`).toString('base64'),
+  isAliasVisibleToActiveParticipants = true,
 ): WsMessage => ({
   type: 'LIVE_AUDIO_ACTIVE_PARTICIPANT_PROFILE',
   participantId,
-  alias,
-  activeListPublicKey,
-  isAliasVisibleToActiveParticipants: true,
+  isAliasVisibleToActiveParticipants,
   createdAt: Date.now(),
 });
 
@@ -267,15 +264,14 @@ describe('visible active participants', () => {
     expect(permission.canViewActiveParticipants).toBe(true);
   });
 
-  it('routes active participant profile with alias and public key to authorized control', async () => {
+  it('routes only technical alias visibility in the active participant profile', async () => {
     const control = await connectWs('control');
     const audience = await connectWs('audience');
     const participantId = randomUUID();
-    const activeListPublicKey = Buffer.from('audience-visible-list-key').toString('base64');
 
     audience.send(makeParticipantStatus(participantId));
     await waitFor(control, (message) => message.type === 'LIVE_AUDIO_PARTICIPANT_STATUS' && message.participantId === participantId);
-    audience.send(makeActiveProfile(participantId, 'Nuevo Nick', activeListPublicKey));
+    audience.send(makeActiveProfile(participantId));
 
     const profile = await waitFor(
       control,
@@ -283,9 +279,10 @@ describe('visible active participants', () => {
     );
     const participant = getLiveAudioParticipantSnapshot().participants.find((item) => item.participantId === participantId);
 
-    expect(profile.alias).toBe('Nuevo Nick');
-    expect(profile.activeListPublicKey).toBe(activeListPublicKey);
-    expect(participant?.activeListPublicKey).toBe(activeListPublicKey);
+    expect(profile).not.toHaveProperty('alias');
+    expect(profile).not.toHaveProperty('activeListPublicKey');
+    expect(participant).not.toHaveProperty('alias');
+    expect(participant).not.toHaveProperty('activeListPublicKey');
     expect(participant?.isAliasVisibleToActiveParticipants).toBe(true);
   });
 
@@ -304,7 +301,7 @@ describe('visible active participants', () => {
       ),
     );
 
-    audience.send(makeActiveProfile(participantId, 'Mano Levantada'));
+    audience.send(makeActiveProfile(participantId));
     await waitFor(
       control,
       (message) => message.type === 'LIVE_AUDIO_ACTIVE_PARTICIPANT_PROFILE' && message.participantId === participantId,

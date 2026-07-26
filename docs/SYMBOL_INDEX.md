@@ -19,10 +19,13 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
 - `public/audience-sw.js` - shared PWA service worker for `/audience` and `/control`, versioned as `1.2.0`; arbitrary runtime media is network-only.
 - `public/manifest.webmanifest` - Audience PWA manifest scoped to `/audience` and using `public/logo.svg`.
 - `public/control-manifest.webmanifest` - Control PWA manifest scoped to `/control` and using `public/logo.svg`.
+- `server/audience-projection-state.mjs` - allowlisted derivation of the public
+  Audience projection snapshot; exposes only the active slide plus required
+  display, media, scripture, and quiz state.
 
 ## Hooks
 
-- [useSyncState](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useSyncState.ts) - `src/hooks/useSyncState.ts`: BroadcastChannel, SSE/API sync, local persistence, remote state application, calling `onAudioTimelineState` and exposing `wsStatus`.
+- [useSyncState](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useSyncState.ts) - `src/hooks/useSyncState.ts`: role-aware BroadcastChannel/SSE/API sync, reduced public Audience endpoints, local persistence, remote state application, calling `onAudioTimelineState` and exposing `wsStatus`.
 - [useWebSocket](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useWebSocket.ts) - `src/hooks/useWebSocket.ts`: standalone WebSocket connection helper with safe JSON send, typed receive callback, status, cleanup, and exponential reconnect.
 - [useServerClock](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useServerClock.ts) - `src/hooks/useServerClock.ts`: WebSocket server clock offset and RTT estimation from `SERVER_TIME_PING` / `SERVER_TIME_PONG`.
 - [useAudioTimeline](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useAudioTimeline.ts) - `src/hooks/useAudioTimeline.ts`: local audio timeline tracking, status estimation, action dispatching over WebSocket.

@@ -85,7 +85,6 @@ const snapshotParticipantToStatus = (
   isAliasVisibleToActiveParticipants: participant.isAliasVisibleToActiveParticipants,
   canViewActiveParticipants: participant.canViewActiveParticipants,
   isAliasHiddenByControl: participant.isAliasHiddenByControl,
-  activeListPublicKey: participant.activeListPublicKey,
   connected: participant.connected,
   updatedAt: participant.updatedAt,
 });
@@ -171,33 +170,6 @@ export default function LiveAudioControlContainer({
           });
           return next;
         });
-        setParticipantAliases(prev => {
-          const next = { ...prev };
-          snapshot.participants.forEach((participant) => {
-            if (participant.role === 'audience' && participant.alias) {
-              next[participant.participantId] = participant.alias;
-            } else if (
-              participant.role === 'audience' &&
-              participant.isActiveAudience === false &&
-              participant.isKicked !== true
-            ) {
-              delete next[participant.participantId];
-            }
-          });
-          return next;
-        });
-        setParticipantEphemeralKeys(prev => {
-          const next = { ...prev };
-          snapshot.participants.forEach((participant) => {
-            if (participant.role !== 'audience') return;
-            if (participant.activeListPublicKey) {
-              next[participant.participantId] = participant.activeListPublicKey;
-            } else if (participant.isActiveAudience === false && participant.isKicked !== true) {
-              delete next[participant.participantId];
-            }
-          });
-          return next;
-        });
         setConnectionCounts({
           type: 'LIVE_AUDIO_CONNECTION_COUNTS',
           ...snapshot.connectionCounts,
@@ -217,9 +189,6 @@ export default function LiveAudioControlContainer({
       if (type === 'LIVE_AUDIO_PARTICIPANT_STATUS') {
         const msg = payload as unknown as LiveAudioParticipantStatusMessage;
         setParticipantsMap(prev => ({ ...prev, [msg.participantId]: msg }));
-        if (msg.activeListPublicKey) {
-          setParticipantEphemeralKeys(prev => ({ ...prev, [msg.participantId]: msg.activeListPublicKey! }));
-        }
         if (msg.isActiveAudience === false && msg.isKicked !== true) {
           setParticipantAliases(prev => {
             const next = { ...prev };
@@ -237,14 +206,8 @@ export default function LiveAudioControlContainer({
 
       if (type === 'LIVE_AUDIO_ACTIVE_PARTICIPANT_PROFILE') {
         const participantId = typeof payload.participantId === 'string' ? payload.participantId : '';
-        const alias = sanitizeAlias(payload.alias);
-        const activeListPublicKey = typeof payload.activeListPublicKey === 'string'
-          ? payload.activeListPublicKey
-          : '';
-        if (!participantId || !alias || !activeListPublicKey) return;
+        if (!participantId) return;
         const isAliasVisibleToActiveParticipants = payload.isAliasVisibleToActiveParticipants === true;
-        setParticipantAliases(prev => ({ ...prev, [participantId]: alias }));
-        setParticipantEphemeralKeys(prev => ({ ...prev, [participantId]: activeListPublicKey }));
         setParticipantsMap(prev => {
           const existing = prev[participantId];
           if (!existing) return prev;
@@ -253,7 +216,6 @@ export default function LiveAudioControlContainer({
             [participantId]: {
               ...existing,
               isAliasVisibleToActiveParticipants,
-              activeListPublicKey,
             },
           };
         });
@@ -263,7 +225,6 @@ export default function LiveAudioControlContainer({
             participants: [{
               participantId,
               role: 'audience',
-              alias,
               isAliasVisibleToActiveParticipants,
             }],
           },
@@ -325,17 +286,6 @@ export default function LiveAudioControlContainer({
     const alias = sanitizeAlias(data.alias);
     if (alias) {
       setParticipantAliases(prev => ({ ...prev, [signal.fromParticipantId]: alias }));
-      wsSend?.('LIVE_AUDIO_SNAPSHOT_PATCH', {
-        type: 'LIVE_AUDIO_SNAPSHOT_PATCH',
-        snapshot: {
-          participants: [{
-            participantId: signal.fromParticipantId,
-            role: 'audience',
-            alias,
-          }],
-        },
-        createdAt: Date.now(),
-      });
     }
 
     if (signal.ephemeralPublicKey) {

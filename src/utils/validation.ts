@@ -216,7 +216,8 @@ const validateOperationalParticipantSnapshot = (
   if (typeof value.role !== 'string' || !liveAudioParticipantRoles.has(value.role as LiveAudioParticipantRole)) {
     errors.push(`${path}.role no es valido.`);
   }
-  if (value.alias !== undefined && typeof value.alias !== 'string') errors.push(`${path}.alias debe ser texto.`);
+  if (value.alias !== undefined) errors.push(`${path}.alias no puede formar parte del snapshot del servidor.`);
+  if (value.activeListPublicKey !== undefined) errors.push(`${path}.activeListPublicKey no puede formar parte del snapshot del servidor.`);
   if (typeof value.operationalRole !== 'string' || !liveAudioOperationalRoles.has(value.operationalRole)) {
     errors.push(`${path}.operationalRole no es valido.`);
   }
@@ -722,17 +723,17 @@ const validateAudioTimelineState = (value: unknown, path: string): ValidationRes
 const validateAudiencePublicState = (value: unknown, path: string): ValidationResult<unknown> => {
   if (!isRecord(value)) return fail([`${path} debe ser un objeto.`]);
 
-  const errors: string[] = [];
-  if (typeof value.mode !== 'string' || !appModes.has(value.mode)) errors.push(`${path}.mode no es valido.`);
-  if (typeof value.presentationTitle !== 'string') errors.push(`${path}.presentationTitle debe ser texto.`);
-  if (value.slide !== null && !isRecord(value.slide)) errors.push(`${path}.slide debe ser objeto o null.`);
-  if (value.scripture !== null && !isRecord(value.scripture)) errors.push(`${path}.scripture debe ser objeto o null.`);
-  if (!isRecord(value.background)) {
-    errors.push(`${path}.background debe ser un objeto.`);
-  } else {
-    if (value.background.kind !== 'image' && value.background.kind !== 'color') errors.push(`${path}.background.kind no es valido.`);
-    if (typeof value.background.value !== 'string') errors.push(`${path}.background.value debe ser texto.`);
-  }
+  const remote = validateRemoteStatePayload(value);
+  const errors = [...remote.errors];
+  if (value.presentation === undefined) errors.push(`${path}.presentation es requerido.`);
+  if (value.slideIndex === undefined) errors.push(`${path}.slideIndex es requerido.`);
+  if (value.backgroundLock === undefined) errors.push(`${path}.backgroundLock es requerido.`);
+  if (value.lockedBackgroundValue === undefined) errors.push(`${path}.lockedBackgroundValue es requerido.`);
+  if (value.userSelectedBackground === undefined) errors.push(`${path}.userSelectedBackground es requerido.`);
+  if (value.videoState === undefined) errors.push(`${path}.videoState es requerido.`);
+  if (value.appMode === undefined) errors.push(`${path}.appMode es requerido.`);
+  if (value.scriptureState === undefined) errors.push(`${path}.scriptureState es requerido.`);
+  if (value.audioState === undefined) errors.push(`${path}.audioState es requerido.`);
   if (!isFiniteNumber(value.updatedAt)) errors.push(`${path}.updatedAt debe ser numero.`);
 
   return errors.length > 0 ? fail(errors) : ok(value);
@@ -894,7 +895,17 @@ const validateLiveAudioBroadcastMessage = (value: Record<string, unknown>): Vali
       validateOptionalCreatedAt(value, value.type, errors);
       break;
     case 'LIVE_AUDIO_SNAPSHOT_PATCH':
-      if (!isRecord(value.snapshot)) errors.push('snapshot debe ser un objeto.');
+      if (!isRecord(value.snapshot)) {
+        errors.push('snapshot debe ser un objeto.');
+      } else if (
+        Array.isArray(value.snapshot.participants) &&
+        value.snapshot.participants.some((participant) => (
+          isRecord(participant) &&
+          (participant.alias !== undefined || participant.activeListPublicKey !== undefined)
+        ))
+      ) {
+        errors.push('snapshot no puede contener alias ni claves efimeras de Audience.');
+      }
       validateOptionalCreatedAt(value, value.type, errors);
       break;
     default:
