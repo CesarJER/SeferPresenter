@@ -102,17 +102,35 @@ services:
         test -n "$${LIVEKIT_API_SECRET}" || { echo "LIVEKIT_API_SECRET is required" >&2; exit 1; }
         export LIVEKIT_KEYS="$${LIVEKIT_API_KEY}: $${LIVEKIT_API_SECRET}"
         export NODE_IP="$${LIVEKIT_NODE_IP}"
+        is_public_ipv4() {
+          echo "$$1" | grep -Eq '^([0-9]{1,3}\.){3}[0-9]{1,3}$$' || return 1
+          old_ifs="$$IFS"; IFS=.; set -- $$1; IFS="$$old_ifs"
+          [ "$$#" -eq 4 ] || return 1
+          for octet in "$$@"; do [ "$$octet" -ge 0 ] 2>/dev/null && [ "$$octet" -le 255 ] || return 1; done
+          case "$$1.$$2" in
+            0.*|10.*|100.6[4-9]|100.[7-9][0-9]|100.1[01][0-9]|100.12[0-7]|127.*|169.254|172.1[6-9]|172.2[0-9]|172.3[01]|192.168|198.1[89]) return 1 ;;
+          esac
+          [ "$$1" -lt 224 ] || return 1
+        }
         if [ -z "$$NODE_IP" ]; then
-          echo "LIVEKIT_NODE_IP not set, attempting to auto-detect public IP..."
-          NODE_IP=$$(wget -qO- http://api.ipify.org || wget -qO- http://icanhazip.com || wget -qO- http://ifconfig.me/ip)
+          [ "$${SEFER_LIVEKIT_AUTO_DISCOVER_IP}" = "true" ] || { echo "LIVEKIT_NODE_IP is required when discovery is disabled" >&2; exit 1; }
+          echo "LIVEKIT_NODE_IP not set; discovering a public IPv4 address"
+          for attempt in 1 2; do
+            for provider in https://api.ipify.org https://icanhazip.com https://ifconfig.me/ip; do
+              candidate=$$(wget -qO- -T 5 -t 1 "$$provider" 2>/dev/null | tr -d '[:space:]' || true)
+              if is_public_ipv4 "$$candidate"; then NODE_IP="$$candidate"; break 2; fi
+            done
+          done
         fi
-        test -n "$$NODE_IP" || { echo "Could not determine NODE_IP" >&2; exit 1; }
+        is_public_ipv4 "$$NODE_IP" || { echo "A valid public LIVEKIT_NODE_IP could not be determined" >&2; exit 1; }
+        echo "LiveKit public IPv4 configured"
         export NODE_IP
         exec /livekit-server
     environment:
       - LIVEKIT_API_KEY=${LIVEKIT_API_KEY:-}
       - LIVEKIT_API_SECRET=${LIVEKIT_API_SECRET:-}
       - LIVEKIT_NODE_IP=${LIVEKIT_NODE_IP:-}
+      - SEFER_LIVEKIT_AUTO_DISCOVER_IP=${SEFER_LIVEKIT_AUTO_DISCOVER_IP:-true}
       - "REDIS_HOST=redis:6379"
       - "UDP_PORT=50000-50050"
     ports:
@@ -125,7 +143,7 @@ services:
         condition: service_healthy
         restart: true
     healthcheck:
-      test: [ "CMD-SHELL", "wget -qO- http://127.0.0.1:7880/alive >/dev/null || exit 1" ]
+      test: [ "CMD", "busybox", "nc", "-z", "-w", "3", "127.0.0.1", "7880" ]
       interval: 30s
       timeout: 10s
       retries: 3
