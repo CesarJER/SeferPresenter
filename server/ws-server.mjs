@@ -8,6 +8,7 @@ const roles = new Set(['presenter', 'control', 'audience', 'unknown'])
 const liveAudioControls = new Map()
 const liveAudioParticipants = new Map()
 const audienceAccessRecords = new Map()
+const audienceCredentialIndex = new Map()
 const audienceSseTickets = new Map()
 let presentationSessionId = randomUUID()
 let serverEpoch = randomUUID()
@@ -130,23 +131,41 @@ const createAudienceCredential = () => randomBytes(32).toString('base64url')
 const hashAudienceCredential = (credential) =>
   createHash('sha256').update(credential, 'utf8').digest()
 
+const audienceCredentialKey = (hash) => hash.toString('hex')
+
+const deleteAudienceAccessRecord = (participantId) => {
+  const record = audienceAccessRecords.get(participantId)
+  if (!record) return false
+  audienceAccessRecords.delete(participantId)
+  audienceCredentialIndex.delete(audienceCredentialKey(record.credentialHash))
+  return true
+}
+
+const clearAudienceAccessRecords = () => {
+  audienceAccessRecords.clear()
+  audienceCredentialIndex.clear()
+}
+
+const getAudienceAccessCapacity = () => {
+  const raw = Number.parseInt(process.env.SEFER_AUDIENCE_ACCESS_CAPACITY || '500', 10)
+  return Number.isFinite(raw) && raw > 0 ? Math.min(raw, 5_000) : 500
+}
+
 const findAudienceAccessByCredential = (credential) => {
   if (typeof credential !== 'string' || credential.length < 32) return null
   const candidate = hashAudienceCredential(credential)
-  for (const record of audienceAccessRecords.values()) {
-    if (
-      record.credentialHash.length === candidate.length &&
-      timingSafeEqual(record.credentialHash, candidate)
-    ) {
-      if (record.expiresAt <= Date.now()) {
-        audienceAccessRecords.delete(record.participantId)
-        stateRevision += 1
-        return null
-      }
-      return record
-    }
+  const participantId = audienceCredentialIndex.get(audienceCredentialKey(candidate))
+  const record = participantId ? audienceAccessRecords.get(participantId) : null
+  if (!record) return null
+  if (
+    record.credentialHash.length !== candidate.length ||
+    !timingSafeEqual(record.credentialHash, candidate)
+  ) return null
+  if (record.expiresAt <= Date.now()) {
+    deleteAudienceAccessRecord(record.participantId)
+    return null
   }
-  return null
+  return record
 }
 
 const makeAudienceAccessState = (record) => ({
@@ -165,6 +184,11 @@ const makeAudienceAccessState = (record) => ({
 const bootstrapAudienceAccess = (credential) => {
   const existing = findAudienceAccessByCredential(credential)
   if (existing) return { ...makeAudienceAccessState(existing), credential: undefined }
+  if (audienceAccessRecords.size >= getAudienceAccessCapacity()) {
+    const error = new Error('Audience access capacity reached')
+    error.code = 'AUDIENCE_CAPACITY_REACHED'
+    throw error
+  }
   const nextCredential = createAudienceCredential()
   const participantId = randomUUID()
   const record = {
@@ -177,7 +201,7 @@ const bootstrapAudienceAccess = (credential) => {
     expiresAt: Date.now() + getAudienceResumeTtlMs(),
   }
   audienceAccessRecords.set(participantId, record)
-  stateRevision += 1
+  audienceCredentialIndex.set(audienceCredentialKey(record.credentialHash), participantId)
   return { ...makeAudienceAccessState(record), credential: nextCredential }
 }
 
@@ -191,8 +215,7 @@ const authorizeAudienceCredential = (credential, { requireAdmitted = true } = {}
 const logoutAudienceCredential = (credential) => {
   const record = findAudienceAccessByCredential(credential)
   if (!record) return false
-  audienceAccessRecords.delete(record.participantId)
-  stateRevision += 1
+  deleteAudienceAccessRecord(record.participantId)
   return true
 }
 
@@ -224,6 +247,14 @@ const getServerEpoch = () => serverEpoch
 const isAudienceParticipantAdmitted = (participantId) => {
   const record = audienceAccessRecords.get(participantId)
   return accessMode === 'PUBLIC' || record?.accessState === 'ADMITTED'
+}
+
+const canReceiveAudienceSessionContent = (meta) => {
+  if (meta?.role !== 'audience') return true
+  const record = meta.audienceAccessId
+    ? audienceAccessRecords.get(meta.audienceAccessId)
+    : null
+  return Boolean(record && record.accessState === 'ADMITTED')
 }
 
 const createResumeCredential = () => randomBytes(32).toString('base64url')
@@ -577,6 +608,7 @@ const resetWsServerStateForTests = () => {
   liveAudioControls.clear()
   liveAudioParticipants.clear()
   audienceAccessRecords.clear()
+  audienceCredentialIndex.clear()
   audienceSseTickets.clear()
   liveAudioControlPublicKeyMessage = null
   privateControlOverlayEnvelope = null
@@ -966,6 +998,15 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
       })
       return
     }
+    if (issuer.controlState !== 'PRINCIPAL') {
+      sendJson(meta.ws, {
+        type: 'LIVE_AUDIO_PRIVATE_OVERLAY_RESULT',
+        messageId: msg.messageId,
+        result: 'NACK',
+        reason: 'NOT_OVERLAY_AUTHORITY',
+      })
+      return
+    }
     if (liveAudioControlPublicKeyMessage?.keyId !== msg.keyId) {
       sendJson(meta.ws, {
         type: 'LIVE_AUDIO_PRIVATE_OVERLAY_RESULT',
@@ -975,15 +1016,33 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
       })
       return
     }
-    if (
-      privateControlOverlayEnvelope &&
-      msg.privateStateRevision <= privateControlOverlayEnvelope.privateStateRevision
-    ) {
+    if (msg.basedOnStateRevision > stateRevision) {
+      sendJson(meta.ws, {
+        type: 'LIVE_AUDIO_PRIVATE_OVERLAY_RESULT',
+        messageId: msg.messageId,
+        result: 'NACK',
+        reason: 'TECHNICAL_STATE_AHEAD',
+      })
+      return
+    }
+    if (privateControlOverlayEnvelope?.messageId === msg.messageId) {
       sendJson(meta.ws, {
         type: 'LIVE_AUDIO_PRIVATE_OVERLAY_RESULT',
         messageId: msg.messageId,
         result: 'ACK',
         reason: 'DUPLICATE',
+      })
+      return
+    }
+    const expectedPrivateRevision = privateControlOverlayEnvelope
+      ? privateControlOverlayEnvelope.privateStateRevision + 1
+      : 1
+    if (msg.privateStateRevision !== expectedPrivateRevision) {
+      sendJson(meta.ws, {
+        type: 'LIVE_AUDIO_PRIVATE_OVERLAY_RESULT',
+        messageId: msg.messageId,
+        result: 'NACK',
+        reason: 'PRIVATE_REVISION_GAP',
       })
       return
     }
@@ -1101,6 +1160,12 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
     meta.audienceAccessId = record.participantId
     meta.participantId = record.participantId
     sendAudienceAccessState(meta, record)
+    if (record.accessState === 'ADMITTED') {
+      sendJson(meta.ws, {
+        type: 'AUDIO_TIMELINE_STATE',
+        timeline: getTimeline(),
+      })
+    }
   }
 
   const handleAudienceAccessRequest = (meta, msg) => {
@@ -1967,10 +2032,12 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
     }
     sendJson(ws, makeRecordingPolicyMessage())
 
-    ws.send(JSON.stringify({
-      type: 'AUDIO_TIMELINE_STATE',
-      timeline: getTimeline(),
-    }))
+    if (role !== 'audience') {
+      ws.send(JSON.stringify({
+        type: 'AUDIO_TIMELINE_STATE',
+        timeline: getTimeline(),
+      }))
+    }
 
     ws.on('message', async (raw) => {
       let msg
@@ -1990,13 +2057,15 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
       }
       if (
         meta.role === 'audience' &&
-        accessMode === 'CONTROLLED' &&
         admittedAudienceOnlyTypes.has(msg.type)
       ) {
         const access = meta.audienceAccessId
           ? audienceAccessRecords.get(meta.audienceAccessId)
           : null
-        if (access?.accessState !== 'ADMITTED') return
+        if (access?.accessState !== 'ADMITTED') {
+          sendError(meta.ws, 'AUDIENCE_ACCESS_NOT_BOUND', 'Bind a valid Audience credential before accessing session content')
+          return
+        }
       }
       if (
         recordingPolicyTransitionInProgress &&
@@ -2069,7 +2138,7 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
           broadcast({
             type: 'AUDIO_TIMELINE_STATE',
             timeline,
-          })
+          }, canReceiveAudienceSessionContent)
           break
         }
 
@@ -2079,16 +2148,9 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
               ? audienceAccessRecords.get(meta.audienceAccessId)
               : null
             if (
-              accessMode === 'CONTROLLED' &&
-              (
-                !accessRecord ||
-                accessRecord.participantId !== msg.fromParticipantId ||
-                accessRecord.accessState === 'BLOCKED' ||
-                (
-                  accessRecord.accessState !== 'ADMITTED' &&
-                  msg.signalClass === 'PRIVATE_MESSAGE'
-                )
-              )
+              !accessRecord ||
+              accessRecord.participantId !== msg.fromParticipantId ||
+              accessRecord.accessState !== 'ADMITTED'
             ) {
               if (typeof msg.messageId === 'string') {
                 sendPrivateSignalResult(ws, msg, 'NACK', 'ACCESS_NOT_BOUND')
@@ -2404,7 +2466,7 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
             stateRevision = 0
             liveAudioControls.clear()
             liveAudioParticipants.clear()
-            audienceAccessRecords.clear()
+            clearAudienceAccessRecords()
             audienceSseTickets.clear()
             accessMode = getDefaultAccessMode()
             configureRecordingPolicy(snapshotProviders.recordingPolicy)
@@ -2498,8 +2560,20 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
     }
     for (const [participantId, accessRecord] of audienceAccessRecords) {
       if (accessRecord.expiresAt > now) continue
-      audienceAccessRecords.delete(participantId)
-      commitStateMutation()
+      const wasWaiting = accessRecord.accessState === 'WAITING'
+      deleteAudienceAccessRecord(participantId)
+      const revisionEnvelope = wasWaiting ? commitStateMutation() : null
+      if (revisionEnvelope) {
+        broadcast({
+          type: 'AUDIENCE_ACCESS_DECISION_RESULT',
+          ...revisionEnvelope,
+          participantId,
+          decision: 'EXPIRED',
+        }, (targetMeta) => (
+          targetMeta.role === 'control' &&
+          isControlAuthorized(liveAudioControls.get(targetMeta.controlSessionId))
+        ))
+      }
       for (const meta of wsClients.values()) {
         if (meta.role !== 'audience' || meta.audienceAccessId !== participantId) continue
         sendJson(meta.ws, {
@@ -2565,6 +2639,7 @@ export {
   getPresentationSessionId,
   getServerEpoch,
   isAudienceParticipantAdmitted,
+  canReceiveAudienceSessionContent,
   getRecordingPolicy,
   hasCurrentRecordingConfirmation,
 }

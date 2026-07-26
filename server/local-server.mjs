@@ -20,6 +20,7 @@ import {
   logoutAudienceCredential,
   isLiveAudioControlAuthorized,
   isAudienceParticipantAdmitted,
+  canReceiveAudienceSessionContent,
 } from './ws-server.mjs'
 import {
   classifyQuizSseRequest,
@@ -55,6 +56,7 @@ import {
 } from './content-validation.mjs'
 import { readJsonWithRecovery, writeJsonSafely } from './json-persistence.mjs'
 import { resolvePathInsideRoot } from './path-containment.mjs'
+import { createFixedWindowRateLimiter } from './request-rate-limit.mjs'
 import { deriveAudienceProjectionState } from './audience-projection-state.mjs'
 import {
   buildOperatorManifest,
@@ -83,6 +85,10 @@ const privacyLocalPath = process.env.SEFER_PRIVACY_LOCAL_PATH?.trim() ||
   path.join(rootDir, 'privacy.local.md')
 const privacyLocalMarkdown = readPrivacyLocalMarkdown(privacyLocalPath)
 const sseHeartbeatMs = 30_000
+const checkAudienceBootstrapRate = createFixedWindowRateLimiter({
+  limit: 120,
+  windowMs: 60_000,
+})
 
 let currentState = makeProjectionSyncStateMessage(getDefaultProjectionState(), {
   clientId: 'server',
@@ -594,7 +600,7 @@ const broadcastTimelineState = () => {
   broadcastWs({
     type: 'AUDIO_TIMELINE_STATE',
     timeline: getTimeline(),
-  })
+  }, canReceiveAudienceSessionContent)
 }
 
 const syncTimelineToSlideSelection = (payload, now = Date.now()) => {
@@ -686,14 +692,33 @@ const requireAuth = (req, res, url) => {
   return true
 }
 
+const getRequestClientKey = (req) => {
+  const forwarded = Array.isArray(req.headers['x-forwarded-for'])
+    ? req.headers['x-forwarded-for'][0]
+    : req.headers['x-forwarded-for']
+  return typeof forwarded === 'string' && forwarded.trim()
+    ? forwarded.split(',')[0].trim()
+    : req.socket.remoteAddress || 'unknown'
+}
+
 const handleApi = async (req, res, url) => {
   if (url.pathname === '/api/audience/access/bootstrap' && req.method === 'POST') {
+    const rate = checkAudienceBootstrapRate(getRequestClientKey(req))
+    if (!rate.allowed) {
+      res.setHeader('Retry-After', String(Math.ceil(rate.retryAfterMs / 1000)))
+      sendJson(res, 429, { error: 'Audience access bootstrap rate limit reached' })
+      return true
+    }
     try {
       const raw = await readBody(req)
       const body = raw ? JSON.parse(raw) : {}
       sendJson(res, 200, bootstrapAudienceAccess(body.credential))
     } catch (err) {
-      sendJson(res, 400, { error: err.message || 'Invalid access bootstrap request' })
+      sendJson(
+        res,
+        err?.code === 'AUDIENCE_CAPACITY_REACHED' ? 429 : 400,
+        { error: err.message || 'Invalid access bootstrap request' },
+      )
     }
     return true
   }
@@ -1235,7 +1260,10 @@ const handleWsMessageFromClient = (msg, meta) => {
         : tl.basePositionSec;
       if (Math.abs(currentEstimated - msg.audioState.currentTime) > 1.0) {
         applyAction({ type: 'SEEK', positionSec: msg.audioState.currentTime });
-        broadcastWs({ type: 'AUDIO_TIMELINE_STATE', timeline: getTimeline() });
+        broadcastWs(
+          { type: 'AUDIO_TIMELINE_STATE', timeline: getTimeline() },
+          canReceiveAudienceSessionContent,
+        );
       }
     }
     return true

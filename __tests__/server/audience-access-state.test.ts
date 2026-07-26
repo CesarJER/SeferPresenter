@@ -11,11 +11,13 @@ describe('Audience resume credential lifetime', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-01-01T00:00:00Z'));
     delete process.env.SEFER_AUDIENCE_RESUME_TTL_HOURS;
+    delete process.env.SEFER_AUDIENCE_ACCESS_CAPACITY;
     resetWsServerStateForTests();
   });
 
   afterEach(() => {
     delete process.env.SEFER_AUDIENCE_RESUME_TTL_HOURS;
+    delete process.env.SEFER_AUDIENCE_ACCESS_CAPACITY;
     resetWsServerStateForTests();
     vi.useRealTimers();
   });
@@ -43,5 +45,15 @@ describe('Audience resume credential lifetime', () => {
     const access = bootstrapAudienceAccess() as { credential: string };
     expect(logoutAudienceCredential(access.credential)).toBe(true);
     expect(authorizeAudienceCredential(access.credential, { requireAdmitted: false })).toBeNull();
+  });
+
+  it('caps outstanding resume credentials without advancing hidden state', () => {
+    process.env.SEFER_AUDIENCE_ACCESS_CAPACITY = '2';
+    const first = bootstrapAudienceAccess() as { stateRevision: number };
+    const second = bootstrapAudienceAccess() as { stateRevision: number };
+
+    expect(first.stateRevision).toBe(0);
+    expect(second.stateRevision).toBe(0);
+    expect(() => bootstrapAudienceAccess()).toThrow(/capacity reached/i);
   });
 });

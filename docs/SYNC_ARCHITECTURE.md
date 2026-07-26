@@ -63,6 +63,13 @@ remove the local credential and the matching server digest. Reject/Block keeps
 the credential so the server can enforce the state, but removes protected local
 content.
 
+Bootstrap is rate-limited per forwarded client address and bounded by
+`SEFER_AUDIENCE_ACCESS_CAPACITY` (500 by default, hard maximum 5000). Credential
+hashes use a direct validated hash index, so lookup does not scan all Audience
+records. Issuing an otherwise invisible credential does not consume a
+canonical `stateRevision`; admission, waiting and participant mutations still
+produce contiguous revisioned deltas.
+
 ### Protected Offline Recovery
 
 The service worker continues to cache only the application shell, scripture,
@@ -232,6 +239,10 @@ Control uses `lastSentListRef` to avoid re-sending unchanged visible lists.
 
 - Audience WebSocket clients may send only `SERVER_TIME_PING`, their own
   `LIVE_AUDIO_PARTICIPANT_STATUS`, and `PRIVATE_CONTROL_SIGNAL`.
+- In both `PUBLIC` and `CONTROLLED`, timeline, participant status and private
+  signals require `AUDIENCE_ACCESS_BIND` with a server-issued credential.
+  `PUBLIC` credentials are admitted immediately; this proves possession and
+  bounds resources, but does not verify identity or add moderation.
 - Audience `PRIVATE_CONTROL_SIGNAL` messages are accepted only when
   `fromParticipantId` is a UUID v4 bound to the active WebSocket connection, the
   ciphertext is base64 and at most 4096 bytes, the nonce decodes to 12 bytes,
@@ -291,7 +302,10 @@ Control uses `lastSentListRef` to avoid re-sending unchanged visible lists.
   participants, admission, permissions, ownership, queues, moderation or
   policies from the authoritative technical snapshot. The server stores only
   the latest bounded encrypted envelope and cannot decrypt it; session or key
-  rotation clears it.
+  rotation clears it. Only the principal Control may advance the overlay,
+  `basedOnStateRevision` cannot refer to future technical state, and private
+  revisions must be exactly contiguous; duplicates are idempotent by
+  `messageId`.
 - A WebSocket reconnect creates a temporary Control identity and then presents
   the previous opaque 256-bit resume credential in a message body. The server
   stores only its SHA-256 digest, rotates the credential after every successful

@@ -15,6 +15,7 @@ interface WsClient {
   ws: WebSocket;
   messages: WsMessage[];
   send: (message: WsMessage) => void;
+  participantId?: string;
 }
 
 let httpServer: Server;
@@ -62,21 +63,31 @@ const waitFor = async (
   });
 };
 
-const connectWs = (role: 'presenter' | 'control' | 'audience' | 'unknown') =>
+const connectWs = (
+  role: 'presenter' | 'control' | 'audience' | 'unknown',
+  autoBindAudience = true,
+) =>
   new Promise<WsClient>((resolve, reject) => {
+    const access = role === 'audience' && autoBindAudience
+      ? bootstrapAudienceAccess() as { credential: string; participantId: string }
+      : null;
     const ws = new WebSocket(`${baseUrl}?role=${role}&clientId=${randomUUID()}`);
     const client: WsClient = {
       ws,
       messages: [],
       send: (message) => ws.send(JSON.stringify(message)),
+      participantId: access?.participantId,
     };
 
     ws.on('message', (raw) => {
-      client.messages.push(JSON.parse(raw.toString()) as WsMessage);
+      const message = JSON.parse(raw.toString()) as WsMessage;
+      client.messages.push(message);
+      if (access && message.type === 'AUDIENCE_ACCESS_STATE') resolve(client);
     });
     ws.on('open', () => {
       clients.push(client);
-      resolve(client);
+      if (access) client.send({ type: 'AUDIENCE_ACCESS_BIND', credential: access.credential });
+      else resolve(client);
     });
     ws.on('error', reject);
   });
@@ -243,11 +254,53 @@ describe('Live Audio WebSocket routing', () => {
     delete process.env.SEFER_SESSION_ACCESS_DEFAULT;
   });
 
+  it('rejects future or discontinuous private overlay revisions', async () => {
+    const principal = await connectWs('control');
+    const welcome = await waitFor(principal, (message) => message.type === 'WELCOME');
+    const keyId = `key-${randomUUID()}`;
+    principal.send({
+      type: 'LIVE_AUDIO_CONTROL_PUBLIC_KEY',
+      controlSessionId: welcome.controlSessionId,
+      keyId,
+      publicKey: Buffer.from('session-public').toString('base64'),
+    });
+    const publish = (messageId: string, privateStateRevision: number, basedOnStateRevision: number) => {
+      principal.send({
+        type: 'LIVE_AUDIO_PRIVATE_OVERLAY_PUBLISH',
+        messageId,
+        keyId,
+        privateStateRevision,
+        basedOnStateRevision,
+        ciphertext: Buffer.from(`overlay-${messageId}`).toString('base64'),
+        nonce: Buffer.alloc(12, 4).toString('base64'),
+      });
+    };
+
+    publish('future', 1, Number.MAX_SAFE_INTEGER);
+    const future = await waitFor(
+      principal,
+      (message) => message.type === 'LIVE_AUDIO_PRIVATE_OVERLAY_RESULT' && message.messageId === 'future',
+    );
+    expect(future).toMatchObject({ result: 'NACK', reason: 'TECHNICAL_STATE_AHEAD' });
+
+    publish('valid', 1, 0);
+    await waitFor(
+      principal,
+      (message) => message.type === 'LIVE_AUDIO_PRIVATE_OVERLAY_RESULT' && message.messageId === 'valid' && message.result === 'ACK',
+    );
+    publish('gap', 3, 0);
+    const gap = await waitFor(
+      principal,
+      (message) => message.type === 'LIVE_AUDIO_PRIVATE_OVERLAY_RESULT' && message.messageId === 'gap',
+    );
+    expect(gap).toMatchObject({ result: 'NACK', reason: 'PRIVATE_REVISION_GAP' });
+  });
+
   it('routes private audience signals only to authorized controls', async () => {
     const principal = await connectWs('control');
     const pending = await connectWs('control');
     const audience = await connectWs('audience');
-    const participantId = randomUUID();
+    const participantId = audience.participantId!;
 
     await waitFor(principal, (message) => message.type === 'WELCOME');
     await waitFor(pending, (message) => message.type === 'LIVE_AUDIO_CONTROL_AUTHORIZATION_STATE' && message.controlState === 'PENDING');
@@ -266,8 +319,8 @@ describe('Live Audio WebSocket routing', () => {
     const control = await connectWs('control');
     const audience = await connectWs('audience');
     const observer = await connectWs('audience');
-    const participantId = randomUUID();
-    const observerParticipantId = randomUUID();
+    const participantId = audience.participantId!;
+    const observerParticipantId = observer.participantId!;
 
     audience.send(makeParticipantStatus(participantId));
     observer.send(makeParticipantStatus(observerParticipantId));
@@ -292,7 +345,7 @@ describe('Live Audio WebSocket routing', () => {
     const principal = await connectWs('control');
     const pending = await connectWs('control');
     const audience = await connectWs('audience');
-    const participantId = randomUUID();
+    const participantId = audience.participantId!;
 
     await waitFor(principal, (message) => message.type === 'WELCOME');
     await waitFor(pending, (message) => message.type === 'LIVE_AUDIO_CONTROL_AUTHORIZATION_STATE' && message.controlState === 'PENDING');
@@ -330,7 +383,7 @@ describe('Live Audio WebSocket routing', () => {
     process.env.SEFER_SESSION_ACCESS_DEFAULT = 'CONTROLLED';
     resetWsServerStateForTests();
     const principal = await connectWs('control');
-    const audience = await connectWs('audience');
+    const audience = await connectWs('audience', false);
     const access = bootstrapAudienceAccess() as {
       credential: string;
       participantId: string;
@@ -380,7 +433,7 @@ describe('Live Audio WebSocket routing', () => {
     };
     expect(access.accessState).toBe('ADMITTED');
     const principal = await connectWs('control');
-    const audience = await connectWs('audience');
+    const audience = await connectWs('audience', false);
     audience.send({ type: 'AUDIENCE_ACCESS_BIND', credential: access.credential });
     await waitFor(audience, (message) => (
       message.type === 'AUDIENCE_ACCESS_STATE' && message.accessState === 'ADMITTED'
@@ -445,7 +498,7 @@ describe('Live Audio WebSocket routing', () => {
     const presenter = await connectWs('presenter');
     const sender = await connectWs('audience');
     const observer = await connectWs('audience');
-    const participantId = randomUUID();
+    const participantId = sender.participantId!;
 
     sender.send(makeParticipantStatus(participantId));
 
@@ -462,7 +515,7 @@ describe('Live Audio WebSocket routing', () => {
   it('rejects moderation actions sent by audience clients', async () => {
     const control = await connectWs('control');
     const audience = await connectWs('audience');
-    const participantId = randomUUID();
+    const participantId = audience.participantId!;
 
     [
       {
@@ -522,8 +575,8 @@ describe('Live Audio WebSocket routing', () => {
     const control = await connectWs('control');
     const audience = await connectWs('audience');
     const observer = await connectWs('audience');
-    const participantId = randomUUID();
-    const observerParticipantId = randomUUID();
+    const participantId = audience.participantId!;
+    const observerParticipantId = observer.participantId!;
 
     audience.send(makeParticipantStatus(participantId));
     observer.send(makeParticipantStatus(observerParticipantId));
@@ -551,7 +604,7 @@ describe('Live Audio WebSocket routing', () => {
   it('keeps kicked participants passive until control grants them again', async () => {
     const control = await connectWs('control');
     const audience = await connectWs('audience');
-    const participantId = randomUUID();
+    const participantId = audience.participantId!;
 
     audience.send({
       ...makeParticipantStatus(participantId),
@@ -596,7 +649,7 @@ describe('Live Audio WebSocket routing', () => {
     const principal = await connectWs('control');
     const secondary = await connectWs('control');
     const audience = await connectWs('audience');
-    const participantId = randomUUID();
+    const participantId = audience.participantId!;
 
     const pending = await waitFor(
       secondary,
@@ -632,7 +685,7 @@ describe('Live Audio WebSocket routing', () => {
   it('sends an operational snapshot to a new control when the previous control is gone', async () => {
     const firstControl = await connectWs('control');
     const audience = await connectWs('audience');
-    const participantId = randomUUID();
+    const participantId = audience.participantId!;
 
     audience.send({
       ...makeParticipantStatus(participantId),
@@ -729,7 +782,7 @@ describe('Live Audio WebSocket routing', () => {
   it('rejects microphone grants until the bound Audience confirms the active epoch', async () => {
     const access = bootstrapAudienceAccess();
     const control = await connectWs('control');
-    const audience = await connectWs('audience');
+    const audience = await connectWs('audience', false);
     audience.send({ type: 'AUDIENCE_ACCESS_BIND', credential: access.credential });
     await waitFor(audience, (message) => message.type === 'AUDIENCE_ACCESS_STATE');
     audience.send(makeParticipantStatus(access.participantId));
@@ -791,7 +844,7 @@ describe('Live Audio WebSocket routing', () => {
   it('rejects obsolete recording confirmation and client-forged publishing state', async () => {
     const access = bootstrapAudienceAccess();
     const control = await connectWs('control');
-    const audience = await connectWs('audience');
+    const audience = await connectWs('audience', false);
     audience.send({ type: 'AUDIENCE_ACCESS_BIND', credential: access.credential });
     await waitFor(audience, (message) => message.type === 'AUDIENCE_ACCESS_STATE');
     audience.send({
@@ -920,7 +973,7 @@ describe('Live Audio WebSocket routing', () => {
     const principal = await connectWs('control');
     const secondary = await connectWs('control');
     const audience = await connectWs('audience');
-    const participantId = randomUUID();
+    const participantId = audience.participantId!;
     const pending = await waitFor(
       secondary,
       (message) => message.type === 'LIVE_AUDIO_CONTROL_AUTHORIZATION_STATE' && message.controlState === 'PENDING',
@@ -972,7 +1025,7 @@ describe('Live Audio WebSocket routing', () => {
   it('rescues kicked participants as active listeners without microphone publishing', async () => {
     const control = await connectWs('control');
     const audience = await connectWs('audience');
-    const participantId = randomUUID();
+    const participantId = audience.participantId!;
 
     audience.send({
       ...makeParticipantStatus(participantId),
@@ -1018,7 +1071,7 @@ describe('Live Audio WebSocket routing', () => {
   it('does not include historical private messages in operational snapshots', async () => {
     const control = await connectWs('control');
     const audience = await connectWs('audience');
-    const participantId = randomUUID();
+    const participantId = audience.participantId!;
 
     audience.send(makeParticipantStatus(participantId));
     audience.send(makePrivateSignal(participantId, 'secret'));
@@ -1039,7 +1092,7 @@ describe('Live Audio WebSocket routing', () => {
   it('rate-limits private control signals to five messages per minute per participant', async () => {
     const control = await connectWs('control');
     const audience = await connectWs('audience');
-    const participantId = randomUUID();
+    const participantId = audience.participantId!;
 
     audience.send(makeParticipantStatus(participantId));
     for (let index = 0; index < 6; index += 1) {
@@ -1060,7 +1113,7 @@ describe('Live Audio WebSocket routing', () => {
   it('deduplicates private signals and returns idempotent ACKs', async () => {
     const control = await connectWs('control');
     const audience = await connectWs('audience');
-    const participantId = randomUUID();
+    const participantId = audience.participantId!;
     const signal = makePrivateSignal(participantId, 'dedupe');
 
     audience.send(makeParticipantStatus(participantId));
@@ -1090,7 +1143,7 @@ describe('Live Audio WebSocket routing', () => {
   it('does not let profile recovery traffic consume the human message quota', async () => {
     const control = await connectWs('control');
     const audience = await connectWs('audience');
-    const participantId = randomUUID();
+    const participantId = audience.participantId!;
 
     audience.send(makeParticipantStatus(participantId));
     for (let index = 0; index < 6; index += 1) {
@@ -1134,7 +1187,7 @@ describe('Live Audio WebSocket routing', () => {
     expect((second.snapshot as { stateRevision: number }).stateRevision).toBe(firstRevision);
 
     const audience = await connectWs('audience');
-    const participantId = randomUUID();
+    const participantId = audience.participantId!;
     audience.send(makeParticipantStatus(participantId));
     const delta = await waitFor(control, (message) => (
       message.type === 'LIVE_AUDIO_PARTICIPANT_STATUS' && message.participantId === participantId
@@ -1147,7 +1200,7 @@ describe('Live Audio WebSocket routing', () => {
 
   it('cleans ephemeral audience participant state after the rejoin grace period', async () => {
     const audience = await connectWs('audience');
-    const participantId = randomUUID();
+    const participantId = audience.participantId!;
 
     audience.send(makeParticipantStatus(participantId));
     await wait(50);

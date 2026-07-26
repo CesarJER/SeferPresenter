@@ -140,4 +140,25 @@ describe('WebSocket transport authorization', () => {
     audience.ws.send(JSON.stringify({ type: 'SERVER_TIME_PING', padding: 'x'.repeat(70 * 1024) }));
     await expect(closed).resolves.toBe(1009);
   });
+
+  it('does not expose session content or accept participant state before credential binding', async () => {
+    const audience = await connect('audience');
+    await waitFor(audience, (message) => message.type === 'WELCOME');
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(audience.messages.some((message) => message.type === 'AUDIO_TIMELINE_STATE')).toBe(false);
+
+    audience.send({
+      type: 'LIVE_AUDIO_PARTICIPANT_STATUS',
+      participantId: randomUUID(),
+      role: 'audience',
+      speakerState: 'LISTENER',
+      canSubscribe: true,
+      canPublishAudio: false,
+    });
+    const error = await waitFor(
+      audience,
+      (message) => message.type === 'ERROR' && message.code === 'AUDIENCE_ACCESS_NOT_BOUND',
+    );
+    expect(error.code).toBe('AUDIENCE_ACCESS_NOT_BOUND');
+  });
 });
