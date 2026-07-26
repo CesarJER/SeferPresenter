@@ -21,6 +21,8 @@ let httpServer: Server;
 let wss: WebSocketServer;
 let baseUrl: string;
 let clients: WsClient[] = [];
+let recordingRevocations = 0;
+let recordingRevocationShouldFail = false;
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -204,9 +206,23 @@ describe('Live Audio WebSocket routing', () => {
     process.env.SEFER_REQUIRE_AUTH = 'false';
     process.env.SEFER_LIVE_AUDIO_REJOIN_GRACE_SECONDS = '1';
     resetWsServerStateForTests();
+    recordingRevocations = 0;
+    recordingRevocationShouldFail = false;
 
     httpServer = createServer();
-    wss = createWsServer(httpServer);
+    wss = createWsServer(httpServer, undefined, {
+      recordingPolicy: {
+        recordingAvailable: true,
+        recordingMutable: true,
+        recordingDefault: 'NOT_RECORDING',
+      },
+      revokeLiveAudioPublishingForRecording: async () => {
+        recordingRevocations += 1;
+        if (recordingRevocationShouldFail) {
+          throw new Error('LiveKit unavailable');
+        }
+      },
+    });
     await new Promise<void>((resolve) => httpServer.listen(0, resolve));
     const address = httpServer.address();
     if (!address || typeof address === 'string') throw new Error('Expected HTTP server address');
@@ -633,6 +649,190 @@ describe('Live Audio WebSocket routing', () => {
     const snapshot = await waitFor(nextControl, (message) => message.type === 'LIVE_AUDIO_SNAPSHOT');
     const body = snapshot.snapshot as { participants?: Array<{ participantId: string }> };
     expect(body.participants?.some((participant) => participant.participantId === participantId)).toBe(true);
+  });
+
+  it('versions recording policy changes exactly once and keeps the epoch monotonic', async () => {
+    const control = await connectWs('control');
+    const snapshotMessage = await waitFor(
+      control,
+      (message) => message.type === 'LIVE_AUDIO_SNAPSHOT',
+    );
+    const snapshot = snapshotMessage.snapshot as { presentationSessionId: string; stateRevision: number };
+
+    control.send({
+      type: 'SESSION_RECORDING_POLICY_UPDATE',
+      commandId: randomUUID(),
+      presentationSessionId: snapshot.presentationSessionId,
+      expectedStateRevision: snapshot.stateRevision,
+      recordingState: 'RECORDING',
+    });
+    const started = await waitFor(
+      control,
+      (message) => message.type === 'SESSION_RECORDING_POLICY' && message.recordingState === 'RECORDING',
+    );
+
+    expect(started.recordingEpoch).toBe(1);
+    expect(started.stateRevision).toBe(snapshot.stateRevision + 1);
+    expect(recordingRevocations).toBe(1);
+    const startedResult = await waitFor(
+      control,
+      (message) => message.type === 'SESSION_RECORDING_POLICY_RESULT' && message.result === 'ACK',
+    );
+    expect(startedResult.commandId).toBeTruthy();
+
+    control.send({
+      type: 'SESSION_RECORDING_POLICY_UPDATE',
+      commandId: randomUUID(),
+      presentationSessionId: snapshot.presentationSessionId,
+      expectedStateRevision: started.stateRevision,
+      recordingState: 'NOT_RECORDING',
+    });
+    const stopped = await waitFor(
+      control,
+      (message) => message.type === 'SESSION_RECORDING_POLICY' && message.recordingState === 'NOT_RECORDING' && message.stateRevision === Number(started.stateRevision) + 1,
+    );
+    expect(stopped.recordingEpoch).toBe(1);
+  });
+
+  it('NACKs recording activation without changing revision when LiveKit revocation fails', async () => {
+    recordingRevocationShouldFail = true;
+    const control = await connectWs('control');
+    const snapshotMessage = await waitFor(
+      control,
+      (message) => message.type === 'LIVE_AUDIO_SNAPSHOT',
+    );
+    const snapshot = snapshotMessage.snapshot as { presentationSessionId: string; stateRevision: number };
+    const commandId = randomUUID();
+
+    control.send({
+      type: 'SESSION_RECORDING_POLICY_UPDATE',
+      commandId,
+      presentationSessionId: snapshot.presentationSessionId,
+      expectedStateRevision: snapshot.stateRevision,
+      recordingState: 'RECORDING',
+    });
+
+    const result = await waitFor(
+      control,
+      (message) => message.type === 'SESSION_RECORDING_POLICY_RESULT' && message.commandId === commandId,
+    );
+    expect(result).toMatchObject({
+      result: 'NACK',
+      reason: 'LIVEKIT_REVOCATION_FAILED',
+      recordingState: 'NOT_RECORDING',
+      recordingEpoch: 0,
+      stateRevision: snapshot.stateRevision,
+    });
+    expect(recordingRevocations).toBe(1);
+  });
+
+  it('rejects microphone grants until the bound Audience confirms the active epoch', async () => {
+    const access = bootstrapAudienceAccess();
+    const control = await connectWs('control');
+    const audience = await connectWs('audience');
+    audience.send({ type: 'AUDIENCE_ACCESS_BIND', credential: access.credential });
+    await waitFor(audience, (message) => message.type === 'AUDIENCE_ACCESS_STATE');
+    audience.send(makeParticipantStatus(access.participantId));
+    const participantStatus = await waitFor(
+      control,
+      (message) => message.type === 'LIVE_AUDIO_PARTICIPANT_STATUS' && message.participantId === access.participantId,
+    );
+
+    control.send({
+      type: 'SESSION_RECORDING_POLICY_UPDATE',
+      commandId: randomUUID(),
+      presentationSessionId: access.presentationSessionId,
+      expectedStateRevision: participantStatus.stateRevision,
+      recordingState: 'RECORDING',
+    });
+    const recording = await waitFor(
+      control,
+      (message) => message.type === 'SESSION_RECORDING_POLICY' && message.recordingState === 'RECORDING',
+    );
+
+    control.send({
+      type: 'LIVE_AUDIO_GRANT_SPEAK',
+      participantId: access.participantId,
+      createdAt: Date.now(),
+    });
+    await waitFor(
+      control,
+      (message) => message.type === 'ERROR' && message.code === 'RECORDING_CONFIRMATION_REQUIRED',
+    );
+    expect(getLiveAudioParticipantSnapshot().participants.find((item) => item.participantId === access.participantId)?.speakerState)
+      .toBe('LISTENER');
+
+    audience.send({
+      type: 'AUDIENCE_RECORDING_CONFIRMATION',
+      requestId: randomUUID(),
+      participantId: access.participantId,
+      presentationSessionId: access.presentationSessionId,
+      recordingEpoch: recording.recordingEpoch,
+    });
+    const confirmation = await waitFor(
+      audience,
+      (message) => message.type === 'AUDIENCE_RECORDING_CONFIRMATION_RESULT' && message.result === 'ACK',
+    );
+    expect(confirmation.stateRevision).toBe(Number(recording.stateRevision) + 1);
+
+    control.send({
+      type: 'LIVE_AUDIO_GRANT_SPEAK',
+      participantId: access.participantId,
+      createdAt: Date.now(),
+    });
+    await waitFor(
+      audience,
+      (message) => message.type === 'LIVE_AUDIO_GRANT_SPEAK' && message.participantId === access.participantId,
+    );
+    expect(getLiveAudioParticipantSnapshot().participants.find((item) => item.participantId === access.participantId))
+      .toMatchObject({ speakerState: 'GRANTED', canPublishAudio: true });
+  });
+
+  it('rejects obsolete recording confirmation and client-forged publishing state', async () => {
+    const access = bootstrapAudienceAccess();
+    const control = await connectWs('control');
+    const audience = await connectWs('audience');
+    audience.send({ type: 'AUDIENCE_ACCESS_BIND', credential: access.credential });
+    await waitFor(audience, (message) => message.type === 'AUDIENCE_ACCESS_STATE');
+    audience.send({
+      ...makeParticipantStatus(access.participantId),
+      speakerState: 'GRANTED',
+      canPublishAudio: true,
+      isMicrophoneActive: true,
+    });
+    const status = await waitFor(
+      control,
+      (message) => message.type === 'LIVE_AUDIO_PARTICIPANT_STATUS' && message.participantId === access.participantId,
+    );
+    expect(status).toMatchObject({
+      speakerState: 'LISTENER',
+      canPublishAudio: false,
+      isMicrophoneActive: false,
+    });
+
+    control.send({
+      type: 'SESSION_RECORDING_POLICY_UPDATE',
+      commandId: randomUUID(),
+      presentationSessionId: access.presentationSessionId,
+      expectedStateRevision: status.stateRevision,
+      recordingState: 'RECORDING',
+    });
+    const recording = await waitFor(
+      control,
+      (message) => message.type === 'SESSION_RECORDING_POLICY' && message.recordingState === 'RECORDING',
+    );
+    audience.send({
+      type: 'AUDIENCE_RECORDING_CONFIRMATION',
+      requestId: randomUUID(),
+      participantId: access.participantId,
+      presentationSessionId: access.presentationSessionId,
+      recordingEpoch: Number(recording.recordingEpoch) - 1,
+    });
+    const rejected = await waitFor(
+      audience,
+      (message) => message.type === 'AUDIENCE_RECORDING_CONFIRMATION_RESULT' && message.result === 'NACK',
+    );
+    expect(rejected.stateRevision).toBe(recording.stateRevision);
   });
 
   it('resumes the same Control identity during the grace period and rotates its credential', async () => {

@@ -107,6 +107,10 @@ interface ControlOperationalView {
   participants: Record<string, LiveAudioParticipantStatusMessage>;
   connectionCounts: LiveAudioConnectionCountsMessage | null;
   accessMode: 'PUBLIC' | 'CONTROLLED';
+  recordingAvailable: boolean;
+  recordingMutable: boolean;
+  recordingState: 'NOT_RECORDING' | 'RECORDING';
+  recordingEpoch: number;
   audienceAccessRequests: Record<string, number>;
 }
 
@@ -128,6 +132,10 @@ const snapshotToOperationalView = (snapshot: LiveAudioOperationalSnapshot): Cont
       ...snapshot.connectionCounts,
     },
     accessMode: snapshot.policies.accessMode,
+    recordingAvailable: snapshot.policies.recordingAvailable,
+    recordingMutable: snapshot.policies.recordingMutable,
+    recordingState: snapshot.policies.recordingState,
+    recordingEpoch: snapshot.policies.recordingEpoch,
     audienceAccessRequests: Object.fromEntries(
       snapshot.audienceAccessRequests.map((request) => [request.participantId, request.requestedAt]),
     ),
@@ -162,6 +170,39 @@ const applyOperationalDelta = (
       ...state,
       accessMode: delta.payload.accessMode,
       ...(delta.payload.accessMode === 'PUBLIC' ? { audienceAccessRequests: {} } : {}),
+    };
+  }
+  if (
+    delta.type === 'SESSION_RECORDING_POLICY' &&
+    (delta.payload.recordingState === 'NOT_RECORDING' || delta.payload.recordingState === 'RECORDING')
+  ) {
+    const nextParticipants = Object.fromEntries(
+      Object.entries(state.participants).map(([participantId, participant]) => [
+        participantId,
+        delta.payload.recordingState === 'RECORDING'
+          ? {
+              ...participant,
+              canPublishAudio: false,
+              isMicrophoneActive: false,
+              isMuted: true,
+              microphoneTrackState: participant.speakerState === 'GRANTED'
+                ? 'mutedByControl'
+                : participant.microphoneTrackState,
+            }
+          : participant.speakerState === 'GRANTED'
+            ? { ...participant, canPublishAudio: true }
+            : participant,
+      ]),
+    );
+    return {
+      ...state,
+      participants: nextParticipants,
+      recordingAvailable: delta.payload.recordingAvailable === true,
+      recordingMutable: delta.payload.recordingMutable === true,
+      recordingState: delta.payload.recordingState,
+      recordingEpoch: typeof delta.payload.recordingEpoch === 'number'
+        ? delta.payload.recordingEpoch
+        : state.recordingEpoch,
     };
   }
   if (
@@ -215,6 +256,17 @@ export default function LiveAudioControlContainer({
   const [messages, setMessages] = useState<PrivateMessage[]>([]);
   const [joinRequests, setJoinRequests] = useState<Record<string, LiveAudioControlJoinRequestMessage>>({});
   const [accessMode, setAccessMode] = useState<'PUBLIC' | 'CONTROLLED'>('PUBLIC');
+  const [recordingPolicy, setRecordingPolicy] = useState<{
+    recordingAvailable: boolean;
+    recordingMutable: boolean;
+    recordingState: 'NOT_RECORDING' | 'RECORDING';
+    recordingEpoch: number;
+  }>({
+    recordingAvailable: false,
+    recordingMutable: false,
+    recordingState: 'NOT_RECORDING',
+    recordingEpoch: 0,
+  });
   const [audienceAccessRequests, setAudienceAccessRequests] = useState<Record<string, number>>({});
   const participantAliasesRef = useRef(participantAliases);
   const aliasRequestSignatureRef = useRef('');
@@ -274,6 +326,11 @@ export default function LiveAudioControlContainer({
         privateOverlayRef.current = null;
         privateOverlayRevisionRef.current = 0;
         lastSentListRef.current = '';
+        setRecordingPolicy((current) => ({
+          ...current,
+          recordingState: payload.recordingState === 'RECORDING' ? 'RECORDING' : 'NOT_RECORDING',
+          recordingEpoch: typeof payload.recordingEpoch === 'number' ? payload.recordingEpoch : 0,
+        }));
         return;
       }
       if (type === 'WELCOME' || type === 'SESSION_ACCESS_POLICY') {
@@ -305,6 +362,12 @@ export default function LiveAudioControlContainer({
           setParticipantsMap(result.sync.value.participants);
           setConnectionCounts(result.sync.value.connectionCounts);
           setAccessMode(result.sync.value.accessMode);
+          setRecordingPolicy({
+            recordingAvailable: result.sync.value.recordingAvailable,
+            recordingMutable: result.sync.value.recordingMutable,
+            recordingState: result.sync.value.recordingState,
+            recordingEpoch: result.sync.value.recordingEpoch,
+          });
           setAudienceAccessRequests(result.sync.value.audienceAccessRequests);
         }
         return;
@@ -346,6 +409,12 @@ export default function LiveAudioControlContainer({
           setParticipantsMap(result.sync.value.participants);
           setConnectionCounts(result.sync.value.connectionCounts);
           setAccessMode(result.sync.value.accessMode);
+          setRecordingPolicy({
+            recordingAvailable: result.sync.value.recordingAvailable,
+            recordingMutable: result.sync.value.recordingMutable,
+            recordingState: result.sync.value.recordingState,
+            recordingEpoch: result.sync.value.recordingEpoch,
+          });
           setAudienceAccessRequests(result.sync.value.audienceAccessRequests);
         }
         if (
@@ -742,6 +811,23 @@ export default function LiveAudioControlContainer({
     });
   }, [accessMode, controlState, wsSend]);
 
+  const handleRecordingStateChange = useCallback((nextState: 'NOT_RECORDING' | 'RECORDING') => {
+    const sessionId = operationalSyncRef.current.identity?.sessionId;
+    if (
+      controlState !== 'PRINCIPAL' ||
+      !recordingPolicy.recordingMutable ||
+      nextState === recordingPolicy.recordingState ||
+      !sessionId
+    ) return;
+    wsSend?.('SESSION_RECORDING_POLICY_UPDATE', {
+      type: 'SESSION_RECORDING_POLICY_UPDATE',
+      commandId: crypto.randomUUID(),
+      presentationSessionId: sessionId,
+      expectedStateRevision: operationalSyncRef.current.stateRevision,
+      recordingState: nextState,
+    });
+  }, [controlState, recordingPolicy.recordingMutable, recordingPolicy.recordingState, wsSend]);
+
   const computeVisibleList = useCallback((): string[] => (
     computeVisibleActiveParticipants(participantsMap, participantAliases)
   ), [participantAliases, participantsMap]);
@@ -912,22 +998,10 @@ export default function LiveAudioControlContainer({
     }
   }, [participantId, wsSend]);
 
-  const doModerationAction = useCallback(async (endpoint: ModerationEndpoint, pid?: string) => {
+  const doModerationAction = useCallback((endpoint: ModerationEndpoint, pid?: string) => {
     if (!controlSessionId) return;
-    try {
-      const response = await fetch(`/api/livekit/${endpoint}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          role: 'control',
-          controlSessionId,
-          participantId: pid,
-        }),
-      });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      sendModerationMessage(endpoint, pid);
-    } catch (err) {
-      console.error(`Error in moderation action ${endpoint}`, err);
+    if (!sendModerationMessage(endpoint, pid)) {
+      console.error(`Error sending authoritative moderation action ${endpoint}`);
     }
   }, [controlSessionId, sendModerationMessage]);
 
@@ -1107,6 +1181,10 @@ export default function LiveAudioControlContainer({
         listenVolume={listenVolume}
         onListenVolumeChange={(volume) => setListenVolume(clampListenVolume(volume))}
         microphoneVolume={microphoneVolume}
+        recordingState={recordingPolicy.recordingState}
+        recordingEpoch={recordingPolicy.recordingEpoch}
+        recordingMutable={recordingPolicy.recordingAvailable && recordingPolicy.recordingMutable && controlState === 'PRINCIPAL'}
+        onRecordingStateChange={handleRecordingStateChange}
         onMicrophoneVolumeChange={(volume) => setMicrophoneVolume(clampVolume(volume))}
         isModeratorMusicMode={isModeratorMusicMode}
         onModeratorMusicModeChange={handleModeratorMusicModeChange}

@@ -129,6 +129,9 @@ export function useAudienceAccess() {
         accessState: body.accessState,
         retryAt: typeof body.retryAt === 'number' ? body.retryAt : undefined,
         expiresAt: typeof body.expiresAt === 'number' ? body.expiresAt : undefined,
+        recordingConfirmedEpoch: typeof body.recordingConfirmedEpoch === 'number'
+          ? body.recordingConfirmedEpoch
+          : undefined,
         stateRevision: Number(body.stateRevision),
       };
       setSnapshot(nextSnapshot);
@@ -264,6 +267,9 @@ export function useAudienceAccess() {
           : current.accessState,
         retryAt: typeof payload.retryAt === 'number' ? payload.retryAt : undefined,
         expiresAt: typeof payload.expiresAt === 'number' ? payload.expiresAt : current.expiresAt,
+        recordingConfirmedEpoch: typeof payload.recordingConfirmedEpoch === 'number'
+          ? payload.recordingConfirmedEpoch
+          : current.recordingConfirmedEpoch,
         stateRevision: Number.isInteger(payload.stateRevision)
           ? Number(payload.stateRevision)
           : current.stateRevision,

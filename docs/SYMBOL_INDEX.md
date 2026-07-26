@@ -163,11 +163,20 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
   projection commands, media telemetry, quiz events, assets, persistence.
 - `server/ws-server.mjs`: WebSocket `/ws` server for F2 audio timeline messages.
 - `server/livekit-server.mjs`: optional Fase 5.4/5.11 LiveKit self-hosted
-  status, token, refresh-token, and moderation endpoints with memory-only state
-  and no top-level server SDK dependency. Tokens include ephemeral
+  status, token, refresh-token, and moderation endpoints with memory-only state.
+  Tokens include ephemeral
   `participantId` metadata and no alias; refresh keeps the same participant
   identity while reflecting current speaker permission and muted speaker state;
-  refresh possession is proved by a rotating, hashed credential.
+  refresh possession is proved by a rotating, hashed credential. Recording
+  activation uses the server SDK RoomService API to revoke Audience publishing
+  and mute connected microphone tracks before the policy is committed.
+- `getRecordingPolicy` / `hasCurrentRecordingConfirmation` -
+  `server/ws-server.mjs`: authoritative session-scoped recording policy and
+  confirmation checks shared with token issuance and refresh.
+- `RecordingConfirmationDialog` -
+  `src/features/liveAudio/components/audience/RecordingConfirmationDialog.tsx`:
+  focus-managed, keyboard-operable recording confirmation shown before an
+  Audience participant can use the microphone in the active epoch.
 - `server/content-validation.mjs`: bounded deep validation for persisted
   presentation and audio-sync payloads.
 - `server/json-persistence.mjs`: fsynced temp/backup persistence with atomic

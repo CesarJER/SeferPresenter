@@ -196,6 +196,16 @@ Live Audio state:
   quiz aggregates from `LIVE_AUDIO_SNAPSHOT`, but should not persist that data
   locally beyond the active session. Sensitive snapshot overlays are encrypted
   in server memory with a key derived from `SEFER_CONTROL_PASSWORD`.
+- Recording policy, epoch, confirmation validity, and microphone publication
+  authority are server-owned. `server/ws-server.mjs` versions the policy and
+  confirmations; `server/livekit-server.mjs` enforces token grants and connected
+  participant revocation through LiveKit RoomService. Control UI may request a
+  policy change but must not optimistically make it canonical.
+- `LiveAudioAudienceContainer.tsx` owns only the participant-facing recording
+  notice, pending user action, and local focus flow.
+  `RecordingConfirmationDialog.tsx` owns the accessible modal interaction. A
+  local “seen” marker suppresses duplicate toast announcements, but never acts
+  as authoritative consent.
 - The LiveKit browser SDK may only be imported inside `src/features/liveAudio/` or via
   dynamic import from that module. Core files such as `src/App.tsx`,
   `src/hooks/useSyncState.ts`, existing `src/components/shared/`, and shared

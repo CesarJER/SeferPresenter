@@ -253,6 +253,12 @@ const validateOperationalParticipantSnapshot = (
   });
   if (value.connectedAt !== undefined && !isFiniteNumber(value.connectedAt)) errors.push(`${path}.connectedAt debe ser numero.`);
   if (value.disconnectedAt !== undefined && !isFiniteNumber(value.disconnectedAt)) errors.push(`${path}.disconnectedAt debe ser numero.`);
+  if (
+    value.recordingConfirmationEpoch !== undefined &&
+    (!Number.isInteger(value.recordingConfirmationEpoch) || Number(value.recordingConfirmationEpoch) < 0)
+  ) {
+    errors.push(`${path}.recordingConfirmationEpoch debe ser entero no negativo.`);
+  }
   if (!isFiniteNumber(value.updatedAt)) errors.push(`${path}.updatedAt debe ser numero.`);
 };
 
@@ -291,6 +297,28 @@ const validateOperationalSnapshot = (snapshot: unknown, path: string, errors: st
     });
   }
   validateStringArray(snapshot.interventionQueue, `${path}.interventionQueue`, errors);
+  if (!isRecord(snapshot.policies)) {
+    errors.push(`${path}.policies debe ser un objeto.`);
+  } else {
+    if (snapshot.policies.accessMode !== 'PUBLIC' && snapshot.policies.accessMode !== 'CONTROLLED') {
+      errors.push(`${path}.policies.accessMode no es valido.`);
+    }
+    if (typeof snapshot.policies.recordingAvailable !== 'boolean') {
+      errors.push(`${path}.policies.recordingAvailable debe ser booleano.`);
+    }
+    if (typeof snapshot.policies.recordingMutable !== 'boolean') {
+      errors.push(`${path}.policies.recordingMutable debe ser booleano.`);
+    }
+    if (
+      snapshot.policies.recordingState !== 'NOT_RECORDING' &&
+      snapshot.policies.recordingState !== 'RECORDING'
+    ) {
+      errors.push(`${path}.policies.recordingState no es valido.`);
+    }
+    if (!Number.isInteger(snapshot.policies.recordingEpoch) || Number(snapshot.policies.recordingEpoch) < 0) {
+      errors.push(`${path}.policies.recordingEpoch debe ser entero no negativo.`);
+    }
+  }
 
   if (!isRecord(snapshot.authorizations)) {
     errors.push(`${path}.authorizations debe ser un objeto.`);
@@ -938,6 +966,45 @@ const validateLiveAudioBroadcastMessage = (value: Record<string, unknown>): Vali
       break;
     case 'LIVE_AUDIO_REQUEST_ALIASES':
       validateOptionalCreatedAt(value, value.type, errors);
+      break;
+    case 'SESSION_RECORDING_POLICY':
+      if (typeof value.presentationSessionId !== 'string' || value.presentationSessionId.trim() === '') {
+        errors.push('presentationSessionId debe ser texto no vacio.');
+      }
+      if (typeof value.serverEpoch !== 'string' || value.serverEpoch.trim() === '') errors.push('serverEpoch debe ser texto no vacio.');
+      if (!Number.isInteger(value.stateRevision) || Number(value.stateRevision) < 0) errors.push('stateRevision debe ser entero no negativo.');
+      if (typeof value.eventId !== 'string' || value.eventId.trim() === '') errors.push('eventId debe ser texto no vacio.');
+      if (typeof value.recordingAvailable !== 'boolean') errors.push('recordingAvailable debe ser booleano.');
+      if (typeof value.recordingMutable !== 'boolean') errors.push('recordingMutable debe ser booleano.');
+      if (value.recordingState !== 'NOT_RECORDING' && value.recordingState !== 'RECORDING') errors.push('recordingState no es valido.');
+      if (!Number.isInteger(value.recordingEpoch) || Number(value.recordingEpoch) < 0) errors.push('recordingEpoch debe ser entero no negativo.');
+      if (typeof value.changedDuringSession !== 'boolean') errors.push('changedDuringSession debe ser booleano.');
+      if (!isFiniteNumber(value.updatedAt)) errors.push('updatedAt debe ser numero.');
+      break;
+    case 'SESSION_RECORDING_POLICY_RESULT':
+      if (typeof value.commandId !== 'string' || value.commandId.trim() === '') errors.push('commandId debe ser texto no vacio.');
+      if (value.result !== 'ACK' && value.result !== 'NACK') errors.push('result debe ser ACK o NACK.');
+      if (
+        value.reason !== undefined &&
+        value.reason !== 'FORBIDDEN' &&
+        value.reason !== 'REVISION_CONFLICT' &&
+        value.reason !== 'LIVEKIT_REVOCATION_FAILED' &&
+        value.reason !== 'TRANSITION_IN_PROGRESS'
+      ) {
+        errors.push('reason no es valido.');
+      }
+      if (typeof value.presentationSessionId !== 'string' || value.presentationSessionId.trim() === '') errors.push('presentationSessionId debe ser texto no vacio.');
+      if (typeof value.serverEpoch !== 'string' || value.serverEpoch.trim() === '') errors.push('serverEpoch debe ser texto no vacio.');
+      if (!Number.isInteger(value.stateRevision) || Number(value.stateRevision) < 0) errors.push('stateRevision debe ser entero no negativo.');
+      if (value.recordingState !== 'NOT_RECORDING' && value.recordingState !== 'RECORDING') errors.push('recordingState no es valido.');
+      if (!Number.isInteger(value.recordingEpoch) || Number(value.recordingEpoch) < 0) errors.push('recordingEpoch debe ser entero no negativo.');
+      break;
+    case 'AUDIENCE_RECORDING_CONFIRMATION_RESULT':
+      if (value.result !== 'ACK' && value.result !== 'NACK') errors.push('result debe ser ACK o NACK.');
+      if (typeof value.presentationSessionId !== 'string' || value.presentationSessionId.trim() === '') errors.push('presentationSessionId debe ser texto no vacio.');
+      if (!Number.isInteger(value.stateRevision) || Number(value.stateRevision) < 0) errors.push('stateRevision debe ser entero no negativo.');
+      if (!Number.isInteger(value.recordingEpoch) || Number(value.recordingEpoch) < 0) errors.push('recordingEpoch debe ser entero no negativo.');
+      if (value.participantId !== undefined) validateParticipantId(value.participantId, 'participantId', errors);
       break;
     case 'LIVE_AUDIO_SNAPSHOT_REQUEST':
       if (value.controlSessionId !== undefined && typeof value.controlSessionId !== 'string') {
