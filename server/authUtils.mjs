@@ -6,6 +6,7 @@ const publicApiGetPaths = new Set([
   '/api/quiz-events',
   '/api/public-catalogs',
   '/api/audience-cache-assets',
+  '/api/privacy-document',
 ])
 
 const firstHeaderValue = (value) => {
@@ -28,7 +29,11 @@ export const isPublicApiRequest = (pathname, method = 'GET') => {
   if (pathname.startsWith('/api/livekit/')) return true
   if (
     method === 'POST' &&
-    (pathname === '/api/audience/access/bootstrap' || pathname === '/api/audience/sse-ticket')
+    (
+      pathname === '/api/audience/access/bootstrap' ||
+      pathname === '/api/audience/access/logout' ||
+      pathname === '/api/audience/sse-ticket'
+    )
   ) return true
   if (method === 'POST' && pathname === '/api/quiz-answer') return true
   if (method !== 'GET') return false

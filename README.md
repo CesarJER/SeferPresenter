@@ -14,7 +14,9 @@ SeferPresenter es una aplicacion React/Vite para proyectar presentaciones con so
   de medios. Cada catálogo acepta `count_sefer: true|false`; decide únicamente
   si las referencias Tanaj/Sefer cuentan en el número mostrado, sin ocultarlas
   ni excluirlas de búsqueda.
-- **Proteccion de datos**: `/proteccion-datos` queda como ruta publica (accesible sin autenticacion) para el aviso de privacidad del futuro modulo de voz en vivo.
+- **Proteccion de datos**: `/proteccion-datos` es una ruta publica que combina
+  los hechos tecnicos del producto, la configuracion estructurada del operador y
+  su documento organizativo local opcional.
 - **Modo sin LiveKit**: la aplicacion conserva el uso solo presentacion. Si LiveKit esta desactivado, mal configurado o no soportado, `/presenter`, `/control`, `/audio-editor`, `/audience` y catálogos deben seguir cargando sin requerir voz en vivo.
 
 ## Scripts
@@ -55,6 +57,8 @@ El backend local vive en `server/local-server.mjs`. Mantiene inicialmente la mis
 - `GET /api/audience/state`
 - `GET /api/audience/events`
 - `GET /api/audience-cache-assets`
+- `GET /api/privacy-document` (Markdown organizativo local opcional; no expone
+  secretos ni sustituye el manifiesto publico integrado en el build)
 
 Los dos endpoints de estado de Audience son públicos y reducidos: incluyen solo
 la diapositiva proyectada actualmente y el estado funcional necesario para
@@ -104,6 +108,28 @@ npm run start:local
 ```
 
 Con `SEFER_REQUIRE_AUTH=true`, `/control`, `/audio-editor` y endpoints mutantes bajo `/api` quedan protegidos con Basic Auth.
+
+## Configuracion publica del operador
+
+Cada build de produccion debe declarar en `.env` los datos publicos minimos
+documentados en `.env.example`: entidad, contacto para derechos, base juridica,
+URL de privacidad, disponibilidad/estado inicial/mutabilidad de grabacion y modo
+de acceso inicial. No introduzcas secretos en variables `VITE_*`.
+
+Vite valida esos campos e incorpora `operator-manifest.json` a `dist`. El
+servidor vuelve a validar el manifiesto al arrancar y comprueba que el modo de
+acceso integrado coincide con `SEFER_SESSION_ACCESS_DEFAULT`; una configuracion
+ausente, invalida o incoherente detiene build o arranque con un diagnostico.
+Esto mantiene la configuracion publica en el artefacto estatico, sin añadir
+`GET /api/public-config`.
+
+La narrativa legal completa puede montarse como `privacy.local.md`, sin
+reconstruir la imagen. Docker Compose lee
+`${DATA_DIR}/config/privacy.local.md` en modo solo lectura. El archivo es
+opcional, debe ser UTF-8 valido y tener entre 1 byte y 128 KiB; si existe y es
+invalido el servidor no arranca. Solo se interpretan titulos, parrafos, listas y
+enlaces validados, nunca HTML crudo. Hay una plantilla neutral en
+`docs/examples/privacy.example.md`.
 
 ## PWA de audiencia y control
 
@@ -264,6 +290,7 @@ SEFER_LIVE_AUDIO_REJOIN_GRACE_SECONDS=60
 SEFER_LIVE_AUDIO_ALLOW_DELEGATED_MODERATORS=true
 SEFER_LIVE_AUDIO_CONTROL_CODE_TTL_SECONDS=90
 SEFER_SESSION_ACCESS_DEFAULT=PUBLIC
+SEFER_AUDIENCE_RESUME_TTL_HOURS=24
 VITE_SEFER_ACTIVE_ALIAS_VISIBLE_BY_DEFAULT=false
 SEFER_ACTIVE_ALIAS_MODERATION_DEFAULT_VISIBLE=true
 LIVEKIT_URL=

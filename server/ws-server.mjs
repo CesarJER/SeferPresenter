@@ -83,6 +83,12 @@ const getDefaultAccessMode = () =>
 
 let accessMode = getDefaultAccessMode()
 
+const getAudienceResumeTtlMs = () => {
+  const raw = Number.parseInt(process.env.SEFER_AUDIENCE_RESUME_TTL_HOURS || '24', 10)
+  const hours = Number.isFinite(raw) && raw > 0 ? Math.min(raw, 168) : 24
+  return hours * 60 * 60 * 1000
+}
+
 const createAudienceCredential = () => randomBytes(32).toString('base64url')
 const hashAudienceCredential = (credential) =>
   createHash('sha256').update(credential, 'utf8').digest()
@@ -94,7 +100,14 @@ const findAudienceAccessByCredential = (credential) => {
     if (
       record.credentialHash.length === candidate.length &&
       timingSafeEqual(record.credentialHash, candidate)
-    ) return record
+    ) {
+      if (record.expiresAt <= Date.now()) {
+        audienceAccessRecords.delete(record.participantId)
+        stateRevision += 1
+        return null
+      }
+      return record
+    }
   }
   return null
 }
@@ -105,6 +118,7 @@ const makeAudienceAccessState = (record) => ({
   participantId: record.participantId,
   accessState: record.accessState,
   retryAt: record.retryAt,
+  expiresAt: record.expiresAt,
   stateRevision,
 })
 
@@ -120,8 +134,10 @@ const bootstrapAudienceAccess = (credential) => {
     hasAlias: false,
     retryAt: undefined,
     createdAt: Date.now(),
+    expiresAt: Date.now() + getAudienceResumeTtlMs(),
   }
   audienceAccessRecords.set(participantId, record)
+  stateRevision += 1
   return { ...makeAudienceAccessState(record), credential: nextCredential }
 }
 
@@ -130,6 +146,14 @@ const authorizeAudienceCredential = (credential, { requireAdmitted = true } = {}
   if (!record) return null
   if (requireAdmitted && accessMode === 'CONTROLLED' && record.accessState !== 'ADMITTED') return null
   return record
+}
+
+const logoutAudienceCredential = (credential) => {
+  const record = findAudienceAccessByCredential(credential)
+  if (!record) return false
+  audienceAccessRecords.delete(record.participantId)
+  stateRevision += 1
+  return true
 }
 
 const issueAudienceSseTicket = (credential, purpose = 'STATE') => {
@@ -2187,6 +2211,26 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
   })
 
   const heartbeat = setInterval(() => {
+    const now = Date.now()
+    for (const [ticket, ticketRecord] of audienceSseTickets) {
+      if (ticketRecord.expiresAt <= now) audienceSseTickets.delete(ticket)
+    }
+    for (const [participantId, accessRecord] of audienceAccessRecords) {
+      if (accessRecord.expiresAt > now) continue
+      audienceAccessRecords.delete(participantId)
+      commitStateMutation()
+      for (const meta of wsClients.values()) {
+        if (meta.role !== 'audience' || meta.audienceAccessId !== participantId) continue
+        sendJson(meta.ws, {
+          type: 'AUDIENCE_ACCESS_STATE',
+          presentationSessionId,
+          accessMode,
+          participantId,
+          accessState: 'CREDENTIAL_OBSOLETE',
+          stateRevision,
+        })
+      }
+    }
     for (const [client, meta] of wsClients) {
       if (client.isAlive === false) {
         wsClients.delete(client)
@@ -2235,6 +2279,7 @@ export {
   authorizeAudienceCredential,
   issueAudienceSseTicket,
   consumeAudienceSseTicket,
+  logoutAudienceCredential,
   getSessionAccessMode,
   getPresentationSessionId,
   getServerEpoch,

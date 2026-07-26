@@ -4,12 +4,16 @@ import type {
   AudienceAccessState,
   SessionAccessMode,
 } from '../types/audienceAccess';
+import { clearProtectedAudienceSnapshot } from '../utils/protectedAudienceStore';
 
 const STORAGE_KEY = 'sefer-audience-resume-credential';
 
 interface StoredCredential {
   presentationSessionId: string;
   credential: string;
+  participantId: string;
+  accessState: AudienceAccessState;
+  expiresAt: number;
 }
 
 const readStoredCredential = (): StoredCredential | null => {
@@ -19,7 +23,10 @@ const readStoredCredential = (): StoredCredential | null => {
     const value = parsed as Partial<StoredCredential>;
     if (
       typeof value.presentationSessionId !== 'string' ||
-      typeof value.credential !== 'string'
+      typeof value.credential !== 'string' ||
+      typeof value.participantId !== 'string' ||
+      !isAccessState(value.accessState) ||
+      typeof value.expiresAt !== 'number'
     ) return null;
     return value as StoredCredential;
   } catch {
@@ -55,6 +62,7 @@ export function useAudienceAccess() {
   const [credential, setCredential] = useState<string | null>(null);
   const [stateSseTicket, setStateSseTicket] = useState<string | null>(null);
   const [quizSseTicket, setQuizSseTicket] = useState<string | null>(null);
+  const [offline, setOffline] = useState(false);
   const bootstrappingRef = useRef(false);
 
   const issueTickets = useCallback(async (activeCredential: string) => {
@@ -109,6 +117,9 @@ export function useAudienceAccess() {
       writeStoredCredential({
         presentationSessionId: body.presentationSessionId,
         credential: nextCredential,
+        participantId: body.participantId,
+        accessState: body.accessState,
+        expiresAt: typeof body.expiresAt === 'number' ? body.expiresAt : Date.now(),
       });
       setCredential(nextCredential);
       const nextSnapshot: AudienceAccessSnapshot = {
@@ -117,9 +128,11 @@ export function useAudienceAccess() {
         participantId: body.participantId,
         accessState: body.accessState,
         retryAt: typeof body.retryAt === 'number' ? body.retryAt : undefined,
+        expiresAt: typeof body.expiresAt === 'number' ? body.expiresAt : undefined,
         stateRevision: Number(body.stateRevision),
       };
       setSnapshot(nextSnapshot);
+      setOffline(false);
       if (nextSnapshot.accessState === 'ADMITTED') void issueTickets(nextCredential);
     } finally {
       bootstrappingRef.current = false;
@@ -128,8 +141,64 @@ export function useAudienceAccess() {
 
   useEffect(() => {
     void bootstrap().catch(() => {
-      setSnapshot((current) => ({ ...current, accessState: 'CREDENTIAL_OBSOLETE' }));
+      const stored = readStoredCredential();
+      if (
+        stored &&
+        stored.accessState === 'ADMITTED' &&
+        stored.expiresAt > Date.now()
+      ) {
+        setCredential(stored.credential);
+        setOffline(true);
+        setSnapshot({
+          presentationSessionId: stored.presentationSessionId,
+          accessMode: 'CONTROLLED',
+          participantId: stored.participantId,
+          accessState: 'ADMITTED',
+          expiresAt: stored.expiresAt,
+          stateRevision: -1,
+        });
+      } else {
+        writeStoredCredential(null);
+        void clearProtectedAudienceSnapshot();
+        setSnapshot((current) => ({ ...current, accessState: 'CREDENTIAL_OBSOLETE' }));
+      }
     });
+  }, [bootstrap]);
+
+  useEffect(() => {
+    if (!snapshot.expiresAt) return;
+    const remaining = snapshot.expiresAt - Date.now();
+    if (remaining <= 0) {
+      writeStoredCredential(null);
+      void clearProtectedAudienceSnapshot();
+      setCredential(null);
+      setSnapshot((current) => ({ ...current, accessState: 'CREDENTIAL_OBSOLETE' }));
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      writeStoredCredential(null);
+      void clearProtectedAudienceSnapshot();
+      setCredential(null);
+      setStateSseTicket(null);
+      setQuizSseTicket(null);
+      setSnapshot((current) => ({ ...current, accessState: 'CREDENTIAL_OBSOLETE' }));
+    }, remaining);
+    return () => window.clearTimeout(timer);
+  }, [snapshot.expiresAt]);
+
+  useEffect(() => {
+    const handleOnline = () => {
+      setOffline(false);
+      void bootstrap();
+    };
+    const handleOffline = () => setOffline(true);
+    setOffline(!navigator.onLine);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
   }, [bootstrap]);
 
   useEffect(() => {
@@ -142,7 +211,14 @@ export function useAudienceAccess() {
 
   useEffect(() => {
     const clearAfterLogout = () => {
+      if (credential) {
+        void fetch('/api/audience/access/logout', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${credential}` },
+        });
+      }
       writeStoredCredential(null);
+      void clearProtectedAudienceSnapshot();
       setCredential(null);
       setStateSseTicket(null);
       setQuizSseTicket(null);
@@ -151,11 +227,12 @@ export function useAudienceAccess() {
     };
     window.addEventListener('sefer-audience-logout', clearAfterLogout);
     return () => window.removeEventListener('sefer-audience-logout', clearAfterLogout);
-  }, [bootstrap]);
+  }, [bootstrap, credential]);
 
   const handleWsMessage = useCallback((type: string, payload: Record<string, unknown>) => {
     if (type === 'PRESENTATION_SESSION_ROTATED') {
       writeStoredCredential(null);
+      void clearProtectedAudienceSnapshot();
       setCredential(null);
       setStateSseTicket(null);
       setQuizSseTicket(null);
@@ -166,6 +243,7 @@ export function useAudienceAccess() {
     if (type !== 'AUDIENCE_ACCESS_STATE' && type !== 'SESSION_ACCESS_POLICY') return;
     if (payload.accessState === 'CREDENTIAL_OBSOLETE') {
       writeStoredCredential(null);
+      void clearProtectedAudienceSnapshot();
       setCredential(null);
       setStateSseTicket(null);
       setQuizSseTicket(null);
@@ -185,12 +263,23 @@ export function useAudienceAccess() {
           ? payload.accessState
           : current.accessState,
         retryAt: typeof payload.retryAt === 'number' ? payload.retryAt : undefined,
+        expiresAt: typeof payload.expiresAt === 'number' ? payload.expiresAt : current.expiresAt,
         stateRevision: Number.isInteger(payload.stateRevision)
           ? Number(payload.stateRevision)
           : current.stateRevision,
       };
       if (next.accessState === 'ADMITTED' && credential) void issueTickets(credential);
+      if (credential && next.participantId && next.expiresAt) {
+        writeStoredCredential({
+          presentationSessionId: next.presentationSessionId,
+          credential,
+          participantId: next.participantId,
+          accessState: next.accessState,
+          expiresAt: next.expiresAt,
+        });
+      }
       if (next.accessState !== 'ADMITTED') {
+        void clearProtectedAudienceSnapshot();
         setStateSseTicket(null);
         setQuizSseTicket(null);
         sessionStorage.removeItem('sefer-audience-quiz-sse-ticket');
@@ -200,14 +289,21 @@ export function useAudienceAccess() {
   }, [bootstrap, credential, issueTickets]);
 
   const logout = useCallback(() => {
+    if (credential) {
+      void fetch('/api/audience/access/logout', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${credential}` },
+      });
+    }
     writeStoredCredential(null);
+    void clearProtectedAudienceSnapshot();
     setCredential(null);
     setStateSseTicket(null);
     setQuizSseTicket(null);
     sessionStorage.removeItem('sefer-audience-quiz-sse-ticket');
     window.dispatchEvent(new CustomEvent('sefer-audience-logout'));
     void bootstrap();
-  }, [bootstrap]);
+  }, [bootstrap, credential]);
 
   const refreshTickets = useCallback(() => {
     if (credential && snapshot.accessState === 'ADMITTED') {
@@ -221,6 +317,7 @@ export function useAudienceAccess() {
     stateSseTicket,
     quizSseTicket,
     authorized: snapshot.accessState === 'ADMITTED',
+    offline,
     handleWsMessage,
     refreshTickets,
     logout,

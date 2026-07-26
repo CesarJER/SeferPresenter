@@ -7,6 +7,10 @@ import { normalizePresentation } from '../utils/normalizePresentation';
 import { makeSyncMessage } from '../utils/syncProtocol';
 import { validateRemoteStatePayload, validateSyncMessage } from '../utils/validation';
 import { useWebSocket } from './useWebSocket';
+import {
+  loadProtectedAudienceSnapshot,
+  saveProtectedAudienceSnapshot,
+} from '../utils/protectedAudienceStore';
 
 interface SyncStateOptions {
   presentation: Presentation | null;
@@ -61,6 +65,10 @@ interface UseSyncStateProps {
   audienceSseTicket?: string | null;
   onAudienceSseReconnect?: () => void;
   onWsMessage?: (type: string, payload: Record<string, unknown>) => void;
+  audienceParticipantId?: string | null;
+  audiencePresentationSessionId?: string | null;
+  audienceCredentialExpiresAt?: number;
+  audienceOffline?: boolean;
 }
 
 const areJsonEqual = (left: unknown, right: unknown) => JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
@@ -205,6 +213,8 @@ export function useSyncState(props: UseSyncStateProps) {
     setQuizState, setAutoduckState, onAudioTimelineState,
     audienceAccessCredential, audienceAuthorized = true, audienceSseTicket,
     onAudienceSseReconnect, onWsMessage,
+    audienceParticipantId, audiencePresentationSessionId,
+    audienceCredentialExpiresAt, audienceOffline = false,
   } = props;
   const isAudienceMode = !isControlMode && !isPresenterMode;
   const syncEndpoints = useMemo(
@@ -684,6 +694,20 @@ export function useSyncState(props: UseSyncStateProps) {
           stateRevision: Number(data.stateRevision),
         };
       }
+      if (
+        isAudienceMode &&
+        audienceAccessCredential &&
+        audienceParticipantId &&
+        audiencePresentationSessionId &&
+        audienceCredentialExpiresAt
+      ) {
+        void saveProtectedAudienceSnapshot({
+          presentationSessionId: audiencePresentationSessionId,
+          participantId: audienceParticipantId,
+          credential: audienceAccessCredential,
+          expiresAt: audienceCredentialExpiresAt,
+        }, Number(data.stateRevision) || 0, data as Record<string, unknown>);
+      }
 
       if (data.type) {
         const validation = validateSyncMessage(data);
@@ -702,9 +726,38 @@ export function useSyncState(props: UseSyncStateProps) {
       return true;
     } catch (err) {
       console.error('Error requesting backend state snapshot', err);
+      if (
+        isAudienceMode &&
+        audienceAuthorized &&
+        audienceOffline &&
+        audienceAccessCredential &&
+        audienceParticipantId &&
+        audiencePresentationSessionId &&
+        audienceCredentialExpiresAt
+      ) {
+        const cached = await loadProtectedAudienceSnapshot({
+          presentationSessionId: audiencePresentationSessionId,
+          participantId: audienceParticipantId,
+          credential: audienceAccessCredential,
+          expiresAt: audienceCredentialExpiresAt,
+        });
+        if (cached) {
+          audienceRevisionRef.current = {
+            presentationSessionId: audiencePresentationSessionId,
+            serverEpoch: null,
+            stateRevision: cached.stateRevision,
+          };
+          applyRemoteStateRef.current(cached.projectionState);
+          return true;
+        }
+      }
       return false;
     }
-  }, [audienceAccessCredential, audienceAuthorized, isAudienceMode, syncEndpoints.state]);
+  }, [
+    audienceAccessCredential, audienceAuthorized, audienceCredentialExpiresAt,
+    audienceOffline, audienceParticipantId, audiencePresentationSessionId,
+    isAudienceMode, syncEndpoints.state,
+  ]);
 
   // ── BroadcastChannel listener ─────────────────────────────────────
   useEffect(() => {
@@ -824,6 +877,20 @@ export function useSyncState(props: UseSyncStateProps) {
             audienceRevisionRef.current.stateRevision = Number(data.stateRevision);
           }
         }
+        if (
+          isAudienceMode &&
+          audienceAccessCredential &&
+          audienceParticipantId &&
+          audiencePresentationSessionId &&
+          audienceCredentialExpiresAt
+        ) {
+          void saveProtectedAudienceSnapshot({
+            presentationSessionId: audiencePresentationSessionId,
+            participantId: audienceParticipantId,
+            credential: audienceAccessCredential,
+            expiresAt: audienceCredentialExpiresAt,
+          }, Number(data.stateRevision) || 0, data as Record<string, unknown>);
+        }
 
         if (data.type) {
           const validation = validateSyncMessage(data);
@@ -890,7 +957,9 @@ export function useSyncState(props: UseSyncStateProps) {
 
     return () => eventSource.close();
   }, [
-    audienceAuthorized, audienceSseTicket, clientIdRef, isAudienceMode,
+    audienceAccessCredential, audienceAuthorized, audienceCredentialExpiresAt,
+    audienceParticipantId, audiencePresentationSessionId, audienceSseTicket,
+    clientIdRef, isAudienceMode,
     isPresenterMode, onAudienceSseReconnect, requestBackendState,
     syncEndpoints.events, videoStateRef
   ]);

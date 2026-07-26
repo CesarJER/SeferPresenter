@@ -15,6 +15,7 @@ import {
   getServerEpoch,
   getSessionAccessMode,
   issueAudienceSseTicket,
+  logoutAudienceCredential,
   isLiveAudioControlAuthorized,
   isAudienceParticipantAdmitted,
 } from './ws-server.mjs'
@@ -48,6 +49,11 @@ import {
 import { writeJsonSafely } from './json-persistence.mjs'
 import { resolvePathInsideRoot } from './path-containment.mjs'
 import { deriveAudienceProjectionState } from './audience-projection-state.mjs'
+import {
+  buildOperatorManifest,
+  readPrivacyLocalMarkdown,
+  validateOperatorManifestFile,
+} from './operator-config.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const rootDir = path.resolve(__dirname, '..')
@@ -63,6 +69,12 @@ const getBearerCredential = (req) => {
 const port = Number(process.env.SEFER_PORT || 8787)
 const staticArgIndex = process.argv.indexOf('--static')
 const staticDir = path.resolve(rootDir, staticArgIndex >= 0 ? process.argv[staticArgIndex + 1] || 'dist' : 'dist')
+const operatorManifest = staticArgIndex >= 0
+  ? validateOperatorManifestFile(staticDir)
+  : buildOperatorManifest(process.env)
+const privacyLocalPath = process.env.SEFER_PRIVACY_LOCAL_PATH?.trim() ||
+  path.join(rootDir, 'privacy.local.md')
+const privacyLocalMarkdown = readPrivacyLocalMarkdown(privacyLocalPath)
 const sseHeartbeatMs = 30_000
 
 let currentState = makeProjectionSyncStateMessage(getDefaultProjectionState(), {
@@ -663,6 +675,14 @@ const handleApi = async (req, res, url) => {
     return true
   }
 
+  if (url.pathname === '/api/privacy-document' && req.method === 'GET') {
+    sendJson(res, 200, {
+      operator: operatorManifest,
+      markdown: privacyLocalMarkdown,
+    })
+    return true
+  }
+
   if (url.pathname === '/api/audience/sse-ticket' && req.method === 'POST') {
     const credential = getBearerCredential(req)
     let purpose = 'STATE'
@@ -682,6 +702,12 @@ const handleApi = async (req, res, url) => {
       return true
     }
     sendJson(res, 200, { ticket, expiresInSeconds: 30 })
+    return true
+  }
+
+  if (url.pathname === '/api/audience/access/logout' && req.method === 'POST') {
+    const removed = logoutAudienceCredential(getBearerCredential(req))
+    sendJson(res, removed ? 200 : 401, { success: removed })
     return true
   }
 

@@ -18,6 +18,13 @@
 | `d5fe035` | SP-PERF-006/007 | Assets hash y activación SW |
 | `113ad32` | SP-SRE-016/018 | ICE/TCP, API interna, readiness y Docker |
 | `c14e157` | A11Y-FINAL-007 | Persistencia de foco y texto del alias durante rerenders |
+| `a5e6263` | Privacidad | Restauración de perfil y consentimiento de audiencia |
+| `a33d530` | SP-PRIV-008 | Clarificación de consentimiento y recordatorio de grabación |
+| `764ece6` | Accesibilidad | Permitir scroll en páginas de acceso y privacidad |
+| `0091ceb` | Autorización | Vinculación de petición de palabra a credencial de audiencia |
+| `d76f49e` | MC-SYNC-008 | Prevención de estado REVOKED prematuro (mitigación frontend) |
+| `59ecd9c` | Autorización | Persistencia y resincronización de permisos de vista de lista activa |
+| `a876409` | SP-PRIV-001 / Estabilidad | Migración de sesión y estado del quiz a localStorage para estabilidad móvil |
 
 En cada frontera se ejecutaron pruebas dirigidas, TypeScript y ESLint. Las
 fronteras arquitectónicas incluyeron la suite completa y build. El resultado

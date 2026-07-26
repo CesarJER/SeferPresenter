@@ -25,6 +25,7 @@ import type {
   QuizQuestionScore,
 } from '../types/quiz';
 import { makeEmptyAudienceAnswer } from '../types/quiz';
+import { refreshProtectedAudienceDrafts } from '../utils/protectedAudienceStore';
 
 // ── Session ID ────────────────────────────────────────────────────────────────
 
@@ -166,6 +167,7 @@ export function useAudienceAnswers(
   useEffect(() => {
     try {
       localStorage.setItem(ANSWERS_STORAGE_KEY, JSON.stringify(answersByPresentation));
+      void refreshProtectedAudienceDrafts();
     } catch {
       // Storage quota exceeded — silently ignore
     }
@@ -175,6 +177,7 @@ export function useAudienceAnswers(
   useEffect(() => {
     try {
       localStorage.setItem(SCORES_STORAGE_KEY, JSON.stringify(scoresByPresentation));
+      void refreshProtectedAudienceDrafts();
     } catch {
       // Ignore
     }
@@ -189,8 +192,21 @@ export function useAudienceAnswers(
       setScoresByPresentation({});
       setSessionId(makeQuizSessionId());
     };
+    const handleProtectedRestore = () => {
+      try {
+        setAnswersByPresentation(JSON.parse(localStorage.getItem(ANSWERS_STORAGE_KEY) || '{}'));
+        setScoresByPresentation(JSON.parse(localStorage.getItem(SCORES_STORAGE_KEY) || '{}'));
+      } catch {
+        setAnswersByPresentation({});
+        setScoresByPresentation({});
+      }
+    };
     window.addEventListener('sefer-audience-logout', handleLogout);
-    return () => window.removeEventListener('sefer-audience-logout', handleLogout);
+    window.addEventListener('sefer-protected-quiz-restored', handleProtectedRestore);
+    return () => {
+      window.removeEventListener('sefer-audience-logout', handleLogout);
+      window.removeEventListener('sefer-protected-quiz-restored', handleProtectedRestore);
+    };
   }, []);
 
   // Listen for CLEAR commands from controller and LOGOUT events from PWA identity
