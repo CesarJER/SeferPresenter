@@ -46,6 +46,8 @@ interface QuizControllerViewProps {
   rangeStats: QuizRangeStats[];
   totalSessions: number;
   maxBaseCentipunts: number;
+  registeredQuestionCount: number;
+  onRecalculateResults: () => void;
   renderMode?: 'top' | 'bottom' | 'both';
   onAdjustTimer?: (seconds: number) => void;
 }
@@ -78,6 +80,8 @@ export const QuizControllerView: React.FC<QuizControllerViewProps> = ({
   rangeStats,
   totalSessions,
   maxBaseCentipunts,
+  registeredQuestionCount,
+  onRecalculateResults,
   renderMode = 'both',
   onAdjustTimer,
 }) => {
@@ -339,6 +343,8 @@ export const QuizControllerView: React.FC<QuizControllerViewProps> = ({
             rangeStats={rangeStats}
             totalSessions={totalSessions}
             maxBaseCentipunts={maxBaseCentipunts}
+            registeredQuestionCount={registeredQuestionCount}
+            onRecalculateResults={onRecalculateResults}
           />
         </div>
       )}

@@ -389,7 +389,7 @@ Current local/browser state includes:
 
 - Stored presenter state and background lock in `localStorage`.
 - Control editor UI state such as draft text, expanded rows, fullscreen, panel visibility.
-- Audience answer/session state managed by `src/hooks/useQuizAnswers.ts`, with event broadcasting for quiz submissions.
+- Audience answer/session state managed by `src/hooks/useQuizAnswers.ts`, partitioned by `presentationId` in local storage and in every quiz submission/final-score message.
 - DOM media element refs and loaded media metadata.
 
 Keep these local unless another device/mode must observe them.
@@ -440,6 +440,9 @@ Presentation state visible to audience:
 - App mode and scripture state.
 - Video/audio state needed to mirror projection.
 - Quiz subslide/timer state needed for display and answering.
+- Quiz run tracking (`completedQuizSlideIds`, the optional result cut in
+  `resultQuizSlideIds`, and its recalculated `maxBaseCentipunts`) so Control,
+  Presenter, and Audience use the same category ranges.
 
 Controller UI state:
 
@@ -453,10 +456,23 @@ Controller UI state:
 
 Quiz answers and personal scoring are fundamentally anonymous and decoupled from Live Audio identity. The architecture enforces the following privacy rules:
 
-- **Local Storage:** Individual answers and scoring remain on the audience member's device (`localStorage`). The server does not receive or persist individual, nominal answers linked to a profile.
+- **Session Storage:** Individual answers and scoring remain in audience `localStorage`; the server also keeps the submitted answers in volatile memory for the active quiz session. This lets a reconnected Control recover the session without writing quiz answers to disk. The snapshot endpoint is reserved for Control when authentication is enabled.
+- **Presentation Scope:** Answer and score maps are nested by `presentationId`.
+  `QUIZ_ANSWER`, `QUIZ_FINAL_SCORE`, and `QUIZ_CLEAR_ANSWERS` also carry that ID,
+  and Control ignores messages from any presentation other than the active one.
 - **Separate Session IDs:** The quiz module generates its own ephemeral `sessionId` on first interaction. This ID is strictly separated from the LiveKit `participantId`. The quiz hook (`useQuizAnswers`) does not share state with `useLiveAudio` or `usePrivateControlSignals`.
 - **Aggregated Results:** The controller receives aggregated session scores and answers to calculate overall ranges and statistics for the results slide. The controller does not project nominal rankings, aliases, or performance history.
-- **No Participant Profiling:** There is no historical performance tracking by participant. Aggregated session scores are ephemeral and disappear when the quiz session is cleared or the browser tab is closed.
+- **Partial Quiz Results:** Questions with submitted answers are marked in green
+  in Control. From the results slide, Control may emit `QUIZ_RECALCULATE_RESULTS`
+  with those marked IDs; the backend validates them against the active
+  presentation, recalculates the maximum score, increments `scoreRequestId`, and
+  broadcasts the same result cut to Presenter and Audience. Audience recalculates
+  and resends its final score for every request, including repeated recalculations
+  of the same cut. Control also
+  recomputes each received session total from only those selected answers, so
+  category counts update immediately. Clearing a question removes its stored
+  answers, result inclusion, and green marker.
+- **No Participant Profiling:** There is no historical performance tracking by participant. Quiz session data is ephemeral and disappears when the server session is cleared or the server process stops.
 - **Special Activities:** Any future activity (like a named contest) that requires deviating from this anonymous aggregated model must not be implemented in the base MVP and requires explicit documentation and user consent flows prior to participation.
 
 Synchronization protocol:

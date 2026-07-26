@@ -40,7 +40,7 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
 - `useSeferReader` - `src/hooks/useSeferReader.ts`: book/chapter/verse reader state and data loading.
 - `useQuizTimer` - `src/hooks/useQuizTimer.ts`: quiz timer state and transitions.
 - [useAudienceSession](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useAudienceSession.ts) - `src/hooks/useAudienceSession.ts`: audience local session management, device ID, nick, and presentation session ID tracking in localStorage.
-- Quiz answer hooks - `src/hooks/useQuizAnswers.ts`: audience answer sessions and controller aggregation through `useAudienceAnswers` and `useControllerAnswers`.
+- Quiz answer hooks - `src/hooks/useQuizAnswers.ts`: presentation-scoped audience answer sessions and controller aggregation through `useAudienceAnswers` and `useControllerAnswers`.
 - `useQuizAudio` - `src/hooks/useQuizAudio.ts`: quiz feedback sounds.
 - `scriptureNumerals` helpers - `src/hooks/scriptureNumerals.ts`: scripture numeral utilities.
 - [useLiveAudioAvailability](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/features/liveAudio/hooks/useLiveAudioAvailability.ts) - `src/features/liveAudio/hooks/useLiveAudioAvailability.ts`: optional LiveKit runtime availability check using `/api/livekit/status`, with module-level cache and no SDK import.
@@ -97,7 +97,7 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
 
 ## Sync Modules
 
-- `RemoteCommandPayload` / `SyncStatePayload` - `src/types/sync.ts`: sync contracts.
+- `RemoteCommandPayload` / `SyncStatePayload` - `src/types/sync.ts`: sync contracts, including `QUIZ_RECALCULATE_RESULTS` for publishing a partial-quiz result cut.
 - `LiveAudioBroadcastMessage` / `PrivateControlSignalMessage` -
   `src/types/liveAudio.ts`: optional Live Audio message family kept separate from
   `SyncStatePayload` and existing remote commands.
@@ -192,6 +192,7 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
 - `getMetadata` / `loadBookData` - `src/utils/metadataCache.ts`: scripture metadata/book loading and caching.
 - `parseVerses` - `src/utils/scriptureParser.ts`: TSV scripture parsing.
 - `getScriptureChapterVerses` / `materializeScriptureSlides` - `src/utils/scriptureLookup.ts`: scripture lookup and slide materialization.
+- `validateScriptureSpec` / `auditQuickScriptureReferences` / `auditSlideScriptureReferences` - `src/utils/scriptureLookup.ts`: checks quiz and Sefer/Tanaj references against generated metadata before editor conversion or persistence.
 - `scripts/generate-verses.js`: generated `public/books/*.tsv` and `public/metadata.json`.
 - [navigationUtils](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/utils/navigationUtils.ts) - `src/utils/navigationUtils.ts`: sequential linear step generation for presentations.
 

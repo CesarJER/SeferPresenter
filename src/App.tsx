@@ -10,7 +10,7 @@ const LiveAudioPresenter = import.meta.env.VITE_SEFER_LIVE_AUDIO_BUILD !== 'fals
 
 import type { AudioState, AudioSyncMap, AudioTimelineState } from './types/audio';
 import { DEFAULT_AUDIO_STATE } from './types/audio';
-import type { AppMode, Presentation, ScriptureNavState, Slide, VideoState, QuizData } from './types/presentation';
+import type { AppMode, Presentation, ScriptureNavState, Slide, VideoState } from './types/presentation';
 import type { QuizOptionId, QuizSyncState } from './types/quiz';
 import type { RemoteCommandPayload, AutoduckState } from './types/sync';
 
@@ -101,6 +101,10 @@ function App() {
   const [quizCurrentSubslideIndex, setQuizCurrentSubslideIndex] = useState(0);
   const [quizPresenterDemoSelection, setQuizPresenterDemoSelection] = useState<QuizOptionId | null>(null);
   const [incomingFeedbackSound, setIncomingFeedbackSound] = useState<QuizSyncState['feedbackSound']>(null);
+  const [quizCompletedSlideIds, setQuizCompletedSlideIds] = useState<string[]>([]);
+  const [quizResultSlideIds, setQuizResultSlideIds] = useState<string[] | undefined>(undefined);
+  const [quizScoreRequestId, setQuizScoreRequestId] = useState(0);
+  const [syncedQuizMaxBaseCentipunts, setSyncedQuizMaxBaseCentipunts] = useState<number | undefined>(undefined);
   const quizTimer = useQuizTimer({
     timerSeconds: activeQuizData?.timerSeconds ?? 30,
   });
@@ -188,7 +192,11 @@ function App() {
       if (subslides.length > 0) initialIndex = subslides.length - 1;
     }
 
+    const previous = quizStateRef.current;
+    const presentationId = currentPresentationRef.current?.id;
+    const canPreserveRun = Boolean(presentationId && previous?.presentationId === presentationId);
     return {
+      presentationId,
       currentSubslideIndex: initialIndex,
       timerState: {
         status: 'idle',
@@ -197,8 +205,13 @@ function App() {
         pausedRemainingMs: null,
       },
       presenterDemoSelection: {
+        ...(canPreserveRun ? previous?.presenterDemoSelection : {}),
         [slide.id]: null,
       },
+      completedQuizSlideIds: canPreserveRun ? previous?.completedQuizSlideIds ?? [] : [],
+      resultQuizSlideIds: canPreserveRun ? previous?.resultQuizSlideIds : undefined,
+      scoreRequestId: canPreserveRun ? previous?.scoreRequestId ?? 0 : 0,
+      maxBaseCentipunts: canPreserveRun ? previous?.maxBaseCentipunts : undefined,
     };
   }, []);
   const quizAudio = useQuizAudio({
@@ -215,6 +228,7 @@ function App() {
       .map(s => s.quizData!);
     return calcMaxBaseCentipunts(allQuizData);
   }, [currentPresentation]);
+  const effectiveMaxBaseCentipunts = syncedQuizMaxBaseCentipunts ?? maxBaseCentipunts;
 
   const activeQuizState = useMemo<QuizSyncState | null>(() => {
     if (!activeQuizData || !activeSlide) return null;
@@ -224,9 +238,13 @@ function App() {
       presenterDemoSelection: {
         [activeSlide.id]: quizPresenterDemoSelection,
       },
-      maxBaseCentipunts,
+      presentationId: currentPresentation?.id,
+      completedQuizSlideIds: quizCompletedSlideIds,
+      resultQuizSlideIds: quizResultSlideIds,
+      scoreRequestId: quizScoreRequestId,
+      maxBaseCentipunts: effectiveMaxBaseCentipunts,
     };
-  }, [activeQuizData, activeSlide, quizCurrentSubslideIndex, quizTimer.timerState, quizPresenterDemoSelection, maxBaseCentipunts]);
+  }, [activeQuizData, activeSlide, quizCurrentSubslideIndex, quizTimer.timerState, quizPresenterDemoSelection, currentPresentation?.id, quizCompletedSlideIds, quizResultSlideIds, quizScoreRequestId, effectiveMaxBaseCentipunts]);
 
   const applyRemoteQuizState = useCallback((state: QuizSyncState | null) => {
     if (!state) {
@@ -234,6 +252,10 @@ function App() {
       setQuizCurrentSubslideIndex(0);
       setQuizPresenterDemoSelection(null);
       setIncomingFeedbackSound(null);
+      setQuizCompletedSlideIds([]);
+      setQuizResultSlideIds(undefined);
+      setQuizScoreRequestId(0);
+      setSyncedQuizMaxBaseCentipunts(undefined);
       quizTimer.resetTimer((activeQuizData?.timerSeconds ?? 30) * 1000);
       return;
     }
@@ -247,6 +269,10 @@ function App() {
     quizTimer.setTimerState(state.timerState);
     setQuizPresenterDemoSelection(activeSlide ? state.presenterDemoSelection?.[activeSlide.id] ?? fallbackSelection : fallbackSelection);
     setIncomingFeedbackSound(state.feedbackSound ?? null);
+    setQuizCompletedSlideIds(state.completedQuizSlideIds ?? []);
+    setQuizResultSlideIds(state.resultQuizSlideIds);
+    setQuizScoreRequestId(state.scoreRequestId ?? 0);
+    setSyncedQuizMaxBaseCentipunts(state.maxBaseCentipunts);
   }, [activeQuizData?.timerSeconds, activeSlide, quizTimer.resetTimer, quizTimer.setTimerState, setIncomingFeedbackSound]);
 
   useEffect(() => {
@@ -839,7 +865,7 @@ function App() {
             quizCurrentSubslideIndex={quizCurrentSubslideIndex}
             quizTimerState={quizTimer.timerState}
             quizPresenterDemoSelection={quizPresenterDemoSelection}
-            quizMaxBaseCentipunts={calcMaxBaseCentipunts(currentPresentation?.slides.map(s => s.quizData).filter(Boolean) as QuizData[] || [])}
+            quizMaxBaseCentipunts={effectiveMaxBaseCentipunts}
             autoduckState={autoduckState}
           />
         </div>

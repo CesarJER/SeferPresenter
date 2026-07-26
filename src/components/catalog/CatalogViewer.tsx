@@ -177,7 +177,10 @@ export const CatalogViewer: React.FC<CatalogViewerProps> = ({ catalog, presentat
                       </div>
                     ))}
                   </div>
-                ) : pres.mode === 'trilingual' ? (
+                ) : pres.mode === 'trilingual' && (
+                  (slide.lines[1] && slide.lines[1] !== '-' && slide.lines[1] !== '>-') || 
+                  (slide.lines[2] && slide.lines[2] !== '-' && slide.lines[2] !== '>-')
+                ) ? (
                   <div className={`w-full ${viewMode === 'continuous' ? 'grid grid-cols-3 gap-2 sm:gap-4' : 'flex flex-col space-y-2'}`}>
                     {slide.lines.slice(0, 3).map((line, idx) => {
                       if (!line || line === '-' || line === '>-') return <div key={idx}></div>;

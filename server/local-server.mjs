@@ -50,11 +50,15 @@ const quizAggregateState = {
   submittedSessionsBySlideId: new Map(),
   finalScoreBuckets: new Map(),
   finalScoreSessions: new Map(),
+  answerSessions: new Map(),
+  finalScoreValues: new Map(),
   updatedAt: null,
 }
 
 const contentTypes = {
+  '.avif': 'image/avif',
   '.css': 'text/css; charset=utf-8',
+  '.gif': 'image/gif',
   '.html': 'text/html; charset=utf-8',
   '.ico': 'image/x-icon',
   '.js': 'text/javascript; charset=utf-8',
@@ -68,6 +72,7 @@ const contentTypes = {
   '.tsv': 'text/tab-separated-values; charset=utf-8',
   '.txt': 'text/plain; charset=utf-8',
   '.wav': 'audio/wav',
+  '.webp': 'image/webp',
   '.webm': 'video/webm',
   '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg',
@@ -240,33 +245,88 @@ const scoreBucketForCentipunts = (value) => {
   return `${lower}-${lower + 99}`
 }
 
+const quizScopePrefix = (presentationId) => `${encodeURIComponent(presentationId)}::`
+const quizScopedKey = (presentationId, value) => `${quizScopePrefix(presentationId)}${value}`
+const clearQuizScope = (presentationId) => {
+  const prefix = quizScopePrefix(presentationId)
+  for (const key of quizAggregateState.submittedSessionsBySlideId.keys()) {
+    if (key.startsWith(prefix)) quizAggregateState.submittedSessionsBySlideId.delete(key)
+  }
+  for (const key of quizAggregateState.finalScoreBuckets.keys()) {
+    if (key.startsWith(prefix)) quizAggregateState.finalScoreBuckets.delete(key)
+  }
+  for (const key of quizAggregateState.finalScoreSessions.keys()) {
+    if (key.startsWith(prefix)) quizAggregateState.finalScoreSessions.delete(key)
+  }
+  for (const key of quizAggregateState.answerSessions.keys()) {
+    if (key.startsWith(prefix)) quizAggregateState.answerSessions.delete(key)
+  }
+  for (const key of quizAggregateState.finalScoreValues.keys()) {
+    if (key.startsWith(prefix)) quizAggregateState.finalScoreValues.delete(key)
+  }
+}
+
 const updateQuizAggregate = (message) => {
   if (!isObjectRecord(message)) return
   const now = Date.now()
+  const presentationId = typeof message.presentationId === 'string' && message.presentationId
+    ? message.presentationId
+    : currentState.presentation?.id
+  if (!presentationId) return
 
   if (message.type === 'QUIZ_ANSWER') {
     if (typeof message.sessionId !== 'string' || typeof message.slideId !== 'string') return
     if (!isObjectRecord(message.answer) || message.answer.submitted !== true) return
 
-    const sessions = quizAggregateState.submittedSessionsBySlideId.get(message.slideId) || new Set()
+    const slideKey = quizScopedKey(presentationId, message.slideId)
+    const sessions = quizAggregateState.submittedSessionsBySlideId.get(slideKey) || new Set()
     sessions.add(message.sessionId)
-    quizAggregateState.submittedSessionsBySlideId.set(message.slideId, sessions)
+    quizAggregateState.submittedSessionsBySlideId.set(slideKey, sessions)
+    const sessionKey = quizScopedKey(presentationId, message.sessionId)
+    const existingSession = quizAggregateState.answerSessions.get(sessionKey) || {
+      sessionId: message.sessionId,
+      presentationId,
+      answers: {},
+    }
+    quizAggregateState.answerSessions.set(sessionKey, {
+      ...existingSession,
+      displayName: typeof message.displayName === 'string' ? message.displayName.slice(0, 80) : existingSession.displayName,
+      answers: {
+        ...existingSession.answers,
+        [message.slideId]: {
+          slideId: message.slideId,
+          selectedOptionIds: Array.isArray(message.answer.selectedOptionIds)
+            ? message.answer.selectedOptionIds.filter((id) => typeof id === 'string')
+            : [],
+          submitted: true,
+          submittedAt: Number.isFinite(message.answer.submittedAt) ? message.answer.submittedAt : now,
+          bonusReadingClaimed: message.answer.bonusReadingClaimed === true,
+          ...(typeof message.answer.citaBook === 'string' ? { citaBook: message.answer.citaBook.slice(0, 80) } : {}),
+          ...(typeof message.answer.citaChapter === 'string' ? { citaChapter: message.answer.citaChapter.slice(0, 16) } : {}),
+          ...(typeof message.answer.citaVerseStart === 'string' ? { citaVerseStart: message.answer.citaVerseStart.slice(0, 16) } : {}),
+          ...(typeof message.answer.citaVerseEnd === 'string' ? { citaVerseEnd: message.answer.citaVerseEnd.slice(0, 16) } : {}),
+        },
+      },
+    })
     quizAggregateState.updatedAt = now
     return
   }
 
   if (message.type === 'QUIZ_FINAL_SCORE') {
     if (typeof message.sessionId !== 'string' || !Number.isFinite(message.totalCentipunts)) return
-    const previousBucket = quizAggregateState.finalScoreSessions.get(message.sessionId)
+    const sessionKey = quizScopedKey(presentationId, message.sessionId)
+    const previousBucket = quizAggregateState.finalScoreSessions.get(sessionKey)
     if (previousBucket) {
       const previousCount = quizAggregateState.finalScoreBuckets.get(previousBucket) || 0
       if (previousCount <= 1) quizAggregateState.finalScoreBuckets.delete(previousBucket)
       else quizAggregateState.finalScoreBuckets.set(previousBucket, previousCount - 1)
     }
 
-    const bucket = scoreBucketForCentipunts(message.totalCentipunts)
+    const rawBucket = scoreBucketForCentipunts(message.totalCentipunts)
+    const bucket = rawBucket ? quizScopedKey(presentationId, rawBucket) : null
     if (!bucket) return
-    quizAggregateState.finalScoreSessions.set(message.sessionId, bucket)
+    quizAggregateState.finalScoreSessions.set(sessionKey, bucket)
+    quizAggregateState.finalScoreValues.set(sessionKey, Math.max(0, Math.floor(message.totalCentipunts)))
     quizAggregateState.finalScoreBuckets.set(bucket, (quizAggregateState.finalScoreBuckets.get(bucket) || 0) + 1)
     quizAggregateState.updatedAt = now
     return
@@ -274,25 +334,75 @@ const updateQuizAggregate = (message) => {
 
   if (message.type === 'QUIZ_CLEAR_ANSWERS') {
     if (typeof message.slideId === 'string') {
-      quizAggregateState.submittedSessionsBySlideId.delete(message.slideId)
+      quizAggregateState.submittedSessionsBySlideId.delete(quizScopedKey(presentationId, message.slideId))
+      const prefix = quizScopePrefix(presentationId)
+      for (const [key, session] of quizAggregateState.answerSessions.entries()) {
+        if (!key.startsWith(prefix) || !session.answers?.[message.slideId]) continue
+        const answers = { ...session.answers }
+        delete answers[message.slideId]
+        quizAggregateState.answerSessions.set(key, { ...session, answers })
+      }
+      for (const key of quizAggregateState.finalScoreBuckets.keys()) {
+        if (key.startsWith(prefix)) quizAggregateState.finalScoreBuckets.delete(key)
+      }
+      for (const key of quizAggregateState.finalScoreSessions.keys()) {
+        if (key.startsWith(prefix)) quizAggregateState.finalScoreSessions.delete(key)
+      }
+      for (const key of quizAggregateState.finalScoreValues.keys()) {
+        if (key.startsWith(prefix)) quizAggregateState.finalScoreValues.delete(key)
+      }
     } else {
-      quizAggregateState.submittedSessionsBySlideId.clear()
-      quizAggregateState.finalScoreBuckets.clear()
-      quizAggregateState.finalScoreSessions.clear()
+      clearQuizScope(presentationId)
     }
     quizAggregateState.updatedAt = now
   }
 }
 
-const getQuizAggregateSnapshot = () => ({
+const getQuizAggregateSnapshot = () => {
+  const presentationId = currentState.presentation?.id
+  if (!presentationId) return {
+    submittedAnswersBySlideId: {},
+    finalScoreRanges: {},
+    totalFinalScores: 0,
+    updatedAt: quizAggregateState.updatedAt,
+  }
+  const prefix = quizScopePrefix(presentationId)
+  const scopedFinalSessions = Array.from(quizAggregateState.finalScoreSessions.keys())
+    .filter((key) => key.startsWith(prefix))
+  return ({
   submittedAnswersBySlideId: Object.fromEntries(
     Array.from(quizAggregateState.submittedSessionsBySlideId.entries())
-      .map(([slideId, sessions]) => [slideId, sessions.size]),
+      .filter(([key]) => key.startsWith(prefix))
+      .map(([key, sessions]) => [key.slice(prefix.length), sessions.size]),
   ),
-  finalScoreRanges: Object.fromEntries(quizAggregateState.finalScoreBuckets.entries()),
-  totalFinalScores: quizAggregateState.finalScoreSessions.size,
+  finalScoreRanges: Object.fromEntries(
+    Array.from(quizAggregateState.finalScoreBuckets.entries())
+      .filter(([key]) => key.startsWith(prefix))
+      .map(([key, count]) => [key.slice(prefix.length), count]),
+  ),
+  totalFinalScores: scopedFinalSessions.length,
   updatedAt: quizAggregateState.updatedAt,
-})
+  })
+}
+
+const getQuizControlSnapshot = (presentationId) => {
+  const prefix = quizScopePrefix(presentationId)
+  return {
+    type: 'QUIZ_SESSION_SNAPSHOT',
+    presentationId,
+    sessions: Object.fromEntries(
+      Array.from(quizAggregateState.answerSessions.entries())
+        .filter(([key]) => key.startsWith(prefix))
+        .map(([key, session]) => [key.slice(prefix.length), session]),
+    ),
+    sessionTotalScores: Object.fromEntries(
+      Array.from(quizAggregateState.finalScoreValues.entries())
+        .filter(([key]) => key.startsWith(prefix))
+        .map(([key, score]) => [key.slice(prefix.length), score]),
+    ),
+    updatedAt: quizAggregateState.updatedAt,
+  }
+}
 
 const logStateChange = (state) => {
   // Removed spammy log
@@ -380,6 +490,11 @@ const reduceRemoteCommandMessage = (message, sourceMeta) => {
   })
   if (!result.ok) {
     return { ok: false, status: 400, error: result.error }
+  }
+
+  if (message.payload.command === 'RESET_STATE' && message.payload.clearSession === true) {
+    const presentationId = currentState.presentation?.id
+    if (presentationId) clearQuizScope(presentationId)
   }
 
   const committedState = commitState(result.state, {
@@ -526,6 +641,20 @@ const handleApi = async (req, res, url) => {
     return true
   }
 
+  if (url.pathname === '/api/quiz-control-state' && req.method === 'POST') {
+    try {
+      const body = JSON.parse(await readBody(req))
+      if (typeof body.presentationId !== 'string' || !body.presentationId) {
+        sendJson(res, 400, { error: 'presentationId is required' })
+        return true
+      }
+      sendJson(res, 200, getQuizControlSnapshot(body.presentationId))
+    } catch (err) {
+      sendJson(res, 400, { error: err.message || 'Invalid JSON' })
+    }
+    return true
+  }
+
   if (url.pathname === '/api/quiz-answer' && req.method === 'POST') {
     try {
       const body = await readBody(req)
@@ -668,7 +797,7 @@ const handleApi = async (req, res, url) => {
   if (url.pathname === '/api/backgrounds' && req.method === 'GET') {
     const backgrounds = walkAssets(
       [path.join(publicDir, 'backgrounds'), path.join(publicDir, 'videos')],
-      /\.(png|jpe?g|mp4|webm)$/i
+      /\.(avif|gif|jpe?g|png|svg|webp|mp4|webm)$/i
     )
     sendJson(res, 200, backgrounds)
     return true

@@ -3,7 +3,14 @@ import type { Presentation, QuizData, Slide, VideoState, AppMode, ScriptureNavSt
 import type { SeferReaderState } from '../../hooks/useSeferReader';
 import { transliterateText } from '../../utils/transliterate';
 import { parseMediaSlideString, serializeMediaToText } from '../../utils/mediaUtils';
-import { materializeScriptureSlides, parseScriptureTag, scriptureSlideToTag } from '../../utils/scriptureLookup';
+import {
+  auditQuickScriptureReferences,
+  auditSlideScriptureReferences,
+  materializeScriptureSlides,
+  parseScriptureTag,
+  scriptureSlideToTag,
+  type ScriptureAuditIssue,
+} from '../../utils/scriptureLookup';
 import { ArrowUp, Pencil, Maximize2, Minimize2, Music, ArrowUpDown } from 'lucide-react';
 import SeferControlPanel from './SeferControlPanel';
 import SeferControlPanelMini from './SeferControlPanelMini';
@@ -74,6 +81,8 @@ interface MenuPopupProps {
   quizCurrentSubslideIndex?: number;
   quizTimerState?: QuizTimerState;
   quizPresenterDemoSelection?: QuizOptionId | null;
+  quizMaxBaseCentipunts?: number;
+  quizResultSlideIds?: string[];
   onQuizSubslideSelect?: (idx: number) => void;
   onQuizStartTimer?: () => void;
   onQuizPauseTimer?: () => void;
@@ -158,6 +167,8 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
   quizCurrentSubslideIndex = 0,
   quizTimerState,
   quizPresenterDemoSelection = null,
+  quizMaxBaseCentipunts,
+  quizResultSlideIds,
   onQuizSubslideSelect = () => { },
   onQuizStartTimer = () => { },
   onQuizPauseTimer = () => { },
@@ -176,13 +187,39 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
   wsStatus,
   controlSessionId,
 }) => {
-  const controllerAnswers = useControllerAnswers();
+  const controllerAnswers = useControllerAnswers(currentPresentation?.id ?? null);
   // ────────────────────────────────────────────────────────────────
   // States
   // ────────────────────────────────────────────────────────────────
   const activeSlide = currentPresentation && currentSlideIndex >= 0 && currentSlideIndex < currentPresentation.slides.length
     ? currentPresentation.slides[currentSlideIndex]
     : null;
+  const quizQuestionSlides = currentPresentation?.slides.filter(
+    (slide) => slide.type === 'quiz' && slide.quizData && !slide.quizData.isResultsSlide,
+  ) ?? [];
+  const fullQuizMaxBaseCentipunts = calcMaxBaseCentipunts(quizQuestionSlides.map((slide) => slide.quizData!));
+  const effectiveQuizMaxBaseCentipunts = quizMaxBaseCentipunts ?? fullQuizMaxBaseCentipunts;
+  const recalculateResultSlideIds = quizQuestionSlides
+    .filter((slide) => controllerAnswers.getSubmittedCount(slide.id) > 0)
+    .map((slide) => slide.id);
+  const handleRecalculateQuizResults = () => {
+    if (recalculateResultSlideIds.length === 0) return;
+    emitCommand?.({ command: 'QUIZ_RECALCULATE_RESULTS', slideIds: recalculateResultSlideIds });
+  };
+  const handleClearQuizAnswers = (slideId: string) => {
+    controllerAnswers.clearSlideAnswers(slideId);
+    emitCommand?.({ command: 'QUIZ_CLEAR_QUESTION_RESULTS', slideId });
+  };
+  const controllerResultScoreOverrides = quizResultSlideIds
+    ? Object.fromEntries(Object.entries(controllerAnswers.sessions).map(([sessionId, session]) => {
+      const totalCentipunts = quizQuestionSlides.reduce((total, slide) => {
+        if (!quizResultSlideIds.includes(slide.id) || !slide.quizData) return total;
+        const answer = session.answers[slide.id];
+        return answer?.submitted ? total + scoreAnswer(slide.quizData, answer).totalCentipunts : total;
+      }, 0);
+      return [sessionId, totalCentipunts];
+    }))
+    : undefined;
   const isActiveScriptureSlide = !!activeSlide && (activeSlide.type === 'sefer' || activeSlide.type === 'tanaj' || !!activeSlide.scriptureBook);
 
   const [id, setId] = useState('');
@@ -242,6 +279,25 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
   // Estados reactivos para la gestión de diapositivas del editor visual
   const [slides, setSlides] = useState<Slide[]>([]);
   const [isTableMode, setIsTableMode] = useState(true);
+
+  const showScriptureAudit = (action: string, issues: ScriptureAuditIssue[]) => {
+    const details = issues.map((issue, index) => `${index + 1}. ${issue.location}: ${issue.message}`).join('\n');
+    alert(`No se puede ${action}. Se encontraron ${issues.length} posible${issues.length === 1 ? '' : 's'} error${issues.length === 1 ? '' : 'es'} en citas bíblicas:\n\n${details}\n\nCorrige las referencias y vuelve a intentarlo.`);
+  };
+
+  const auditQuickEditor = async (action: string) => {
+    try {
+      const primaryText = mode === 'standard' ? standardText : hebText;
+      const issues = await auditQuickScriptureReferences(primaryText);
+      if (issues.length === 0) return true;
+      showScriptureAudit(action, issues);
+      return false;
+    } catch (error) {
+      console.error('Error auditing scripture references', error);
+      alert(`No se puede ${action} porque no fue posible comprobar las citas bíblicas. Verifica que metadata.json esté disponible y vuelve a intentarlo.`);
+      return false;
+    }
+  };
 
   // NUEVOS estados para visor/reproducción reestructurado
   const [editorMode, setEditorMode] = useState<'list' | 'edit'>('list');
@@ -338,7 +394,20 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
       { id: 'slide-title', label: 'Título', lines: ['', '-', '-'] }
     ]);
     setIsTableMode(true);
-  }, [backgrounds]);
+  }, [
+    backgrounds,
+    setBg,
+    setFontScale,
+    setHebText,
+    setId,
+    setIsTableMode,
+    setMode,
+    setSlides,
+    setStandardText,
+    setTitle,
+    setTraText,
+    setTransText,
+  ]);
 
   const handleStartEditing = (p: Presentation) => {
     setEditorMode('edit');
@@ -505,6 +574,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
       setIsTableMode(false);
     } else {
       // De Texto Rápido a Tabla:
+      if (!await auditQuickEditor('cambiar a la vista de tabla')) return;
       const parsed = await buildSlidesForSave();
       const merged = parsed.slides.map((pSlide, idx) => {
         const existing = slides[idx] || slides.find(s => s.id === pSlide.id);
@@ -521,6 +591,8 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
 
   const handleModeChange = async (newMode: 'standard' | 'trilingual') => {
     if (newMode === mode) return;
+
+    if (!isTableMode && !await auditQuickEditor(`cambiar al modo ${newMode === 'trilingual' ? '3x' : '1x'}`)) return;
 
     setMode(newMode);
 
@@ -1371,7 +1443,21 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
       ? (currentPresentation?.background || backgrounds[0])
       : bg;
 
+    if (!isTableMode && !await auditQuickEditor('guardar la presentación')) return;
+
     const parsed = await buildSlidesForSave();
+    let slideIssues: ScriptureAuditIssue[];
+    try {
+      slideIssues = await auditSlideScriptureReferences(parsed.slides);
+    } catch (error) {
+      console.error('Error auditing saved scripture references', error);
+      alert('No se puede guardar la presentación porque no fue posible comprobar sus citas bíblicas. Verifica que metadata.json esté disponible y vuelve a intentarlo.');
+      return;
+    }
+    if (slideIssues.length > 0) {
+      showScriptureAudit('guardar la presentación', slideIssues);
+      return;
+    }
 
     await onSave({
       id: id || currentPresentation?.id || Date.now().toString(),
@@ -1645,14 +1731,23 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                       <div className="flex-1 flex flex-wrap gap-1.5 max-h-[4.2rem] overflow-y-auto pr-1 scrollbar-thin">
                         {currentPresentation.slides.map((slide, idx) => {
                           const isSelected = currentSlideIndex === idx;
+                          const isRegisteredQuizQuestion = slide.type === 'quiz'
+                            && slide.quizData
+                            && !slide.quizData.isResultsSlide
+                            && controllerAnswers.getSubmittedCount(slide.id) > 0;
                           return (
                             <button
                               id={`live-slide-btn-${idx}`}
                               key={slide.id}
                               onClick={() => onSelectSlide(idx)}
+                              title={isRegisteredQuizQuestion ? 'Pregunta registrada y contabilizada' : undefined}
                               className={`min-w-[2.2rem] rounded border text-xs font-semibold transition-all px-2.5 py-1 select-none ${isSelected
-                                ? 'border-yellow-500 bg-yellow-600 text-white font-bold shadow-[0_0_8px_rgba(234,179,8,0.3)]'
-                                : 'border-gray-600 bg-gray-700 hover:bg-gray-600 text-gray-300'
+                                ? isRegisteredQuizQuestion
+                                  ? 'border-yellow-400 bg-emerald-600 text-white font-bold ring-1 ring-yellow-400 shadow-[0_0_8px_rgba(16,185,129,0.4)]'
+                                  : 'border-yellow-500 bg-yellow-600 text-white font-bold shadow-[0_0_8px_rgba(234,179,8,0.3)]'
+                                : isRegisteredQuizQuestion
+                                  ? 'border-emerald-400 bg-emerald-700 hover:bg-emerald-600 text-white'
+                                  : 'border-gray-600 bg-gray-700 hover:bg-gray-600 text-gray-300'
                                 }`}
                             >
                               {slide.label}
@@ -1706,10 +1801,6 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                     />
 
                     {activeSlide?.type === 'quiz' && activeSlide.quizData && quizTimerState && (() => {
-                      const allQuizData = currentPresentation?.slides
-                        .filter(s => s.type === 'quiz' && s.quizData)
-                        .map(s => s.quizData!) || [];
-                      const maxBaseCentipunts = calcMaxBaseCentipunts(allQuizData);
                       const optionCounts: Record<string, number> = {};
                       for (const opt of activeSlide.quizData.options) {
                         optionCounts[opt.id] = 0;
@@ -1752,10 +1843,12 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                           optionCounts={optionCounts}
                           citaHits={citaHits}
                           citaMisses={citaMisses}
-                          onClearAnswers={() => controllerAnswers.clearSlideAnswers(activeSlide.id)}
-                          rangeStats={controllerAnswers.calcRangeStats(activeSlide.quizData.resultProfiles || [], maxBaseCentipunts)}
+                          onClearAnswers={() => handleClearQuizAnswers(activeSlide.id)}
+                          rangeStats={controllerAnswers.calcRangeStats(activeSlide.quizData.resultProfiles || [], effectiveQuizMaxBaseCentipunts, controllerResultScoreOverrides)}
                           totalSessions={Object.keys(controllerAnswers.sessions).length}
-                          maxBaseCentipunts={maxBaseCentipunts}
+                          maxBaseCentipunts={effectiveQuizMaxBaseCentipunts}
+                          registeredQuestionCount={recalculateResultSlideIds.length}
+                          onRecalculateResults={handleRecalculateQuizResults}
                           renderMode="top"
                           onAdjustTimer={onQuizAdjustTimer}
                         />
@@ -1783,10 +1876,6 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
             emitCommand={emitCommand}
           >
             {activeSlide?.type === 'quiz' && activeSlide.quizData && quizTimerState && (() => {
-              const allQuizData = currentPresentation?.slides
-                .filter(s => s.type === 'quiz' && s.quizData)
-                .map(s => s.quizData!) || [];
-              const maxBaseCentipunts = calcMaxBaseCentipunts(allQuizData);
               const optionCounts: Record<string, number> = {};
               for (const opt of activeSlide.quizData.options) {
                 optionCounts[opt.id] = 0;
@@ -1829,10 +1918,12 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                   optionCounts={optionCounts}
                   citaHits={citaHits}
                   citaMisses={citaMisses}
-                  onClearAnswers={() => controllerAnswers.clearSlideAnswers(activeSlide.id)}
-                  rangeStats={controllerAnswers.calcRangeStats(activeSlide.quizData.resultProfiles || [], maxBaseCentipunts)}
+                  onClearAnswers={() => handleClearQuizAnswers(activeSlide.id)}
+                  rangeStats={controllerAnswers.calcRangeStats(activeSlide.quizData.resultProfiles || [], effectiveQuizMaxBaseCentipunts, controllerResultScoreOverrides)}
                   totalSessions={Object.keys(controllerAnswers.sessions).length}
-                  maxBaseCentipunts={maxBaseCentipunts}
+                  maxBaseCentipunts={effectiveQuizMaxBaseCentipunts}
+                  registeredQuestionCount={recalculateResultSlideIds.length}
+                  onRecalculateResults={handleRecalculateQuizResults}
                   renderMode="bottom"
                   onAdjustTimer={onQuizAdjustTimer}
                 />
