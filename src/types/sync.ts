@@ -3,6 +3,12 @@ import type { LiveAudioBroadcastMessage, LiveAudioControlState } from './liveAud
 import type { AppMode, Presentation, ScriptureNavState, VideoState } from './presentation';
 import type { QuizSyncState } from './quiz';
 import type { SeferReaderState } from '../hooks/useSeferReader';
+import type {
+  AudienceAccessDecisionMessage,
+  AudienceAccessRequestMessage,
+  AudienceAccessStateMessage,
+  SessionAccessPolicyMessage,
+} from './audienceAccess';
 
 export const SYNC_PROTOCOL_VERSION = 1;
 
@@ -102,4 +108,5 @@ export type BroadcastMessage =
   | ({ type: 'AUDIO_PRESENTATION_CLOCK'; timelineId: string; estimatedPositionSec: number; serverTimeMs: number } & SyncProtocolMeta)
   | ({ type: 'AUDIENCE_STATE_UPDATE'; state: AudiencePublicState } & SyncProtocolMeta)
   | (LiveAudioBroadcastMessage & SyncProtocolMeta)
+  | ((AudienceAccessStateMessage | AudienceAccessRequestMessage | AudienceAccessDecisionMessage | SessionAccessPolicyMessage) & SyncProtocolMeta)
   | ({ type: 'ERROR'; code: string; message: string } & SyncProtocolMeta);

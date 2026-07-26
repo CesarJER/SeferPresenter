@@ -44,6 +44,12 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
 - `useSeferReader` - `src/hooks/useSeferReader.ts`: book/chapter/verse reader state and data loading.
 - `useQuizTimer` - `src/hooks/useQuizTimer.ts`: quiz timer state and transitions.
 - [useAudienceSession](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useAudienceSession.ts) - `src/hooks/useAudienceSession.ts`: ephemeral audience identity/alias state, logout purge, and presentation-session rotation.
+- `useAudienceAccess` - `src/hooks/useAudienceAccess.ts`: Audience credential
+  bootstrap, admission state, one-use SSE tickets, session rotation and
+  credential cleanup.
+- `AudienceAccessGate` -
+  `src/components/audience/AudienceAccessGate.tsx`: encrypted-alias waiting
+  room UI that keeps protected session content unmounted until admission.
 - Quiz answer hooks - `src/hooks/useQuizAnswers.ts`: presentation-scoped audience answer sessions and controller aggregation through `useAudienceAnswers` and `useControllerAnswers`.
 - `useQuizAudio` - `src/hooks/useQuizAudio.ts`: quiz feedback sounds.
 - `scriptureNumerals` helpers - `src/hooks/scriptureNumerals.ts`: scripture numeral utilities.

@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { WebSocket, type WebSocketServer } from 'ws';
 import {
   createWsServer,
+  bootstrapAudienceAccess,
   getLiveAudioParticipantSnapshot,
   resetWsServerStateForTests,
 } from '../server/ws-server.mjs';
@@ -223,6 +224,7 @@ describe('Live Audio WebSocket routing', () => {
     await new Promise<void>((resolve) => httpServer.close(() => resolve()));
     resetWsServerStateForTests();
     delete process.env.SEFER_LIVE_AUDIO_REJOIN_GRACE_SECONDS;
+    delete process.env.SEFER_SESSION_ACCESS_DEFAULT;
   });
 
   it('routes private audience signals only to authorized controls', async () => {
@@ -306,6 +308,78 @@ describe('Live Audio WebSocket routing', () => {
 
     expect(request).not.toHaveProperty('alias');
     expect(request).not.toHaveProperty('participantId');
+  });
+
+  it('keeps controlled Audience content gated until a ready Control admits the bound credential', async () => {
+    process.env.SEFER_SESSION_ACCESS_DEFAULT = 'CONTROLLED';
+    resetWsServerStateForTests();
+    const principal = await connectWs('control');
+    const audience = await connectWs('audience');
+    const access = bootstrapAudienceAccess() as {
+      credential: string;
+      participantId: string;
+      accessState: string;
+    };
+    expect(access.accessState).toBe('REQUEST_REQUIRED');
+
+    audience.send({
+      type: 'AUDIENCE_ACCESS_BIND',
+      credential: access.credential,
+    });
+    await waitFor(audience, (message) => (
+      message.type === 'AUDIENCE_ACCESS_STATE' &&
+      message.accessState === 'REQUEST_REQUIRED'
+    ));
+
+    audience.send(makePrivateSignal(access.participantId, 'access-alias'));
+    audience.send({
+      type: 'AUDIENCE_ACCESS_REQUEST',
+      participantId: access.participantId,
+      createdAt: Date.now(),
+    });
+    await waitFor(principal, (message) => (
+      message.type === 'AUDIENCE_ACCESS_REQUEST' &&
+      message.participantId === access.participantId
+    ));
+
+    principal.send({
+      type: 'AUDIENCE_ACCESS_DECISION',
+      participantId: access.participantId,
+      decision: 'ADMIT',
+      createdAt: Date.now(),
+    });
+    const admitted = await waitFor(audience, (message) => (
+      message.type === 'AUDIENCE_ACCESS_STATE' &&
+      message.accessState === 'ADMITTED'
+    ));
+    expect(admitted.accessMode).toBe('CONTROLLED');
+    delete process.env.SEFER_SESSION_ACCESS_DEFAULT;
+  });
+
+  it('moves anonymous public credentials to request-required when the principal enables controlled access', async () => {
+    const access = bootstrapAudienceAccess() as {
+      credential: string;
+      participantId: string;
+      accessState: string;
+    };
+    expect(access.accessState).toBe('ADMITTED');
+    const principal = await connectWs('control');
+    const audience = await connectWs('audience');
+    audience.send({ type: 'AUDIENCE_ACCESS_BIND', credential: access.credential });
+    await waitFor(audience, (message) => (
+      message.type === 'AUDIENCE_ACCESS_STATE' && message.accessState === 'ADMITTED'
+    ));
+
+    principal.send({
+      type: 'SESSION_ACCESS_POLICY_UPDATE',
+      accessMode: 'CONTROLLED',
+      createdAt: Date.now(),
+    });
+    const waiting = await waitFor(audience, (message) => (
+      message.type === 'AUDIENCE_ACCESS_STATE' &&
+      message.accessState === 'REQUEST_REQUIRED'
+    ));
+    expect(waiting.accessMode).toBe('CONTROLLED');
   });
 
   it('rejects clear alias data in operational snapshot patches', async () => {

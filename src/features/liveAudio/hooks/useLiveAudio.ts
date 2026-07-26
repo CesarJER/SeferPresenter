@@ -180,10 +180,21 @@ const requestToken = async (
   roomSession?: string,
   controlSessionId?: string,
 ) => {
+  let audienceAccessCredential: string | undefined;
+  if (role === 'audience') {
+    try {
+      const stored = JSON.parse(localStorage.getItem('sefer-audience-resume-credential') || 'null') as {
+        credential?: unknown;
+      } | null;
+      if (typeof stored?.credential === 'string') audienceAccessCredential = stored.credential;
+    } catch {
+      audienceAccessCredential = undefined;
+    }
+  }
   const response = await fetch('/api/livekit/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify({ role, roomSession, controlSessionId }),
+    body: JSON.stringify({ role, roomSession, controlSessionId, audienceAccessCredential }),
   });
 
   if (!response.ok) throw new Error('Live Audio token request failed');
@@ -191,10 +202,19 @@ const requestToken = async (
 };
 
 const refreshToken = async (participantId: string, refreshCredential: string) => {
+  let audienceAccessCredential: string | undefined;
+  try {
+    const stored = JSON.parse(localStorage.getItem('sefer-audience-resume-credential') || 'null') as {
+      credential?: unknown;
+    } | null;
+    if (typeof stored?.credential === 'string') audienceAccessCredential = stored.credential;
+  } catch {
+    audienceAccessCredential = undefined;
+  }
   const response = await fetch('/api/livekit/refresh-token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify({ participantId, refreshCredential }),
+    body: JSON.stringify({ participantId, refreshCredential, audienceAccessCredential }),
   });
 
   if (!response.ok) throw new Error('Live Audio token refresh failed');

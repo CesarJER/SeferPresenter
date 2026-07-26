@@ -26,6 +26,10 @@ const normalizeOrigin = (value) => {
 
 export const isPublicApiRequest = (pathname, method = 'GET') => {
   if (pathname.startsWith('/api/livekit/')) return true
+  if (
+    method === 'POST' &&
+    (pathname === '/api/audience/access/bootstrap' || pathname === '/api/audience/sse-ticket')
+  ) return true
   if (method === 'POST' && pathname === '/api/quiz-answer') return true
   if (method !== 'GET') return false
   if (publicApiGetPaths.has(pathname)) return true

@@ -1,13 +1,22 @@
 import fs from 'node:fs'
 import http from 'node:http'
 import path from 'node:path'
+import { randomUUID } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import { createLiveKitApi } from './livekit-server.mjs'
 import {
   createWsServer,
+  authorizeAudienceCredential,
+  bootstrapAudienceAccess,
+  consumeAudienceSseTicket,
   getLiveAudioControlSnapshot,
   getLiveAudioParticipantState,
+  getPresentationSessionId,
+  getServerEpoch,
+  getSessionAccessMode,
+  issueAudienceSseTicket,
   isLiveAudioControlAuthorized,
+  isAudienceParticipantAdmitted,
 } from './ws-server.mjs'
 import {
   hasAllowedRequestOrigin,
@@ -43,6 +52,14 @@ import { deriveAudienceProjectionState } from './audience-projection-state.mjs'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const rootDir = path.resolve(__dirname, '..')
 const publicDir = path.join(rootDir, 'public')
+
+const getBearerCredential = (req) => {
+  const authorization = Array.isArray(req.headers.authorization)
+    ? req.headers.authorization[0]
+    : req.headers.authorization
+  if (typeof authorization !== 'string' || !authorization.startsWith('Bearer ')) return null
+  return authorization.slice('Bearer '.length).trim()
+}
 const port = Number(process.env.SEFER_PORT || 8787)
 const staticArgIndex = process.argv.indexOf('--static')
 const staticDir = path.resolve(rootDir, staticArgIndex >= 0 ? process.argv[staticArgIndex + 1] || 'dist' : 'dist')
@@ -52,6 +69,8 @@ let currentState = makeProjectionSyncStateMessage(getDefaultProjectionState(), {
   clientId: 'server',
   origin: 'control',
 })
+let audienceStateRevision = 0
+let audienceEventId = randomUUID()
 
 let clients = new Set()
 let audienceClients = new Set()
@@ -274,10 +293,28 @@ const walkAssets = (directories, matcher) => {
   return results
 }
 
+const makeAudienceStateSnapshot = () => ({
+  ...deriveAudienceProjectionState(currentState),
+  presentationSessionId: getPresentationSessionId(),
+  serverEpoch: getServerEpoch(),
+  stateRevision: audienceStateRevision,
+  eventId: audienceEventId,
+})
+
 const broadcast = (body) => {
   writeSseSet(clients, body)
-  const audienceBody = JSON.stringify(deriveAudienceProjectionState(currentState))
-  writeSseSet(audienceClients, audienceBody)
+  const audienceBody = JSON.stringify(makeAudienceStateSnapshot())
+  for (const client of audienceClients) {
+    if (
+      getSessionAccessMode() === 'CONTROLLED' &&
+      !isAudienceParticipantAdmitted(client.audienceParticipantId)
+    ) {
+      audienceClients.delete(client)
+      client.end()
+      continue
+    }
+    writeSse(audienceClients, client, audienceBody)
+  }
 }
 
 const broadcastQuizAnswer = (body, parsed) => {
@@ -285,6 +322,15 @@ const broadcastQuizAnswer = (body, parsed) => {
   const isSensitive = type === 'QUIZ_ANSWER' || type === 'QUIZ_FINAL_SCORE'
 
   for (const client of quizClients) {
+    if (
+      getSessionAccessMode() === 'CONTROLLED' &&
+      client.audienceParticipantId &&
+      !isAudienceParticipantAdmitted(client.audienceParticipantId)
+    ) {
+      quizClients.delete(client)
+      client.end()
+      continue
+    }
     if (isSensitive && !client.isControl) {
       continue
     }
@@ -494,6 +540,8 @@ const commitState = (state, metadata = {}) => {
     now: metadata.now,
     messageId: metadata.messageId,
   })
+  audienceStateRevision += 1
+  audienceEventId = randomUUID()
   logStateChange(currentState)
   broadcast(JSON.stringify(currentState))
   return currentState
@@ -604,6 +652,39 @@ const requireAuth = (req, res, url) => {
 }
 
 const handleApi = async (req, res, url) => {
+  if (url.pathname === '/api/audience/access/bootstrap' && req.method === 'POST') {
+    try {
+      const raw = await readBody(req)
+      const body = raw ? JSON.parse(raw) : {}
+      sendJson(res, 200, bootstrapAudienceAccess(body.credential))
+    } catch (err) {
+      sendJson(res, 400, { error: err.message || 'Invalid access bootstrap request' })
+    }
+    return true
+  }
+
+  if (url.pathname === '/api/audience/sse-ticket' && req.method === 'POST') {
+    const credential = getBearerCredential(req)
+    let purpose = 'STATE'
+    try {
+      const raw = await readBody(req)
+      if (raw) {
+        const body = JSON.parse(raw)
+        if (body.purpose === 'QUIZ') purpose = 'QUIZ'
+      }
+    } catch {
+      sendJson(res, 400, { error: 'Invalid SSE ticket request' })
+      return true
+    }
+    const ticket = issueAudienceSseTicket(credential, purpose)
+    if (!ticket) {
+      sendJson(res, 403, { error: 'Audience admission is required' })
+      return true
+    }
+    sendJson(res, 200, { ticket, expiresInSeconds: 30 })
+    return true
+  }
+
   if (url.pathname.startsWith('/api/livekit/')) {
     const handled = await liveKitApi.handle({ req, res, url, readBody, sendJson })
     if (handled) return true
@@ -626,28 +707,49 @@ const handleApi = async (req, res, url) => {
   }
 
   if (url.pathname === '/api/audience/state' && req.method === 'GET') {
-    sendJson(res, 200, deriveAudienceProjectionState(currentState))
+    if (
+      getSessionAccessMode() === 'CONTROLLED' &&
+      !authorizeAudienceCredential(getBearerCredential(req))
+    ) {
+      sendJson(res, 403, { error: 'Audience admission is required' })
+      return true
+    }
+    sendJson(res, 200, makeAudienceStateSnapshot())
     return true
   }
 
   if (url.pathname === '/api/audience/events' && req.method === 'GET') {
+    const ticket = url.searchParams.get('ticket')
+    const ticketAccess = ticket ? consumeAudienceSseTicket(ticket, 'STATE') : null
+    if (getSessionAccessMode() === 'CONTROLLED' && !ticketAccess) {
+      sendJson(res, 403, { error: 'A valid one-use Audience SSE ticket is required' })
+      return true
+    }
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
       Connection: 'keep-alive',
     })
     registerSseClient(audienceClients, res)
-    writeSse(audienceClients, res, JSON.stringify(deriveAudienceProjectionState(currentState)))
+    res.audienceParticipantId = ticketAccess?.participantId
+    writeSse(audienceClients, res, JSON.stringify(makeAudienceStateSnapshot()))
     return true
   }
 
   if (url.pathname === '/api/quiz-events' && req.method === 'GET') {
+    const ticket = url.searchParams.get('ticket')
+    const ticketAccess = ticket ? consumeAudienceSseTicket(ticket, 'QUIZ') : null
+    if (getSessionAccessMode() === 'CONTROLLED' && !ticketAccess) {
+      sendJson(res, 403, { error: 'A valid one-use Audience quiz ticket is required' })
+      return true
+    }
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
       Connection: 'keep-alive',
     })
-    res.isControl = hasValidBasicAuth(req) || !isAuthRequired()
+    res.isControl = !ticketAccess && (hasValidBasicAuth(req) || !isAuthRequired())
+    res.audienceParticipantId = ticketAccess?.participantId
     registerSseClient(quizClients, res)
     return true
   }
@@ -667,6 +769,13 @@ const handleApi = async (req, res, url) => {
   }
 
   if (url.pathname === '/api/quiz-answer' && req.method === 'POST') {
+    if (
+      getSessionAccessMode() === 'CONTROLLED' &&
+      !authorizeAudienceCredential(getBearerCredential(req))
+    ) {
+      sendJson(res, 403, { error: 'Audience admission is required' })
+      return true
+    }
     try {
       const body = await readBody(req)
       const parsed = JSON.parse(body)
@@ -1147,6 +1256,8 @@ server.on('close', () => {
 })
 
 liveKitApi = createLiveKitApi({
+  authorizeAudienceCredential,
+  getSessionAccessMode,
   getLiveAudioControlSnapshot,
   getLiveAudioParticipantState,
   isLiveAudioControlAuthorized,

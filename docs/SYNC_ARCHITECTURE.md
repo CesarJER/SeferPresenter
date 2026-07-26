@@ -24,6 +24,38 @@ The local backend keeps SSE connections alive with `data: heartbeat\n\n` every
 `/api/quiz-events`. Closed or errored SSE responses are removed from the server
 client sets, and failed SSE writes are dropped from future broadcasts.
 
+### Public And Controlled Audience Access
+
+Each presentation session has a canonical `accessMode` (`PUBLIC` or
+`CONTROLLED`) initialized from `SEFER_SESSION_ACCESS_DEFAULT`. Only the ready
+principal Control may change it; the policy is included in the authoritative
+Control snapshot and every accepted change advances `stateRevision`.
+
+Audience bootstraps through `/api/audience/access/bootstrap`. The client keeps a
+256-bit opaque resume credential in localStorage, while the server keeps only
+its SHA-256 digest and non-nominal admission state. The credential is sent in an
+Authorization header or WebSocket message body, never in a URL or log.
+Persistent credentials are exchanged for 30-second, one-use SSE tickets.
+
+In `CONTROLLED`, projection state/SSE, quiz submission/events, Live Audio
+tokens, participant status and other live session functions require an admitted
+credential. Static application resources, privacy information and public
+catalogs remain available. A waiting client sends its alias only inside the E2E
+Control channel; the server sees the technical `AUDIENCE_ACCESS_REQUEST` but
+never the alias.
+
+Any ready Control may `ADMIT`, `REJECT` (30-second retry) or `BLOCK` a request.
+Changing Public to Controlled preserves admitted records that already supplied
+an alias and moves anonymous records to `REQUEST_REQUIRED`. Changing back to
+Public admits waiting/rejected records and clears blocks. A new Control obtains
+the current waiting set from the technical snapshot and the aliases from the
+private E2E overlay.
+
+Audience projection snapshots carry `presentationSessionId`, `serverEpoch`,
+`stateRevision` and `eventId`. Audience replaces state from the authoritative
+snapshot on connect/reconnect or a revision gap; it does not reconstruct missed
+projection state from historical events.
+
 Main message types live in `src/types/sync.ts`:
 
 - `SYNC_STATE`: full state needed to initialize or resynchronize clients.
