@@ -318,6 +318,8 @@ LiveKit para que anuncie la dirección nueva.
 
 El registro de estabilización previo a la auditoría de producción está en
 `docs/audits/2026-07-24/PRE_AUDIT_STABILIZATION.md`.
+La auditoría y el plan bloqueante de sincronización multi-Control están en
+`docs/audits/2026-07-24/MULTI_CONTROL_SYNC_AUDIT.md`.
 
 Antes de cerrar cambios importantes:
 
