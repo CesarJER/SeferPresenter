@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { WebSocket, type WebSocketServer } from 'ws';
 import {
   createWsServer,
+  bootstrapAudienceAccess,
   getLiveAudioParticipantSnapshot,
   resetWsServerStateForTests,
 } from '../server/ws-server.mjs';
@@ -34,7 +35,7 @@ const waitFor = async (
   return new Promise<WsMessage>((resolve, reject) => {
     const timeout = setTimeout(() => {
       cleanup();
-      reject(new Error('Timed out waiting for WebSocket message'));
+      reject(new Error(`Timed out waiting for WebSocket message; received: ${client.messages.map((message) => `${message.type}:${message.result ?? message.controlState ?? message.code ?? ''}`).join(', ')}`));
     }, timeoutMs);
 
     const onMessage = (raw: WebSocket.RawData) => {
@@ -121,6 +122,28 @@ const authorizeSecondary = async (
 ) => {
   const transferId = `transfer-${randomUUID()}`;
   const keyId = `key-${randomUUID()}`;
+  const principalControlSessionId = String(
+    principal.messages.find((message) => message.type === 'WELCOME')?.controlSessionId,
+  );
+  principal.send({
+    type: 'LIVE_AUDIO_CONTROL_PUBLIC_KEY',
+    controlSessionId: principalControlSessionId,
+    keyId,
+    publicKey: Buffer.from('session-public').toString('base64'),
+    createdAt: Date.now(),
+  });
+  principal.send({
+    type: 'LIVE_AUDIO_PRIVATE_OVERLAY_PUBLISH',
+    messageId: `overlay-${randomUUID()}`,
+    keyId,
+    privateStateRevision: 1,
+    basedOnStateRevision: 0,
+    ciphertext: Buffer.from('encrypted-overlay').toString('base64'),
+    nonce: Buffer.alloc(12, 9).toString('base64'),
+  });
+  await waitFor(principal, (message) => (
+    message.type === 'LIVE_AUDIO_PRIVATE_OVERLAY_RESULT' && message.result === 'ACK'
+  ));
   principal.send({
     type: 'LIVE_AUDIO_CONTROL_AUTHORIZED',
     controlSessionId: targetControlSessionId,
@@ -157,6 +180,23 @@ const authorizeSecondary = async (
     decision: 'APPROVE',
     createdAt: Date.now(),
   });
+  const overlay = await waitFor(
+    secondary,
+    (message) => message.type === 'LIVE_AUDIO_PRIVATE_OVERLAY_SNAPSHOT',
+  );
+  secondary.send({
+    type: 'LIVE_AUDIO_PRIVATE_OVERLAY_RESULT',
+    result: 'ACK',
+    keyId: overlay.keyId,
+    privateStateRevision: overlay.privateStateRevision,
+  });
+  await waitFor(
+    secondary,
+    (message) => (
+      message.type === 'LIVE_AUDIO_CONTROL_AUTHORIZATION_STATE' &&
+      message.controlState === 'AUTHORIZED'
+    ),
+  );
 };
 
 describe('Live Audio WebSocket routing', () => {
@@ -184,6 +224,7 @@ describe('Live Audio WebSocket routing', () => {
     await new Promise<void>((resolve) => httpServer.close(() => resolve()));
     resetWsServerStateForTests();
     delete process.env.SEFER_LIVE_AUDIO_REJOIN_GRACE_SECONDS;
+    delete process.env.SEFER_SESSION_ACCESS_DEFAULT;
   });
 
   it('routes private audience signals only to authorized controls', async () => {
@@ -267,6 +308,78 @@ describe('Live Audio WebSocket routing', () => {
 
     expect(request).not.toHaveProperty('alias');
     expect(request).not.toHaveProperty('participantId');
+  });
+
+  it('keeps controlled Audience content gated until a ready Control admits the bound credential', async () => {
+    process.env.SEFER_SESSION_ACCESS_DEFAULT = 'CONTROLLED';
+    resetWsServerStateForTests();
+    const principal = await connectWs('control');
+    const audience = await connectWs('audience');
+    const access = bootstrapAudienceAccess() as {
+      credential: string;
+      participantId: string;
+      accessState: string;
+    };
+    expect(access.accessState).toBe('REQUEST_REQUIRED');
+
+    audience.send({
+      type: 'AUDIENCE_ACCESS_BIND',
+      credential: access.credential,
+    });
+    await waitFor(audience, (message) => (
+      message.type === 'AUDIENCE_ACCESS_STATE' &&
+      message.accessState === 'REQUEST_REQUIRED'
+    ));
+
+    audience.send(makePrivateSignal(access.participantId, 'access-alias'));
+    audience.send({
+      type: 'AUDIENCE_ACCESS_REQUEST',
+      participantId: access.participantId,
+      createdAt: Date.now(),
+    });
+    await waitFor(principal, (message) => (
+      message.type === 'AUDIENCE_ACCESS_REQUEST' &&
+      message.participantId === access.participantId
+    ));
+
+    principal.send({
+      type: 'AUDIENCE_ACCESS_DECISION',
+      participantId: access.participantId,
+      decision: 'ADMIT',
+      createdAt: Date.now(),
+    });
+    const admitted = await waitFor(audience, (message) => (
+      message.type === 'AUDIENCE_ACCESS_STATE' &&
+      message.accessState === 'ADMITTED'
+    ));
+    expect(admitted.accessMode).toBe('CONTROLLED');
+    delete process.env.SEFER_SESSION_ACCESS_DEFAULT;
+  });
+
+  it('moves anonymous public credentials to request-required when the principal enables controlled access', async () => {
+    const access = bootstrapAudienceAccess() as {
+      credential: string;
+      participantId: string;
+      accessState: string;
+    };
+    expect(access.accessState).toBe('ADMITTED');
+    const principal = await connectWs('control');
+    const audience = await connectWs('audience');
+    audience.send({ type: 'AUDIENCE_ACCESS_BIND', credential: access.credential });
+    await waitFor(audience, (message) => (
+      message.type === 'AUDIENCE_ACCESS_STATE' && message.accessState === 'ADMITTED'
+    ));
+
+    principal.send({
+      type: 'SESSION_ACCESS_POLICY_UPDATE',
+      accessMode: 'CONTROLLED',
+      createdAt: Date.now(),
+    });
+    const waiting = await waitFor(audience, (message) => (
+      message.type === 'AUDIENCE_ACCESS_STATE' &&
+      message.accessState === 'REQUEST_REQUIRED'
+    ));
+    expect(waiting.accessMode).toBe('CONTROLLED');
   });
 
   it('rejects clear alias data in operational snapshot patches', async () => {
@@ -515,11 +628,41 @@ describe('Live Audio WebSocket routing', () => {
     );
 
     firstControl.ws.close();
-    await wait(100);
+    await wait(1_100);
     const nextControl = await connectWs('control');
     const snapshot = await waitFor(nextControl, (message) => message.type === 'LIVE_AUDIO_SNAPSHOT');
     const body = snapshot.snapshot as { participants?: Array<{ participantId: string }> };
     expect(body.participants?.some((participant) => participant.participantId === participantId)).toBe(true);
+  });
+
+  it('resumes the same Control identity during the grace period and rotates its credential', async () => {
+    const first = await connectWs('control');
+    const welcome = await waitFor(first, (message) => message.type === 'WELCOME');
+    const originalSessionId = String(welcome.controlSessionId);
+    const originalCredential = String(welcome.controlResumeCredential);
+
+    first.ws.close();
+    await wait(50);
+
+    const reconnecting = await connectWs('control');
+    const temporaryWelcome = await waitFor(reconnecting, (message) => message.type === 'WELCOME');
+    expect(temporaryWelcome.controlSessionId).not.toBe(originalSessionId);
+
+    reconnecting.send({
+      type: 'LIVE_AUDIO_CONTROL_RESUME',
+      controlSessionId: originalSessionId,
+      credential: originalCredential,
+    });
+    const resumed = await waitFor(
+      reconnecting,
+      (message) => message.type === 'LIVE_AUDIO_CONTROL_RESUME_RESULT',
+    );
+
+    expect(resumed.accepted).toBe(true);
+    expect(resumed.controlSessionId).toBe(originalSessionId);
+    expect(resumed.credential).not.toBe(originalCredential);
+    expect(resumed.connectionEpoch).toEqual(expect.any(String));
+    await waitFor(reconnecting, (message) => message.type === 'LIVE_AUDIO_SNAPSHOT');
   });
 
   it('does not send operational snapshots to pending controls', async () => {

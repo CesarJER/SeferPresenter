@@ -29,6 +29,15 @@ import {
   reduceControlSyncEnvelope,
   type ControlSyncReducerState,
 } from '../../utils/controlSyncReducer';
+import {
+  assignStableAliasOrdinal,
+  formatAliasForControl,
+  type AliasOrdinalState,
+} from '../../utils/aliasOrdinals';
+import {
+  replacePrivateControlOverlay,
+  type PrivateControlOverlaySnapshot,
+} from '../../utils/privateControlOverlay';
 
 type ModerationEndpoint =
   | 'grant-speak'
@@ -97,6 +106,8 @@ const snapshotParticipantToStatus = (
 interface ControlOperationalView {
   participants: Record<string, LiveAudioParticipantStatusMessage>;
   connectionCounts: LiveAudioConnectionCountsMessage | null;
+  accessMode: 'PUBLIC' | 'CONTROLLED';
+  audienceAccessRequests: Record<string, number>;
 }
 
 interface ControlOperationalDelta {
@@ -116,6 +127,10 @@ const snapshotToOperationalView = (snapshot: LiveAudioOperationalSnapshot): Cont
       type: 'LIVE_AUDIO_CONNECTION_COUNTS',
       ...snapshot.connectionCounts,
     },
+    accessMode: snapshot.policies.accessMode,
+    audienceAccessRequests: Object.fromEntries(
+      snapshot.audienceAccessRequests.map((request) => [request.participantId, request.requestedAt]),
+    ),
   };
 };
 
@@ -139,6 +154,38 @@ const applyOperationalDelta = (
       connectionCounts: delta.payload as unknown as LiveAudioConnectionCountsMessage,
     };
   }
+  if (
+    delta.type === 'SESSION_ACCESS_POLICY' &&
+    (delta.payload.accessMode === 'PUBLIC' || delta.payload.accessMode === 'CONTROLLED')
+  ) {
+    return {
+      ...state,
+      accessMode: delta.payload.accessMode,
+      ...(delta.payload.accessMode === 'PUBLIC' ? { audienceAccessRequests: {} } : {}),
+    };
+  }
+  if (
+    delta.type === 'AUDIENCE_ACCESS_REQUEST' &&
+    typeof delta.payload.participantId === 'string'
+  ) {
+    return {
+      ...state,
+      audienceAccessRequests: {
+        ...state.audienceAccessRequests,
+        [delta.payload.participantId]: typeof delta.payload.requestedAt === 'number'
+          ? delta.payload.requestedAt
+          : Date.now(),
+      },
+    };
+  }
+  if (
+    delta.type === 'AUDIENCE_ACCESS_DECISION_RESULT' &&
+    typeof delta.payload.participantId === 'string'
+  ) {
+    const next = { ...state.audienceAccessRequests };
+    delete next[delta.payload.participantId];
+    return { ...state, audienceAccessRequests: next };
+  }
   return state;
 };
 
@@ -161,11 +208,14 @@ export default function LiveAudioControlContainer({
   const [isModeratorMusicMode, setIsModeratorMusicMode] = useState(false);
   const [participantsMap, setParticipantsMap] = useState<Record<string, LiveAudioParticipantStatusMessage>>({});
   const [participantAliases, setParticipantAliases] = useState<Record<string, string>>({});
+  const [participantAliasOrdinals, setParticipantAliasOrdinals] = useState<Record<string, number>>({});
   const [participantEphemeralKeys, setParticipantEphemeralKeys] = useState<Record<string, string>>({});
   const [participantMicrophoneConfigs, setParticipantMicrophoneConfigs] = useState<Record<string, { volume: number; musicMode: boolean }>>({});
   const [connectionCounts, setConnectionCounts] = useState<LiveAudioConnectionCountsMessage | null>(null);
   const [messages, setMessages] = useState<PrivateMessage[]>([]);
   const [joinRequests, setJoinRequests] = useState<Record<string, LiveAudioControlJoinRequestMessage>>({});
+  const [accessMode, setAccessMode] = useState<'PUBLIC' | 'CONTROLLED'>('PUBLIC');
+  const [audienceAccessRequests, setAudienceAccessRequests] = useState<Record<string, number>>({});
   const participantAliasesRef = useRef(participantAliases);
   const aliasRequestSignatureRef = useRef('');
   const lastSentListRef = useRef('');
@@ -173,6 +223,13 @@ export default function LiveAudioControlContainer({
   const operationalSyncRef = useRef<ControlSyncReducerState<ControlOperationalView, ControlOperationalDelta>>(
     createControlSyncReducerState(),
   );
+  const aliasOrdinalStateRef = useRef<AliasOrdinalState>({
+    assignments: {},
+    nextByNormalizedAlias: {},
+  });
+  const privateOverlayRef = useRef<PrivateControlOverlaySnapshot | null>(null);
+  const privateOverlayRevisionRef = useRef(0);
+  const overlayPublishSequenceRef = useRef<Promise<void>>(Promise.resolve());
 
   const { availability } = useLiveAudioAvailability();
 
@@ -206,13 +263,23 @@ export default function LiveAudioControlContainer({
       if (type === 'PRESENTATION_SESSION_ROTATED') {
         setParticipantsMap({});
         setParticipantAliases({});
+        setParticipantAliasOrdinals({});
         setParticipantEphemeralKeys({});
         setMessages([]);
         setJoinRequests({});
         setConnectionCounts(null);
+        setAudienceAccessRequests({});
         operationalSyncRef.current = createControlSyncReducerState();
+        aliasOrdinalStateRef.current = { assignments: {}, nextByNormalizedAlias: {} };
+        privateOverlayRef.current = null;
+        privateOverlayRevisionRef.current = 0;
         lastSentListRef.current = '';
         return;
+      }
+      if (type === 'WELCOME' || type === 'SESSION_ACCESS_POLICY') {
+        if (payload.accessMode === 'PUBLIC' || payload.accessMode === 'CONTROLLED') {
+          setAccessMode(payload.accessMode);
+        }
       }
       if (type === 'LIVE_AUDIO_SNAPSHOT') {
         const snapshot = payload.snapshot as LiveAudioOperationalSnapshot | undefined;
@@ -237,6 +304,8 @@ export default function LiveAudioControlContainer({
         if (result.sync.value) {
           setParticipantsMap(result.sync.value.participants);
           setConnectionCounts(result.sync.value.connectionCounts);
+          setAccessMode(result.sync.value.accessMode);
+          setAudienceAccessRequests(result.sync.value.audienceAccessRequests);
         }
         return;
       }
@@ -276,6 +345,8 @@ export default function LiveAudioControlContainer({
         if (result.sync.value) {
           setParticipantsMap(result.sync.value.participants);
           setConnectionCounts(result.sync.value.connectionCounts);
+          setAccessMode(result.sync.value.accessMode);
+          setAudienceAccessRequests(result.sync.value.audienceAccessRequests);
         }
         if (
           type === 'LIVE_AUDIO_PARTICIPANT_STATUS' ||
@@ -295,18 +366,6 @@ export default function LiveAudioControlContainer({
       if (type === 'LIVE_AUDIO_PARTICIPANT_STATUS') {
         const msg = payload as unknown as LiveAudioParticipantStatusMessage;
         setParticipantsMap(prev => ({ ...prev, [msg.participantId]: msg }));
-        if (msg.isActiveAudience === false && msg.isKicked !== true) {
-          setParticipantAliases(prev => {
-            const next = { ...prev };
-            delete next[msg.participantId];
-            return next;
-          });
-          setParticipantEphemeralKeys(prev => {
-            const next = { ...prev };
-            delete next[msg.participantId];
-            return next;
-          });
-        }
         return;
       }
 
@@ -374,6 +433,22 @@ export default function LiveAudioControlContainer({
         }
         return;
       }
+      if (type === 'AUDIENCE_ACCESS_REQUEST' && typeof payload.participantId === 'string') {
+        setAudienceAccessRequests((current) => ({
+          ...current,
+          [payload.participantId as string]: typeof payload.requestedAt === 'number'
+            ? payload.requestedAt
+            : Date.now(),
+        }));
+        return;
+      }
+      if (type === 'AUDIENCE_ACCESS_DECISION_RESULT' && typeof payload.participantId === 'string') {
+        setAudienceAccessRequests((current) => {
+          const next = { ...current };
+          delete next[payload.participantId as string];
+          return next;
+        });
+      }
     });
     return unsubscribe;
   }, [controlSessionId, subscribeToWsMessage, wsSend]);
@@ -395,6 +470,12 @@ export default function LiveAudioControlContainer({
     const data = getSignalRecord(signal);
     const alias = sanitizeAlias(data.alias);
     if (alias) {
+      aliasOrdinalStateRef.current = assignStableAliasOrdinal(
+        aliasOrdinalStateRef.current,
+        signal.fromParticipantId,
+        alias,
+      );
+      setParticipantAliasOrdinals({ ...aliasOrdinalStateRef.current.assignments });
       setParticipantAliases(prev => ({ ...prev, [signal.fromParticipantId]: alias }));
     }
 
@@ -435,7 +516,7 @@ export default function LiveAudioControlContainer({
         : '';
 
     if ((signalType === 'PRIVATE_MESSAGE' || signalType === 'message') && content) {
-      const fromAlias = alias || participantAliasesRef.current[signal.fromParticipantId] || 'Sin nick';
+      const fromAlias = alias || participantAliasesRef.current[signal.fromParticipantId] || 'Alias no recuperable';
       setMessages(prev => [...prev, {
         id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
         fromAlias,
@@ -449,8 +530,11 @@ export default function LiveAudioControlContainer({
     sendPrivateSignalToParticipant,
     requestAliases,
     ready: privateSignalsReady,
+    keyId: privateKeyId,
     requestControlAuthorization,
-    authorizeSecondaryControl
+    authorizeSecondaryControl,
+    encryptControlOverlay,
+    decryptControlOverlay,
   } = usePrivateControlSignals({
     role: 'control',
     participantId: participantId || controlSessionId || 'control',
@@ -461,6 +545,139 @@ export default function LiveAudioControlContainer({
     transportReady: wsStatus === 'open',
     onPrivateSignal: handlePrivateSignal,
   });
+
+  useEffect(() => {
+    if (!subscribeToWsMessage) return;
+    return subscribeToWsMessage((type, payload) => {
+      if (type !== 'LIVE_AUDIO_PRIVATE_OVERLAY_SNAPSHOT') return;
+      if (
+        typeof payload.keyId !== 'string' ||
+        typeof payload.ciphertext !== 'string' ||
+        typeof payload.nonce !== 'string' ||
+        !Number.isSafeInteger(payload.privateStateRevision)
+      ) return;
+      const overlayKeyId = payload.keyId;
+      const overlayCiphertext = payload.ciphertext;
+      const overlayNonce = payload.nonce;
+      const overlayRevision = Number(payload.privateStateRevision);
+
+      void decryptControlOverlay({
+        keyId: overlayKeyId,
+        ciphertext: overlayCiphertext,
+        nonce: overlayNonce,
+      }).then((decrypted) => {
+        const applied = replacePrivateControlOverlay(privateOverlayRef.current, decrypted, {
+          expectedKeyId: overlayKeyId,
+          currentTechnicalStateRevision: operationalSyncRef.current.stateRevision,
+        });
+        if (!applied.ok) {
+          wsSend?.('LIVE_AUDIO_PRIVATE_OVERLAY_RESULT', {
+            result: 'NACK',
+            keyId: overlayKeyId,
+            privateStateRevision: overlayRevision,
+            reason: applied.reason,
+          });
+          return;
+        }
+        privateOverlayRef.current = applied.value;
+        privateOverlayRevisionRef.current = applied.value.privateStateRevision;
+        const aliases: Record<string, string> = {};
+        const ordinals: Record<string, number> = {};
+        const ephemeralKeys: Record<string, string> = {};
+        const microphoneConfigs: Record<string, { volume: number; musicMode: boolean }> = {};
+        const nextByNormalizedAlias: Record<string, number> = {};
+        Object.entries(applied.value.participants).forEach(([id, participant]) => {
+          aliases[id] = participant.alias;
+          ordinals[id] = participant.aliasOrdinal;
+          const normalized = participant.alias.trim().replace(/\s+/gu, ' ').normalize('NFC').toLocaleLowerCase();
+          nextByNormalizedAlias[normalized] = Math.max(
+            nextByNormalizedAlias[normalized] ?? 0,
+            participant.aliasOrdinal + 1,
+          );
+          if (participant.ephemeralPublicKey) ephemeralKeys[id] = participant.ephemeralPublicKey;
+          if (participant.microphoneConfig) microphoneConfigs[id] = participant.microphoneConfig;
+        });
+        aliasOrdinalStateRef.current = { assignments: ordinals, nextByNormalizedAlias };
+        setParticipantAliases(aliases);
+        setParticipantAliasOrdinals(ordinals);
+        setParticipantEphemeralKeys(ephemeralKeys);
+        setParticipantMicrophoneConfigs(microphoneConfigs);
+        wsSend?.('LIVE_AUDIO_PRIVATE_OVERLAY_RESULT', {
+          result: 'ACK',
+          keyId: applied.value.keyId,
+          privateStateRevision: applied.value.privateStateRevision,
+        });
+      }).catch(() => {
+        wsSend?.('LIVE_AUDIO_PRIVATE_OVERLAY_RESULT', {
+          result: 'NACK',
+          keyId: overlayKeyId,
+          privateStateRevision: overlayRevision,
+          reason: 'DECRYPT_FAILED',
+        });
+      });
+    });
+  }, [decryptControlOverlay, subscribeToWsMessage, wsSend]);
+
+  useEffect(() => {
+    if (
+      controlState !== 'PRINCIPAL' ||
+      !privateSignalsReady ||
+      !privateKeyId ||
+      !wsSend
+    ) return;
+    const timer = window.setTimeout(() => {
+      overlayPublishSequenceRef.current = overlayPublishSequenceRef.current.then(async () => {
+        const privateStateRevision = privateOverlayRevisionRef.current + 1;
+        const participants = Object.fromEntries(
+          Object.entries(participantAliases).map(([id, alias]) => [
+            id,
+            {
+              alias,
+              aliasOrdinal: participantAliasOrdinals[id] ?? 0,
+              ...(participantEphemeralKeys[id]
+                ? { ephemeralPublicKey: participantEphemeralKeys[id] }
+                : {}),
+              ...(participantMicrophoneConfigs[id]
+                ? { microphoneConfig: participantMicrophoneConfigs[id] }
+                : {}),
+            },
+          ]),
+        );
+        const snapshot: PrivateControlOverlaySnapshot = {
+          type: 'PRIVATE_CONTROL_OVERLAY_SNAPSHOT',
+          keyId: privateKeyId,
+          privateStateRevision,
+          basedOnStateRevision: Math.max(0, operationalSyncRef.current.stateRevision),
+          participants,
+        };
+        const encrypted = await encryptControlOverlay(snapshot);
+        if (!encrypted || encrypted.keyId !== privateKeyId) return;
+        privateOverlayRef.current = snapshot;
+        privateOverlayRevisionRef.current = privateStateRevision;
+        wsSend('LIVE_AUDIO_PRIVATE_OVERLAY_PUBLISH', {
+          messageId: crypto.randomUUID(),
+          keyId: encrypted.keyId,
+          privateStateRevision,
+          basedOnStateRevision: snapshot.basedOnStateRevision,
+          ciphertext: encrypted.ciphertext,
+          nonce: encrypted.nonce,
+        });
+      }).catch((error) => {
+        console.warn('LiveAudioControl: private overlay publication failed', error);
+      });
+    }, 50);
+    return () => window.clearTimeout(timer);
+  }, [
+    controlState,
+    encryptControlOverlay,
+    participantAliasOrdinals,
+    participantAliases,
+    participantEphemeralKeys,
+    participantMicrophoneConfigs,
+    privateKeyId,
+    privateSignalsReady,
+    wsSend,
+  ]);
 
   useEffect(() => {
     if (controlState === 'PENDING' && verificationCode && requestedAuthRef.current !== verificationCode) {
@@ -505,6 +722,25 @@ export default function LiveAudioControlContainer({
   const handleDismissMessage = useCallback((id: string) => {
     setMessages(prev => prev.filter(m => m.id !== id));
   }, []);
+
+  const handleAudienceAccessDecision = useCallback((
+    targetParticipantId: string,
+    decision: 'ADMIT' | 'REJECT' | 'BLOCK',
+  ) => {
+    wsSend?.('AUDIENCE_ACCESS_DECISION', {
+      participantId: targetParticipantId,
+      decision,
+      createdAt: Date.now(),
+    });
+  }, [wsSend]);
+
+  const handleAccessModeChange = useCallback(() => {
+    if (controlState !== 'PRINCIPAL') return;
+    wsSend?.('SESSION_ACCESS_POLICY_UPDATE', {
+      accessMode: accessMode === 'PUBLIC' ? 'CONTROLLED' : 'PUBLIC',
+      createdAt: Date.now(),
+    });
+  }, [accessMode, controlState, wsSend]);
 
   const computeVisibleList = useCallback((): string[] => (
     computeVisibleActiveParticipants(participantsMap, participantAliases)
@@ -576,7 +812,9 @@ export default function LiveAudioControlContainer({
         const isMicrophoneActive = p.isMicrophoneActive ?? (p.speakerState === 'GRANTED' && p.isMuted === false);
         return {
           participantId: p.participantId,
-          alias: alias || 'Sin nick',
+          alias: alias
+            ? formatAliasForControl(alias, participantAliasOrdinals[p.participantId] ?? 0)
+            : 'Sincronizando alias…',
           speakerState: p.speakerState,
           isMuted: p.isMuted ?? !isMicrophoneActive,
           isMicrophoneActive,
@@ -589,7 +827,7 @@ export default function LiveAudioControlContainer({
           isMusicMode: participantMicrophoneConfigs[p.participantId]?.musicMode ?? false,
         };
       })
-  ), [participantAliases, participantMicrophoneConfigs, participantsMap]);
+  ), [participantAliasOrdinals, participantAliases, participantMicrophoneConfigs, participantsMap]);
 
   const activeUsers = participants.filter(p => p.isActiveAudience && !p.isKicked).length;
   const pendingWordCount = participants.filter(p => p.speakerState === 'REQUESTED' && !p.isKicked).length;
@@ -789,12 +1027,64 @@ export default function LiveAudioControlContainer({
     });
   }, [wsSend]);
 
-  if (availability !== 'enabled') {
-    return null;
-  }
-
   const portalTarget = document.getElementById('live-audio-inbox-portal-target');
-  const hasUnread = messages.length > 0 || authorizationRequests.length > 0;
+  const accessRequestItems = Object.entries(audienceAccessRequests).map(([id, requestedAt]) => ({
+    participantId: id,
+    alias: participantAliases[id]
+      ? formatAliasForControl(participantAliases[id], participantAliasOrdinals[id] ?? 0)
+      : 'Sincronizando alias…',
+    requestedAt,
+  }));
+  const hasUnread = messages.length > 0 || authorizationRequests.length > 0 || accessRequestItems.length > 0;
+  const inboxPortal = portalTarget ? createPortal(
+    <div className="flex items-center gap-2">
+      <button
+        type="button"
+        onClick={handleAccessModeChange}
+        disabled={controlState !== 'PRINCIPAL'}
+        className="rounded border border-slate-600 bg-slate-800 px-2 py-1.5 text-xs font-bold text-white disabled:opacity-50"
+        title="Solo el Control principal puede cambiar el modo de acceso"
+      >
+        Acceso: {accessMode === 'PUBLIC' ? 'Público' : 'Controlado'}
+      </button>
+      <PwaRestartButton controlMenu={true} connectionState={state} connectionQuality={connectionQuality} />
+      <div className="relative">
+        <button
+          onClick={() => setIsInboxOpen(!isInboxOpen)}
+          className={`flex items-center justify-center p-2 text-xs font-semibold rounded border transition-all cursor-pointer ${hasUnread
+            ? 'bg-red-600 border-red-500 text-white animate-pulse'
+            : isInboxOpen
+              ? 'bg-blue-600 border-blue-500 text-white'
+              : 'bg-gray-800 border-gray-700 hover:bg-gray-700 text-gray-300 hover:text-white'
+            }`}
+          title="Bandeja Privada"
+        >
+          <Bell size={14} />
+          {hasUnread && (
+            <span className="absolute -top-1 -right-1 bg-white text-red-600 text-[10px] font-bold px-1 rounded-full">
+              {messages.length + authorizationRequests.length + accessRequestItems.length}
+            </span>
+          )}
+        </button>
+      </div>
+      <PrivateControlInbox
+        isOpen={isInboxOpen}
+        isControlAuthorized={isControlAuthorized}
+        messages={messages}
+        authorizationRequests={authorizationRequests}
+        audienceAccessRequests={accessRequestItems}
+        onApproveRequest={handleApproveRequest}
+        onRejectRequest={onRejectRequest}
+        onDismissMessage={handleDismissMessage}
+        onAudienceAccessDecision={handleAudienceAccessDecision}
+      />
+    </div>,
+    portalTarget,
+  ) : null;
+
+  if (availability !== 'enabled') {
+    return inboxPortal;
+  }
 
   return (
     <>
@@ -806,42 +1096,7 @@ export default function LiveAudioControlContainer({
         />
       ))}
 
-      {portalTarget && createPortal(
-        <div className="flex items-center gap-2">
-          <PwaRestartButton controlMenu={true} connectionState={state} connectionQuality={connectionQuality} />
-
-          <div className="relative">
-            <button
-              onClick={() => setIsInboxOpen(!isInboxOpen)}
-              className={`flex items-center justify-center p-2 text-xs font-semibold rounded border transition-all cursor-pointer ${hasUnread
-                ? 'bg-red-600 border-red-500 text-white animate-pulse'
-                : isInboxOpen
-                  ? 'bg-blue-600 border-blue-500 text-white'
-                  : 'bg-gray-800 border-gray-700 hover:bg-gray-700 text-gray-300 hover:text-white'
-                }`}
-              title="Bandeja Privada"
-            >
-              <Bell size={14} />
-              {hasUnread && (
-                <span className="absolute -top-1 -right-1 bg-white text-red-600 text-[10px] font-bold px-1 rounded-full">
-                  {messages.length + authorizationRequests.length}
-                </span>
-              )}
-            </button>
-          </div>
-
-          <PrivateControlInbox
-            isOpen={isInboxOpen}
-            isControlAuthorized={isControlAuthorized}
-            messages={messages}
-            authorizationRequests={authorizationRequests}
-            onApproveRequest={handleApproveRequest}
-            onRejectRequest={onRejectRequest}
-            onDismissMessage={handleDismissMessage}
-          />
-        </div>,
-        portalTarget
-      )}
+      {inboxPortal}
 
       <LiveAudioControlPanel
         totalAudience={totalAudience}

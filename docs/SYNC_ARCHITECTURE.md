@@ -24,6 +24,38 @@ The local backend keeps SSE connections alive with `data: heartbeat\n\n` every
 `/api/quiz-events`. Closed or errored SSE responses are removed from the server
 client sets, and failed SSE writes are dropped from future broadcasts.
 
+### Public And Controlled Audience Access
+
+Each presentation session has a canonical `accessMode` (`PUBLIC` or
+`CONTROLLED`) initialized from `SEFER_SESSION_ACCESS_DEFAULT`. Only the ready
+principal Control may change it; the policy is included in the authoritative
+Control snapshot and every accepted change advances `stateRevision`.
+
+Audience bootstraps through `/api/audience/access/bootstrap`. The client keeps a
+256-bit opaque resume credential in localStorage, while the server keeps only
+its SHA-256 digest and non-nominal admission state. The credential is sent in an
+Authorization header or WebSocket message body, never in a URL or log.
+Persistent credentials are exchanged for 30-second, one-use SSE tickets.
+
+In `CONTROLLED`, projection state/SSE, quiz submission/events, Live Audio
+tokens, participant status and other live session functions require an admitted
+credential. Static application resources, privacy information and public
+catalogs remain available. A waiting client sends its alias only inside the E2E
+Control channel; the server sees the technical `AUDIENCE_ACCESS_REQUEST` but
+never the alias.
+
+Any ready Control may `ADMIT`, `REJECT` (30-second retry) or `BLOCK` a request.
+Changing Public to Controlled preserves admitted records that already supplied
+an alias and moves anonymous records to `REQUEST_REQUIRED`. Changing back to
+Public admits waiting/rejected records and clears blocks. A new Control obtains
+the current waiting set from the technical snapshot and the aliases from the
+private E2E overlay.
+
+Audience projection snapshots carry `presentationSessionId`, `serverEpoch`,
+`stateRevision` and `eventId`. Audience replaces state from the authoritative
+snapshot on connect/reconnect or a revision gap; it does not reconstruct missed
+projection state from historical events.
+
 Main message types live in `src/types/sync.ts`:
 
 - `SYNC_STATE`: full state needed to initialize or resynchronize clients.
@@ -183,9 +215,11 @@ Control uses `lastSentListRef` to avoid re-sending unchanged visible lists.
 - `PENDING` and `AUTHORIZED_SYNCING` Controls do not receive
   `PRIVATE_CONTROL_SIGNAL`. A secondary enters `AUTHORIZED_SYNCING` when the
   encrypted Control key transfer starts and becomes `AUTHORIZED` only after the
-  recipient imports the key and returns a correlated
-  `LIVE_AUDIO_CONTROL_KEY_TRANSFER_RESULT` ACK. NACK, timeout, mismatched IDs,
-  or a failed send never authorize the Control.
+  recipient imports the key, returns a correlated
+  `LIVE_AUDIO_CONTROL_KEY_TRANSFER_RESULT` ACK, atomically replaces the
+  technical snapshot and decrypts/ACKs the current private overlay. NACK,
+  timeout, mismatched IDs, a failed send, or a missing overlay never authorize
+  the Control.
 - `PENDING` Controls cannot send private signals or moderation messages such as
   grant, mute, or kick; the server returns an `ERROR`.
 - Authorized Controls can publish the current Control public key and can send
@@ -214,8 +248,11 @@ Control uses `lastSentListRef` to avoid re-sending unchanged visible lists.
   speaker state, intervention queue, Control authorizations, relevant LiveKit
   state, and anonymous quiz aggregates. It does not include historical private
   messages, ciphertext history, aliases, or audience ephemeral public keys.
-  A newly authorized Control receives the shared Control session key E2E and
-  requests fresh encrypted alias signals from Audience.
+  A newly authorized Control receives the shared Control session key E2E,
+  the current opaque `LIVE_AUDIO_PRIVATE_OVERLAY_SNAPSHOT`, and the technical
+  snapshot before it is ready. The overlay contains only current aliases,
+  stable duplicate ordinals, participant public keys and private microphone
+  configuration; it never contains private-message history.
 - Operational state is ordered by a server-owned monotonic `stateRevision`
   scoped to `presentationSessionId`. Snapshots include `serverEpoch` and the
   current revision; revisioned deltas include an `eventId`. A snapshot replaces
@@ -223,6 +260,16 @@ Control uses `lastSentListRef` to avoid re-sending unchanged visible lists.
   ignore duplicate/stale events, and request a fresh snapshot on connect,
   reconnect, stream change, or revision gap. Reading a snapshot never advances
   the revision; each accepted canonical mutation advances it exactly once.
+- The private E2E overlay is enrichment only. It can never mutate or override
+  participants, admission, permissions, ownership, queues, moderation or
+  policies from the authoritative technical snapshot. The server stores only
+  the latest bounded encrypted envelope and cannot decrypt it; session or key
+  rotation clears it.
+- A WebSocket reconnect creates a temporary Control identity and then presents
+  the previous opaque 256-bit resume credential in a message body. The server
+  stores only its SHA-256 digest, rotates the credential after every successful
+  resume, fences the prior socket, and requires overlay convergence again
+  before accepting mutations. Credentials never appear in URLs or logs.
 - This snapshot-plus-revision protocol replaces reconstruction from historical
   incrementals. A Control must not remain divergent or materialize “Sin nick”
   merely because it joined after an event was emitted.
@@ -238,8 +285,10 @@ Control uses `lastSentListRef` to avoid re-sending unchanged visible lists.
 - `allowDelegatedModerators` is controlled by
   `SEFER_LIVE_AUDIO_ALLOW_DELEGATED_MODERATORS` and defaults to true. When false,
   only the principal Control may authorize pending Controls.
-- If the principal disconnects, the oldest authorized Control by authorization
-  timestamp is promoted. If no authorized Control exists, the server emits
+- A disconnected Control remains suspended for the bounded
+  `SEFER_LIVE_AUDIO_REJOIN_GRACE_SECONDS` interval. Only after that grace
+  expires is the oldest authorized Control by authorization timestamp promoted.
+  If no authorized Control exists, the server emits
   `CONTROL_KEY_ROTATED` with reason `NO_AUTHORIZED_CONTROLS`, clears the private
   session boundary, and restarts Control ownership with the oldest pending
   Control if one remains connected.
@@ -264,8 +313,9 @@ subscriber events and ignores them on BroadcastChannel/SSE paths.
 The snapshot is deliberately non-nominal: it contains technical microphone,
 visibility, moderation, connection, and authorization state, but rejects clear
 aliases and audience ephemeral public keys. The server never stores private
-message history, private signal plaintext, private keys, alias maps, or
-ciphertext logs in the snapshot.
+message history, private signal plaintext, private keys, or clear alias maps.
+The separately bounded E2E overlay cache is opaque current-state recovery data,
+not part of the technical snapshot and not a ciphertext history.
 
 `server/local-server.mjs` contributes only anonymous quiz aggregates to the
 snapshot: submitted-answer counts by slide and final-score buckets. It does not

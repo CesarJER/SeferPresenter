@@ -100,12 +100,33 @@ type ScoresByPresentation = Record<string, Record<string, QuizQuestionScore>>;
 
 const ANSWERS_STORAGE_KEY = 'sefer-quiz-answers-by-presentation';
 const SCORES_STORAGE_KEY = 'sefer-quiz-scores-by-presentation';
+const QUIZ_SSE_TICKET_KEY = 'sefer-audience-quiz-sse-ticket';
+
+const getAudienceCredential = (): string | null => {
+  try {
+    const parsed = JSON.parse(localStorage.getItem('sefer-audience-resume-credential') || 'null') as {
+      credential?: unknown;
+    } | null;
+    return typeof parsed?.credential === 'string' ? parsed.credential : null;
+  } catch {
+    return null;
+  }
+};
+
+const getAudienceHeaders = () => {
+  const credential = getAudienceCredential();
+  return {
+    'Content-Type': 'application/json',
+    ...(credential ? { Authorization: `Bearer ${credential}` } : {}),
+  };
+};
 
 export function useAudienceAnswers(
   presentationId: string | null,
   displayName?: string,
 ): UseAudienceAnswersReturn {
   const [sessionId, setSessionId] = useState(makeQuizSessionId);
+  const [ticketRevision, setTicketRevision] = useState(0);
   const channel = useMemo(() => new BroadcastChannel('sefer-quiz'), []);
   const scopeId = presentationId ?? '';
 
@@ -135,6 +156,12 @@ export function useAudienceAnswers(
     () => scoresByPresentation[scopeId] ?? {},
     [scoresByPresentation, scopeId],
   );
+
+  useEffect(() => {
+    const handleTicketUpdate = () => setTicketRevision((value) => value + 1);
+    window.addEventListener('sefer-audience-tickets-updated', handleTicketUpdate);
+    return () => window.removeEventListener('sefer-audience-tickets-updated', handleTicketUpdate);
+  }, []);
 
   useEffect(() => {
     try {
@@ -200,7 +227,15 @@ export function useAudienceAnswers(
 
     channel.addEventListener('message', handleChannelMessage);
 
-    const eventSource = new EventSource('/api/quiz-events');
+    const credential = getAudienceCredential();
+    const ticket = sessionStorage.getItem(QUIZ_SSE_TICKET_KEY);
+    if (credential && !ticket) {
+      channel.removeEventListener('message', handleChannelMessage);
+      return;
+    }
+    const eventSource = new EventSource(
+      ticket ? `/api/quiz-events?ticket=${encodeURIComponent(ticket)}` : '/api/quiz-events',
+    );
     eventSource.onmessage = (event) => {
       try {
         if (event.data === 'heartbeat') return;
@@ -212,12 +247,17 @@ export function useAudienceAnswers(
         // intentional no-op
       }
     };
+    eventSource.onerror = () => {
+      if (!credential) return;
+      eventSource.close();
+      window.dispatchEvent(new CustomEvent('sefer-audience-sse-refresh-request'));
+    };
 
     return () => {
       channel.removeEventListener('message', handleChannelMessage);
       eventSource.close();
     };
-  }, [channel, scopeId]);
+  }, [channel, scopeId, ticketRevision]);
 
   const getAnswers = useCallback(() => answers, [answers]);
 
@@ -250,7 +290,7 @@ export function useAudienceAnswers(
     // Also send via SSE endpoint for cross-device sync
     fetch('/api/quiz-answer', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAudienceHeaders(),
       body: JSON.stringify(msg),
     }).catch(() => {}); // Non-critical — local state is source of truth
   }, [channel, displayName, presentationId, sessionId]);
@@ -341,7 +381,7 @@ export function useAudienceAnswers(
     // Also send via SSE endpoint for cross-device sync
     fetch('/api/quiz-answer', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAudienceHeaders(),
       body: JSON.stringify(msg),
     }).catch(() => {});
   }, [channel, presentationId, sessionId]);

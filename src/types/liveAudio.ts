@@ -246,6 +246,47 @@ export interface PrivateControlSignalMessage {
   createdAt?: number;
 }
 
+export interface LiveAudioControlResumeMessage {
+  type: 'LIVE_AUDIO_CONTROL_RESUME';
+  controlSessionId: string;
+  credential: string;
+}
+
+export interface LiveAudioControlResumeResultMessage {
+  type: 'LIVE_AUDIO_CONTROL_RESUME_RESULT';
+  accepted: boolean;
+  code?: 'CONTROL_RESUME_INVALID';
+  controlSessionId?: string;
+  controlState?: LiveAudioControlState;
+  credential?: string;
+  connectionEpoch?: string;
+}
+
+export interface LiveAudioPrivateOverlayPublishMessage {
+  type: 'LIVE_AUDIO_PRIVATE_OVERLAY_PUBLISH';
+  messageId: string;
+  keyId: string;
+  privateStateRevision: number;
+  basedOnStateRevision: number;
+  ciphertext: string;
+  nonce: string;
+}
+
+export interface LiveAudioPrivateOverlaySnapshotMessage
+  extends Omit<LiveAudioPrivateOverlayPublishMessage, 'type'> {
+  type: 'LIVE_AUDIO_PRIVATE_OVERLAY_SNAPSHOT';
+  createdAt?: number;
+}
+
+export interface LiveAudioPrivateOverlayResultMessage {
+  type: 'LIVE_AUDIO_PRIVATE_OVERLAY_RESULT';
+  messageId?: string;
+  result: 'ACK' | 'NACK';
+  keyId?: string;
+  privateStateRevision?: number;
+  reason?: string;
+}
+
 export interface PrivateControlSignalResultMessage {
   type: 'PRIVATE_CONTROL_SIGNAL_RESULT';
   messageId: string;
@@ -313,6 +354,13 @@ export interface LiveAudioOperationalSnapshot {
   };
   participants: LiveAudioOperationalParticipantSnapshot[];
   interventionQueue: string[];
+  policies: {
+    accessMode: 'PUBLIC' | 'CONTROLLED';
+  };
+  audienceAccessRequests: Array<{
+    participantId: string;
+    requestedAt: number;
+  }>;
   authorizations: {
     principalControlSessionId: string | null;
     controls: LiveAudioOperationalControlSnapshot[];
@@ -393,6 +441,11 @@ export type LiveAudioBroadcastMessage =
   | LiveAudioControlKeyTransferResultMessage
   | LiveAudioControlAuthorizationStateMessage
   | LiveAudioControlAuthorizationDecisionMessage
+  | LiveAudioControlResumeMessage
+  | LiveAudioControlResumeResultMessage
+  | LiveAudioPrivateOverlayPublishMessage
+  | LiveAudioPrivateOverlaySnapshotMessage
+  | LiveAudioPrivateOverlayResultMessage
   | ControlKeyRotatedMessage
   | PrivateControlSignalMessage
   | PrivateControlSignalResultMessage

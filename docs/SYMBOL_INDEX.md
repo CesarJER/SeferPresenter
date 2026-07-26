@@ -44,6 +44,12 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
 - `useSeferReader` - `src/hooks/useSeferReader.ts`: book/chapter/verse reader state and data loading.
 - `useQuizTimer` - `src/hooks/useQuizTimer.ts`: quiz timer state and transitions.
 - [useAudienceSession](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useAudienceSession.ts) - `src/hooks/useAudienceSession.ts`: ephemeral audience identity/alias state, logout purge, and presentation-session rotation.
+- `useAudienceAccess` - `src/hooks/useAudienceAccess.ts`: Audience credential
+  bootstrap, admission state, one-use SSE tickets, session rotation and
+  credential cleanup.
+- `AudienceAccessGate` -
+  `src/components/audience/AudienceAccessGate.tsx`: encrypted-alias waiting
+  room UI that keeps protected session content unmounted until admission.
 - Quiz answer hooks - `src/hooks/useQuizAnswers.ts`: presentation-scoped audience answer sessions and controller aggregation through `useAudienceAnswers` and `useControllerAnswers`.
 - `useQuizAudio` - `src/hooks/useQuizAudio.ts`: quiz feedback sounds.
 - `scriptureNumerals` helpers - `src/hooks/scriptureNumerals.ts`: scripture numeral utilities.
@@ -188,6 +194,14 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
   `src/features/liveAudio/utils/controlSyncReducer.ts`: authoritative snapshot
   replacement, monotonic delta application, deduplication, gap buffering, and
   stream/session reset for multi-Control synchronization.
+- `validatePrivateControlOverlaySnapshot` / `replacePrivateControlOverlay` /
+  `applyPrivateControlOverlayDelta` -
+  `src/features/liveAudio/utils/privateControlOverlay.ts`: strict current-state
+  E2E overlay validation and monotonic application without message history.
+- `normalizeAliasForOrdinal` / `assignStableAliasOrdinal` /
+  `formatAliasForControl` -
+  `src/features/liveAudio/utils/aliasOrdinals.ts`: Control-only duplicate alias
+  grouping and stable, non-reused session ordinals.
 
 ## Types
 

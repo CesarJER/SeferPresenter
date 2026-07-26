@@ -145,7 +145,7 @@ const getVideoGrant = (role, room, config, participantId, existingParticipant) =
   }
 }
 
-const issueToken = ({ role, roomSession, controlSessionId, existingParticipant }) => {
+const issueToken = ({ role, roomSession, controlSessionId, existingParticipant, participantId: requestedParticipantId }) => {
   const config = getConfig()
   if (!config.enabled) {
     return { ok: false, status: 503, error: 'Live Audio is disabled or misconfigured' }
@@ -157,7 +157,7 @@ const issueToken = ({ role, roomSession, controlSessionId, existingParticipant }
 
   const nowSeconds = Math.floor(Date.now() / 1000)
   const expiresAt = Date.now() + config.tokenTtlMinutes * 60_000
-  const participantId = existingParticipant?.participantId || randomUUID()
+  const participantId = existingParticipant?.participantId || requestedParticipantId || randomUUID()
   const participantIdentity = existingParticipant?.participantIdentity || `${role}-${participantId}`
   const room = getRoomName(config, roomSession || existingParticipant?.roomSession)
   const video = getVideoGrant(role, room, config, participantId, existingParticipant)
@@ -273,7 +273,14 @@ const handleToken = async ({ req, res, readBody, sendJson, controlApi }) => {
   const body = await readJson(req, readBody)
   const requestedRole = roles.has(body.role) ? body.role : 'audience'
 
-  if (requestedRole !== 'audience') {
+  let audienceAccess = null
+  if (requestedRole === 'audience') {
+    audienceAccess = controlApi?.authorizeAudienceCredential?.(body.audienceAccessCredential)
+    if (!audienceAccess && controlApi?.getSessionAccessMode?.() === 'CONTROLLED') {
+      sendJson(res, 403, { error: 'Audience admission is required for Live Audio' })
+      return true
+    }
+  } else {
     if (!hasValidBasicAuth(req)) {
       sendJson(res, 403, { error: 'Privileged Live Audio roles require authentication' })
       return true
@@ -291,6 +298,7 @@ const handleToken = async ({ req, res, readBody, sendJson, controlApi }) => {
     role: requestedRole,
     roomSession: body.roomSession,
     controlSessionId: requestedRole === 'control' ? body.controlSessionId : undefined,
+    participantId: audienceAccess?.participantId,
   })
 
   if (!result.ok) {
@@ -328,6 +336,14 @@ const handleRefreshToken = async ({ req, res, readBody, sendJson, controlApi }) 
     !controlApi?.isLiveAudioControlAuthorized?.(existingParticipant.controlSessionId)
   ) {
     sendJson(res, 403, { error: 'Control is no longer authorized for Live Audio' })
+    return true
+  }
+  if (
+    existingParticipant.role === 'audience' &&
+    controlApi?.getSessionAccessMode?.() === 'CONTROLLED' &&
+    !controlApi?.authorizeAudienceCredential?.(body.audienceAccessCredential)
+  ) {
+    sendJson(res, 403, { error: 'Audience admission is required to refresh Live Audio' })
     return true
   }
   const wsParticipant = controlApi?.getLiveAudioParticipantState?.(body.participantId)

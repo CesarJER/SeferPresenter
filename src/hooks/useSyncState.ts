@@ -56,6 +56,11 @@ interface UseSyncStateProps {
   setQuizState?: (state: QuizSyncState | null) => void;
   setAutoduckState: (state: AutoduckState) => void;
   onAudioTimelineState?: (state: AudioTimelineState) => void;
+  audienceAccessCredential?: string | null;
+  audienceAuthorized?: boolean;
+  audienceSseTicket?: string | null;
+  onAudienceSseReconnect?: () => void;
+  onWsMessage?: (type: string, payload: Record<string, unknown>) => void;
 }
 
 const areJsonEqual = (left: unknown, right: unknown) => JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
@@ -75,6 +80,13 @@ const liveAudioWsOnlyTypes = new Set([
   'LIVE_AUDIO_CONTROL_KEY_TRANSFER_RESULT',
   'LIVE_AUDIO_CONTROL_AUTHORIZATION_STATE',
   'LIVE_AUDIO_CONTROL_AUTHORIZATION_DECISION',
+  'LIVE_AUDIO_CONTROL_RESUME_RESULT',
+  'LIVE_AUDIO_PRIVATE_OVERLAY_SNAPSHOT',
+  'LIVE_AUDIO_PRIVATE_OVERLAY_RESULT',
+  'AUDIENCE_ACCESS_STATE',
+  'AUDIENCE_ACCESS_REQUEST',
+  'AUDIENCE_ACCESS_DECISION_RESULT',
+  'SESSION_ACCESS_POLICY',
   'CONTROL_KEY_ROTATED',
   'PRIVATE_CONTROL_SIGNAL',
   'PRIVATE_CONTROL_SIGNAL_RESULT',
@@ -86,6 +98,38 @@ const liveAudioWsOnlyTypes = new Set([
 
 const isLiveAudioWsOnlyType = (type: unknown): type is string =>
   typeof type === 'string' && liveAudioWsOnlyTypes.has(type);
+
+const CONTROL_RESUME_STORAGE_KEY = 'sefer-control-resume';
+
+interface StoredControlResume {
+  presentationSessionId: string;
+  controlSessionId: string;
+  credential: string;
+}
+
+const readStoredControlResume = (): StoredControlResume | null => {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(CONTROL_RESUME_STORAGE_KEY) || 'null') as unknown;
+    if (!parsed || typeof parsed !== 'object') return null;
+    const value = parsed as Partial<StoredControlResume>;
+    if (
+      typeof value.presentationSessionId !== 'string' ||
+      typeof value.controlSessionId !== 'string' ||
+      typeof value.credential !== 'string'
+    ) return null;
+    return value as StoredControlResume;
+  } catch {
+    return null;
+  }
+};
+
+const writeStoredControlResume = (value: StoredControlResume | null) => {
+  if (value) {
+    localStorage.setItem(CONTROL_RESUME_STORAGE_KEY, JSON.stringify(value));
+  } else {
+    localStorage.removeItem(CONTROL_RESUME_STORAGE_KEY);
+  }
+};
 
 const presenterSideEffectCommands = new Set<RemoteCommandPayload['command']>([
   'QUIZ_PLAY_APPLAUSE',
@@ -159,6 +203,8 @@ export function useSyncState(props: UseSyncStateProps) {
     setLockedBackgroundValue, setUserSelectedBackground, setVideoState,
     setAppMode, setScriptureState, setAudioState, setAudioSyncMaps,
     setQuizState, setAutoduckState, onAudioTimelineState,
+    audienceAccessCredential, audienceAuthorized = true, audienceSseTicket,
+    onAudienceSseReconnect, onWsMessage,
   } = props;
   const isAudienceMode = !isControlMode && !isPresenterMode;
   const syncEndpoints = useMemo(
@@ -169,6 +215,11 @@ export function useSyncState(props: UseSyncStateProps) {
   const channel = useMemo(() => new BroadcastChannel('sefer-presenter'), []);
   const processedMessageIdsRef = useRef<Set<string>>(new Set());
   const lastControllerUpdateMsRef = useRef<number>(0);
+  const audienceRevisionRef = useRef<{
+    presentationSessionId: string | null;
+    serverEpoch: string | null;
+    stateRevision: number;
+  }>({ presentationSessionId: null, serverEpoch: null, stateRevision: -1 });
 
   const wsUrl = useMemo(() => {
     if (typeof window === 'undefined') return null;
@@ -179,6 +230,10 @@ export function useSyncState(props: UseSyncStateProps) {
 
   const onAudioTimelineStateRef = useRef(onAudioTimelineState);
   useEffect(() => { onAudioTimelineStateRef.current = onAudioTimelineState; }, [onAudioTimelineState]);
+  const audienceCredentialRef = useRef(audienceAccessCredential);
+  const onWsMessageRef = useRef(onWsMessage);
+  useEffect(() => { audienceCredentialRef.current = audienceAccessCredential; }, [audienceAccessCredential]);
+  useEffect(() => { onWsMessageRef.current = onWsMessage; }, [onWsMessage]);
 
   const lastKeyMessageRef = useRef<{type: string, payload: Record<string, unknown>} | null>(null);
   const wsMessageSubscribersRef = useRef<Set<(type: string, payload: Record<string, unknown>) => void>>(new Set());
@@ -194,13 +249,70 @@ export function useSyncState(props: UseSyncStateProps) {
   }, []);
 
   const handleWsMessage = useCallback((type: string, payload: Record<string, unknown>) => {
+    onWsMessageRef.current?.(type, payload);
     if (type === 'LIVE_AUDIO_CONTROL_PUBLIC_KEY' || type === 'CONTROL_KEY_ROTATED') {
       lastKeyMessageRef.current = { type, payload };
     }
+
+    if (type === 'LIVE_AUDIO_CONTROL_RESUME_RESULT') {
+      const pending = pendingControlResumeRef.current;
+      if (
+        payload.accepted === true &&
+        typeof payload.presentationSessionId === 'string' &&
+        typeof payload.controlSessionId === 'string' &&
+        typeof payload.credential === 'string'
+      ) {
+        controlSessionIdRef.current = payload.controlSessionId;
+        writeStoredControlResume({
+          presentationSessionId: payload.presentationSessionId,
+          controlSessionId: payload.controlSessionId,
+          credential: payload.credential,
+        });
+      } else if (pending) {
+        controlSessionIdRef.current = pending.controlSessionId;
+        writeStoredControlResume(pending);
+      }
+      pendingControlResumeRef.current = null;
+    }
+
     wsMessageSubscribersRef.current.forEach(handler => handler(type, payload));
     
     if (type === 'WELCOME') {
-      controlSessionIdRef.current = payload.controlSessionId as string | undefined;
+      const nextSessionId = typeof payload.controlSessionId === 'string'
+        ? payload.controlSessionId
+        : undefined;
+      const presentationSessionId = typeof payload.presentationSessionId === 'string'
+        ? payload.presentationSessionId
+        : undefined;
+      const credential = typeof payload.controlResumeCredential === 'string'
+        ? payload.controlResumeCredential
+        : undefined;
+      controlSessionIdRef.current = nextSessionId;
+      if (payload.role === 'control' && nextSessionId && presentationSessionId && credential) {
+        const previous = readStoredControlResume();
+        const temporary = { presentationSessionId, controlSessionId: nextSessionId, credential };
+        if (
+          previous &&
+          previous.presentationSessionId === presentationSessionId &&
+          previous.controlSessionId !== nextSessionId
+        ) {
+          pendingControlResumeRef.current = temporary;
+          wsSendRef.current('LIVE_AUDIO_CONTROL_RESUME', {
+            controlSessionId: previous.controlSessionId,
+            credential: previous.credential,
+          });
+        } else {
+          if (previous?.presentationSessionId !== presentationSessionId) {
+            writeStoredControlResume(null);
+          }
+          writeStoredControlResume(temporary);
+        }
+      }
+      if (payload.role === 'audience' && audienceCredentialRef.current) {
+        wsSendRef.current('AUDIENCE_ACCESS_BIND', {
+          credential: audienceCredentialRef.current,
+        });
+      }
       console.log(`[CLIENT DBG] WebSocket WELCOME - clientId=${payload.clientId} role=${payload.role} controlSessionId=${payload.controlSessionId}`);
       wsSendRef.current('SERVER_TIME_PING', { clientSentAtMs: Date.now() });
       return;
@@ -231,9 +343,15 @@ export function useSyncState(props: UseSyncStateProps) {
   });
   const wsSendRef = useRef(wsSend);
   useEffect(() => { wsSendRef.current = wsSend; }, [wsSend]);
+  useEffect(() => {
+    if (isAudienceMode && wsStatus === 'open' && audienceAccessCredential) {
+      wsSend('AUDIENCE_ACCESS_BIND', { credential: audienceAccessCredential });
+    }
+  }, [audienceAccessCredential, isAudienceMode, wsSend, wsStatus]);
 
   const [isMediaMaster, setIsMediaMaster] = useState(false);
   const controlSessionIdRef = useRef<string | undefined>(undefined);
+  const pendingControlResumeRef = useRef<StoredControlResume | null>(null);
 
   // ── Persist to localStorage ───────────────────────────────────────
   const persistState = useCallback((
@@ -535,15 +653,37 @@ export function useSyncState(props: UseSyncStateProps) {
   }, [applyRemoteState, onRemoteCommand, applyAudioTelemetry, applyDisplayTelemetry, setVideoState, setAudioSyncMaps]);
 
   const requestBackendState = useCallback(async () => {
+    if (isAudienceMode && !audienceAuthorized) return false;
     try {
       const response = await fetch(syncEndpoints.state, {
         method: 'GET',
-        headers: { Accept: 'application/json' },
+        headers: {
+          Accept: 'application/json',
+          ...(isAudienceMode && audienceAccessCredential
+            ? { Authorization: `Bearer ${audienceAccessCredential}` }
+            : {}),
+        },
         cache: 'no-store',
       });
       if (!response.ok) return false;
       const data = await response.json();
       if (!data) return false;
+      if (
+        isAudienceMode &&
+        typeof data.presentationSessionId === 'string' &&
+        typeof data.serverEpoch === 'string' &&
+        Number.isInteger(data.stateRevision)
+      ) {
+        const current = audienceRevisionRef.current;
+        const sameStream = current.presentationSessionId === data.presentationSessionId &&
+          current.serverEpoch === data.serverEpoch;
+        if (sameStream && Number(data.stateRevision) < current.stateRevision) return false;
+        audienceRevisionRef.current = {
+          presentationSessionId: data.presentationSessionId,
+          serverEpoch: data.serverEpoch,
+          stateRevision: Number(data.stateRevision),
+        };
+      }
 
       if (data.type) {
         const validation = validateSyncMessage(data);
@@ -564,7 +704,7 @@ export function useSyncState(props: UseSyncStateProps) {
       console.error('Error requesting backend state snapshot', err);
       return false;
     }
-  }, [syncEndpoints.state]);
+  }, [audienceAccessCredential, audienceAuthorized, isAudienceMode, syncEndpoints.state]);
 
   // ── BroadcastChannel listener ─────────────────────────────────────
   useEffect(() => {
@@ -649,13 +789,41 @@ export function useSyncState(props: UseSyncStateProps) {
 
   // ── SSE listener (web mode only) ──────────────────────────────────
   useEffect(() => {
-    const eventSource = new EventSource(syncEndpoints.events);
+    if (isAudienceMode && (!audienceAuthorized || !audienceSseTicket)) return;
+    const eventsUrl = isAudienceMode && audienceSseTicket
+      ? `${syncEndpoints.events}?ticket=${encodeURIComponent(audienceSseTicket)}`
+      : syncEndpoints.events;
+    const eventSource = new EventSource(eventsUrl);
 
     eventSource.onmessage = (event) => {
       try {
         if (event.data === 'heartbeat') return;
         const data = JSON.parse(event.data);
         if (!data) return;
+        if (
+          isAudienceMode &&
+          typeof data.presentationSessionId === 'string' &&
+          typeof data.serverEpoch === 'string' &&
+          Number.isInteger(data.stateRevision)
+        ) {
+          const current = audienceRevisionRef.current;
+          const sameStream = current.presentationSessionId === data.presentationSessionId &&
+            current.serverEpoch === data.serverEpoch;
+          if (!sameStream) {
+            audienceRevisionRef.current = {
+              presentationSessionId: data.presentationSessionId,
+              serverEpoch: data.serverEpoch,
+              stateRevision: Number(data.stateRevision),
+            };
+          } else if (Number(data.stateRevision) <= current.stateRevision) {
+            return;
+          } else if (current.stateRevision >= 0 && Number(data.stateRevision) > current.stateRevision + 1) {
+            void requestBackendState();
+            return;
+          } else {
+            audienceRevisionRef.current.stateRevision = Number(data.stateRevision);
+          }
+        }
 
         if (data.type) {
           const validation = validateSyncMessage(data);
@@ -714,9 +882,17 @@ export function useSyncState(props: UseSyncStateProps) {
       }
     };
 
+    eventSource.onerror = () => {
+      if (!isAudienceMode) return;
+      eventSource.close();
+      onAudienceSseReconnect?.();
+    };
+
     return () => eventSource.close();
   }, [
-    clientIdRef, isPresenterMode, syncEndpoints.events, videoStateRef
+    audienceAuthorized, audienceSseTicket, clientIdRef, isAudienceMode,
+    isPresenterMode, onAudienceSseReconnect, requestBackendState,
+    syncEndpoints.events, videoStateRef
   ]);
 
   return { channel, syncState, emitCommand, persistState, emitAudioTelemetry, emitVideoTelemetry, emitDisplayTelemetry, wsStatus, wsSend, subscribeToWsMessage, isMediaMaster };

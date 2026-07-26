@@ -1,8 +1,14 @@
 import type { AudioState, AudioTimelineAction, AudioTimelineState } from './audio';
-import type { LiveAudioBroadcastMessage } from './liveAudio';
+import type { LiveAudioBroadcastMessage, LiveAudioControlState } from './liveAudio';
 import type { AppMode, Presentation, ScriptureNavState, VideoState } from './presentation';
 import type { QuizSyncState } from './quiz';
 import type { SeferReaderState } from '../hooks/useSeferReader';
+import type {
+  AudienceAccessDecisionMessage,
+  AudienceAccessRequestMessage,
+  AudienceAccessStateMessage,
+  SessionAccessPolicyMessage,
+} from './audienceAccess';
 
 export const SYNC_PROTOCOL_VERSION = 1;
 
@@ -93,7 +99,7 @@ export type BroadcastMessage =
   | ({ type: 'AUDIO_SYNC_MAPS_UPDATE'; maps: unknown[] } & SyncProtocolMeta)
   | ({ type: 'REQUEST_STATE'; clientId?: string } & SyncProtocolMeta)
   | ({ type: 'REMOTE_COMMAND'; clientId: string; payload: RemoteCommandPayload } & SyncProtocolMeta)
-  | ({ type: 'WELCOME'; clientId: string; serverTimeMs: number; role?: 'presenter' | 'control' | 'audience' | 'unknown'; presentationSessionId?: string } & SyncProtocolMeta)
+  | ({ type: 'WELCOME'; clientId: string; serverTimeMs: number; role?: 'presenter' | 'control' | 'audience' | 'unknown'; presentationSessionId?: string; controlSessionId?: string; controlState?: LiveAudioControlState; controlResumeCredential?: string } & SyncProtocolMeta)
   | ({ type: 'PRESENTATION_SESSION_ROTATED'; presentationSessionId: string } & SyncProtocolMeta)
   | ({ type: 'SERVER_TIME_PING'; clientSentAtMs: number } & SyncProtocolMeta)
   | ({ type: 'SERVER_TIME_PONG'; clientSentAtMs: number; serverTimeMs: number } & SyncProtocolMeta)
@@ -102,4 +108,5 @@ export type BroadcastMessage =
   | ({ type: 'AUDIO_PRESENTATION_CLOCK'; timelineId: string; estimatedPositionSec: number; serverTimeMs: number } & SyncProtocolMeta)
   | ({ type: 'AUDIENCE_STATE_UPDATE'; state: AudiencePublicState } & SyncProtocolMeta)
   | (LiveAudioBroadcastMessage & SyncProtocolMeta)
+  | ((AudienceAccessStateMessage | AudienceAccessRequestMessage | AudienceAccessDecisionMessage | SessionAccessPolicyMessage) & SyncProtocolMeta)
   | ({ type: 'ERROR'; code: string; message: string } & SyncProtocolMeta);
