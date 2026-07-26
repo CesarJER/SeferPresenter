@@ -190,9 +190,9 @@ Canales principales:
 - `LIVE_AUDIO_SNAPSHOT_REQUEST` / `LIVE_AUDIO_SNAPSHOT`: snapshot operacional
   efimero para Controles autorizados, con participantes, cola, autorizaciones,
   estado LiveKit y agregados anonimos de quiz. Controles pendientes no lo reciben.
-- `LIVE_AUDIO_ACTIVE_PARTICIPANT_PROFILE`: perfil activo claro enviado solo a
-  Controles autorizados con alias, preferencia de visibilidad y clave publica
-  para cifrar la lista visible de nicks.
+- `LIVE_AUDIO_ACTIVE_PARTICIPANT_PROFILE`: estado técnico claro, sin alias ni
+  claves, que comunica únicamente la preferencia de visibilidad. El alias y la
+  clave efímera viajan dentro del sobre E2E `PRIVATE_CONTROL_SIGNAL`.
 
 La audiencia muestra la misma imagen viva del presenter, sin controles de navegacion ni apertura del panel de control.
 
@@ -205,7 +205,7 @@ puntuaciones en cada recalculo.
 
 `PRIVATE_CONTROL_SIGNAL` es un contenedor tecnico cifrado para senales privadas
 entre Audience y controles autorizados. No contiene alias, mensajes ni
-configuracion de micro en claro, y el servidor debe limitarse a validar/rutear
+configuracion de micro en texto claro, y el servidor debe limitarse a validar/rutear
 sin descifrar ni persistir contenido.
 La capa E2E simplificada usa Web Crypto: Control publica una clave publica ECDH
 P-256, Audience cifra con una clave AES-GCM 256 derivada y un nonce aleatorio de
@@ -284,9 +284,9 @@ Endpoints:
 
 No hay endpoints de consentimiento, alias legible ni chat legible. El backend no
 persiste claves, alias, tokens ni mensajes privados en archivos o base de datos.
-El snapshot operacional vive solo en memoria; las partes sensibles que el
-servidor llega a conocer por parches de Control autorizado se cifran con una
-clave derivada de `SEFER_CONTROL_PASSWORD` y no se guardan en disco.
+El snapshot operacional vive solo en memoria y es no nominal: rechaza alias y
+claves efímeras de Audience, y conserva únicamente estado técnico de conexión,
+moderación, visibilidad y micrófono.
 
 Compose conserva copias de recuperación fsync de `presentations.json` y
 `audio_sync.json` en el volumen `sefer_backups`. En un montaje individual de

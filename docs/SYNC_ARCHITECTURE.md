@@ -139,12 +139,12 @@ identity/state. `VITE_SEFER_ACTIVE_ALIAS_VISIBLE_BY_DEFAULT=false` keeps the
 checkbox off unless explicitly configured otherwise.
 
 The readable list is never computed or broadcast by the server. Audience sends
-its active profile to authorized Control in clear via
-`LIVE_AUDIO_ACTIVE_PARTICIPANT_PROFILE`; that profile contains the current alias,
-the user's sharing preference, and the audience public key that Control needs
-to encrypt the visible list back to that participant. Control patches only the
-technical preference and operational alias into `LIVE_AUDIO_SNAPSHOT_PATCH`,
-computes the visible A-Z list with `computeVisibleActiveParticipants`, and sends
+only its sharing preference in clear via
+`LIVE_AUDIO_ACTIVE_PARTICIPANT_PROFILE`; clear alias and ephemeral-key fields
+are rejected. The alias and audience ephemeral public key reach authorized
+Control only through the E2E `PRIVATE_CONTROL_SIGNAL` envelope. Control keeps
+the alias map in page memory, computes the visible A-Z list with
+`computeVisibleActiveParticipants`, and sends
 `{ type: 'VISIBLE_ACTIVE_PARTICIPANTS', participants, updatedAt }` back as a
 targeted encrypted private signal to each active viewer whose
 `canViewActiveParticipants` flag is true. Only the list payload is encrypted;
@@ -152,7 +152,8 @@ authorization changes travel as clear technical WebSocket messages.
 
 The server owns only technical fields in memory and snapshots:
 `isAliasVisibleToActiveParticipants`, `canViewActiveParticipants`,
-`isAliasHiddenByControl`, and `activeListPublicKey`. Control may grant/revoke
+`isAliasHiddenByControl`, microphone state, and admission/moderation state.
+Operational snapshots reject `alias` and `activeListPublicKey`. Control may grant/revoke
 list-view permission with `LIVE_AUDIO_SET_ACTIVE_LIST_VIEW_PERMISSION`; the
 server confirms that state to the target audience client with clear
 `LIVE_AUDIO_ACTIVE_LIST_VIEW_PERMISSION`. Control may put a consenting
@@ -198,11 +199,13 @@ Control uses `lastSentListRef` to avoid re-sending unchanged visible lists.
   `LIVE_AUDIO_SNAPSHOT_PATCH` support Control handoff. Only authorized Controls
   receive or publish operational snapshots; pending Controls receive an error
   and no snapshot. The snapshot includes connected-user counts, participants,
-  operational aliases known to authorized Control, logical roles (`pasivo`,
-  `activo`, `cola`, `orador`, `control`, `presenter`), microphone permission/track state,
+  logical roles (`pasivo`, `activo`, `cola`, `orador`, `control`, `presenter`),
+  microphone permission/track state,
   speaker state, intervention queue, Control authorizations, relevant LiveKit
   state, and anonymous quiz aggregates. It does not include historical private
-  messages or ciphertext history.
+  messages, ciphertext history, aliases, or audience ephemeral public keys.
+  A newly authorized Control receives the shared Control session key E2E and
+  requests fresh encrypted alias signals from Audience.
 - The WebSocket server keeps the current authorized Control public key in memory
   and replays it to audience clients that connect later, so nicknames and
   private messages can be encrypted even when Control was already open.
@@ -238,13 +241,11 @@ subscriber events and ignores them on BroadcastChannel/SSE paths.
 ### Operational Snapshot Privacy
 
 `server/ws-server.mjs` keeps the Control handoff snapshot in process memory only.
-Sensitive snapshot overlays that the server can learn from authorized Control
-patches, such as operational aliases and microphone state hints, are encrypted
-with AES-256-GCM using a key derived from `SEFER_CONTROL_PASSWORD`. If that
-environment variable is not set, the fallback key remains local to the process
-and the snapshot still is not persisted to disk. The server never stores private
-message history, private signal plaintext, private keys, or ciphertext logs in
-the snapshot.
+The snapshot is deliberately non-nominal: it contains technical microphone,
+visibility, moderation, connection, and authorization state, but rejects clear
+aliases and audience ephemeral public keys. The server never stores private
+message history, private signal plaintext, private keys, alias maps, or
+ciphertext logs in the snapshot.
 
 `server/local-server.mjs` contributes only anonymous quiz aggregates to the
 snapshot: submitted-answer counts by slide and final-score buckets. It does not
