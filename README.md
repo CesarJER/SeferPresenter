@@ -50,6 +50,12 @@ El backend local vive en `server/local-server.mjs`. Mantiene inicialmente la mis
 - `GET /api/audience/state`
 - `GET /api/audience/events`
 - `GET /api/audience-cache-assets`
+
+Los dos endpoints de estado de Audience son públicos y reducidos: incluyen solo
+la diapositiva proyectada actualmente y el estado funcional necesario para
+fondo, multimedia, textos, quiz y audio. No exponen el catálogo, etiquetas ni
+diapositivas anteriores o futuras. `/api/state` y `/api/state-events` conservan
+el estado completo y son administrativos.
 - `GET /api/livekit/status`
 - `POST /api/livekit/token`
 - `POST /api/livekit/refresh-token`

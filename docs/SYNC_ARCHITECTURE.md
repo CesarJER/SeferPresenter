@@ -33,8 +33,9 @@ Main message types live in `src/types/sync.ts`:
 - `DISPLAY_TELEMETRY`: background lock/override updates.
 - `AUDIO_SYNC_MAPS_UPDATE`: audio cue map updates.
 - `SET_AUTODUCK_STATE`: Autoduck status and fade factor to lower media volume automatically when active speakers are detected.
-- `REQUEST_STATE`: clients ask for a fresh backend snapshot; clients also fetch
-  `/api/state` directly on startup.
+- `REQUEST_STATE`: Control and Presenter ask for a fresh backend snapshot and
+  fetch `/api/state` directly on startup. Audience instead fetches the reduced
+  `/api/audience/state` snapshot.
 - `WELCOME`: sent by the server upon WebSocket connection, providing client ID, role, server time, and presentation session ID.
 - `PRESENTATION_SESSION_ROTATED`: announces a new presentation session ID, which forces clients to update/sync.
 - `SERVER_TIME_PING` / `SERVER_TIME_PONG`: round-trip clock sync messages for estimating client-to-server clock offset.
@@ -443,7 +444,9 @@ the code/task explicitly introduces them.
 
 Presentation state visible to audience:
 
-- Current presentation and slide.
+- Current presentation identity and current slide only. The public Audience
+  snapshot is built by `server/audience-projection-state.mjs`; it omits tags,
+  the catalogue, previous/future slides, and unknown editor-only fields.
 - Background.
 - App mode and scripture state.
 - Video/audio state needed to mirror projection.
@@ -451,6 +454,12 @@ Presentation state visible to audience:
 - Quiz run tracking (`completedQuizSlideIds`, the optional result cut in
   `resultQuizSlideIds`, and its recalculated `maxBaseCentipunts`) so Control,
   Presenter, and Audience use the same category ranges.
+
+`src/hooks/useSyncState.ts` selects `/api/audience/state` and
+`/api/audience/events` for Audience. It also ignores projection messages from
+the same-origin `BroadcastChannel`, preventing an Audience tab from receiving a
+Control tab's full presentation. Control and Presenter continue to use the
+protected `/api/state` and `/api/state-events` endpoints.
 
 Controller UI state:
 

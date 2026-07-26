@@ -99,6 +99,11 @@ export const arePresentationsEqual = (left: Presentation | null, right: Presenta
   return areJsonEqual(left, right);
 };
 
+export const getProjectionSyncEndpoints = (isAudienceMode: boolean) => ({
+  state: isAudienceMode ? '/api/audience/state' : '/api/state',
+  events: isAudienceMode ? '/api/audience/events' : '/api/state-events',
+});
+
 const areVideoStatesEqual = (left: VideoState | null, right: VideoState | null) => {
   if (left === right) return true;
   if (!left || !right) return false;
@@ -153,6 +158,11 @@ export function useSyncState(props: UseSyncStateProps) {
     setAppMode, setScriptureState, setAudioState, setAudioSyncMaps,
     setQuizState, setAutoduckState, onAudioTimelineState,
   } = props;
+  const isAudienceMode = !isControlMode && !isPresenterMode;
+  const syncEndpoints = useMemo(
+    () => getProjectionSyncEndpoints(isAudienceMode),
+    [isAudienceMode],
+  );
 
   const channel = useMemo(() => new BroadcastChannel('sefer-presenter'), []);
   const processedMessageIdsRef = useRef<Set<string>>(new Set());
@@ -524,7 +534,7 @@ export function useSyncState(props: UseSyncStateProps) {
 
   const requestBackendState = useCallback(async () => {
     try {
-      const response = await fetch('/api/state', {
+      const response = await fetch(syncEndpoints.state, {
         method: 'GET',
         headers: { Accept: 'application/json' },
         cache: 'no-store',
@@ -552,7 +562,7 @@ export function useSyncState(props: UseSyncStateProps) {
       console.error('Error requesting backend state snapshot', err);
       return false;
     }
-  }, []);
+  }, [syncEndpoints.state]);
 
   // ── BroadcastChannel listener ─────────────────────────────────────
   useEffect(() => {
@@ -569,6 +579,7 @@ export function useSyncState(props: UseSyncStateProps) {
       const data = validation.value;
 
       if (isLiveAudioWsOnlyType(data.type)) return;
+      if (isAudienceMode && data.type !== 'REQUEST_STATE') return;
 
       if (data.messageId) {
         if (processedMessageIdsRef.current.has(data.messageId)) return;
@@ -624,19 +635,19 @@ export function useSyncState(props: UseSyncStateProps) {
     channel.addEventListener('message', handleMessage);
 
     void requestBackendState().then((loaded) => {
-      if (!loaded) {
+      if (!loaded && !isAudienceMode) {
         channel.postMessage(makeSyncMessage({ type: 'REQUEST_STATE', clientId: clientIdRef.current }));
       }
     });
 
     return () => channel.removeEventListener('message', handleMessage);
   }, [
-    isPresenterMode, channel, clientIdRef, requestBackendState, videoStateRef
+    isAudienceMode, isPresenterMode, channel, clientIdRef, requestBackendState, videoStateRef
   ]);
 
   // ── SSE listener (web mode only) ──────────────────────────────────
   useEffect(() => {
-    const eventSource = new EventSource('/api/state-events');
+    const eventSource = new EventSource(syncEndpoints.events);
 
     eventSource.onmessage = (event) => {
       try {
@@ -703,7 +714,7 @@ export function useSyncState(props: UseSyncStateProps) {
 
     return () => eventSource.close();
   }, [
-    clientIdRef, isPresenterMode, videoStateRef
+    clientIdRef, isPresenterMode, syncEndpoints.events, videoStateRef
   ]);
 
   return { channel, syncState, emitCommand, persistState, emitAudioTelemetry, emitVideoTelemetry, emitDisplayTelemetry, wsStatus, wsSend, subscribeToWsMessage, isMediaMaster };
