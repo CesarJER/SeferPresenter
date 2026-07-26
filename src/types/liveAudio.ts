@@ -344,6 +344,7 @@ export interface LiveAudioStatusResponse {
 export interface LiveAudioTokenResponse {
   livekitUrl: string;
   token: string;
+  refreshCredential: string;
   expiresAt: number;
   participantIdentity: string;
   participantId: string;

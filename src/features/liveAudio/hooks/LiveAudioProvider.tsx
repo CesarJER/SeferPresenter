@@ -6,6 +6,7 @@ import { useLiveAudio } from './useLiveAudio';
 interface LiveAudioProviderProps {
   role: LiveAudioParticipantRole;
   roomSession?: string;
+  controlSessionId?: string;
   autoConnect?: boolean;
   children: ReactNode;
 }
@@ -13,10 +14,11 @@ interface LiveAudioProviderProps {
 export const LiveAudioProvider = ({
   role,
   roomSession,
+  controlSessionId,
   autoConnect,
   children,
 }: LiveAudioProviderProps) => {
-  const liveAudio = useLiveAudio({ role, roomSession, autoConnect });
+  const liveAudio = useLiveAudio({ role, roomSession, controlSessionId, autoConnect });
 
   return (
     <LiveAudioContext.Provider value={liveAudio}>
