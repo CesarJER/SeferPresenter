@@ -54,7 +54,9 @@ Catalog:
 
 - `src/components/catalog/CatalogApp.tsx`: React root for the public catalog interface, parsing route paths and fetching public index data.
 - `src/components/catalog/CatalogIndex.tsx`: displays the list of all available public catalogs and their tags.
-- `src/components/catalog/CatalogViewer.tsx`: renders public, safe-for-web presentation copies, hiding internal metadata and removing media/quiz slides.
+- `src/components/catalog/CatalogViewer.tsx`: renders public, safe-for-web presentation copies, card excerpts, configurable counts, and safe search highlights.
+- `src/utils/catalogCards.ts`: owns reusable pure card/count/excerpt/search
+  derivation; catalog components own only rendering and interaction.
   `LiveAudioTrackOutput.tsx` belong under
   `src/features/liveAudio/components/shared/`. Future `LiveAudioNotice.tsx`,
   `CollapsiblePrivacyNotice.tsx`, `LiveAudioAliasInput.tsx`, and

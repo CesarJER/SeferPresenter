@@ -3,14 +3,28 @@ import type { CatalogDef } from './CatalogApp';
 import type { Presentation } from '../../types/presentation';
 import { ArrowLeft, Search, FileText, BookOpen, AlignLeft, LayoutGrid } from 'lucide-react';
 import { sanitizeSlideHtml } from '../../utils/hebrewText';
+import {
+  catalogTextToPlainText,
+  getCatalogCardData,
+  isCatalogTitleSlide,
+  normalizeCatalogSearch,
+  splitCatalogHighlightedText,
+} from '../../utils/catalogCards';
 
 interface CatalogViewerProps {
   catalog: CatalogDef;
   presentationId: string | null;
 }
 
-const normalizeSearch = (value: string) =>
-  value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+const HighlightedText: React.FC<{ value: string; query: string }> = ({ value, query }) => (
+  <>
+    {splitCatalogHighlightedText(value, query).map((segment, index) => (
+      segment.match
+        ? <mark key={index} className="bg-yellow-200 text-inherit rounded-sm">{segment.text}</mark>
+        : <React.Fragment key={index}>{segment.text}</React.Fragment>
+    ))}
+  </>
+);
 
 export const CatalogViewer: React.FC<CatalogViewerProps> = ({ catalog, presentationId }) => {
   const [presentations, setPresentations] = useState<Presentation[]>([]);
@@ -35,7 +49,7 @@ export const CatalogViewer: React.FC<CatalogViewerProps> = ({ catalog, presentat
       });
   }, [catalog.id]);
 
-  const cleanQuery = normalizeSearch(search);
+  const cleanQuery = normalizeCatalogSearch(search);
   const hasSearch = search.trim() !== '';
 
   const { titleMatches, contentMatches } = useMemo(() => {
@@ -47,14 +61,14 @@ export const CatalogViewer: React.FC<CatalogViewerProps> = ({ catalog, presentat
     const cResults: Presentation[] = [];
 
     presentations.forEach(p => {
-      const normTitle = normalizeSearch(p.title);
+      const normTitle = normalizeCatalogSearch(p.title);
       if (normTitle.includes(cleanQuery)) {
         tResults.push(p);
         return;
       }
 
       const matchesContent = p.slides?.some(slide => 
-        slide.lines?.some(line => line && normalizeSearch(line).includes(cleanQuery))
+        slide.lines?.some(line => line && normalizeCatalogSearch(catalogTextToPlainText(line)).includes(cleanQuery))
       );
 
       if (matchesContent) {
@@ -96,10 +110,7 @@ export const CatalogViewer: React.FC<CatalogViewerProps> = ({ catalog, presentat
 
     let slidesToRender = pres.slides;
     if (slidesToRender.length > 0) {
-      const firstSlide = slidesToRender[0];
-      const titleText = (firstSlide.lines[0] || '').trim();
-      const isTitleSlide = titleText && pres.title.trim().includes(titleText);
-      if (isTitleSlide) {
+      if (isCatalogTitleSlide(pres, 0)) {
         slidesToRender = slidesToRender.slice(1);
       }
     }
@@ -228,7 +239,7 @@ export const CatalogViewer: React.FC<CatalogViewerProps> = ({ catalog, presentat
           <div className="text-center sm:text-left min-w-0">
             <h1 className="text-2xl font-bold text-amber-900 truncate">{catalog.title}</h1>
             <p className="text-xs text-amber-700 mt-1">
-              Catálogo público • {presentations.length} canciones
+              Catálogo público • {presentations.length} presentaciones
             </p>
           </div>
           <div className="relative w-full sm:w-auto min-w-[250px]">
@@ -248,7 +259,7 @@ export const CatalogViewer: React.FC<CatalogViewerProps> = ({ catalog, presentat
         {!hasSearch ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {titleMatches.map(p => (
-              <PresentationCard key={p.id} presentation={p} catalogPath={catalog.path} />
+              <PresentationCard key={p.id} presentation={p} catalogPath={catalog.path} countSefer={catalog.count_sefer} />
             ))}
           </div>
         ) : (
@@ -266,7 +277,7 @@ export const CatalogViewer: React.FC<CatalogViewerProps> = ({ catalog, presentat
                 </h2>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {titleMatches.map(p => (
-                    <PresentationCard key={p.id} presentation={p} catalogPath={catalog.path} />
+                    <PresentationCard key={p.id} presentation={p} catalogPath={catalog.path} countSefer={catalog.count_sefer} query={search} />
                   ))}
                 </div>
               </div>
@@ -279,13 +290,15 @@ export const CatalogViewer: React.FC<CatalogViewerProps> = ({ catalog, presentat
                 </h2>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {contentMatches.map(p => {
-                    const matchedLine = p.slides?.flatMap(s => s.lines || []).find(l => l && normalizeSearch(l).includes(cleanQuery));
+                    const matchedLine = p.slides?.flatMap(s => s.lines || []).find(l => l && normalizeCatalogSearch(catalogTextToPlainText(l)).includes(cleanQuery));
                     return (
                       <PresentationCard 
                         key={p.id} 
                         presentation={p} 
                         catalogPath={catalog.path} 
                         snippet={matchedLine} 
+                        countSefer={catalog.count_sefer}
+                        query={search}
                       />
                     );
                   })}
@@ -303,10 +316,15 @@ interface PresentationCardProps {
   presentation: Presentation;
   catalogPath: string;
   snippet?: string;
+  countSefer: boolean;
+  query?: string;
 }
 
-const PresentationCard: React.FC<PresentationCardProps> = ({ presentation, catalogPath, snippet }) => (
-  <a
+const PresentationCard: React.FC<PresentationCardProps> = ({ presentation, catalogPath, snippet, countSefer, query = '' }) => {
+  const card = getCatalogCardData(presentation, countSefer);
+  const excerpt = snippet ? catalogTextToPlainText(snippet) : card.excerpt;
+  return (
+    <a
     href={`${catalogPath}/${presentation.id}`}
     className="bg-white/80 border border-amber-200 hover:border-amber-400 hover:bg-white transition-colors p-4 rounded-lg flex items-start gap-4 group cursor-pointer shadow-sm hover:shadow-md"
   >
@@ -314,17 +332,18 @@ const PresentationCard: React.FC<PresentationCardProps> = ({ presentation, catal
       <FileText size={20} className="text-amber-600 group-hover:text-amber-700 transition-colors" />
     </div>
     <div className="flex-1 min-w-0">
-      <h3 className="font-bold text-amber-900 group-hover:text-amber-950 truncate mb-1">{presentation.title}</h3>
-      <p className="text-xs text-amber-700 truncate">
-        {presentation.slides.length} diapositiva{presentation.slides.length !== 1 ? 's' : ''}
-      </p>
-      {snippet && (
-        <div 
-          className="text-xs text-amber-600/80 mt-2 italic border-l-2 border-amber-300 pl-2 line-clamp-2"
-          dangerouslySetInnerHTML={{ __html: sanitizeSlideHtml(snippet) }}
-        />
+      <h3 className="font-bold text-amber-900 group-hover:text-amber-950 truncate mb-1">
+        <HighlightedText value={presentation.title} query={query} />
+      </h3>
+      {excerpt && (
+        <p className="text-xs text-amber-700/90 mt-1 line-clamp-3">
+          <span className="font-bold text-amber-800">({card.count})</span>{' '}
+          <HighlightedText value={excerpt} query={query} />
+        </p>
       )}
+      {!excerpt && <p className="text-xs font-bold text-amber-700">({card.count})</p>}
     </div>
   </a>
-);
+  );
+};
 
