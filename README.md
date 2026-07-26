@@ -81,8 +81,10 @@ endpoints HTTP existentes siguen activos.
 
 Si necesitas probar el stack completo con proxy, Redis y LiveKit, activa el
 perfil opcional con `docker compose --profile live-audio up --build`. El perfil
-requiere `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` y `LIVEKIT_NODE_IP`; no usa
-credenciales de desarrollo ni consulta servicios publicos para descubrir la IP.
+requiere `LIVEKIT_API_KEY` y `LIVEKIT_API_SECRET`. `LIVEKIT_NODE_IP` tiene
+prioridad cuando se define; si queda vacío,
+`SEFER_LIVEKIT_AUTO_DISCOVER_IP=true` habilita un fallback mediante proveedores
+HTTPS, con timeout, reintentos acotados y validación de IPv4 pública.
 Antes de construirlo, activa tambien `SEFER_LIVE_AUDIO_ENABLED=true` y
 `VITE_SEFER_LIVE_AUDIO_BUILD=true` en el entorno.
 `npm run dev` sigue siendo util
@@ -301,6 +303,16 @@ registra y solo usa escritura in-place después de crear esa copia durable.
 ## Legacy
 
 `legacy/` es registro local de desarrollo. No forma parte del producto, no debe ir al build y queda fuera de ESLint.
+
+Los patrones `*.local` y `*.local.*` están reservados para adaptaciones privadas
+de una instalación. Nunca deben contener código, pruebas o documentación
+canónica del producto.
+
+La imagen de producción se construye deliberadamente con Vite y sirve `dist`.
+Cada operador puede realizar su propio build para incorporar logos y variables
+`VITE_*` públicas; multimedia, fondos y datos se montan en tiempo de ejecución.
+Tras un cambio de IP pública actualizado mediante DDNS, hay que reiniciar
+LiveKit para que anuncie la dirección nueva.
 
 ## Verificacion recomendada
 
