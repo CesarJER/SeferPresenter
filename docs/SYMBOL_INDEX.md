@@ -188,6 +188,14 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
   `src/features/liveAudio/utils/controlSyncReducer.ts`: authoritative snapshot
   replacement, monotonic delta application, deduplication, gap buffering, and
   stream/session reset for multi-Control synchronization.
+- `validatePrivateControlOverlaySnapshot` / `replacePrivateControlOverlay` /
+  `applyPrivateControlOverlayDelta` -
+  `src/features/liveAudio/utils/privateControlOverlay.ts`: strict current-state
+  E2E overlay validation and monotonic application without message history.
+- `normalizeAliasForOrdinal` / `assignStableAliasOrdinal` /
+  `formatAliasForControl` -
+  `src/features/liveAudio/utils/aliasOrdinals.ts`: Control-only duplicate alias
+  grouping and stable, non-reused session ordinals.
 
 ## Types
 

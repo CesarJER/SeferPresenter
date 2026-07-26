@@ -29,6 +29,15 @@ import {
   reduceControlSyncEnvelope,
   type ControlSyncReducerState,
 } from '../../utils/controlSyncReducer';
+import {
+  assignStableAliasOrdinal,
+  formatAliasForControl,
+  type AliasOrdinalState,
+} from '../../utils/aliasOrdinals';
+import {
+  replacePrivateControlOverlay,
+  type PrivateControlOverlaySnapshot,
+} from '../../utils/privateControlOverlay';
 
 type ModerationEndpoint =
   | 'grant-speak'
@@ -161,6 +170,7 @@ export default function LiveAudioControlContainer({
   const [isModeratorMusicMode, setIsModeratorMusicMode] = useState(false);
   const [participantsMap, setParticipantsMap] = useState<Record<string, LiveAudioParticipantStatusMessage>>({});
   const [participantAliases, setParticipantAliases] = useState<Record<string, string>>({});
+  const [participantAliasOrdinals, setParticipantAliasOrdinals] = useState<Record<string, number>>({});
   const [participantEphemeralKeys, setParticipantEphemeralKeys] = useState<Record<string, string>>({});
   const [participantMicrophoneConfigs, setParticipantMicrophoneConfigs] = useState<Record<string, { volume: number; musicMode: boolean }>>({});
   const [connectionCounts, setConnectionCounts] = useState<LiveAudioConnectionCountsMessage | null>(null);
@@ -173,6 +183,13 @@ export default function LiveAudioControlContainer({
   const operationalSyncRef = useRef<ControlSyncReducerState<ControlOperationalView, ControlOperationalDelta>>(
     createControlSyncReducerState(),
   );
+  const aliasOrdinalStateRef = useRef<AliasOrdinalState>({
+    assignments: {},
+    nextByNormalizedAlias: {},
+  });
+  const privateOverlayRef = useRef<PrivateControlOverlaySnapshot | null>(null);
+  const privateOverlayRevisionRef = useRef(0);
+  const overlayPublishSequenceRef = useRef<Promise<void>>(Promise.resolve());
 
   const { availability } = useLiveAudioAvailability();
 
@@ -206,11 +223,15 @@ export default function LiveAudioControlContainer({
       if (type === 'PRESENTATION_SESSION_ROTATED') {
         setParticipantsMap({});
         setParticipantAliases({});
+        setParticipantAliasOrdinals({});
         setParticipantEphemeralKeys({});
         setMessages([]);
         setJoinRequests({});
         setConnectionCounts(null);
         operationalSyncRef.current = createControlSyncReducerState();
+        aliasOrdinalStateRef.current = { assignments: {}, nextByNormalizedAlias: {} };
+        privateOverlayRef.current = null;
+        privateOverlayRevisionRef.current = 0;
         lastSentListRef.current = '';
         return;
       }
@@ -295,18 +316,6 @@ export default function LiveAudioControlContainer({
       if (type === 'LIVE_AUDIO_PARTICIPANT_STATUS') {
         const msg = payload as unknown as LiveAudioParticipantStatusMessage;
         setParticipantsMap(prev => ({ ...prev, [msg.participantId]: msg }));
-        if (msg.isActiveAudience === false && msg.isKicked !== true) {
-          setParticipantAliases(prev => {
-            const next = { ...prev };
-            delete next[msg.participantId];
-            return next;
-          });
-          setParticipantEphemeralKeys(prev => {
-            const next = { ...prev };
-            delete next[msg.participantId];
-            return next;
-          });
-        }
         return;
       }
 
@@ -395,6 +404,12 @@ export default function LiveAudioControlContainer({
     const data = getSignalRecord(signal);
     const alias = sanitizeAlias(data.alias);
     if (alias) {
+      aliasOrdinalStateRef.current = assignStableAliasOrdinal(
+        aliasOrdinalStateRef.current,
+        signal.fromParticipantId,
+        alias,
+      );
+      setParticipantAliasOrdinals({ ...aliasOrdinalStateRef.current.assignments });
       setParticipantAliases(prev => ({ ...prev, [signal.fromParticipantId]: alias }));
     }
 
@@ -435,7 +450,7 @@ export default function LiveAudioControlContainer({
         : '';
 
     if ((signalType === 'PRIVATE_MESSAGE' || signalType === 'message') && content) {
-      const fromAlias = alias || participantAliasesRef.current[signal.fromParticipantId] || 'Sin nick';
+      const fromAlias = alias || participantAliasesRef.current[signal.fromParticipantId] || 'Alias no recuperable';
       setMessages(prev => [...prev, {
         id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
         fromAlias,
@@ -449,8 +464,11 @@ export default function LiveAudioControlContainer({
     sendPrivateSignalToParticipant,
     requestAliases,
     ready: privateSignalsReady,
+    keyId: privateKeyId,
     requestControlAuthorization,
-    authorizeSecondaryControl
+    authorizeSecondaryControl,
+    encryptControlOverlay,
+    decryptControlOverlay,
   } = usePrivateControlSignals({
     role: 'control',
     participantId: participantId || controlSessionId || 'control',
@@ -461,6 +479,139 @@ export default function LiveAudioControlContainer({
     transportReady: wsStatus === 'open',
     onPrivateSignal: handlePrivateSignal,
   });
+
+  useEffect(() => {
+    if (!subscribeToWsMessage) return;
+    return subscribeToWsMessage((type, payload) => {
+      if (type !== 'LIVE_AUDIO_PRIVATE_OVERLAY_SNAPSHOT') return;
+      if (
+        typeof payload.keyId !== 'string' ||
+        typeof payload.ciphertext !== 'string' ||
+        typeof payload.nonce !== 'string' ||
+        !Number.isSafeInteger(payload.privateStateRevision)
+      ) return;
+      const overlayKeyId = payload.keyId;
+      const overlayCiphertext = payload.ciphertext;
+      const overlayNonce = payload.nonce;
+      const overlayRevision = Number(payload.privateStateRevision);
+
+      void decryptControlOverlay({
+        keyId: overlayKeyId,
+        ciphertext: overlayCiphertext,
+        nonce: overlayNonce,
+      }).then((decrypted) => {
+        const applied = replacePrivateControlOverlay(privateOverlayRef.current, decrypted, {
+          expectedKeyId: overlayKeyId,
+          currentTechnicalStateRevision: operationalSyncRef.current.stateRevision,
+        });
+        if (!applied.ok) {
+          wsSend?.('LIVE_AUDIO_PRIVATE_OVERLAY_RESULT', {
+            result: 'NACK',
+            keyId: overlayKeyId,
+            privateStateRevision: overlayRevision,
+            reason: applied.reason,
+          });
+          return;
+        }
+        privateOverlayRef.current = applied.value;
+        privateOverlayRevisionRef.current = applied.value.privateStateRevision;
+        const aliases: Record<string, string> = {};
+        const ordinals: Record<string, number> = {};
+        const ephemeralKeys: Record<string, string> = {};
+        const microphoneConfigs: Record<string, { volume: number; musicMode: boolean }> = {};
+        const nextByNormalizedAlias: Record<string, number> = {};
+        Object.entries(applied.value.participants).forEach(([id, participant]) => {
+          aliases[id] = participant.alias;
+          ordinals[id] = participant.aliasOrdinal;
+          const normalized = participant.alias.trim().replace(/\s+/gu, ' ').normalize('NFC').toLocaleLowerCase();
+          nextByNormalizedAlias[normalized] = Math.max(
+            nextByNormalizedAlias[normalized] ?? 0,
+            participant.aliasOrdinal + 1,
+          );
+          if (participant.ephemeralPublicKey) ephemeralKeys[id] = participant.ephemeralPublicKey;
+          if (participant.microphoneConfig) microphoneConfigs[id] = participant.microphoneConfig;
+        });
+        aliasOrdinalStateRef.current = { assignments: ordinals, nextByNormalizedAlias };
+        setParticipantAliases(aliases);
+        setParticipantAliasOrdinals(ordinals);
+        setParticipantEphemeralKeys(ephemeralKeys);
+        setParticipantMicrophoneConfigs(microphoneConfigs);
+        wsSend?.('LIVE_AUDIO_PRIVATE_OVERLAY_RESULT', {
+          result: 'ACK',
+          keyId: applied.value.keyId,
+          privateStateRevision: applied.value.privateStateRevision,
+        });
+      }).catch(() => {
+        wsSend?.('LIVE_AUDIO_PRIVATE_OVERLAY_RESULT', {
+          result: 'NACK',
+          keyId: overlayKeyId,
+          privateStateRevision: overlayRevision,
+          reason: 'DECRYPT_FAILED',
+        });
+      });
+    });
+  }, [decryptControlOverlay, subscribeToWsMessage, wsSend]);
+
+  useEffect(() => {
+    if (
+      controlState !== 'PRINCIPAL' ||
+      !privateSignalsReady ||
+      !privateKeyId ||
+      !wsSend
+    ) return;
+    const timer = window.setTimeout(() => {
+      overlayPublishSequenceRef.current = overlayPublishSequenceRef.current.then(async () => {
+        const privateStateRevision = privateOverlayRevisionRef.current + 1;
+        const participants = Object.fromEntries(
+          Object.entries(participantAliases).map(([id, alias]) => [
+            id,
+            {
+              alias,
+              aliasOrdinal: participantAliasOrdinals[id] ?? 0,
+              ...(participantEphemeralKeys[id]
+                ? { ephemeralPublicKey: participantEphemeralKeys[id] }
+                : {}),
+              ...(participantMicrophoneConfigs[id]
+                ? { microphoneConfig: participantMicrophoneConfigs[id] }
+                : {}),
+            },
+          ]),
+        );
+        const snapshot: PrivateControlOverlaySnapshot = {
+          type: 'PRIVATE_CONTROL_OVERLAY_SNAPSHOT',
+          keyId: privateKeyId,
+          privateStateRevision,
+          basedOnStateRevision: Math.max(0, operationalSyncRef.current.stateRevision),
+          participants,
+        };
+        const encrypted = await encryptControlOverlay(snapshot);
+        if (!encrypted || encrypted.keyId !== privateKeyId) return;
+        privateOverlayRef.current = snapshot;
+        privateOverlayRevisionRef.current = privateStateRevision;
+        wsSend('LIVE_AUDIO_PRIVATE_OVERLAY_PUBLISH', {
+          messageId: crypto.randomUUID(),
+          keyId: encrypted.keyId,
+          privateStateRevision,
+          basedOnStateRevision: snapshot.basedOnStateRevision,
+          ciphertext: encrypted.ciphertext,
+          nonce: encrypted.nonce,
+        });
+      }).catch((error) => {
+        console.warn('LiveAudioControl: private overlay publication failed', error);
+      });
+    }, 50);
+    return () => window.clearTimeout(timer);
+  }, [
+    controlState,
+    encryptControlOverlay,
+    participantAliasOrdinals,
+    participantAliases,
+    participantEphemeralKeys,
+    participantMicrophoneConfigs,
+    privateKeyId,
+    privateSignalsReady,
+    wsSend,
+  ]);
 
   useEffect(() => {
     if (controlState === 'PENDING' && verificationCode && requestedAuthRef.current !== verificationCode) {
@@ -576,7 +727,9 @@ export default function LiveAudioControlContainer({
         const isMicrophoneActive = p.isMicrophoneActive ?? (p.speakerState === 'GRANTED' && p.isMuted === false);
         return {
           participantId: p.participantId,
-          alias: alias || 'Sin nick',
+          alias: alias
+            ? formatAliasForControl(alias, participantAliasOrdinals[p.participantId] ?? 0)
+            : 'Sincronizando alias…',
           speakerState: p.speakerState,
           isMuted: p.isMuted ?? !isMicrophoneActive,
           isMicrophoneActive,
@@ -589,7 +742,7 @@ export default function LiveAudioControlContainer({
           isMusicMode: participantMicrophoneConfigs[p.participantId]?.musicMode ?? false,
         };
       })
-  ), [participantAliases, participantMicrophoneConfigs, participantsMap]);
+  ), [participantAliasOrdinals, participantAliases, participantMicrophoneConfigs, participantsMap]);
 
   const activeUsers = participants.filter(p => p.isActiveAudience && !p.isKicked).length;
   const pendingWordCount = participants.filter(p => p.speakerState === 'REQUESTED' && !p.isKicked).length;

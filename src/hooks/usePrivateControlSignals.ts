@@ -71,6 +71,16 @@ export interface PrivateControlSignalsState {
   requestAliases: () => Promise<boolean>;
   requestControlAuthorization: (verificationCode: string) => Promise<boolean>;
   authorizeSecondaryControl: (request: LiveAudioControlJoinRequestMessage) => Promise<boolean>;
+  encryptControlOverlay: (value: unknown) => Promise<{
+    keyId: string;
+    ciphertext: string;
+    nonce: string;
+  } | null>;
+  decryptControlOverlay: (payload: {
+    keyId: string;
+    ciphertext: string;
+    nonce: string;
+  }) => Promise<unknown>;
   clearPrivateState: () => void;
 }
 
@@ -383,6 +393,38 @@ export function usePrivateControlSignals(options: UsePrivateControlSignalsOption
     });
   }, [controlSessionId, role, transportReady]);
 
+  const encryptControlOverlay = useCallback(async (value: unknown) => {
+    const keyPair = sessionKeyPairRef.current;
+    const activeKeyId = currentKeyIdRef.current;
+    const publicKeyBase64 = currentControlPublicKeyRef.current;
+    if (role !== 'control' || !keyPair || !activeKeyId || !publicKeyBase64) return null;
+    const publicKey = await importPublicKey(publicKeyBase64);
+    const sharedKey = await deriveSharedKey(keyPair.privateKey, publicKey);
+    const encrypted = await encrypt(sharedKey, serializeSignalValue(value));
+    return { keyId: activeKeyId, ...encrypted };
+  }, [role]);
+
+  const decryptControlOverlay = useCallback(async (payload: {
+    keyId: string;
+    ciphertext: string;
+    nonce: string;
+  }): Promise<unknown> => {
+    const keyPair = sessionKeyPairRef.current;
+    const publicKeyBase64 = currentControlPublicKeyRef.current;
+    if (
+      role !== 'control' ||
+      !keyPair ||
+      !publicKeyBase64 ||
+      payload.keyId !== currentKeyIdRef.current
+    ) {
+      throw new Error('Private Control overlay key is unavailable');
+    }
+    const publicKey = await importPublicKey(publicKeyBase64);
+    const sharedKey = await deriveSharedKey(keyPair.privateKey, publicKey);
+    const plaintext = await decrypt(sharedKey, payload.ciphertext, payload.nonce);
+    return parseSignalPlaintext(plaintext);
+  }, [role]);
+
   const handlePrivateControlSignal = useCallback(async (payload: Record<string, unknown>) => {
     const signal = payload as unknown as PrivateControlSignalMessage;
 
@@ -596,6 +638,8 @@ export function usePrivateControlSignals(options: UsePrivateControlSignalsOption
     requestAliases,
     requestControlAuthorization,
     authorizeSecondaryControl,
+    encryptControlOverlay,
+    decryptControlOverlay,
     clearPrivateState,
   };
 }

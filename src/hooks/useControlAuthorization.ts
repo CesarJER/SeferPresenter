@@ -148,6 +148,27 @@ export function useControlAuthorization(options: UseControlAuthorizationOptions)
         return;
       }
 
+      if (type === 'LIVE_AUDIO_CONTROL_RESUME_RESULT' && payload.accepted === true) {
+        if (typeof payload.controlSessionId === 'string') {
+          setControlSessionId(payload.controlSessionId);
+        }
+        if (isControlState(payload.controlState)) {
+          setControlState(payload.controlState);
+        }
+        if (
+          typeof payload.presentationSessionId === 'string' &&
+          typeof payload.serverEpoch === 'string' &&
+          Number.isInteger(payload.stateRevision)
+        ) {
+          revisionRef.current = {
+            presentationSessionId: payload.presentationSessionId,
+            serverEpoch: payload.serverEpoch,
+            stateRevision: Number(payload.stateRevision),
+          };
+        }
+        return;
+      }
+
       if (type === 'LIVE_AUDIO_CONTROL_AUTHORIZATION_STATE') {
         if (!acceptRevision(payload)) return;
         applyAuthorizationState(payload);

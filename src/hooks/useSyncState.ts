@@ -75,6 +75,9 @@ const liveAudioWsOnlyTypes = new Set([
   'LIVE_AUDIO_CONTROL_KEY_TRANSFER_RESULT',
   'LIVE_AUDIO_CONTROL_AUTHORIZATION_STATE',
   'LIVE_AUDIO_CONTROL_AUTHORIZATION_DECISION',
+  'LIVE_AUDIO_CONTROL_RESUME_RESULT',
+  'LIVE_AUDIO_PRIVATE_OVERLAY_SNAPSHOT',
+  'LIVE_AUDIO_PRIVATE_OVERLAY_RESULT',
   'CONTROL_KEY_ROTATED',
   'PRIVATE_CONTROL_SIGNAL',
   'PRIVATE_CONTROL_SIGNAL_RESULT',
@@ -86,6 +89,38 @@ const liveAudioWsOnlyTypes = new Set([
 
 const isLiveAudioWsOnlyType = (type: unknown): type is string =>
   typeof type === 'string' && liveAudioWsOnlyTypes.has(type);
+
+const CONTROL_RESUME_STORAGE_KEY = 'sefer-control-resume';
+
+interface StoredControlResume {
+  presentationSessionId: string;
+  controlSessionId: string;
+  credential: string;
+}
+
+const readStoredControlResume = (): StoredControlResume | null => {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(CONTROL_RESUME_STORAGE_KEY) || 'null') as unknown;
+    if (!parsed || typeof parsed !== 'object') return null;
+    const value = parsed as Partial<StoredControlResume>;
+    if (
+      typeof value.presentationSessionId !== 'string' ||
+      typeof value.controlSessionId !== 'string' ||
+      typeof value.credential !== 'string'
+    ) return null;
+    return value as StoredControlResume;
+  } catch {
+    return null;
+  }
+};
+
+const writeStoredControlResume = (value: StoredControlResume | null) => {
+  if (value) {
+    localStorage.setItem(CONTROL_RESUME_STORAGE_KEY, JSON.stringify(value));
+  } else {
+    localStorage.removeItem(CONTROL_RESUME_STORAGE_KEY);
+  }
+};
 
 const presenterSideEffectCommands = new Set<RemoteCommandPayload['command']>([
   'QUIZ_PLAY_APPLAUSE',
@@ -197,10 +232,61 @@ export function useSyncState(props: UseSyncStateProps) {
     if (type === 'LIVE_AUDIO_CONTROL_PUBLIC_KEY' || type === 'CONTROL_KEY_ROTATED') {
       lastKeyMessageRef.current = { type, payload };
     }
+
+    if (type === 'LIVE_AUDIO_CONTROL_RESUME_RESULT') {
+      const pending = pendingControlResumeRef.current;
+      if (
+        payload.accepted === true &&
+        typeof payload.presentationSessionId === 'string' &&
+        typeof payload.controlSessionId === 'string' &&
+        typeof payload.credential === 'string'
+      ) {
+        controlSessionIdRef.current = payload.controlSessionId;
+        writeStoredControlResume({
+          presentationSessionId: payload.presentationSessionId,
+          controlSessionId: payload.controlSessionId,
+          credential: payload.credential,
+        });
+      } else if (pending) {
+        controlSessionIdRef.current = pending.controlSessionId;
+        writeStoredControlResume(pending);
+      }
+      pendingControlResumeRef.current = null;
+    }
+
     wsMessageSubscribersRef.current.forEach(handler => handler(type, payload));
     
     if (type === 'WELCOME') {
-      controlSessionIdRef.current = payload.controlSessionId as string | undefined;
+      const nextSessionId = typeof payload.controlSessionId === 'string'
+        ? payload.controlSessionId
+        : undefined;
+      const presentationSessionId = typeof payload.presentationSessionId === 'string'
+        ? payload.presentationSessionId
+        : undefined;
+      const credential = typeof payload.controlResumeCredential === 'string'
+        ? payload.controlResumeCredential
+        : undefined;
+      controlSessionIdRef.current = nextSessionId;
+      if (payload.role === 'control' && nextSessionId && presentationSessionId && credential) {
+        const previous = readStoredControlResume();
+        const temporary = { presentationSessionId, controlSessionId: nextSessionId, credential };
+        if (
+          previous &&
+          previous.presentationSessionId === presentationSessionId &&
+          previous.controlSessionId !== nextSessionId
+        ) {
+          pendingControlResumeRef.current = temporary;
+          wsSendRef.current('LIVE_AUDIO_CONTROL_RESUME', {
+            controlSessionId: previous.controlSessionId,
+            credential: previous.credential,
+          });
+        } else {
+          if (previous?.presentationSessionId !== presentationSessionId) {
+            writeStoredControlResume(null);
+          }
+          writeStoredControlResume(temporary);
+        }
+      }
       console.log(`[CLIENT DBG] WebSocket WELCOME - clientId=${payload.clientId} role=${payload.role} controlSessionId=${payload.controlSessionId}`);
       wsSendRef.current('SERVER_TIME_PING', { clientSentAtMs: Date.now() });
       return;
@@ -234,6 +320,7 @@ export function useSyncState(props: UseSyncStateProps) {
 
   const [isMediaMaster, setIsMediaMaster] = useState(false);
   const controlSessionIdRef = useRef<string | undefined>(undefined);
+  const pendingControlResumeRef = useRef<StoredControlResume | null>(null);
 
   // ── Persist to localStorage ───────────────────────────────────────
   const persistState = useCallback((
