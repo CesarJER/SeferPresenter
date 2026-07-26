@@ -8,6 +8,8 @@ const roles = new Set(['presenter', 'control', 'audience', 'unknown'])
 const liveAudioControls = new Map()
 const liveAudioParticipants = new Map()
 let presentationSessionId = randomUUID()
+let serverEpoch = randomUUID()
+let stateRevision = 0
 let liveAudioControlPublicKeyMessage = null
 const PRIVATE_CONTROL_SIGNAL_MAX_CIPHERTEXT_BYTES = 4096
 const PRIVATE_CONTROL_SIGNAL_RATE_LIMIT = 5
@@ -36,6 +38,18 @@ const audienceAllowedTypes = new Set([
   'LIVE_AUDIO_REMOVE_ACTIVE_PARTICIPANT',
 ])
 
+const makeRevisionEnvelope = (revision = stateRevision) => ({
+  presentationSessionId,
+  serverEpoch,
+  stateRevision: revision,
+  eventId: randomUUID(),
+})
+
+const commitStateMutation = () => {
+  stateRevision += 1
+  return makeRevisionEnvelope(stateRevision)
+}
+
 const makeRole = (value) => roles.has(value) ? value : 'unknown'
 
 const getControlCodeTtlMs = () => {
@@ -51,7 +65,8 @@ const getDefaultModerationVisible = () =>
   String(process.env.SEFER_ACTIVE_ALIAS_MODERATION_DEFAULT_VISIBLE || 'true').toLowerCase() !== 'false'
 
 const mergeOperationalSnapshotPatch = (patch) => {
-  if (!patch || typeof patch !== 'object') return
+  if (!patch || typeof patch !== 'object') return false
+  let changed = false
 
   if (Array.isArray(patch.participants)) {
     for (const participant of patch.participants) {
@@ -60,12 +75,15 @@ const mergeOperationalSnapshotPatch = (patch) => {
       if (!storedParticipant) continue
       if (microphonePermissionStates.has(participant.microphonePermissionState)) {
         storedParticipant.microphonePermissionState = participant.microphonePermissionState
+        changed = true
       }
       if (microphoneTrackStates.has(participant.microphoneTrackState)) {
         storedParticipant.microphoneTrackState = participant.microphoneTrackState
+        changed = true
       }
       if (typeof participant.isAliasVisibleToActiveParticipants === 'boolean') {
         storedParticipant.isAliasVisibleToActiveParticipants = participant.isAliasVisibleToActiveParticipants
+        changed = true
         if (storedParticipant.isAliasHiddenByControl === undefined) {
           storedParticipant.isAliasHiddenByControl = !getDefaultModerationVisible()
         }
@@ -73,6 +91,7 @@ const mergeOperationalSnapshotPatch = (patch) => {
       storedParticipant.updatedAt = Date.now()
     }
   }
+  return changed
 }
 
 const containsClearAliasData = (patch) => (
@@ -251,6 +270,9 @@ const makeOperationalSnapshot = ({ liveKitState, quizAggregate } = {}) => {
   return {
     snapshotId: `snapshot-${Date.now()}-${randomUUID()}`,
     createdAt: Date.now(),
+    presentationSessionId,
+    serverEpoch,
+    stateRevision,
     connectionCounts: getConnectionCountsSnapshot(),
     participants,
     interventionQueue: participants
@@ -356,6 +378,9 @@ const resetWsServerStateForTests = () => {
   liveAudioControls.clear()
   liveAudioParticipants.clear()
   liveAudioControlPublicKeyMessage = null
+  presentationSessionId = randomUUID()
+  serverEpoch = randomUUID()
+  stateRevision = 0
 }
 
 const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) => {
@@ -399,7 +424,7 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
     }
   }
 
-  const makeConnectionCountsMessage = () => {
+  const makeConnectionCountsMessage = (revisionEnvelope = makeRevisionEnvelope()) => {
     const counts = {
       audienceConnections: 0,
       controlConnections: 0,
@@ -415,14 +440,15 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
 
     return {
       type: 'LIVE_AUDIO_CONNECTION_COUNTS',
+      ...revisionEnvelope,
       totalConnections: counts.audienceConnections + counts.controlConnections + counts.presenterConnections,
       ...counts,
       updatedAt: Date.now(),
     }
   }
 
-  const broadcastConnectionCounts = () => {
-    const message = makeConnectionCountsMessage()
+  const broadcastConnectionCounts = (revisionEnvelope = commitStateMutation()) => {
+    const message = makeConnectionCountsMessage(revisionEnvelope)
     broadcast(message, (meta) => meta.role === 'presenter' || meta.role === 'control')
     broadcastMediaMasterStatus()
   }
@@ -448,6 +474,7 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
     const principal = findPrincipalControl()
     const message = {
       type: 'LIVE_AUDIO_CONTROL_AUTHORIZATION_STATE',
+      ...makeRevisionEnvelope(),
       controlSessionId: control.controlSessionId,
       controlState: control.controlState,
       principalControlSessionId: principal?.controlSessionId,
@@ -508,6 +535,7 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
 
     if (authorized[0]) {
       authorized[0].controlState = 'PRINCIPAL'
+      commitStateMutation()
       broadcastAuthorizationState()
       return
     }
@@ -523,6 +551,7 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
       pending[0].verificationCode = undefined
       pending[0].codeExpiresAt = undefined
       pending[0].authorizedAt = Date.now()
+      commitStateMutation()
     }
 
     broadcastAuthorizationState()
@@ -533,6 +562,7 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
     if (!control) return
     const wasPrincipal = control.controlState === 'PRINCIPAL'
     liveAudioControls.delete(controlSessionId)
+    commitStateMutation()
     if (wasPrincipal) {
       promoteSuccessorIfNeeded()
     } else {
@@ -545,6 +575,7 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
     if (!control || (control.controlState !== 'PENDING' && control.controlState !== 'AUTHORIZED_SYNCING')) return
     control.verificationCode = undefined
     control.codeExpiresAt = Date.now()
+    commitStateMutation()
     sendAuthorizationState(control)
     broadcastAuthorizationState()
   }
@@ -577,6 +608,7 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
     }
 
     liveAudioControls.set(controlSessionId, control)
+    commitStateMutation()
     return control
   }
 
@@ -613,6 +645,8 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
       target.authorizedAt = Date.now()
       target.verificationCode = undefined
       target.codeExpiresAt = undefined
+      target.pendingTransfer = undefined
+      commitStateMutation()
     } else {
       clearTimeout(target.expiryTimer)
       sendJson(target.ws, {
@@ -625,6 +659,7 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
         updatedAt: Date.now(),
       })
       liveAudioControls.delete(target.controlSessionId)
+      commitStateMutation()
       wsClients.delete(target.ws)
       target.ws.close(4003, 'Control authorization rejected')
     }
@@ -666,6 +701,7 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
       keyId: msg.keyId,
       issuerControlSessionId: issuer.controlSessionId,
     }
+    commitStateMutation()
     sendJson(target.ws, {
       ...msg,
       authorizedByControlSessionId: issuer.controlSessionId,
@@ -705,6 +741,7 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
       target.keyTransferAck = false
       target.pendingTransfer = undefined
     }
+    commitStateMutation()
     broadcastAuthorizationState()
   }
 
@@ -850,8 +887,10 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
     participant.cleanupTimer = setTimeout(() => cleanupExpiredParticipant(meta.participantId), getRejoinGraceMs())
     participant.cleanupTimer.unref?.()
 
+    const revisionEnvelope = commitStateMutation()
     broadcast({
       ...makeReducedParticipantStatus(participant),
+      ...revisionEnvelope,
       connected: false,
       updatedAt: Date.now(),
     }, (targetMeta) => isControlAuthorized(liveAudioControls.get(targetMeta.controlSessionId)))
@@ -876,9 +915,12 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
     current.isMuted = true
     current.isActiveAudience = false
     current.isMicrophoneActive = false
-    routeParticipantStatus(releasedStatus)
+    liveAudioParticipants.delete(participantId)
+    const revisionEnvelope = commitStateMutation()
+    routeParticipantStatus(releasedStatus, revisionEnvelope)
     broadcast({
       type: 'LIVE_AUDIO_REVOKE_SPEAK',
+      ...revisionEnvelope,
       participantId,
       createdAt: Date.now(),
     }, (targetMeta) => {
@@ -886,7 +928,6 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
       if (targetMeta.role !== 'control') return false
       return isControlAuthorized(liveAudioControls.get(targetMeta.controlSessionId))
     })
-    liveAudioParticipants.delete(participantId)
   }
 
   const sweepExpiredParticipants = () => {
@@ -955,13 +996,17 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
     updatedAt: msg.updatedAt || Date.now(),
   })
 
-  const routeParticipantStatus = (msg) => {
-    const reduced = makeReducedParticipantStatus(msg)
+  const routeParticipantStatus = (msg, revisionEnvelope = commitStateMutation()) => {
+    const reduced = {
+      ...makeReducedParticipantStatus(msg),
+      ...revisionEnvelope,
+    }
     broadcast(reduced, (targetMeta) => {
       if (targetMeta.role === 'presenter') return true
       if (targetMeta.role !== 'control') return false
       return isControlAuthorized(liveAudioControls.get(targetMeta.controlSessionId))
     })
+    return revisionEnvelope
   }
 
   const validateModerationMessage = (msg) => {
@@ -979,11 +1024,12 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
 
   const applyModerationState = (msg) => {
     const now = Date.now()
+    const changedParticipants = []
     const update = (participantId, patch) => {
       const participant = liveAudioParticipants.get(participantId)
       if (!participant) return
       Object.assign(participant, patch, { updatedAt: now })
-      routeParticipantStatus(makeReducedParticipantStatus(participant))
+      changedParticipants.push(participant)
     }
 
     switch (msg.type) {
@@ -1057,6 +1103,12 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
       default:
         break
     }
+    if (changedParticipants.length === 0) return null
+    const revisionEnvelope = commitStateMutation()
+    for (const participant of changedParticipants) {
+      routeParticipantStatus(makeReducedParticipantStatus(participant), revisionEnvelope)
+    }
+    return revisionEnvelope
   }
 
   const routeControlPublicKey = (msg, issuer) => {
@@ -1124,6 +1176,7 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
       clientId,
       ws,
       controlSessionId: control?.controlSessionId,
+      connectionEpoch: randomUUID(),
     }
     wsClients.set(ws, meta)
 
@@ -1135,6 +1188,9 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
       controlSessionId: control?.controlSessionId,
       controlState: control?.controlState,
       presentationSessionId,
+      serverEpoch,
+      connectionEpoch: meta.connectionEpoch,
+      stateRevision,
     }))
     broadcastConnectionCounts()
     broadcastMediaMasterStatus()
@@ -1299,9 +1355,10 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
           if (!participant || participant.isKicked) break
           participant.isAliasVisibleToActiveParticipants = msg.isAliasVisibleToActiveParticipants
           participant.updatedAt = Date.now()
-          routeParticipantStatus(participant)
+          const revisionEnvelope = routeParticipantStatus(participant)
           broadcast({
             type: 'LIVE_AUDIO_ACTIVE_PARTICIPANT_PROFILE',
+            ...revisionEnvelope,
             participantId: msg.participantId,
             isAliasVisibleToActiveParticipants: msg.isAliasVisibleToActiveParticipants,
             createdAt: msg.createdAt || Date.now(),
@@ -1375,7 +1432,9 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
             sendError(ws, 'CLEAR_ALIAS_FORBIDDEN', 'Alias data must use end-to-end encrypted private signals')
             break
           }
-          mergeOperationalSnapshotPatch(msg.snapshot)
+          const changed = mergeOperationalSnapshotPatch(msg.snapshot)
+          if (!changed) break
+          commitStateMutation()
           broadcast(makeSnapshotMessage(), (targetMeta) => {
             if (targetMeta.role !== 'control') return false
             return isControlAuthorized(liveAudioControls.get(targetMeta.controlSessionId))
@@ -1392,9 +1451,11 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
           if (!participant) break
           participant.canViewActiveParticipants = msg.canViewActiveParticipants
           participant.updatedAt = Date.now()
+          const revisionEnvelope = commitStateMutation()
           if (participant.ws?.readyState === WebSocket.OPEN) {
             sendJson(participant.ws, {
               type: 'LIVE_AUDIO_ACTIVE_LIST_VIEW_PERMISSION',
+              ...revisionEnvelope,
               participantId: msg.participantId,
               canViewActiveParticipants: msg.canViewActiveParticipants,
               createdAt: Date.now(),
@@ -1417,6 +1478,7 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
           if (!participant.isAliasVisibleToActiveParticipants && !msg.isAliasHiddenByControl) break
           participant.isAliasHiddenByControl = msg.isAliasHiddenByControl
           participant.updatedAt = Date.now()
+          commitStateMutation()
           broadcast(makeSnapshotMessage(), (targetMeta) => {
             if (targetMeta.role !== 'control') return false
             return isControlAuthorized(liveAudioControls.get(targetMeta.controlSessionId))
@@ -1443,10 +1505,11 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
             isMicrophoneActive: false,
             updatedAt: Date.now(),
           })
-          routeParticipantStatus(makeReducedParticipantStatus(participant))
+          const revisionEnvelope = routeParticipantStatus(makeReducedParticipantStatus(participant))
           if (participant.ws?.readyState === WebSocket.OPEN) {
             sendJson(participant.ws, {
               type: 'LIVE_AUDIO_REMOVE_ACTIVE_PARTICIPANT',
+              ...revisionEnvelope,
               participantId: msg.participantId,
               createdAt: Date.now(),
             })
@@ -1484,6 +1547,7 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
           }
           if (msg.payload?.command === 'RESET_STATE' && msg.payload.clearSession) {
             presentationSessionId = randomUUID()
+            stateRevision = 0
             liveAudioControls.clear()
             liveAudioParticipants.clear()
             broadcastConnectionCounts()
@@ -1491,6 +1555,9 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
             broadcast(JSON.stringify({
               type: 'PRESENTATION_SESSION_ROTATED',
               presentationSessionId,
+              serverEpoch,
+              stateRevision,
+              eventId: randomUUID(),
             }))
             console.log('[SERVER] Presentation session rotated')
           }
@@ -1509,8 +1576,12 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
             sendError(ws, 'CONTROL_PENDING_FORBIDDEN', 'Pending controls cannot send moderation actions')
             break
           }
-          applyModerationState(msg)
-          broadcast(msg, (targetMeta) => canReceiveModerationMessage(targetMeta, msg))
+          const revisionEnvelope = applyModerationState(msg)
+          if (!revisionEnvelope) break
+          broadcast({
+            ...msg,
+            ...revisionEnvelope,
+          }, (targetMeta) => canReceiveModerationMessage(targetMeta, msg))
           break
         }
 

@@ -24,6 +24,11 @@ import {
   hasVisibleParticipantsChanged,
   serializeVisibleParticipants,
 } from '../../utils/activeParticipants';
+import {
+  createControlSyncReducerState,
+  reduceControlSyncEnvelope,
+  type ControlSyncReducerState,
+} from '../../utils/controlSyncReducer';
 
 type ModerationEndpoint =
   | 'grant-speak'
@@ -89,6 +94,54 @@ const snapshotParticipantToStatus = (
   updatedAt: participant.updatedAt,
 });
 
+interface ControlOperationalView {
+  participants: Record<string, LiveAudioParticipantStatusMessage>;
+  connectionCounts: LiveAudioConnectionCountsMessage | null;
+}
+
+interface ControlOperationalDelta {
+  type: string;
+  payload: Record<string, unknown>;
+}
+
+const snapshotToOperationalView = (snapshot: LiveAudioOperationalSnapshot): ControlOperationalView => {
+  const participants: Record<string, LiveAudioParticipantStatusMessage> = {};
+  for (const participant of snapshot.participants) {
+    if (participant.role !== 'audience') continue;
+    participants[participant.participantId] = snapshotParticipantToStatus(participant);
+  }
+  return {
+    participants,
+    connectionCounts: {
+      type: 'LIVE_AUDIO_CONNECTION_COUNTS',
+      ...snapshot.connectionCounts,
+    },
+  };
+};
+
+const applyOperationalDelta = (
+  state: ControlOperationalView,
+  delta: ControlOperationalDelta,
+): ControlOperationalView => {
+  if (delta.type === 'LIVE_AUDIO_PARTICIPANT_STATUS') {
+    const participant = delta.payload as unknown as LiveAudioParticipantStatusMessage;
+    return {
+      ...state,
+      participants: {
+        ...state.participants,
+        [participant.participantId]: participant,
+      },
+    };
+  }
+  if (delta.type === 'LIVE_AUDIO_CONNECTION_COUNTS') {
+    return {
+      ...state,
+      connectionCounts: delta.payload as unknown as LiveAudioConnectionCountsMessage,
+    };
+  }
+  return state;
+};
+
 export default function LiveAudioControlContainer({
   isControlAuthorized,
   authorizationRequests = [],
@@ -117,6 +170,9 @@ export default function LiveAudioControlContainer({
   const aliasRequestSignatureRef = useRef('');
   const lastSentListRef = useRef('');
   const requestedAuthRef = useRef<string | null>(null);
+  const operationalSyncRef = useRef<ControlSyncReducerState<ControlOperationalView, ControlOperationalDelta>>(
+    createControlSyncReducerState(),
+  );
 
   const { availability } = useLiveAudioAvailability();
 
@@ -154,27 +210,77 @@ export default function LiveAudioControlContainer({
         setMessages([]);
         setJoinRequests({});
         setConnectionCounts(null);
+        operationalSyncRef.current = createControlSyncReducerState();
         lastSentListRef.current = '';
         return;
       }
       if (type === 'LIVE_AUDIO_SNAPSHOT') {
         const snapshot = payload.snapshot as LiveAudioOperationalSnapshot | undefined;
         if (!snapshot || !Array.isArray(snapshot.participants)) return;
-        setParticipantsMap(prev => {
-          const next = { ...prev };
-          snapshot.participants.forEach((participant) => {
-            if (participant.role !== 'audience') return;
-            const existing = next[participant.participantId];
-            if (existing?.updatedAt && existing.updatedAt > participant.updatedAt) return;
-            next[participant.participantId] = snapshotParticipantToStatus(participant);
-          });
-          return next;
-        });
-        setConnectionCounts({
-          type: 'LIVE_AUDIO_CONNECTION_COUNTS',
-          ...snapshot.connectionCounts,
-        });
+        if (
+          typeof snapshot.presentationSessionId !== 'string' ||
+          typeof snapshot.serverEpoch !== 'string' ||
+          !Number.isInteger(snapshot.stateRevision)
+        ) return;
+        const result = reduceControlSyncEnvelope(
+          operationalSyncRef.current,
+          {
+            type: 'SNAPSHOT',
+            sessionId: snapshot.presentationSessionId,
+            serverEpoch: snapshot.serverEpoch,
+            stateRevision: snapshot.stateRevision,
+            state: snapshotToOperationalView(snapshot),
+          },
+          applyOperationalDelta,
+        );
+        operationalSyncRef.current = result.sync;
+        if (result.sync.value) {
+          setParticipantsMap(result.sync.value.participants);
+          setConnectionCounts(result.sync.value.connectionCounts);
+        }
         return;
+      }
+
+      const revision = payload.stateRevision;
+      const eventId = payload.eventId;
+      const sessionId = payload.presentationSessionId;
+      const serverEpoch = payload.serverEpoch;
+      if (
+        Number.isInteger(revision) &&
+        typeof eventId === 'string' &&
+        typeof sessionId === 'string' &&
+        typeof serverEpoch === 'string'
+      ) {
+        const result = reduceControlSyncEnvelope(
+          operationalSyncRef.current,
+          {
+            type: 'DELTA',
+            sessionId,
+            serverEpoch,
+            stateRevision: Number(revision),
+            eventId,
+            delta: { type, payload },
+          },
+          applyOperationalDelta,
+        );
+        operationalSyncRef.current = result.sync;
+        if (result.requestSnapshot) {
+          wsSend?.('LIVE_AUDIO_SNAPSHOT_REQUEST', {
+            type: 'LIVE_AUDIO_SNAPSHOT_REQUEST',
+            controlSessionId: controlSessionId || undefined,
+            lastAppliedStateRevision: result.sync.stateRevision < 0 ? 0 : result.sync.stateRevision,
+            reason: 'GAP',
+            createdAt: Date.now(),
+          });
+        }
+        if (result.sync.value) {
+          setParticipantsMap(result.sync.value.participants);
+          setConnectionCounts(result.sync.value.connectionCounts);
+        }
+        if (
+          type === 'LIVE_AUDIO_PARTICIPANT_STATUS' ||
+          type === 'LIVE_AUDIO_CONNECTION_COUNTS'
+        ) return;
       }
 
       if (
@@ -273,13 +379,17 @@ export default function LiveAudioControlContainer({
   }, [controlSessionId, subscribeToWsMessage, wsSend]);
 
   useEffect(() => {
-    if (!isControlAuthorized || !wsSend) return;
+    if (!isControlAuthorized || !wsSend || wsStatus !== 'open') return;
     wsSend('LIVE_AUDIO_SNAPSHOT_REQUEST', {
       type: 'LIVE_AUDIO_SNAPSHOT_REQUEST',
       controlSessionId: controlSessionId || undefined,
+      lastAppliedStateRevision: operationalSyncRef.current.stateRevision < 0
+        ? 0
+        : operationalSyncRef.current.stateRevision,
+      reason: operationalSyncRef.current.identity ? 'RECONNECT' : 'CONNECT',
       createdAt: Date.now(),
     });
-  }, [controlSessionId, isControlAuthorized, wsSend]);
+  }, [controlSessionId, isControlAuthorized, wsSend, wsStatus]);
 
   const handlePrivateSignal = useCallback((signal: DecryptedPrivateControlSignal) => {
     const data = getSignalRecord(signal);

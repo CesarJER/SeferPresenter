@@ -431,6 +431,9 @@ describe('runtime validation', () => {
       snapshot: {
         snapshotId: 'snapshot-1',
         createdAt: Date.now(),
+        presentationSessionId: 'session-1',
+        serverEpoch: 'server-1',
+        stateRevision: 3,
         connectionCounts: {
           totalConnections: 1,
           audienceConnections: 1,

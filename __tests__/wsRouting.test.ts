@@ -486,10 +486,18 @@ describe('Live Audio WebSocket routing', () => {
     await authorizeSecondary(principal, secondary, String(pending.controlSessionId));
 
     const snapshot = await waitFor(secondary, (message) => message.type === 'LIVE_AUDIO_SNAPSHOT');
-    const participants = snapshot.snapshot as { participants?: Array<{ participantId: string; speakerState: string }> };
+    const participants = snapshot.snapshot as {
+      participants?: Array<{ participantId: string; speakerState: string }>;
+      presentationSessionId?: string;
+      serverEpoch?: string;
+      stateRevision?: number;
+    };
     expect(participants.participants?.some((participant) => (
       participant.participantId === participantId && participant.speakerState === 'REQUESTED'
     ))).toBe(true);
+    expect(participants.presentationSessionId).toEqual(expect.any(String));
+    expect(participants.serverEpoch).toEqual(expect.any(String));
+    expect(participants.stateRevision).toEqual(expect.any(Number));
   });
 
   it('sends an operational snapshot to a new control when the previous control is gone', async () => {
@@ -756,6 +764,42 @@ describe('Live Audio WebSocket routing', () => {
       message.messageId === humanMessage.messageId
     ));
     expect(received.signalClass).toBe('PRIVATE_MESSAGE');
+  });
+
+  it('increments stateRevision for mutations but not for snapshot reads', async () => {
+    const control = await connectWs('control');
+    await waitFor(control, (message) => message.type === 'LIVE_AUDIO_SNAPSHOT');
+    control.messages = [];
+
+    control.send({
+      type: 'LIVE_AUDIO_SNAPSHOT_REQUEST',
+      lastAppliedStateRevision: 0,
+      reason: 'CONNECT',
+      createdAt: Date.now(),
+    });
+    const first = await waitFor(control, (message) => message.type === 'LIVE_AUDIO_SNAPSHOT');
+    const firstRevision = Number((first.snapshot as { stateRevision: number }).stateRevision);
+    control.messages = [];
+
+    control.send({
+      type: 'LIVE_AUDIO_SNAPSHOT_REQUEST',
+      lastAppliedStateRevision: firstRevision,
+      reason: 'RECONNECT',
+      createdAt: Date.now(),
+    });
+    const second = await waitFor(control, (message) => message.type === 'LIVE_AUDIO_SNAPSHOT');
+    expect((second.snapshot as { stateRevision: number }).stateRevision).toBe(firstRevision);
+
+    const audience = await connectWs('audience');
+    const participantId = randomUUID();
+    audience.send(makeParticipantStatus(participantId));
+    const delta = await waitFor(control, (message) => (
+      message.type === 'LIVE_AUDIO_PARTICIPANT_STATUS' && message.participantId === participantId
+    ));
+    expect(Number(delta.stateRevision)).toBeGreaterThan(firstRevision);
+    expect(delta.eventId).toEqual(expect.any(String));
+    expect(delta.presentationSessionId).toEqual(expect.any(String));
+    expect(delta.serverEpoch).toEqual(expect.any(String));
   });
 
   it('cleans ephemeral audience participant state after the rejoin grace period', async () => {
