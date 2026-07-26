@@ -38,6 +38,7 @@ import {
 } from './content-validation.mjs'
 import { writeJsonSafely } from './json-persistence.mjs'
 import { resolvePathInsideRoot } from './path-containment.mjs'
+import { deriveAudienceProjectionState } from './audience-projection-state.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const rootDir = path.resolve(__dirname, '..')
@@ -275,7 +276,7 @@ const walkAssets = (directories, matcher) => {
 
 const broadcast = (body) => {
   writeSseSet(clients, body)
-  const audienceBody = JSON.stringify(deriveAudienceState(currentState))
+  const audienceBody = JSON.stringify(deriveAudienceProjectionState(currentState))
   writeSseSet(audienceClients, audienceBody)
 }
 
@@ -584,52 +585,6 @@ const heartbeatSseClients = () => {
   writeSseSet(quizClients, 'heartbeat')
 }
 
-const isVideoAsset = (value) => /\.(mp4|webm)$/i.test(value || '')
-const isImageAsset = (value) => /\.(png|jpe?g|gif|webp|svg)$/i.test(value || '')
-
-const deriveBackground = (state, slide) => {
-  let value = ''
-  if (state.backgroundLock) {
-    value = state.lockedBackgroundValue || state.presentation?.background || ''
-  } else {
-    value = state.userSelectedBackground || slide?.background || state.presentation?.background || ''
-  }
-
-  if (isImageAsset(value) && !isVideoAsset(value)) return { kind: 'image', value }
-  return { kind: 'color', value: '#07111f' }
-}
-
-const deriveAudienceState = (state) => {
-  const presentation = state.presentation || null
-  const slideIndex = Number.isInteger(state.slideIndex) ? state.slideIndex : -1
-  const slide = presentation && slideIndex >= 0 ? presentation.slides?.[slideIndex] || null : null
-  const scripture = state.scriptureState
-    ? {
-      reference: `${state.scriptureState.bookAbbrevEs || state.scriptureState.bookEs} ${state.scriptureState.chapter}:${state.scriptureState.verse}`,
-      verseNikud: state.scriptureState.verseNikud,
-      transliteration: state.scriptureState.transliteration,
-      translation: state.scriptureState.translation,
-    }
-    : null
-  const isMediaSlide = slide?.type === 'video' || slide?.lines?.[0]?.trim() === '[IMAGE]'
-
-  return {
-    mode: state.appMode || 'slides',
-    presentationTitle: presentation?.title || '',
-    slide: slide
-      ? {
-        id: slide.id,
-        label: slide.label,
-        lines: isMediaSlide ? [] : slide.lines || [],
-        type: isMediaSlide ? 'media' : scripture ? 'scripture' : 'text',
-      }
-      : null,
-    scripture,
-    background: deriveBackground(state, slide),
-    updatedAt: Date.now(),
-  }
-}
-
 const requireAuth = (req, res, url) => {
   if (!isProtectedRequestPath(url.pathname, req.method || 'GET')) return false
   if (hasValidBasicAuth(req)) return false
@@ -671,7 +626,7 @@ const handleApi = async (req, res, url) => {
   }
 
   if (url.pathname === '/api/audience/state' && req.method === 'GET') {
-    sendJson(res, 200, deriveAudienceState(currentState))
+    sendJson(res, 200, deriveAudienceProjectionState(currentState))
     return true
   }
 
@@ -682,7 +637,7 @@ const handleApi = async (req, res, url) => {
       Connection: 'keep-alive',
     })
     registerSseClient(audienceClients, res)
-    writeSse(audienceClients, res, JSON.stringify(deriveAudienceState(currentState)))
+    writeSse(audienceClients, res, JSON.stringify(deriveAudienceProjectionState(currentState)))
     return true
   }
 

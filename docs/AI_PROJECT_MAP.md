@@ -25,6 +25,8 @@ Fast map for agents. Use real paths only; this repo does not currently have
   projection rendering; route-specific Control/Audience roots live separately.
 - `README.md`: human overview, routes, scripts, backend endpoints, verification.
 - `server/local-server.mjs`: local backend, static serving, SSE, persistence endpoints, auth gate, and WebSocket attachment.
+- `server/audience-projection-state.mjs`: allowlisted public snapshot containing
+  only the active projected slide and the functional state Audience needs.
 - `server/ws-server.mjs`: WebSocket `/ws` server for backend-owned audio timeline messages.
 - `server/livekit-server.mjs`: optional self-hosted LiveKit token and moderation endpoints with memory-only state.
 - `server/timelineManager.mjs`: isolated audio timeline state and action reducer.
