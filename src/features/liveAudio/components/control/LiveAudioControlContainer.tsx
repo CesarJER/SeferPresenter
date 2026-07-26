@@ -2,7 +2,11 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Bell } from 'lucide-react';
 import { LiveAudioControlPanel } from './LiveAudioControlPanel';
-import { PrivateControlInbox, type PrivateMessage } from './PrivateControlInbox';
+import {
+  PrivateControlInbox,
+  PrivateInboxNotificationStatus,
+  type PrivateMessage,
+} from './PrivateControlInbox';
 import type { LiveAudioParticipant } from './LiveAudioParticipantRow';
 import { PwaRestartButton } from '../../../../components/shared/PwaRestartButton';
 import type {
@@ -282,6 +286,7 @@ export default function LiveAudioControlContainer({
   const privateOverlayRef = useRef<PrivateControlOverlaySnapshot | null>(null);
   const privateOverlayRevisionRef = useRef(0);
   const overlayPublishSequenceRef = useRef<Promise<void>>(Promise.resolve());
+  const inboxButtonRef = useRef<HTMLButtonElement>(null);
 
   const { availability } = useLiveAudioAvailability();
 
@@ -1109,9 +1114,11 @@ export default function LiveAudioControlContainer({
       : 'Sincronizando alias…',
     requestedAt,
   }));
-  const hasUnread = messages.length > 0 || authorizationRequests.length > 0 || accessRequestItems.length > 0;
+  const notificationCount = messages.length + authorizationRequests.length + accessRequestItems.length;
+  const hasUnread = notificationCount > 0;
   const inboxPortal = portalTarget ? createPortal(
     <div className="flex items-center gap-2">
+      <PrivateInboxNotificationStatus count={notificationCount} />
       <button
         type="button"
         onClick={handleAccessModeChange}
@@ -1124,7 +1131,11 @@ export default function LiveAudioControlContainer({
       <PwaRestartButton controlMenu={true} connectionState={state} connectionQuality={connectionQuality} />
       <div className="relative">
         <button
+          ref={inboxButtonRef}
           onClick={() => setIsInboxOpen(!isInboxOpen)}
+          aria-expanded={isInboxOpen}
+          aria-controls="private-control-inbox"
+          aria-label={`Bandeja privada, ${notificationCount} pendientes`}
           className={`flex items-center justify-center p-2 text-xs font-semibold rounded border transition-all cursor-pointer ${hasUnread
             ? 'bg-red-600 border-red-500 text-white animate-pulse'
             : isInboxOpen
@@ -1136,7 +1147,7 @@ export default function LiveAudioControlContainer({
           <Bell size={14} />
           {hasUnread && (
             <span className="absolute -top-1 -right-1 bg-white text-red-600 text-[10px] font-bold px-1 rounded-full">
-              {messages.length + authorizationRequests.length + accessRequestItems.length}
+              {notificationCount}
             </span>
           )}
         </button>
@@ -1150,6 +1161,10 @@ export default function LiveAudioControlContainer({
         onApproveRequest={handleApproveRequest}
         onRejectRequest={onRejectRequest}
         onDismissMessage={handleDismissMessage}
+        onClose={() => {
+          setIsInboxOpen(false);
+          window.requestAnimationFrame(() => inboxButtonRef.current?.focus());
+        }}
         onAudienceAccessDecision={handleAudienceAccessDecision}
       />
     </div>,

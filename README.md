@@ -357,6 +357,8 @@ El registro de estabilización previo a la auditoría de producción está en
 `docs/audits/2026-07-24/PRE_AUDIT_STABILIZATION.md`.
 La auditoría y el plan bloqueante de sincronización multi-Control están en
 `docs/audits/2026-07-24/MULTI_CONTROL_SYNC_AUDIT.md`.
+La matriz de certificación de teclado y lectores de pantalla está en
+`docs/audits/2026-07-24/ACCESSIBILITY_CERTIFICATION_MATRIX.md`.
 
 Antes de cerrar cambios importantes:
 

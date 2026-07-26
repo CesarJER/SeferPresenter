@@ -81,6 +81,7 @@ export default function LiveAudioAudienceContainer({
   const [showRecordingConfirmation, setShowRecordingConfirmation] = useState(false);
   const [recordingConfirmationPending, setRecordingConfirmationPending] = useState(false);
   const [recordingConfirmationError, setRecordingConfirmationError] = useState<string | null>(null);
+  const [privateMessageAnnouncement, setPrivateMessageAnnouncement] = useState('');
   const pendingRecordingActionRef = useRef<'REQUEST_WORD' | 'MICROPHONE' | null>(null);
   const isStartingAudioRef = useRef(false);
   const silenceAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -814,8 +815,12 @@ export default function LiveAudioAudienceContainer({
         <AudiencePrivateControlMessage
           onClose={() => setShowPrivateMessageModal(false)}
           onSend={handleSendPrivateMessage}
+          onSent={() => setPrivateMessageAnnouncement('Mensaje privado enviado a Control')}
         />
       )}
+      <p role="status" aria-live="polite" aria-atomic="true" className="sr-only">
+        {privateMessageAnnouncement}
+      </p>
 
       {showRecordingToast && (
         <div

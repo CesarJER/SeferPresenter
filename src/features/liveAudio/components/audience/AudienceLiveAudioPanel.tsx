@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useId, useRef } from 'react';
 import { Mic, MicOff, Hand, MessageSquare, LogOut, Volume2, VolumeX, Play, RotateCcw, CheckCircle2, Loader2, Users } from 'lucide-react';
 import type { LiveAudioConnectionState, LiveAudioMicrophoneDiagnostics } from '../../../../types/liveAudio';
 import { ActiveParticipantsPanel } from './ActiveParticipantsPanel';
@@ -76,7 +76,16 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
   const [isParticipantsOpen, setIsParticipantsOpen] = useState(false);
   const hasAudioStartedRef = useRef(hasAudioStarted);
   const panelRootRef = useRef<HTMLDivElement>(null);
+  const interactionStatusRef = useRef<HTMLParagraphElement>(null);
   const isFirstMountRef = useRef(true);
+  const previousInteractionStateRef = useRef({
+    isActive,
+    isParticipationBlocked,
+    isWordGranted,
+    isPendingWord,
+  });
+  const participantsPanelId = useId();
+  const volumePanelId = useId();
 
   const setIsVisible = (val: boolean | ((prev: boolean) => boolean)) => {
     setIsVisibleState(prev => {
@@ -197,13 +206,43 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
     return () => window.removeEventListener('click', handleGlobalClick);
   }, []);
 
-  if (state !== 'connected' && state !== 'reconnecting' && state !== 'reconnected' && state !== 'reconnectFailed') {
-    return null;
-  }
-
   const handlePanelClick = (e: React.MouseEvent) => {
     e.stopPropagation();
   };
+  const interactionStatus = isParticipationBlocked
+    ? 'Participación bloqueada por Control'
+    : isWordGranted
+      ? 'Control te ha concedido la palabra'
+      : isPendingWord
+        ? 'Solicitud enviada; en espera'
+        : isActive
+          ? 'Participación activa; puedes pedir la palabra'
+          : 'Puedes entrar en el modo de participación';
+
+  useEffect(() => {
+    const previous = previousInteractionStateRef.current;
+    const changed = previous.isActive !== isActive ||
+      previous.isParticipationBlocked !== isParticipationBlocked ||
+      previous.isWordGranted !== isWordGranted ||
+      previous.isPendingWord !== isPendingWord;
+    previousInteractionStateRef.current = {
+      isActive,
+      isParticipationBlocked,
+      isWordGranted,
+      isPendingWord,
+    };
+    if (!changed) return;
+    const frame = window.requestAnimationFrame(() => {
+      if (document.activeElement === document.body) {
+        interactionStatusRef.current?.focus();
+      }
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [isActive, isParticipationBlocked, isWordGranted, isPendingWord]);
+
+  if (state !== 'connected' && state !== 'reconnecting' && state !== 'reconnected' && state !== 'reconnectFailed') {
+    return null;
+  }
 
   const wrapperClass = variant === 'inline'
     ? "flex items-center justify-center w-full pointer-events-none z-[60]"
@@ -264,27 +303,30 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
   ) : null;
   const reconnectStatus = state === 'reconnecting'
     ? (
-      <div className="flex items-center gap-2 h-full bg-orange-600/90 text-white px-3 rounded-full shadow-lg backdrop-blur-sm">
-        <Loader2 className="w-4 h-4 animate-spin" />
+      <div role="status" aria-live="polite" aria-atomic="true" className="flex items-center gap-2 h-full bg-orange-600/90 text-white px-3 rounded-full shadow-lg backdrop-blur-sm">
+        <Loader2 aria-hidden="true" className="w-4 h-4 motion-safe:animate-spin" />
         <span className="text-xs font-semibold">Reconectando</span>
       </div>
     )
     : state === 'reconnected'
       ? (
-        <div className="flex items-center gap-2 h-full bg-emerald-600/90 text-white px-3 rounded-full shadow-lg backdrop-blur-sm">
-          <CheckCircle2 className="w-4 h-4" />
+        <div role="status" aria-live="polite" aria-atomic="true" className="flex items-center gap-2 h-full bg-emerald-600/90 text-white px-3 rounded-full shadow-lg backdrop-blur-sm">
+          <CheckCircle2 aria-hidden="true" className="w-4 h-4" />
           <span className="text-xs font-semibold">Reconectado</span>
         </div>
       )
       : state === 'reconnectFailed'
         ? (
-          <button
-            onClick={onRetryAudio}
-            className="flex items-center gap-2 h-full bg-red-600/90 hover:bg-red-500/90 text-white px-3 rounded-full shadow-lg backdrop-blur-sm transition-all"
-          >
-            <RotateCcw className="w-4 h-4" />
-            <span className="text-xs font-semibold">Reintentar audio</span>
-          </button>
+          <div role="alert">
+            <button
+              onClick={onRetryAudio}
+              aria-label="La reconexión de audio falló. Reintentar audio"
+              className="flex items-center gap-2 h-full bg-red-600/90 hover:bg-red-500/90 text-white px-3 rounded-full shadow-lg backdrop-blur-sm transition-all"
+            >
+              <RotateCcw aria-hidden="true" className="w-4 h-4" />
+              <span className="text-xs font-semibold">Reintentar audio</span>
+            </button>
+          </div>
         )
         : null;
 
@@ -292,6 +334,16 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
     return (
       <div ref={panelRootRef} className={wrapperClass} onClick={handlePanelClick} id="audience-bottom-panel">
         <div className={panelClass}>
+          <p
+            ref={interactionStatusRef}
+            role={isParticipationBlocked ? 'alert' : 'status'}
+            aria-live={isParticipationBlocked ? 'assertive' : 'polite'}
+            aria-atomic="true"
+            tabIndex={-1}
+            className="sr-only"
+          >
+            {interactionStatus}
+          </p>
           {reconnectStatus}
           {!hasAudioStarted && (
             <button
@@ -307,7 +359,7 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
             disabled={isParticipationBlocked}
             className={`flex items-center gap-2 h-full border px-4 rounded-full backdrop-blur-md transition-all ${isParticipationBlocked
               ? 'bg-gray-700 border-gray-600 text-gray-400 cursor-not-allowed'
-              : 'bg-yellow-500 hover:bg-yellow-400 border-yellow-300 text-black shadow-[0_0_15px_rgba(234,179,8,0.6)] animate-pulse'
+              : 'bg-yellow-500 hover:bg-yellow-400 border-yellow-300 text-black shadow-[0_0_15px_rgba(234,179,8,0.6)] motion-safe:animate-pulse'
               }`}
             title={isParticipationBlocked ? "Participacion bloqueada por Control" : "Participar"}
           >
@@ -322,9 +374,19 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
   return (
     <div ref={panelRootRef} className={wrapperClass} onClick={handlePanelClick}>
       <div className={`${panelClass} relative bg-gray-900/70 backdrop-blur-lg border border-white/10 px-2 rounded-2xl shadow-2xl`}>
+        <p
+          ref={interactionStatusRef}
+          role={isParticipationBlocked ? 'alert' : 'status'}
+          aria-live={isParticipationBlocked ? 'assertive' : 'polite'}
+          aria-atomic="true"
+          tabIndex={-1}
+          className="sr-only"
+        >
+          {interactionStatus}
+        </p>
         {diagnostics}
         {isParticipantsOpen && (
-          <div className="absolute bottom-full mb-3 left-0 right-0" onClick={(event) => event.stopPropagation()}>
+          <div id={participantsPanelId} className="absolute bottom-full mb-3 left-0 right-0" onClick={(event) => event.stopPropagation()}>
             <ActiveParticipantsPanel
               isAuthorized={canViewActiveParticipants}
               participants={visibleParticipants}
@@ -340,6 +402,8 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
           <div className="flex h-full flex-col items-center justify-center gap-0.5">
           <button
             onClick={onToggleMicrophone}
+            aria-pressed={isMicrophoneActive}
+            aria-label={isMicrophoneActive ? 'Desactivar micrófono' : 'Activar micrófono'}
             className={`flex items-center justify-center p-3 rounded-xl transition-colors ${isMicrophoneActive
               ? 'bg-blue-600 hover:bg-blue-500 text-white shadow-[0_0_15px_rgba(37,99,235,0.5)]'
               : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
@@ -358,6 +422,8 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
         ) : (
           <button
             onClick={isPendingWord ? onCancelRequest : onRequestWord}
+            aria-pressed={isPendingWord}
+            aria-label={isPendingWord ? 'Cancelar solicitud de palabra' : 'Pedir palabra'}
             className={`flex items-center justify-center p-3 rounded-xl transition-colors ${isPendingWord
               ? 'bg-yellow-600/80 hover:bg-yellow-500/80 text-white'
               : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
@@ -370,6 +436,7 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
 
         <button
           onClick={onOpenMessage}
+          aria-label="Enviar mensaje privado a Control"
           className="flex items-center justify-center p-3 rounded-xl bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors"
           title="Mensaje Privado a Control"
         >
@@ -378,20 +445,32 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
 
         <button
           onClick={() => setIsParticipantsOpen((current) => !current)}
+          aria-expanded={isParticipantsOpen}
+          aria-controls={participantsPanelId}
+          aria-label="Mostrar participantes"
           className="flex items-center justify-center p-3 rounded-xl bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors"
           title="Participantes"
         >
           <Users className="w-6 h-6" />
         </button>
 
-        <div
-          className="relative flex items-center justify-center p-3 rounded-xl bg-gray-700 text-gray-300 hover:bg-gray-600 transition-colors cursor-pointer"
-          onClick={() => setIsVolumeOpen((current) => !current)}
-        >
-          {volume === 0 ? <VolumeX className="w-6 h-6" /> : <Volume2 className="w-6 h-6" />}
+        <div className="relative flex items-center justify-center">
+          <button
+            type="button"
+            className="flex items-center justify-center p-3 rounded-xl bg-gray-700 text-gray-300 hover:bg-gray-600 transition-colors cursor-pointer"
+            onClick={() => setIsVolumeOpen((current) => !current)}
+            aria-expanded={isVolumeOpen}
+            aria-controls={volumePanelId}
+            aria-label={`Ajustar volumen. Volumen actual ${Math.round(volume * 100)} por ciento`}
+          >
+            {volume === 0 ? <VolumeX className="w-6 h-6" /> : <Volume2 className="w-6 h-6" />}
+          </button>
 
           {isVolumeOpen && (
             <div
+              id={volumePanelId}
+              role="group"
+              aria-label="Controles de volumen"
               className="absolute bottom-full mb-3 left-1/2 -translate-x-1/2 bg-gray-800 p-3 rounded-xl shadow-xl border border-gray-700 flex flex-col gap-3 min-w-[8rem]"
               onClick={(event) => event.stopPropagation()}
             >
@@ -402,6 +481,8 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
                   min="0" max="1" step="0.05"
                   value={volume}
                   onChange={e => onVolumeChange(parseFloat(e.target.value))}
+                  aria-label="Volumen del audio en vivo"
+                  aria-valuetext={`${Math.round(volume * 100)} por ciento`}
                   className="w-24 h-2 accent-blue-500 cursor-pointer"
                   title="Volumen del audio en vivo"
                 />
@@ -415,6 +496,8 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
                     min="0" max="300" step="5"
                     value={microphoneVolume}
                     onChange={e => onMicrophoneVolumeChange(parseFloat(e.target.value))}
+                    aria-label="Volumen del micrófono"
+                    aria-valuetext={`${Math.round(microphoneVolume)} por ciento`}
                     className="w-24 h-2 accent-green-500 cursor-pointer"
                     title="Volumen del micrófono (%)"
                   />
@@ -422,8 +505,9 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
                     <label className="flex items-center gap-2 mt-2 cursor-pointer hover:bg-gray-700 p-1 rounded transition-colors w-full justify-center" title="Modo Música (Desactiva filtro de ruido)">
                       <input
                         type="checkbox"
-                        checked={isMusicMode}
-                        onChange={(e) => onMusicModeChange(e.target.checked)}
+                      checked={isMusicMode}
+                      onChange={(e) => onMusicModeChange(e.target.checked)}
+                      aria-label="Modo música del micrófono"
                         className="accent-purple-500 w-4 h-4 cursor-pointer"
                       />
                       <span className="text-sm">🎵</span>
