@@ -2,53 +2,61 @@ import { useState, useEffect, useCallback } from 'react';
 import { makeClientId } from '../utils/normalizePresentation';
 
 const ALIAS_VISIBLE_KEY = 'sefer-audience-alias-visible';
-const AUDIENCE_DEVICE_ID_KEY = 'sefer-audience-device-id';
-const AUDIENCE_NICK_KEY = 'sefer-audience-nick';
-const AUDIENCE_SESSION_ID_KEY = 'sefer-audience-session-id';
-const QUIZ_SESSION_ID_KEY = 'sefer-quiz-session-id';
 
 interface UseAudienceSessionProps {
   subscribeToWsMessage?: (handler: (type: string, payload: Record<string, unknown>) => void) => () => void;
 }
 
 export function useAudienceSession({ subscribeToWsMessage }: UseAudienceSessionProps = {}) {
-  const [deviceId, setDeviceId] = useState<string>(() => makeClientId());
+  const [deviceId, setDeviceId] = useState<string>('');
   const [nick, setNick] = useState<string>('');
   const [aliasVisible, setAliasVisible] = useState<boolean>(false);
   const [presentationSessionId, setPresentationSessionId] = useState<string | null>(null);
 
-  // Aliases and participant IDs are page-scoped. Remove values persisted by older versions.
+  // Initialize from localStorage
   useEffect(() => {
-    localStorage.removeItem(AUDIENCE_DEVICE_ID_KEY);
-    localStorage.removeItem(AUDIENCE_NICK_KEY);
-    localStorage.removeItem(ALIAS_VISIBLE_KEY);
+    let savedDeviceId = localStorage.getItem('sefer-audience-device-id');
+    if (!savedDeviceId) {
+      savedDeviceId = makeClientId();
+      localStorage.setItem('sefer-audience-device-id', savedDeviceId);
+    }
+    setDeviceId(savedDeviceId);
 
+    const savedNick = localStorage.getItem('sefer-audience-nick') || '';
+    setNick(savedNick);
+
+    const savedAliasVisible = localStorage.getItem(ALIAS_VISIBLE_KEY);
     const defaultAliasVisible =
       String(import.meta.env.VITE_SEFER_ACTIVE_ALIAS_VISIBLE_BY_DEFAULT ?? 'false').toLowerCase() === 'true';
-    setAliasVisible(defaultAliasVisible);
+    setAliasVisible(savedAliasVisible !== null ? savedAliasVisible === 'true' : defaultAliasVisible);
 
-    const savedSessionId = localStorage.getItem(AUDIENCE_SESSION_ID_KEY);
+    const savedSessionId = localStorage.getItem('sefer-audience-session-id');
     if (savedSessionId) {
       setPresentationSessionId(savedSessionId);
     }
   }, []);
 
   const clearLocalSession = useCallback(() => {
-    localStorage.removeItem(AUDIENCE_DEVICE_ID_KEY);
-    localStorage.removeItem(AUDIENCE_NICK_KEY);
-    localStorage.removeItem(AUDIENCE_SESSION_ID_KEY);
+    localStorage.removeItem('sefer-audience-nick');
+    localStorage.removeItem('sefer-audience-session-id');
     localStorage.removeItem(ALIAS_VISIBLE_KEY);
-    localStorage.removeItem(QUIZ_SESSION_ID_KEY);
+    
+    // Opcionalmente borrar respuestas de quiz guardadas (limpiar la sesión activa actual)
+    const activeQuizSession = localStorage.getItem('sefer-audience-session-id');
+    if (activeQuizSession) {
+       // El quiz maneja la data usando la key, así que lo manejaremos disparando un evento o borrando todo
+       // Por ahora solo removemos nuestro knowledge
+    }
 
-    setDeviceId(makeClientId());
     setNick('');
     setAliasVisible(false);
     setPresentationSessionId(null);
-
+    
+    // Disparar evento para que otras partes de la app reaccionen al logout
     window.dispatchEvent(new CustomEvent('sefer-audience-logout'));
   }, []);
 
-  // Track the backend presentation session and purge local identity at its boundary.
+  // Listen to WebSocket to keep track of the server's presentationSessionId
   useEffect(() => {
     if (!subscribeToWsMessage) return;
 
@@ -56,18 +64,19 @@ export function useAudienceSession({ subscribeToWsMessage }: UseAudienceSessionP
       if (type === 'WELCOME') {
         const serverSessionId = payload.presentationSessionId as string | undefined;
         if (serverSessionId) {
-          const localSessionId = localStorage.getItem(AUDIENCE_SESSION_ID_KEY);
+          const localSessionId = localStorage.getItem('sefer-audience-session-id');
           if (localSessionId && localSessionId !== serverSessionId) {
+            console.log('[AudienceSession] Server session ID differs from local, purging local session...');
             clearLocalSession();
           }
-          localStorage.setItem(AUDIENCE_SESSION_ID_KEY, serverSessionId);
+          localStorage.setItem('sefer-audience-session-id', serverSessionId);
           setPresentationSessionId(serverSessionId);
         }
       } else if (type === 'PRESENTATION_SESSION_ROTATED') {
-        const newSessionId = payload.presentationSessionId;
-        if (typeof newSessionId !== 'string' || !newSessionId) return;
+        const newSessionId = payload.presentationSessionId as string;
+        console.log('[AudienceSession] Presentation session rotated, purging local session...');
         clearLocalSession();
-        localStorage.setItem(AUDIENCE_SESSION_ID_KEY, newSessionId);
+        localStorage.setItem('sefer-audience-session-id', newSessionId);
         setPresentationSessionId(newSessionId);
       }
     };
@@ -76,12 +85,20 @@ export function useAudienceSession({ subscribeToWsMessage }: UseAudienceSessionP
   }, [subscribeToWsMessage, clearLocalSession]);
 
   const login = useCallback((newNick: string) => {
-    setNick(newNick.trim().slice(0, 50));
+    const trimmed = newNick.trim().slice(0, 50);
+    localStorage.setItem('sefer-audience-nick', trimmed);
+    setNick(trimmed);
   }, []);
 
-  const logout = clearLocalSession;
+  const logout = useCallback(() => {
+    localStorage.removeItem('sefer-audience-nick');
+    localStorage.removeItem(ALIAS_VISIBLE_KEY);
+    setNick('');
+    setAliasVisible(false);
+  }, []);
 
   const setAliasVisibleCallback = useCallback((value: boolean) => {
+    localStorage.setItem(ALIAS_VISIBLE_KEY, value ? 'true' : 'false');
     setAliasVisible(value);
   }, []);
 
@@ -93,6 +110,6 @@ export function useAudienceSession({ subscribeToWsMessage }: UseAudienceSessionP
     login,
     logout,
     setAliasVisible: setAliasVisibleCallback,
-    isLoggedIn: !!nick,
+    isLoggedIn: !!nick
   };
 }

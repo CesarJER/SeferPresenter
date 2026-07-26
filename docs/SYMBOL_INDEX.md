@@ -11,21 +11,17 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
 - `catalog.html` - Vite build entry for public catalogs; loads `src/main-catalog.tsx`.
 - `src/main.tsx` - current React root for presenter/default shell.
 - `src/main-audio-editor.tsx` - standalone audio editor root; loads and saves `/api/audio-sync` without presenter sync wiring.
-- `src/main-audience.tsx` - standalone Audience root with read-only projection,
-  quiz, PWA/media and optional Live Audio wiring.
+- `src/main-audience.tsx` - placeholder mode-specific root for audience mode in the MPA split.
 - `src/main-control.tsx` - standalone React root for control mode; orchestrates control state and sync wiring without presenter/media elements.
 - `src/main-catalog.tsx` - standalone React root for the public catalog interface.
 - `vite.config.ts` - Vite multi-entry input configuration.
-- `public/audience-sw.js` - shared PWA service worker for `/audience` and `/control`, versioned as `1.2.0`; arbitrary runtime media is network-only.
+- `public/audience-sw.js` - shared PWA service worker for `/audience` and `/control`, versioned as `1.1.0` with testable cache exclusion helpers.
 - `public/manifest.webmanifest` - Audience PWA manifest scoped to `/audience` and using `public/logo.svg`.
 - `public/control-manifest.webmanifest` - Control PWA manifest scoped to `/control` and using `public/logo.svg`.
-- `server/audience-projection-state.mjs` - allowlisted derivation of the public
-  Audience projection snapshot; exposes only the active slide plus required
-  display, media, scripture, and quiz state.
 
 ## Hooks
 
-- [useSyncState](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useSyncState.ts) - `src/hooks/useSyncState.ts`: role-aware BroadcastChannel/SSE/API sync, reduced public Audience endpoints, local persistence, remote state application, calling `onAudioTimelineState` and exposing `wsStatus`.
+- [useSyncState](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useSyncState.ts) - `src/hooks/useSyncState.ts`: BroadcastChannel, SSE/API sync, local persistence, remote state application, calling `onAudioTimelineState` and exposing `wsStatus`.
 - [useWebSocket](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useWebSocket.ts) - `src/hooks/useWebSocket.ts`: standalone WebSocket connection helper with safe JSON send, typed receive callback, status, cleanup, and exponential reconnect.
 - [useServerClock](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useServerClock.ts) - `src/hooks/useServerClock.ts`: WebSocket server clock offset and RTT estimation from `SERVER_TIME_PING` / `SERVER_TIME_PONG`.
 - [useAudioTimeline](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useAudioTimeline.ts) - `src/hooks/useAudioTimeline.ts`: local audio timeline tracking, status estimation, action dispatching over WebSocket.
@@ -43,8 +39,8 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
 - `useScriptureNavigation` - `src/hooks/useScriptureNavigation.ts`: scripture projection, slide boundary, manual Sefer mode transitions.
 - `useSeferReader` - `src/hooks/useSeferReader.ts`: book/chapter/verse reader state and data loading.
 - `useQuizTimer` - `src/hooks/useQuizTimer.ts`: quiz timer state and transitions.
-- [useAudienceSession](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useAudienceSession.ts) - `src/hooks/useAudienceSession.ts`: ephemeral audience identity/alias state, logout purge, and presentation-session rotation.
-- Quiz answer hooks - `src/hooks/useQuizAnswers.ts`: presentation-scoped audience answer sessions and controller aggregation through `useAudienceAnswers` and `useControllerAnswers`.
+- [useAudienceSession](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useAudienceSession.ts) - `src/hooks/useAudienceSession.ts`: audience local session management, device ID, nick, and presentation session ID tracking in localStorage.
+- Quiz answer hooks - `src/hooks/useQuizAnswers.ts`: audience answer sessions and controller aggregation through `useAudienceAnswers` and `useControllerAnswers`.
 - `useQuizAudio` - `src/hooks/useQuizAudio.ts`: quiz feedback sounds.
 - `scriptureNumerals` helpers - `src/hooks/scriptureNumerals.ts`: scripture numeral utilities.
 - [useLiveAudioAvailability](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/features/liveAudio/hooks/useLiveAudioAvailability.ts) - `src/features/liveAudio/hooks/useLiveAudioAvailability.ts`: optional LiveKit runtime availability check using `/api/livekit/status`, with module-level cache and no SDK import.
@@ -71,9 +67,7 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
 - `AudienceScreen` - `src/components/audience/AudienceScreen.tsx`: audience route projection/quiz selection.
 - `CatalogApp` - `src/components/catalog/CatalogApp.tsx`: public catalog root component, handles routing.
 - `CatalogIndex` - `src/components/catalog/CatalogIndex.tsx`: displays available public catalogs.
-- `CatalogViewer` - `src/components/catalog/CatalogViewer.tsx`: displays presentations for a given public catalog with safe excerpts and search highlighting.
-- `src/utils/catalogCards.ts` - pure catalog card count, title-slide,
-  plain-text excerpt, and accent-insensitive highlight helpers.
+- `CatalogViewer` - `src/components/catalog/CatalogViewer.tsx`: displays presentations for a given public catalog.
 - `ActiveParticipantsPanel` - `src/features/liveAudio/components/audience/ActiveParticipantsPanel.tsx`: audience-side alias-sharing checkbox and authorized visible participant list.
 - `PwaRestartButton` - `src/components/shared/PwaRestartButton.tsx`: confirmed reload/update action for installed audience/control PWAs.
 - Proposed Live Audio components - future optional runtime components under
@@ -103,7 +97,7 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
 
 ## Sync Modules
 
-- `RemoteCommandPayload` / `SyncStatePayload` - `src/types/sync.ts`: sync contracts, including `QUIZ_RECALCULATE_RESULTS` for publishing a partial-quiz result cut.
+- `RemoteCommandPayload` / `SyncStatePayload` - `src/types/sync.ts`: sync contracts.
 - `LiveAudioBroadcastMessage` / `PrivateControlSignalMessage` -
   `src/types/liveAudio.ts`: optional Live Audio message family kept separate from
   `SyncStatePayload` and existing remote commands.
@@ -149,14 +143,7 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
   status, token, refresh-token, and moderation endpoints with memory-only state
   and no top-level server SDK dependency. Tokens include ephemeral
   `participantId` metadata and no alias; refresh keeps the same participant
-  identity while reflecting current speaker permission and muted speaker state;
-  refresh possession is proved by a rotating, hashed credential.
-- `server/content-validation.mjs`: bounded deep validation for persisted
-  presentation and audio-sync payloads.
-- `server/json-persistence.mjs`: fsynced temp/backup persistence with atomic
-  rename and an explicit single-file bind-mount fallback.
-- `server/path-containment.mjs`: static-file containment using `path.relative`.
-- `server/quiz-message-validation.mjs`: bounded public quiz message shapes.
+  identity while reflecting current speaker permission and muted speaker state.
 - `server/timelineManager.mjs`: backend-owned audio timeline state and action reducer.
 - `server/audio-timeline-sync.mjs`: pure helpers for estimating backend audio
   timeline position and mapping audio cue positions to slide/verse selections.
@@ -205,7 +192,6 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
 - `getMetadata` / `loadBookData` - `src/utils/metadataCache.ts`: scripture metadata/book loading and caching.
 - `parseVerses` - `src/utils/scriptureParser.ts`: TSV scripture parsing.
 - `getScriptureChapterVerses` / `materializeScriptureSlides` - `src/utils/scriptureLookup.ts`: scripture lookup and slide materialization.
-- `validateScriptureSpec` / `auditQuickScriptureReferences` / `auditSlideScriptureReferences` - `src/utils/scriptureLookup.ts`: checks quiz and Sefer/Tanaj references against generated metadata before editor conversion or persistence.
 - `scripts/generate-verses.js`: generated `public/books/*.tsv` and `public/metadata.json`.
 - [navigationUtils](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/utils/navigationUtils.ts) - `src/utils/navigationUtils.ts`: sequential linear step generation for presentations.
 

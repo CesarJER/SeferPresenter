@@ -24,18 +24,24 @@ export interface AutoduckState {
 }
 
 export interface AudiencePublicState {
-  presentation: Presentation | null;
-  slideIndex: number;
-  stepIndex: number;
-  backgroundLock: boolean;
-  lockedBackgroundValue: string | null;
-  userSelectedBackground: string | null;
-  videoState: VideoState | null;
-  appMode: AppMode;
-  scriptureState: ScriptureNavState | null;
-  audioState: AudioState;
-  quizState: QuizSyncState | null;
-  autoduckState: AutoduckState;
+  mode: AppMode;
+  presentationTitle: string;
+  slide: {
+    id: string;
+    label: string;
+    lines: string[];
+    type: 'media' | 'scripture' | 'text';
+  } | null;
+  scripture: {
+    reference: string;
+    verseNikud: string;
+    transliteration: string;
+    translation: string;
+  } | null;
+  background: {
+    kind: 'image' | 'color';
+    value: string;
+  };
   updatedAt: number;
 }
 
@@ -68,8 +74,6 @@ export type RemoteCommandPayload =
   | { command: 'QUIZ_RESET_TIMER' }
   | { command: 'QUIZ_ADJUST_TIMER'; seconds: number }
   | { command: 'QUIZ_COMPLETE' }
-  | { command: 'QUIZ_RECALCULATE_RESULTS'; slideIds: string[] }
-  | { command: 'QUIZ_CLEAR_QUESTION_RESULTS'; slideId: string }
   | { command: 'QUIZ_SELECT_SUBSLIDE'; index: number }
   | { command: 'QUIZ_DEMO_SELECT'; optionId: string | null }
   | { command: 'QUIZ_PLAY_APPLAUSE' }

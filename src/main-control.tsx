@@ -10,8 +10,7 @@ import { useLiveAudioAvailability } from './features/liveAudio/hooks/useLiveAudi
 
 import type { AudioState, AudioSyncMap, AudioTimelineState } from './types/audio';
 import { DEFAULT_AUDIO_STATE } from './types/audio';
-import type { AppMode, Presentation, ScriptureNavState, Slide, VideoState } from './types/presentation';
-import type { SeferReaderState } from './hooks/useSeferReader';
+import type { AppMode, Presentation, ScriptureNavState, VideoState } from './types/presentation';
 import type { QuizSyncState } from './types/quiz';
 import type { AutoduckState } from './types/sync';
 
@@ -352,42 +351,6 @@ function ControlApp() {
     });
   }, [presentations, emitCommand]);
 
-  const handleAddScriptureSlide = useCallback((state: SeferReaderState, kind: 'sefer' | 'tanaj' = 'sefer') => {
-    const presentation = currentPresentationRef.current;
-    if (!presentation) {
-      alert('Selecciona una presentación antes de añadir una diapositiva de texto sagrado.');
-      return;
-    }
-
-    const verseStart = state.verseStart || state.verse;
-    const verseEnd = state.verseEnd || verseStart;
-    const rangeLabel = verseEnd !== verseStart ? `${verseStart}-${verseEnd}` : verseStart;
-    const randomSuffix = Math.random().toString(36).substring(2, 9);
-    const newSlide: Slide = {
-      id: `slide-${kind}-${state.bookAbbrevEs || state.bookEs}-${state.chapter}-${rangeLabel}-${Date.now()}-${randomSuffix}`,
-      label: `${state.bookAbbrevEs || state.bookEs} ${state.chapter}:${rangeLabel}`,
-      lines: [state.verseNikud, state.transliteration, state.translation],
-      type: kind,
-      scriptureBook: state.bookAbbrevEs || state.bookEs,
-      scriptureChapter: state.chapter,
-      scriptureVerseStart: verseStart,
-      scriptureVerseEnd: verseEnd,
-    };
-    const insertAt = currentSlideIndexRef.current >= 0
-      ? currentSlideIndexRef.current + 1
-      : presentation.slides.length;
-    const updatedPresentation: Presentation = {
-      ...presentation,
-      mode: 'trilingual',
-      slides: [
-        ...presentation.slides.slice(0, insertAt),
-        newSlide,
-        ...presentation.slides.slice(insertAt),
-      ],
-    };
-    handleSave(updatedPresentation);
-  }, [handleSave]);
-
   return (
     <div id="section-app-control-mode" className="w-full h-dvh bg-gray-900 overflow-hidden relative">
       <MenuPopup
@@ -471,14 +434,12 @@ function ControlApp() {
           emitCommand({ command: 'TOGGLE_APP_MODE', mode });
         }}
         onProjectScripture={(state) => emitCommand({ command: 'SCRIPTURE_PROJECT', state, navCommand: 'navigate' })}
-        onAddScriptureSlide={handleAddScriptureSlide}
+        onAddScriptureSlide={(state, kind) => emitCommand({ command: 'SCRIPTURE_ADD_SLIDE', state, kind })}
         onBoundaryReached={(dir) => emitCommand({ command: 'SCRIPTURE_BOUNDARY', direction: dir })}
         quizSubslides={quizSubslides}
         quizCurrentSubslideIndex={quizState?.currentSubslideIndex ?? 0}
         quizTimerState={quizState?.timerState ?? { status: 'idle', timerStartedAt: null, timerDurationMs: 30000, pausedRemainingMs: null }}
         quizPresenterDemoSelection={activeSlide && quizState?.presenterDemoSelection ? quizState.presenterDemoSelection[activeSlide.id] : null}
-        quizMaxBaseCentipunts={quizState?.maxBaseCentipunts}
-        quizResultSlideIds={quizState?.resultQuizSlideIds}
         onQuizSubslideSelect={(idx) => {
           const foundIdx = steps.findIndex(
             (s) => s.slideIndex === currentSlideIndex && s.type === 'quiz' && s.subslideIndex === idx

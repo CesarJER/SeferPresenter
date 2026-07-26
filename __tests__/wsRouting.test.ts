@@ -220,28 +220,6 @@ describe('Live Audio WebSocket routing', () => {
     expect(request).not.toHaveProperty('participantId');
   });
 
-  it('rejects clear alias data in operational snapshot patches', async () => {
-    const control = await connectWs('control');
-
-    control.send({
-      type: 'LIVE_AUDIO_SNAPSHOT_PATCH',
-      snapshot: {
-        participants: [{
-          participantId: randomUUID(),
-          role: 'audience',
-          alias: 'Alias en claro',
-        }],
-      },
-      createdAt: Date.now(),
-    });
-
-    const error = await waitFor(
-      control,
-      (message) => message.type === 'ERROR' && message.code === 'CLEAR_ALIAS_FORBIDDEN',
-    );
-    expect(String(error.message)).toContain('end-to-end encrypted');
-  });
-
   it('replays the current control public key to audience clients that connect later', async () => {
     const control = await connectWs('control');
     const welcome = await waitFor(control, (message) => message.type === 'WELCOME');

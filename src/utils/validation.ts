@@ -30,17 +30,8 @@ const isBooleanOrUndefined = (value: unknown): value is boolean | undefined =>
 const isStringRecordOrUndefined = (value: unknown): value is Record<string, string> | undefined =>
   value === undefined || (isRecord(value) && Object.values(value).every((entry) => typeof entry === 'string'));
 
-const isStringMatrixOrUndefined = (value: unknown): value is string[][] | undefined =>
-  value === undefined || (
-    Array.isArray(value) &&
-    value.every((row) => Array.isArray(row) && row.every((entry) => typeof entry === 'string'))
-  );
-
 const slideTypes = new Set(['text', 'media', 'tanaj', 'sefer', 'quiz']);
-const mediaFits = new Set(['cover', 'contain', 'fill']);
 const quizOptionIds = new Set(['A', 'B', 'C', 'D']);
-const quizTimerStatuses = new Set(['idle', 'running', 'paused', 'expired', 'completed']);
-const quizFeedbackSounds = new Set(['applause', 'mal', 'bip']);
 const presentationModes = new Set(['standard', 'trilingual']);
 const appModes = new Set(['slides', 'scripture', 'seferManual']);
 const origins = new Set(['control', 'presenter']);
@@ -216,8 +207,7 @@ const validateOperationalParticipantSnapshot = (
   if (typeof value.role !== 'string' || !liveAudioParticipantRoles.has(value.role as LiveAudioParticipantRole)) {
     errors.push(`${path}.role no es valido.`);
   }
-  if (value.alias !== undefined) errors.push(`${path}.alias no puede formar parte del snapshot del servidor.`);
-  if (value.activeListPublicKey !== undefined) errors.push(`${path}.activeListPublicKey no puede formar parte del snapshot del servidor.`);
+  if (value.alias !== undefined && typeof value.alias !== 'string') errors.push(`${path}.alias debe ser texto.`);
   if (typeof value.operationalRole !== 'string' || !liveAudioOperationalRoles.has(value.operationalRole)) {
     errors.push(`${path}.operationalRole no es valido.`);
   }
@@ -379,29 +369,6 @@ const validateQuizData = (value: unknown, path: string): ValidationResult<unknow
   if (!isBooleanOrUndefined(value.isResultsSlide)) errors.push(`${path}.isResultsSlide debe ser booleano.`);
   if (isResultsSlide && !Array.isArray(value.resultProfiles)) {
     errors.push(`${path}.resultProfiles debe ser un array en una diapositiva de resultados.`);
-  } else if (value.resultProfiles !== undefined) {
-    if (!Array.isArray(value.resultProfiles)) {
-      errors.push(`${path}.resultProfiles debe ser un array.`);
-    } else {
-      const ranks = new Set<number>();
-      value.resultProfiles.forEach((profile: unknown, index: number) => {
-        const profilePath = `${path}.resultProfiles[${index}]`;
-        if (!isRecord(profile)) {
-          errors.push(`${profilePath} debe ser un objeto.`);
-          return;
-        }
-        if (!Number.isInteger(profile.rank) || (profile.rank as number) < 1) {
-          errors.push(`${profilePath}.rank debe ser entero >= 1.`);
-        } else if (ranks.has(profile.rank as number)) {
-          errors.push(`${profilePath}.rank no puede estar duplicado.`);
-        } else {
-          ranks.add(profile.rank as number);
-        }
-        for (const field of ['title', 'description', 'giftText'] as const) {
-          if (typeof profile[field] !== 'string') errors.push(`${profilePath}.${field} debe ser texto.`);
-        }
-      });
-    }
   }
 
   return errors.length > 0 ? fail(errors) : ok(value);
@@ -423,9 +390,7 @@ const validateSlideValue = (value: unknown, path: string): ValidationResult<Slid
     errors.push(`${path}.type no es valido.`);
   }
   if (!isStringOrUndefined(value.mediaSrc)) errors.push(`${path}.mediaSrc debe ser texto.`);
-  if (value.mediaFit !== undefined && (typeof value.mediaFit !== 'string' || !mediaFits.has(value.mediaFit))) {
-    errors.push(`${path}.mediaFit no es valido.`);
-  }
+  if (!isStringOrUndefined(value.mediaFit)) errors.push(`${path}.mediaFit debe ser texto.`);
   if (value.mediaVolume !== undefined && !isFiniteNumber(value.mediaVolume)) errors.push(`${path}.mediaVolume debe ser numero.`);
   if (value.mediaSpeed !== undefined && !isFiniteNumber(value.mediaSpeed)) errors.push(`${path}.mediaSpeed debe ser numero.`);
   if (!isBooleanOrUndefined(value.mediaLoop)) errors.push(`${path}.mediaLoop debe ser booleano.`);
@@ -437,9 +402,6 @@ const validateSlideValue = (value: unknown, path: string): ValidationResult<Slid
   if (!isStringOrUndefined(value.scriptureChapter)) errors.push(`${path}.scriptureChapter debe ser texto.`);
   if (!isStringOrUndefined(value.scriptureVerseStart)) errors.push(`${path}.scriptureVerseStart debe ser texto.`);
   if (!isStringOrUndefined(value.scriptureVerseEnd)) errors.push(`${path}.scriptureVerseEnd debe ser texto.`);
-  if (!isStringMatrixOrUndefined(value.scriptureVerses)) {
-    errors.push(`${path}.scriptureVerses debe ser un array de arrays de textos.`);
-  }
   if (!isStringRecordOrUndefined(value.scriptureVerseBackgrounds)) {
     errors.push(`${path}.scriptureVerseBackgrounds debe ser un objeto texto/texto.`);
   }
@@ -723,17 +685,17 @@ const validateAudioTimelineState = (value: unknown, path: string): ValidationRes
 const validateAudiencePublicState = (value: unknown, path: string): ValidationResult<unknown> => {
   if (!isRecord(value)) return fail([`${path} debe ser un objeto.`]);
 
-  const remote = validateRemoteStatePayload(value);
-  const errors = [...remote.errors];
-  if (value.presentation === undefined) errors.push(`${path}.presentation es requerido.`);
-  if (value.slideIndex === undefined) errors.push(`${path}.slideIndex es requerido.`);
-  if (value.backgroundLock === undefined) errors.push(`${path}.backgroundLock es requerido.`);
-  if (value.lockedBackgroundValue === undefined) errors.push(`${path}.lockedBackgroundValue es requerido.`);
-  if (value.userSelectedBackground === undefined) errors.push(`${path}.userSelectedBackground es requerido.`);
-  if (value.videoState === undefined) errors.push(`${path}.videoState es requerido.`);
-  if (value.appMode === undefined) errors.push(`${path}.appMode es requerido.`);
-  if (value.scriptureState === undefined) errors.push(`${path}.scriptureState es requerido.`);
-  if (value.audioState === undefined) errors.push(`${path}.audioState es requerido.`);
+  const errors: string[] = [];
+  if (typeof value.mode !== 'string' || !appModes.has(value.mode)) errors.push(`${path}.mode no es valido.`);
+  if (typeof value.presentationTitle !== 'string') errors.push(`${path}.presentationTitle debe ser texto.`);
+  if (value.slide !== null && !isRecord(value.slide)) errors.push(`${path}.slide debe ser objeto o null.`);
+  if (value.scripture !== null && !isRecord(value.scripture)) errors.push(`${path}.scripture debe ser objeto o null.`);
+  if (!isRecord(value.background)) {
+    errors.push(`${path}.background debe ser un objeto.`);
+  } else {
+    if (value.background.kind !== 'image' && value.background.kind !== 'color') errors.push(`${path}.background.kind no es valido.`);
+    if (typeof value.background.value !== 'string') errors.push(`${path}.background.value debe ser texto.`);
+  }
   if (!isFiniteNumber(value.updatedAt)) errors.push(`${path}.updatedAt debe ser numero.`);
 
   return errors.length > 0 ? fail(errors) : ok(value);
@@ -895,17 +857,7 @@ const validateLiveAudioBroadcastMessage = (value: Record<string, unknown>): Vali
       validateOptionalCreatedAt(value, value.type, errors);
       break;
     case 'LIVE_AUDIO_SNAPSHOT_PATCH':
-      if (!isRecord(value.snapshot)) {
-        errors.push('snapshot debe ser un objeto.');
-      } else if (
-        Array.isArray(value.snapshot.participants) &&
-        value.snapshot.participants.some((participant) => (
-          isRecord(participant) &&
-          (participant.alias !== undefined || participant.activeListPublicKey !== undefined)
-        ))
-      ) {
-        errors.push('snapshot no puede contener alias ni claves efimeras de Audience.');
-      }
+      if (!isRecord(value.snapshot)) errors.push('snapshot debe ser un objeto.');
       validateOptionalCreatedAt(value, value.type, errors);
       break;
     default:
@@ -959,73 +911,6 @@ const validateAutoduckState = (value: unknown, path: string): ValidationResult<A
   }
 
   return errors.length > 0 ? fail(errors) : ok(value as unknown as AutoduckState);
-};
-
-const validateQuizSyncState = (value: unknown, path: string): ValidationResult<QuizSyncState> => {
-  if (!isRecord(value)) return fail([`${path} debe ser un objeto.`]);
-
-  const errors: string[] = [];
-  if (value.presentationId !== undefined && typeof value.presentationId !== 'string') {
-    errors.push(`${path}.presentationId debe ser texto.`);
-  }
-  if (!Number.isInteger(value.currentSubslideIndex) || (value.currentSubslideIndex as number) < 0) {
-    errors.push(`${path}.currentSubslideIndex debe ser entero >= 0.`);
-  }
-
-  if (!isRecord(value.timerState)) {
-    errors.push(`${path}.timerState debe ser un objeto.`);
-  } else {
-    const timer = value.timerState;
-    if (typeof timer.status !== 'string' || !quizTimerStatuses.has(timer.status)) {
-      errors.push(`${path}.timerState.status no es valido.`);
-    }
-    if (timer.timerStartedAt !== null && (!isFiniteNumber(timer.timerStartedAt) || timer.timerStartedAt < 0)) {
-      errors.push(`${path}.timerState.timerStartedAt debe ser numero >= 0 o null.`);
-    }
-    if (!isFiniteNumber(timer.timerDurationMs) || timer.timerDurationMs < 0) {
-      errors.push(`${path}.timerState.timerDurationMs debe ser numero >= 0.`);
-    }
-    if (timer.pausedRemainingMs !== null && (!isFiniteNumber(timer.pausedRemainingMs) || timer.pausedRemainingMs < 0)) {
-      errors.push(`${path}.timerState.pausedRemainingMs debe ser numero >= 0 o null.`);
-    }
-  }
-
-  if (!isRecord(value.presenterDemoSelection)) {
-    errors.push(`${path}.presenterDemoSelection debe ser un objeto.`);
-  } else {
-    Object.entries(value.presenterDemoSelection).forEach(([slideId, optionId]) => {
-      if (slideId.trim() === '' || (optionId !== null && (typeof optionId !== 'string' || !quizOptionIds.has(optionId)))) {
-        errors.push(`${path}.presenterDemoSelection contiene una seleccion invalida.`);
-      }
-    });
-  }
-
-  if (value.maxBaseCentipunts !== undefined && (!isFiniteNumber(value.maxBaseCentipunts) || value.maxBaseCentipunts < 0)) {
-    errors.push(`${path}.maxBaseCentipunts debe ser numero >= 0.`);
-  }
-  if (value.scoreRequestId !== undefined && (!Number.isInteger(value.scoreRequestId) || (value.scoreRequestId as number) < 0)) {
-    errors.push(`${path}.scoreRequestId debe ser entero >= 0.`);
-  }
-  for (const field of ['completedQuizSlideIds', 'resultQuizSlideIds'] as const) {
-    const ids = value[field];
-    if (ids !== undefined && (!Array.isArray(ids) || ids.some((id) => typeof id !== 'string'))) {
-      errors.push(`${path}.${field} debe ser un array de textos.`);
-    }
-  }
-  if (value.feedbackSound !== undefined && value.feedbackSound !== null) {
-    if (!isRecord(value.feedbackSound)) {
-      errors.push(`${path}.feedbackSound debe ser un objeto o null.`);
-    } else {
-      if (typeof value.feedbackSound.type !== 'string' || !quizFeedbackSounds.has(value.feedbackSound.type)) {
-        errors.push(`${path}.feedbackSound.type no es valido.`);
-      }
-      if (!isFiniteNumber(value.feedbackSound.timestamp) || value.feedbackSound.timestamp < 0) {
-        errors.push(`${path}.feedbackSound.timestamp debe ser numero >= 0.`);
-      }
-    }
-  }
-
-  return errors.length > 0 ? fail(errors) : ok(value as unknown as QuizSyncState);
 };
 
 export const validateRemoteStatePayload = (value: unknown): ValidationResult<Partial<SyncStatePayload>> => {
@@ -1087,12 +972,10 @@ export const validateRemoteStatePayload = (value: unknown): ValidationResult<Par
     else errors.push(...result.errors);
   }
   if (value.quizState !== undefined) {
-    if (value.quizState === null) {
-      next.quizState = null;
+    if (value.quizState === null || isRecord(value.quizState)) {
+      next.quizState = value.quizState as QuizSyncState | null;
     } else {
-      const result = validateQuizSyncState(value.quizState, 'remote.quizState');
-      if (result.ok) next.quizState = result.value;
-      else errors.push(...result.errors);
+      errors.push('remote.quizState debe ser objeto o null.');
     }
   }
   if (value.clientId !== undefined) {
@@ -1277,14 +1160,6 @@ export const validateSyncMessage = (value: unknown): ValidationResult<BroadcastM
           break;
         case 'QUIZ_ADJUST_TIMER':
           if (!isFiniteNumber(payload.seconds) || (payload.seconds as number) < 1) baseErrors.push('seconds debe ser numero >= 1');
-          break;
-        case 'QUIZ_RECALCULATE_RESULTS':
-          if (!Array.isArray(payload.slideIds) || payload.slideIds.some((id) => typeof id !== 'string')) {
-            baseErrors.push('slideIds debe ser un array de textos');
-          }
-          break;
-        case 'QUIZ_CLEAR_QUESTION_RESULTS':
-          if (typeof payload.slideId !== 'string') baseErrors.push('slideId debe ser texto');
           break;
         case 'QUIZ_DEMO_SELECT':
           if (payload.optionId !== null && typeof payload.optionId !== 'string') baseErrors.push('optionId debe ser texto o null');

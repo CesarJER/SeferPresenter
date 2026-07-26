@@ -1,7 +1,6 @@
 import React from 'react';
 
-const configuredOrgName = import.meta.env.VITE_ORGANIZATION_NAME?.trim() || '';
-const orgName = configuredOrgName || 'Responsable no configurado';
+const orgName = import.meta.env.VITE_ORGANIZATION_NAME || "la organización responsable";
 const orgLegalId = import.meta.env.VITE_ORGANIZATION_LEGAL_ID || "";
 const orgEmail = import.meta.env.VITE_ORGANIZATION_EMAIL || "";
 const orgWebsite = import.meta.env.VITE_ORGANIZATION_WEBSITE || "";
@@ -23,11 +22,6 @@ const DataProtectionPage: React.FC = () => {
             {orgEmail && <li><strong>Correo electrónico:</strong> <a href={`mailto:${orgEmail}`} className="text-blue-600 hover:underline">{orgEmail}</a></li>}
             {orgWebsite && <li><strong>Sitio web:</strong> <a href={orgWebsite} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">{orgWebsite}</a></li>}
           </ul>
-          {!configuredOrgName && (
-            <p role="alert" className="rounded border border-red-300 bg-red-50 p-3 text-sm font-semibold text-red-800">
-              Este despliegue debe configurar la identidad y el canal de contacto de la entidad responsable antes de publicarse.
-            </p>
-          )}
           <p className="text-gray-700">
             SeferPresenter se utiliza para reuniones, estudios, actividades formativas, retransmisiones y eventos organizados por {orgName}.
           </p>
@@ -42,7 +36,7 @@ const DataProtectionPage: React.FC = () => {
             <li>No requiere correo electrónico para acceder como oyente.</li>
             <li>No genera perfiles permanentes de participantes.</li>
             <li>No incorpora vídeo de los asistentes (solo voz si se activa el micrófono).</li>
-            <li>Usa un identificador aleatorio y efímero para separar respuestas de cuestionario; no requiere identidad real.</li>
+            <li>No vincula respuestas de cuestionarios o actividades con la identidad ni perfil.</li>
             <li>No conserva historiales personales de participación.</li>
             <li>No guarda los alias elegidos entre diferentes sesiones.</li>
             <li>No almacena chats ni mensajes privados tras la sesión.</li>
@@ -65,7 +59,7 @@ const DataProtectionPage: React.FC = () => {
             Se considera audiencia activa a la persona que decide realizar una acción participativa, como pedir la palabra, activar el micrófono o enviar un mensaje privado a Control.
           </p>
           <p className="text-gray-700">
-            El alias temporal solo se solicita en estos casos, es elegido libremente por usted y puede no corresponder a su identidad real. Este alias es visible para los controles autorizados de la sesión y, únicamente si usted lo autoriza, para otros participantes activos. Desaparece al finalizar la sesión y su finalidad es gestionar solicitudes y acciones de moderación.
+            El alias temporal solo se solicita en estos casos, es elegido libremente por usted y puede no corresponder a su identidad real. Este alias <strong>solo es visible para los controles autorizados de la sesión</strong> y desaparece al finalizar la misma. Su única finalidad es gestionar solicitudes y acciones de moderación.
           </p>
         </section>
 
@@ -75,12 +69,12 @@ const DataProtectionPage: React.FC = () => {
           <ul className="list-disc pl-6 space-y-1 text-gray-700">
             <li>Un identificador técnico aleatorio de conexión.</li>
             <li>Estado de permisos y conexión.</li>
-            <li>El alias temporal enviado al equipo de moderación.</li>
+            <li>El alias temporal cifrado.</li>
             <li>Mensajes privados cifrados dirigidos a Control.</li>
             <li>Audio transmitido voluntariamente.</li>
           </ul>
           <p className="text-gray-700">
-            La aplicación no persiste en disco historiales nominales ni rankings. Durante la sesión, el servidor y Control procesan respuestas individuales vinculadas únicamente a un identificador aleatorio efímero para operar el cuestionario; se eliminan al cerrar o rotar la sesión. Todo registro técnico inevitable de infraestructura se minimizará.
+            La aplicación <strong>no guarda</strong> logs de IP de los usuarios, historiales nominales, ranking, quién habló ni cuándo, ni las respuestas individuales a cuestionarios. Todo registro técnico inevitable de infraestructura se minimizará.
           </p>
         </section>
 
@@ -94,7 +88,7 @@ const DataProtectionPage: React.FC = () => {
         <section className="space-y-4">
           <h2 className="text-2xl font-semibold text-gray-800">7. Cuestionarios interactivos</h2>
           <p className="text-gray-700">
-            Los cuestionarios calculan la puntuación localmente. El servidor mantiene temporalmente respuestas y puntuaciones asociadas a un identificador aleatorio de la sesión para sincronizar Control, sin nombre real ni ranking nominal persistente. Logout o rotación de sesión purgan el estado local y el servidor no lo escribe en disco.
+            Los cuestionarios calculan la puntuación localmente en su dispositivo. El servidor no guarda las respuestas individuales ni crea rankings nominales.
           </p>
         </section>
 
@@ -108,14 +102,14 @@ const DataProtectionPage: React.FC = () => {
         <section className="space-y-4">
           <h2 className="text-2xl font-semibold text-gray-800">9. Infraestructura y Seguridad</h2>
           <p className="text-gray-700">
-            El sistema de voz opcional (LiveKit) es operado por nosotros o nuestros proveedores autorizados. Para proteger las comunicaciones se emplea cifrado en tránsito (HTTPS/WSS) y tokens de acceso efímeros. El alias puede ser procesado por el servidor y por los controles autorizados durante la sesión.
+            El sistema de voz opcional (LiveKit) es operado por nosotros o nuestros proveedores autorizados. Para la seguridad se emplea cifrado en tránsito (HTTPS/WSS) y cifrado de extremo a extremo para las señales de moderación y alias, con tokens efímeros.
           </p>
         </section>
 
         <section className="space-y-4">
           <h2 className="text-2xl font-semibold text-gray-800">10. Conservación y Derechos</h2>
           <p className="text-gray-700">
-            Los datos efímeros como alias, mensajes e identidad de cuestionario se eliminan al finalizar o rotar la sesión. Las grabaciones podrán conservarse como parte del archivo histórico, educativo o cultural.
+            Los datos efímeros como el alias o mensajes se eliminan al finalizar la sesión. Las grabaciones podrán conservarse como parte del archivo histórico, educativo o cultural.
           </p>
           <p className="text-gray-700">
             Puede ejercer los derechos reconocidos por la normativa aplicable (acceso, rectificación, supresión, limitación y oposición) contactando a:{' '}

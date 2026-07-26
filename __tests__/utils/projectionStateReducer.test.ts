@@ -46,22 +46,6 @@ const presentation = {
       type: 'quiz',
       quizData,
     },
-    {
-      id: 'results',
-      label: 'Resultados',
-      lines: ['Resultados'],
-      type: 'quiz',
-      quizData: {
-        ...quizData,
-        question: '',
-        options: [],
-        isResultsSlide: true,
-        resultProfiles: [
-          { rank: 1, title: 'Alto', description: '', giftText: '' },
-          { rank: 2, title: 'Bajo', description: '', giftText: '' },
-        ],
-      },
-    },
   ],
 };
 
@@ -110,8 +94,7 @@ describe('projectionStateReducer', () => {
     expect(syncState.slideIndex).toBe(1);
     expect(syncState.appMode).toBe('scripture');
     expect(syncState.scriptureState?.bookAbbrevEs).toBe('Gn');
-    const validation = validateSyncMessage(syncState);
-    expect(validation.ok, validation.errors.join('\n')).toBe(true);
+    expect(validateSyncMessage(syncState).ok).toBe(true);
   });
 
   it('can enter manual Sefer mode without Presenter state reduction', () => {
@@ -163,62 +146,6 @@ describe('projectionStateReducer', () => {
     expect(running.state.quizState?.timerState.timerStartedAt).toBe(2000);
   });
 
-  it('recalculates result ranges from only completed quiz slides', () => {
-    const selected = reduceProjectionCommand(baseState, {
-      command: 'SELECT_PRESENTATION_AND_SLIDE',
-      presentation,
-      slideIndex: 2,
-      direction: 'forward',
-    }, { now: 1000 });
-    expect(selected.ok).toBe(true);
-    if (!selected.ok) return;
-
-    const completed = reduceProjectionCommand(selected.state, {
-      command: 'QUIZ_COMPLETE',
-    }, { now: 1500 });
-    expect(completed.ok).toBe(true);
-    if (!completed.ok) return;
-    expect(completed.state.quizState?.completedQuizSlideIds).toEqual(['q1']);
-
-    const results = reduceProjectionCommand(completed.state, {
-      command: 'SELECT_PRESENTATION_AND_SLIDE',
-      presentation,
-      slideIndex: 3,
-      direction: 'forward',
-    }, { now: 2000 });
-    expect(results.ok).toBe(true);
-    if (!results.ok) return;
-
-    const recalculated = reduceProjectionCommand(results.state, {
-      command: 'QUIZ_RECALCULATE_RESULTS',
-      slideIds: ['q1', 'results', 'missing'],
-    }, { now: 2500 });
-    expect(recalculated.ok).toBe(true);
-    if (!recalculated.ok) return;
-    expect(recalculated.state.quizState?.resultQuizSlideIds).toEqual(['q1']);
-    expect(recalculated.state.quizState?.maxBaseCentipunts).toBe(50);
-    expect(recalculated.state.quizState?.scoreRequestId).toBe(1);
-
-    const requestedAgain = reduceProjectionCommand(recalculated.state, {
-      command: 'QUIZ_RECALCULATE_RESULTS',
-      slideIds: ['q1'],
-    }, { now: 2600 });
-    expect(requestedAgain.ok).toBe(true);
-    if (!requestedAgain.ok) return;
-    expect(requestedAgain.state.quizState?.scoreRequestId).toBe(2);
-
-    const cleared = reduceProjectionCommand(requestedAgain.state, {
-      command: 'QUIZ_CLEAR_QUESTION_RESULTS',
-      slideId: 'q1',
-    }, { now: 2700 });
-    expect(cleared.ok).toBe(true);
-    if (!cleared.ok) return;
-    expect(cleared.state.quizState?.completedQuizSlideIds).toEqual([]);
-    expect(cleared.state.quizState?.resultQuizSlideIds).toEqual([]);
-    expect(cleared.state.quizState?.maxBaseCentipunts).toBe(0);
-    expect(cleared.state.quizState?.scoreRequestId).toBe(3);
-  });
-
   it('rejects malformed commands before producing state', () => {
     const result = reduceProjectionCommand(baseState, {
       command: 'SELECT_STEP',
@@ -237,20 +164,6 @@ describe('projectionStateReducer', () => {
     });
 
     expect(messageValidation.ok).toBe(false);
-
-    const invalidRecalculation = validateSyncMessage({
-      type: 'REMOTE_COMMAND',
-      clientId: 'control-1',
-      payload: { command: 'QUIZ_RECALCULATE_RESULTS', slideIds: ['q1', 2] },
-    });
-    expect(invalidRecalculation.ok).toBe(false);
-
-    const invalidClear = validateSyncMessage({
-      type: 'REMOTE_COMMAND',
-      clientId: 'control-1',
-      payload: { command: 'QUIZ_CLEAR_QUESTION_RESULTS', slideId: 2 },
-    });
-    expect(invalidClear.ok).toBe(false);
   });
 
   it('reduces autoduck commands into validated canonical state', () => {
@@ -270,8 +183,7 @@ describe('projectionStateReducer', () => {
       messageId: 'm-autoduck',
     });
 
-    const validation = validateSyncMessage(syncState);
-    expect(validation.ok, validation.errors.join('\n')).toBe(true);
+    expect(validateSyncMessage(syncState).ok).toBe(true);
   });
 
   it('rejects invalid autoduck factors before state reduction', () => {

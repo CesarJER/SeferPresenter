@@ -12,7 +12,6 @@ export function useAudioTimeline(
   timeline: AudioTimelineState | null,
   serverNow: () => number,
   sendMessage: (type: string, payload?: Record<string, unknown>) => boolean,
-  trackEstimatedPosition = true,
 ): UseAudioTimelineResult {
   const [estimatedPositionSec, setEstimatedPositionSec] = useState(timeline?.basePositionSec ?? 0);
   const sendMessageRef = useRef(sendMessage);
@@ -32,19 +31,15 @@ export function useAudioTimeline(
       return;
     }
 
-    if (!trackEstimatedPosition) {
-      setEstimatedPositionSec(timeline.basePositionSec);
-      return;
-    }
-
+    let reqId: number;
     const updatePosition = () => {
       setEstimatedPositionSec(calcCurrentPositionSec(timeline, serverNow()));
+      reqId = requestAnimationFrame(updatePosition);
     };
 
-    updatePosition();
-    const intervalId = window.setInterval(updatePosition, 250);
-    return () => window.clearInterval(intervalId);
-  }, [timeline, serverNow, trackEstimatedPosition]);
+    reqId = requestAnimationFrame(updatePosition);
+    return () => cancelAnimationFrame(reqId);
+  }, [timeline, serverNow]);
 
   const dispatchAction = useCallback((action: AudioTimelineAction) => {
     sendMessageRef.current('AUDIO_TIMELINE_ACTION', { action } as unknown as Record<string, unknown>);

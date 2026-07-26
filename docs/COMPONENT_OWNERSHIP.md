@@ -54,9 +54,7 @@ Catalog:
 
 - `src/components/catalog/CatalogApp.tsx`: React root for the public catalog interface, parsing route paths and fetching public index data.
 - `src/components/catalog/CatalogIndex.tsx`: displays the list of all available public catalogs and their tags.
-- `src/components/catalog/CatalogViewer.tsx`: renders public, safe-for-web presentation copies, card excerpts, configurable counts, and safe search highlights.
-- `src/utils/catalogCards.ts`: owns reusable pure card/count/excerpt/search
-  derivation; catalog components own only rendering and interaction.
+- `src/components/catalog/CatalogViewer.tsx`: renders public, safe-for-web presentation copies, hiding internal metadata and removing media/quiz slides.
   `LiveAudioTrackOutput.tsx` belong under
   `src/features/liveAudio/components/shared/`. Future `LiveAudioNotice.tsx`,
   `CollapsiblePrivacyNotice.tsx`, `LiveAudioAliasInput.tsx`, and
@@ -175,7 +173,7 @@ Live Audio state:
   per-participant microphone boost, temporary aliases, and privacy notice
   checkbox state are session/local state owned by `src/features/liveAudio/`.
   Active participant list visibility is split deliberately: Audience owns its
-  ephemeral `isAliasVisibleToActiveParticipants` preference through
+  local `isAliasVisibleToActiveParticipants` preference through
   `useAudienceSession`, Audience publishes alias plus active-list public key in
   `LIVE_AUDIO_ACTIVE_PARTICIPANT_PROFILE`, Control owns visible alias-list
   computation and encrypted list distribution, and `server/ws-server.mjs` owns
@@ -220,7 +218,7 @@ Live Audio state:
 
 ## Examples
 
-- Quiz content is persistent in `Slide.quizData`, but timer/subslide/demo selection and the completed/result question cut are runtime state in `QuizSyncState` and hooks.
-- Audience quiz answers live in `useQuizAnswers`, partitioned by presentation ID; they are not presenter demo selections.
+- Quiz content is persistent in `Slide.quizData`, but timer/subslide/demo selection is runtime state in `QuizSyncState` and hooks.
+- Audience quiz answers live in `useQuizAnswers`; they are not presenter demo selections.
 - Background lock and override are sync-ready because presenter, control, and audience must agree on projection visuals.
 - `PresenterScreen` receives `slide`, `background`, `videoState`, and quiz props; it does not select presentations.

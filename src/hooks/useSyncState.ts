@@ -58,6 +58,18 @@ interface UseSyncStateProps {
   onAudioTimelineState?: (state: AudioTimelineState) => void;
 }
 
+const areStringArraysEqual = (left: string[] = [], right: string[] = []) =>
+  left.length === right.length && left.every((value, index) => value === right[index]);
+
+const areRecordsEqual = (left?: Record<string, string>, right?: Record<string, string>) => {
+  const leftEntries = Object.entries(left ?? {});
+  const rightRecord = right ?? {};
+  return (
+    leftEntries.length === Object.keys(rightRecord).length &&
+    leftEntries.every(([key, value]) => rightRecord[key] === value)
+  );
+};
+
 const areJsonEqual = (left: unknown, right: unknown) => JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
 
 const liveAudioWsOnlyTypes = new Set([
@@ -94,15 +106,44 @@ const presenterSideEffectCommands = new Set<RemoteCommandPayload['command']>([
 const isPresenterSideEffectCommand = (payload: RemoteCommandPayload) =>
   presenterSideEffectCommands.has(payload.command);
 
-export const arePresentationsEqual = (left: Presentation | null, right: Presentation | null) => {
+const arePresentationsEqual = (left: Presentation | null, right: Presentation | null) => {
   if (left === right) return true;
-  return areJsonEqual(left, right);
-};
+  if (!left || !right) return false;
+  if (
+    left.id !== right.id ||
+    left.title !== right.title ||
+    left.background !== right.background ||
+    left.mode !== right.mode ||
+    left.fontScale !== right.fontScale ||
+    left.slides.length !== right.slides.length
+  ) {
+    return false;
+  }
 
-export const getProjectionSyncEndpoints = (isAudienceMode: boolean) => ({
-  state: isAudienceMode ? '/api/audience/state' : '/api/state',
-  events: isAudienceMode ? '/api/audience/events' : '/api/state-events',
-});
+  return left.slides.every((leftSlide, index) => {
+    const rightSlide = right.slides[index];
+    return (
+      leftSlide.id === rightSlide.id &&
+      leftSlide.label === rightSlide.label &&
+      leftSlide.background === rightSlide.background &&
+      leftSlide.type === rightSlide.type &&
+      leftSlide.mediaSrc === rightSlide.mediaSrc &&
+      leftSlide.mediaVolume === rightSlide.mediaVolume &&
+      leftSlide.mediaSpeed === rightSlide.mediaSpeed &&
+      leftSlide.mediaLoop === rightSlide.mediaLoop &&
+      leftSlide.mediaPresenterNav === rightSlide.mediaPresenterNav &&
+      leftSlide.mediaStart === rightSlide.mediaStart &&
+      leftSlide.mediaEnd === rightSlide.mediaEnd &&
+      leftSlide.scriptureBook === rightSlide.scriptureBook &&
+      leftSlide.scriptureChapter === rightSlide.scriptureChapter &&
+      leftSlide.scriptureVerseStart === rightSlide.scriptureVerseStart &&
+      leftSlide.scriptureVerseEnd === rightSlide.scriptureVerseEnd &&
+      areStringArraysEqual(leftSlide.lines, rightSlide.lines) &&
+      areRecordsEqual(leftSlide.scriptureVerseBackgrounds, rightSlide.scriptureVerseBackgrounds) &&
+      areJsonEqual(leftSlide.quizData, rightSlide.quizData)
+    );
+  });
+};
 
 const areVideoStatesEqual = (left: VideoState | null, right: VideoState | null) => {
   if (left === right) return true;
@@ -158,11 +199,6 @@ export function useSyncState(props: UseSyncStateProps) {
     setAppMode, setScriptureState, setAudioState, setAudioSyncMaps,
     setQuizState, setAutoduckState, onAudioTimelineState,
   } = props;
-  const isAudienceMode = !isControlMode && !isPresenterMode;
-  const syncEndpoints = useMemo(
-    () => getProjectionSyncEndpoints(isAudienceMode),
-    [isAudienceMode],
-  );
 
   const channel = useMemo(() => new BroadcastChannel('sefer-presenter'), []);
   const processedMessageIdsRef = useRef<Set<string>>(new Set());
@@ -534,7 +570,7 @@ export function useSyncState(props: UseSyncStateProps) {
 
   const requestBackendState = useCallback(async () => {
     try {
-      const response = await fetch(syncEndpoints.state, {
+      const response = await fetch('/api/state', {
         method: 'GET',
         headers: { Accept: 'application/json' },
         cache: 'no-store',
@@ -562,7 +598,7 @@ export function useSyncState(props: UseSyncStateProps) {
       console.error('Error requesting backend state snapshot', err);
       return false;
     }
-  }, [syncEndpoints.state]);
+  }, []);
 
   // ── BroadcastChannel listener ─────────────────────────────────────
   useEffect(() => {
@@ -579,7 +615,6 @@ export function useSyncState(props: UseSyncStateProps) {
       const data = validation.value;
 
       if (isLiveAudioWsOnlyType(data.type)) return;
-      if (isAudienceMode && data.type !== 'REQUEST_STATE') return;
 
       if (data.messageId) {
         if (processedMessageIdsRef.current.has(data.messageId)) return;
@@ -635,19 +670,19 @@ export function useSyncState(props: UseSyncStateProps) {
     channel.addEventListener('message', handleMessage);
 
     void requestBackendState().then((loaded) => {
-      if (!loaded && !isAudienceMode) {
+      if (!loaded) {
         channel.postMessage(makeSyncMessage({ type: 'REQUEST_STATE', clientId: clientIdRef.current }));
       }
     });
 
     return () => channel.removeEventListener('message', handleMessage);
   }, [
-    isAudienceMode, isPresenterMode, channel, clientIdRef, requestBackendState, videoStateRef
+    isPresenterMode, channel, clientIdRef, requestBackendState, videoStateRef
   ]);
 
   // ── SSE listener (web mode only) ──────────────────────────────────
   useEffect(() => {
-    const eventSource = new EventSource(syncEndpoints.events);
+    const eventSource = new EventSource('/api/state-events');
 
     eventSource.onmessage = (event) => {
       try {
@@ -714,7 +749,7 @@ export function useSyncState(props: UseSyncStateProps) {
 
     return () => eventSource.close();
   }, [
-    clientIdRef, isPresenterMode, syncEndpoints.events, videoStateRef
+    clientIdRef, isPresenterMode, videoStateRef
   ]);
 
   return { channel, syncState, emitCommand, persistState, emitAudioTelemetry, emitVideoTelemetry, emitDisplayTelemetry, wsStatus, wsSend, subscribeToWsMessage, isMediaMaster };

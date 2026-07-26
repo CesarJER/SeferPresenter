@@ -25,9 +25,7 @@ import { DEFAULT_AUDIO_STATE } from './types/audio';
 
 import './index.css';
 
-const LiveAudioContainer = import.meta.env.VITE_SEFER_LIVE_AUDIO_BUILD !== 'false'
-  ? React.lazy(() => import('./features/liveAudio/components/audience/LiveAudioAudienceContainer'))
-  : null;
+const LiveAudioContainer = React.lazy(() => import('./features/liveAudio/components/audience/LiveAudioAudienceContainer'));
 
 function AudienceApp() {
   const [currentPresentation, setCurrentPresentation] = useState<Presentation | null>(null);
@@ -207,14 +205,13 @@ function AudienceApp() {
     }
     : activeSlide, [activeBackground, activeSlide, scriptureState]);
 
-  const fullMaxBaseCentipunts = useMemo(() => {
+  const maxBaseCentipunts = useMemo(() => {
     if (!currentPresentation) return 0;
     const allQuizData = currentPresentation.slides
       .filter(s => s.type === 'quiz' && s.quizData)
       .map(s => s.quizData!);
     return calcMaxBaseCentipunts(allQuizData);
   }, [currentPresentation]);
-  const maxBaseCentipunts = quizState?.maxBaseCentipunts ?? fullMaxBaseCentipunts;
 
   const handleEnableAudienceMedia = useCallback(async () => {
     await resumeManagedMediaAudio();
@@ -273,8 +270,6 @@ function AudienceApp() {
       background={activeBackground}
       fontScale={currentPresentation?.fontScale ?? 1}
       presentationTitle={currentPresentation?.title || ''}
-      presentationId={currentPresentation?.id ?? null}
-      quizDisplayName={audienceSession.aliasVisible ? audienceSession.nick : undefined}
       scriptureState={quizScriptureState || scriptureState}
       slide={activePresenterSlide}
       videoState={videoState}
@@ -282,8 +277,6 @@ function AudienceApp() {
       quizCurrentSubslideIndex={quizCurrentSubslideIndex}
       quizTimerState={quizTimer.timerState}
       quizMaxBaseCentipunts={maxBaseCentipunts}
-      quizResultSlideIds={quizState?.resultQuizSlideIds}
-      quizScoreRequestId={quizState?.scoreRequestId}
       autoduckState={autoduckState}
       onPlaybackBlocked={handlePlaybackBlocked}
     />
@@ -291,19 +284,17 @@ function AudienceApp() {
 
   return (
     <>
-      {LiveAudioContainer ? (
-        <React.Suspense fallback={audienceScreenElement}>
-          <LiveAudioContainer
-            availability={liveAudioAvailability.availability}
-            wsSend={wsSend}
-            subscribeToWsMessage={subscribeToWsMessage}
-            clientId={clientIdRef.current}
-            audienceSession={audienceSession}
-          >
-            {audienceScreenElement}
-          </LiveAudioContainer>
-        </React.Suspense>
-      ) : audienceScreenElement}
+      <React.Suspense fallback={audienceScreenElement}>
+        <LiveAudioContainer
+          availability={liveAudioAvailability.availability}
+          wsSend={wsSend}
+          subscribeToWsMessage={subscribeToWsMessage}
+          clientId={clientIdRef.current}
+          audienceSession={audienceSession}
+        >
+          {audienceScreenElement}
+        </LiveAudioContainer>
+      </React.Suspense>
       {shouldShowMediaUnlock && (
         <button
           type="button"

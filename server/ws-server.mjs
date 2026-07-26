@@ -1,7 +1,7 @@
-import { randomUUID } from 'node:crypto'
+import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from 'node:crypto'
 import { WebSocket, WebSocketServer } from 'ws'
 import { applyAction, getTimeline } from './timelineManager.mjs'
-import { hasAllowedRequestOrigin, isAuthRequired, hasValidBasicAuth } from './authUtils.mjs'
+import { isAuthRequired, hasValidBasicAuth } from './authUtils.mjs'
 
 const wsClients = new Map()
 const roles = new Set(['presenter', 'control', 'audience', 'unknown'])
@@ -9,11 +9,10 @@ const liveAudioControls = new Map()
 const liveAudioParticipants = new Map()
 let presentationSessionId = randomUUID()
 let liveAudioControlPublicKeyMessage = null
+let encryptedSensitiveSnapshot = null
 const PRIVATE_CONTROL_SIGNAL_MAX_CIPHERTEXT_BYTES = 4096
 const PRIVATE_CONTROL_SIGNAL_RATE_LIMIT = 5
 const PRIVATE_CONTROL_SIGNAL_RATE_WINDOW_MS = 60_000
-const WS_MAX_PAYLOAD_BYTES = 64 * 1024
-const WS_MAX_BUFFERED_BYTES = 512 * 1024
 const uuidV4Pattern = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const base64Pattern = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/
 const speakerStates = new Set(['LISTENER', 'REQUESTED', 'GRANTED', 'MUTED', 'REVOKED'])
@@ -49,39 +48,91 @@ const allowDelegatedModerators = () =>
 const getDefaultModerationVisible = () =>
   String(process.env.SEFER_ACTIVE_ALIAS_MODERATION_DEFAULT_VISIBLE || 'true').toLowerCase() !== 'false'
 
-const mergeOperationalSnapshotPatch = (patch) => {
-  if (!patch || typeof patch !== 'object') return
+const getSnapshotEncryptionKey = () => {
+  const password = process.env.SEFER_CONTROL_PASSWORD || 'sefer-local-ephemeral-snapshot'
+  return createHash('sha256').update(`sefer-control-snapshot:${password}`).digest()
+}
 
-  if (Array.isArray(patch.participants)) {
-    for (const participant of patch.participants) {
-      if (!participant || typeof participant !== 'object' || !isValidParticipantId(participant.participantId)) continue
-      const storedParticipant = liveAudioParticipants.get(participant.participantId)
-      if (!storedParticipant) continue
-      if (microphonePermissionStates.has(participant.microphonePermissionState)) {
-        storedParticipant.microphonePermissionState = participant.microphonePermissionState
-      }
-      if (microphoneTrackStates.has(participant.microphoneTrackState)) {
-        storedParticipant.microphoneTrackState = participant.microphoneTrackState
-      }
-      if (typeof participant.isAliasVisibleToActiveParticipants === 'boolean') {
-        storedParticipant.isAliasVisibleToActiveParticipants = participant.isAliasVisibleToActiveParticipants
-        if (storedParticipant.isAliasHiddenByControl === undefined) {
-          storedParticipant.isAliasHiddenByControl = !getDefaultModerationVisible()
-        }
-      }
-      storedParticipant.updatedAt = Date.now()
+const encryptSensitiveSnapshot = (value) => {
+  const iv = randomBytes(12)
+  const cipher = createCipheriv('aes-256-gcm', getSnapshotEncryptionKey(), iv)
+  const plaintext = Buffer.from(JSON.stringify(value), 'utf8')
+  const ciphertext = Buffer.concat([cipher.update(plaintext), cipher.final()])
+  return {
+    iv: iv.toString('base64'),
+    tag: cipher.getAuthTag().toString('base64'),
+    ciphertext: ciphertext.toString('base64'),
+    updatedAt: Date.now(),
+  }
+}
+
+const decryptSensitiveSnapshot = () => {
+  if (!encryptedSensitiveSnapshot) {
+    return {
+      aliases: {},
+      microphonePermissionStates: {},
+      microphoneTrackStates: {},
+    }
+  }
+
+  try {
+    const decipher = createDecipheriv(
+      'aes-256-gcm',
+      getSnapshotEncryptionKey(),
+      Buffer.from(encryptedSensitiveSnapshot.iv, 'base64'),
+    )
+    decipher.setAuthTag(Buffer.from(encryptedSensitiveSnapshot.tag, 'base64'))
+    const plaintext = Buffer.concat([
+      decipher.update(Buffer.from(encryptedSensitiveSnapshot.ciphertext, 'base64')),
+      decipher.final(),
+    ])
+    const parsed = JSON.parse(plaintext.toString('utf8'))
+    return parsed && typeof parsed === 'object' ? parsed : {}
+  } catch {
+    return {
+      aliases: {},
+      microphonePermissionStates: {},
+      microphoneTrackStates: {},
     }
   }
 }
 
-const containsClearAliasData = (patch) => (
-  Array.isArray(patch?.participants) &&
-  patch.participants.some((participant) => (
-    participant &&
-    typeof participant === 'object' &&
-    (participant.alias !== undefined || participant.activeListPublicKey !== undefined)
-  ))
-)
+const mergeSensitiveSnapshot = (patch) => {
+  if (!patch || typeof patch !== 'object') return
+  const current = decryptSensitiveSnapshot()
+  const next = {
+    aliases: { ...(current.aliases || {}) },
+    microphonePermissionStates: { ...(current.microphonePermissionStates || {}) },
+    microphoneTrackStates: { ...(current.microphoneTrackStates || {}) },
+  }
+
+  if (Array.isArray(patch.participants)) {
+    for (const participant of patch.participants) {
+      if (!participant || typeof participant !== 'object' || !isValidParticipantId(participant.participantId)) continue
+      if (typeof participant.alias === 'string' && participant.alias.trim()) {
+        next.aliases[participant.participantId] = participant.alias.trim().slice(0, 80)
+      }
+      if (typeof participant.microphonePermissionState === 'string') {
+        next.microphonePermissionStates[participant.participantId] = participant.microphonePermissionState
+      }
+      if (typeof participant.microphoneTrackState === 'string') {
+        next.microphoneTrackStates[participant.participantId] = participant.microphoneTrackState
+      }
+      if (typeof participant.isAliasVisibleToActiveParticipants === 'boolean') {
+        const storedParticipant = liveAudioParticipants.get(participant.participantId)
+        if (storedParticipant) {
+          storedParticipant.isAliasVisibleToActiveParticipants = participant.isAliasVisibleToActiveParticipants
+          storedParticipant.updatedAt = Date.now()
+          if (storedParticipant.isAliasHiddenByControl === undefined) {
+            storedParticipant.isAliasHiddenByControl = !getDefaultModerationVisible()
+          }
+        }
+      }
+    }
+  }
+
+  encryptedSensitiveSnapshot = encryptSensitiveSnapshot(next)
+}
 
 const getRejoinGraceMs = () => {
   const raw = Number.parseInt(process.env.SEFER_LIVE_AUDIO_REJOIN_GRACE_SECONDS || '60', 10)
@@ -169,6 +220,7 @@ const getLiveAudioParticipantSnapshot = () => ({
     isAliasVisibleToActiveParticipants: participant.isAliasVisibleToActiveParticipants ?? false,
     canViewActiveParticipants: participant.canViewActiveParticipants ?? false,
     isAliasHiddenByControl: participant.isAliasHiddenByControl ?? false,
+    activeListPublicKey: participant.activeListPublicKey,
     connected: Boolean(participant.ws && participant.ws.readyState === WebSocket.OPEN),
     disconnectedAt: participant.disconnectedAt,
     updatedAt: participant.updatedAt,
@@ -214,13 +266,15 @@ const inferMicrophoneTrackState = (participant) => {
   return 'notRequested'
 }
 
-const makeOperationalParticipantSnapshot = (participant) => {
+const makeOperationalParticipantSnapshot = (participant, sensitive = {}) => {
+  const participantId = participant.participantId
   return {
-    participantId: participant.participantId,
+    participantId,
     role: participant.role,
+    alias: sensitive.aliases?.[participantId],
     operationalRole: inferOperationalRole(participant),
-    microphonePermissionState: participant.microphonePermissionState || 'unknown',
-    microphoneTrackState: participant.microphoneTrackState || inferMicrophoneTrackState(participant),
+    microphonePermissionState: sensitive.microphonePermissionStates?.[participantId] || participant.microphonePermissionState || 'unknown',
+    microphoneTrackState: sensitive.microphoneTrackStates?.[participantId] || inferMicrophoneTrackState(participant),
     speakerState: participant.speakerState,
     canSubscribe: participant.canSubscribe,
     canPublishAudio: participant.canPublishAudio,
@@ -231,6 +285,7 @@ const makeOperationalParticipantSnapshot = (participant) => {
     isAliasVisibleToActiveParticipants: participant.isAliasVisibleToActiveParticipants ?? false,
     canViewActiveParticipants: participant.canViewActiveParticipants ?? false,
     isAliasHiddenByControl: participant.isAliasHiddenByControl ?? false,
+    activeListPublicKey: participant.activeListPublicKey,
     connected: Boolean(participant.ws && participant.ws.readyState === WebSocket.OPEN),
     connectedAt: participant.connectedAt,
     disconnectedAt: participant.disconnectedAt,
@@ -239,7 +294,9 @@ const makeOperationalParticipantSnapshot = (participant) => {
 }
 
 const makeOperationalSnapshot = ({ liveKitState, quizAggregate } = {}) => {
-  const participants = Array.from(liveAudioParticipants.values()).map(makeOperationalParticipantSnapshot)
+  const sensitive = decryptSensitiveSnapshot()
+  const participants = Array.from(liveAudioParticipants.values()).map((participant) =>
+    makeOperationalParticipantSnapshot(participant, sensitive))
   return {
     snapshotId: `snapshot-${Date.now()}-${randomUUID()}`,
     createdAt: Date.now(),
@@ -331,6 +388,7 @@ const getLiveAudioParticipantState = (participantId) => {
     isAliasVisibleToActiveParticipants: participant.isAliasVisibleToActiveParticipants ?? false,
     canViewActiveParticipants: participant.canViewActiveParticipants ?? false,
     isAliasHiddenByControl: participant.isAliasHiddenByControl ?? false,
+    activeListPublicKey: participant.activeListPublicKey,
     connected: Boolean(participant.ws && participant.ws.readyState === WebSocket.OPEN),
     disconnectedAt: participant.disconnectedAt,
     updatedAt: participant.updatedAt,
@@ -348,25 +406,17 @@ const resetWsServerStateForTests = () => {
   liveAudioControls.clear()
   liveAudioParticipants.clear()
   liveAudioControlPublicKeyMessage = null
+  encryptedSensitiveSnapshot = null
 }
 
 const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) => {
-  const wss = new WebSocketServer({
-    server: httpServer,
-    path: '/ws',
-    maxPayload: WS_MAX_PAYLOAD_BYTES,
-  })
+  const wss = new WebSocketServer({ server: httpServer, path: '/ws' })
 
   const broadcast = (message, filter) => {
     const data = typeof message === 'string' ? message : JSON.stringify(message)
     for (const [client, meta] of wsClients) {
       if (client.readyState !== WebSocket.OPEN) continue
       if (filter && !filter(meta)) continue
-      if (client.bufferedAmount > WS_MAX_BUFFERED_BYTES) {
-        wsClients.delete(client)
-        client.close(1013, 'Slow consumer')
-        continue
-      }
       try {
         client.send(data)
       } catch {
@@ -377,11 +427,6 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
 
   const sendJson = (client, message) => {
     if (client.readyState !== WebSocket.OPEN) return false
-    if (client.bufferedAmount > WS_MAX_BUFFERED_BYTES) {
-      wsClients.delete(client)
-      client.close(1013, 'Slow consumer')
-      return false
-    }
     try {
       client.send(JSON.stringify(message))
       return true
@@ -685,7 +730,9 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
     if (!msg || typeof msg !== 'object' || Array.isArray(msg)) return false
     if (msg.type !== 'LIVE_AUDIO_ACTIVE_PARTICIPANT_PROFILE') return false
     if (!isValidParticipantId(msg.participantId)) return false
-    if (msg.alias !== undefined || msg.activeListPublicKey !== undefined) return false
+    if (typeof msg.alias !== 'string' || msg.alias.trim() === '') return false
+    if (msg.alias.trim().length > 80) return false
+    if (!isValidBase64(msg.activeListPublicKey)) return false
     if (typeof msg.isAliasVisibleToActiveParticipants !== 'boolean') return false
     if (msg.createdAt !== undefined && (typeof msg.createdAt !== 'number' || !Number.isFinite(msg.createdAt))) return false
     return true
@@ -731,6 +778,7 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
       isAliasVisibleToActiveParticipants: existing?.isAliasVisibleToActiveParticipants ?? false,
       canViewActiveParticipants: existing?.canViewActiveParticipants ?? false,
       isAliasHiddenByControl: existing?.isAliasHiddenByControl ?? !getDefaultModerationVisible(),
+      activeListPublicKey: existing?.activeListPublicKey,
       microphonePermissionState: typeof status.microphonePermissionState === 'string'
         ? status.microphonePermissionState
         : existing?.microphonePermissionState || 'unknown',
@@ -849,6 +897,7 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
     isAliasVisibleToActiveParticipants: msg.isAliasVisibleToActiveParticipants ?? false,
     canViewActiveParticipants: msg.canViewActiveParticipants ?? false,
     isAliasHiddenByControl: msg.isAliasHiddenByControl ?? false,
+    activeListPublicKey: msg.activeListPublicKey,
     microphonePermissionState: msg.microphonePermissionState,
     microphoneTrackState: msg.microphoneTrackState,
     updatedAt: msg.updatedAt || Date.now(),
@@ -994,16 +1043,6 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
     const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`)
     const role = makeRole(url.searchParams.get('role') || 'unknown')
 
-    if (!hasAllowedRequestOrigin(req)) {
-      ws.send(JSON.stringify({
-        type: 'ERROR',
-        code: 'ORIGIN_FORBIDDEN',
-        message: 'Request origin is not allowed',
-      }))
-      ws.close(1008, 'Origin forbidden')
-      return
-    }
-
     if (role !== 'audience' && isAuthRequired() && !hasValidBasicAuth(req)) {
       ws.send(JSON.stringify({
         type: 'ERROR',
@@ -1079,12 +1118,7 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
           break
 
         case 'AUDIO_TIMELINE_ACTION': {
-          if (meta?.role !== 'control') break
-          const controlMeta = liveAudioControls.get(meta.controlSessionId)
-          if (!isControlAuthorized(controlMeta)) {
-            sendError(ws, 'CONTROL_PENDING_FORBIDDEN', 'Pending controls cannot mutate the audio timeline')
-            break
-          }
+          if (meta?.role === 'audience') break
           const timeline = applyAction(msg.action)
           broadcast({
             type: 'AUDIO_TIMELINE_STATE',
@@ -1121,6 +1155,10 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
             if (!participant.isActiveAudience && !participant.isKicked) {
               participant.isAliasVisibleToActiveParticipants = false
               participant.canViewActiveParticipants = false
+              participant.activeListPublicKey = undefined
+              const sensitive = decryptSensitiveSnapshot()
+              if (sensitive.aliases) delete sensitive.aliases[participant.participantId]
+              encryptedSensitiveSnapshot = encryptSensitiveSnapshot(sensitive)
             }
             routeParticipantStatus(participant)
           }
@@ -1148,11 +1186,14 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
           })
           if (!participant || participant.isKicked) break
           participant.isAliasVisibleToActiveParticipants = msg.isAliasVisibleToActiveParticipants
+          participant.activeListPublicKey = msg.activeListPublicKey
           participant.updatedAt = Date.now()
           routeParticipantStatus(participant)
           broadcast({
             type: 'LIVE_AUDIO_ACTIVE_PARTICIPANT_PROFILE',
             participantId: msg.participantId,
+            alias: msg.alias.trim().slice(0, 80),
+            activeListPublicKey: msg.activeListPublicKey,
             isAliasVisibleToActiveParticipants: msg.isAliasVisibleToActiveParticipants,
             createdAt: msg.createdAt || Date.now(),
           }, (targetMeta) => {
@@ -1216,11 +1257,7 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
             sendError(ws, 'CONTROL_PENDING_FORBIDDEN', 'Pending controls cannot publish operational snapshot patches')
             break
           }
-          if (containsClearAliasData(msg.snapshot)) {
-            sendError(ws, 'CLEAR_ALIAS_FORBIDDEN', 'Alias data must use end-to-end encrypted private signals')
-            break
-          }
-          mergeOperationalSnapshotPatch(msg.snapshot)
+          mergeSensitiveSnapshot(msg.snapshot)
           broadcast(makeSnapshotMessage(), (targetMeta) => {
             if (targetMeta.role !== 'control') return false
             return isControlAuthorized(liveAudioControls.get(targetMeta.controlSessionId))
@@ -1282,12 +1319,16 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
             isAliasVisibleToActiveParticipants: false,
             canViewActiveParticipants: false,
             isAliasHiddenByControl: false,
+            activeListPublicKey: undefined,
             speakerState: 'LISTENER',
             canPublishAudio: false,
             isMuted: true,
             isMicrophoneActive: false,
             updatedAt: Date.now(),
           })
+          const sensitive = decryptSensitiveSnapshot()
+          if (sensitive.aliases) delete sensitive.aliases[msg.participantId]
+          encryptedSensitiveSnapshot = encryptSensitiveSnapshot(sensitive)
           routeParticipantStatus(makeReducedParticipantStatus(participant))
           if (participant.ws?.readyState === WebSocket.OPEN) {
             sendJson(participant.ws, {
@@ -1308,25 +1349,13 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
         case 'VIDEO_TELEMETRY':
         case 'DISPLAY_TELEMETRY':
           if (meta?.role === 'audience') break
-          if (meta?.role === 'control' && !isControlAuthorized(liveAudioControls.get(meta.controlSessionId))) {
-            sendError(ws, 'CONTROL_PENDING_FORBIDDEN', 'Pending controls cannot mutate projection or telemetry state')
-            break
-          }
           if (onFallbackMessage) {
             onFallbackMessage(msg, meta)
           }
           break
 
         case 'REMOTE_COMMAND':
-          if (meta?.role !== 'control') break
-          if (!isControlAuthorized(liveAudioControls.get(meta.controlSessionId))) {
-            sendError(ws, 'CONTROL_PENDING_FORBIDDEN', 'Pending controls cannot mutate projection state')
-            break
-          }
-          {
-            const accepted = onFallbackMessage ? onFallbackMessage(msg, meta) === true : false
-            if (!accepted) break
-          }
+          if (meta?.role === 'audience') break
           if (msg.payload?.command === 'RESET_STATE' && msg.payload.clearSession) {
             presentationSessionId = randomUUID()
             liveAudioControls.clear()
@@ -1337,7 +1366,10 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
               type: 'PRESENTATION_SESSION_ROTATED',
               presentationSessionId,
             }))
-            console.log('[SERVER] Presentation session rotated')
+            console.log(`[SERVER DBG] Global presentation session rotated by ${meta.clientId}, new ID: ${presentationSessionId}`)
+          }
+          if (onFallbackMessage) {
+            onFallbackMessage(msg, meta)
           }
           break
 
