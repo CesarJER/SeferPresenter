@@ -319,6 +319,23 @@ describe('visible active participants', () => {
     const audience = await connectWs('audience');
     const participantId = randomUUID();
 
+    audience.send(makeParticipantStatus(participantId));
+    await waitFor(
+      control,
+      (message) => (
+        message.type === 'LIVE_AUDIO_PARTICIPANT_STATUS' &&
+        message.participantId === participantId
+      ),
+    );
+    control.send({
+      type: 'LIVE_AUDIO_GRANT_SPEAK',
+      participantId,
+      createdAt: Date.now(),
+    });
+    await waitFor(
+      audience,
+      (message) => message.type === 'LIVE_AUDIO_GRANT_SPEAK' && message.participantId === participantId,
+    );
     audience.send(makeParticipantStatus(participantId, {
       speakerState: 'GRANTED',
       canPublishAudio: true,
@@ -330,7 +347,8 @@ describe('visible active participants', () => {
       (message) => (
         message.type === 'LIVE_AUDIO_PARTICIPANT_STATUS' &&
         message.participantId === participantId &&
-        message.speakerState === 'GRANTED'
+        message.speakerState === 'GRANTED' &&
+        message.isMicrophoneActive === true
       ),
     );
 

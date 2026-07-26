@@ -458,6 +458,13 @@ describe('runtime validation', () => {
           updatedAt: Date.now(),
         }],
         interventionQueue: [],
+        policies: {
+          accessMode: 'PUBLIC',
+          recordingAvailable: true,
+          recordingMutable: true,
+          recordingState: 'NOT_RECORDING',
+          recordingEpoch: 0,
+        },
         authorizations: {
           principalControlSessionId: 'control-1',
           controls: [{

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Users, UserCheck, Mic, MicOff, Volume2, VolumeX, ChevronUp, ChevronDown, ShieldAlert } from 'lucide-react';
+import { Users, UserCheck, Mic, MicOff, Volume2, VolumeX, ChevronUp, ChevronDown, ShieldAlert, Circle } from 'lucide-react';
 import { LiveAudioQueue } from './LiveAudioQueue';
 import { LiveAudioSpeakers } from './LiveAudioSpeakers';
 import { LiveAudioListeners } from './LiveAudioListeners';
@@ -14,6 +14,10 @@ interface LiveAudioControlPanelProps {
   listenVolume: number;
   onListenVolumeChange: (volume: number) => void;
   microphoneVolume: number;
+  recordingState: 'NOT_RECORDING' | 'RECORDING';
+  recordingEpoch: number;
+  recordingMutable: boolean;
+  onRecordingStateChange: (state: 'NOT_RECORDING' | 'RECORDING') => void;
   onMicrophoneVolumeChange: (volume: number) => void;
   isModeratorMusicMode?: boolean;
   onModeratorMusicModeChange?: (mode: boolean) => void;
@@ -42,6 +46,10 @@ export const LiveAudioControlPanel: React.FC<LiveAudioControlPanelProps> = ({
   listenVolume,
   onListenVolumeChange,
   microphoneVolume,
+  recordingState,
+  recordingEpoch,
+  recordingMutable,
+  onRecordingStateChange,
   onMicrophoneVolumeChange,
   isModeratorMusicMode,
   onModeratorMusicModeChange,
@@ -73,6 +81,43 @@ export const LiveAudioControlPanel: React.FC<LiveAudioControlPanelProps> = ({
           ${isExpanded ? 'h-[60vh] max-h-[calc(100vh-80px)] md:h-[450px] opacity-100' : 'h-0 max-h-0 opacity-0 border-none'}`}
       >
         <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
+          <div
+            role="status"
+            className={`rounded-lg border p-3 text-sm ${
+              recordingState === 'RECORDING'
+                ? 'border-red-500 bg-red-950/60 text-red-100'
+                : 'border-slate-600 bg-slate-800 text-slate-200'
+            }`}
+          >
+            <div className="flex items-center justify-between gap-3">
+              <span className="flex items-center gap-2 font-bold">
+                <Circle
+                  aria-hidden="true"
+                  className={`h-3 w-3 ${
+                    recordingState === 'RECORDING'
+                      ? 'fill-red-400 text-red-400'
+                      : 'text-slate-300'
+                  }`}
+                />
+                {recordingState === 'RECORDING'
+                  ? `Se está grabando (época ${recordingEpoch})`
+                  : 'No se está grabando'}
+              </span>
+              <button
+                type="button"
+                disabled={!recordingMutable}
+                onClick={() => onRecordingStateChange(
+                  recordingState === 'RECORDING' ? 'NOT_RECORDING' : 'RECORDING',
+                )}
+                className="rounded bg-slate-950 px-3 py-1.5 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {recordingState === 'RECORDING' ? 'Finalizar' : 'Declarar grabación'}
+              </button>
+            </div>
+            <p className="mt-1 text-xs">
+              Estado declarativo: SeferPresenter no controla un grabador externo.
+            </p>
+          </div>
           
           {/* Global Actions */}
           <div className="flex gap-2 shrink-0">

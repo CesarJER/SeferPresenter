@@ -12,6 +12,11 @@ const audienceSseTickets = new Map()
 let presentationSessionId = randomUUID()
 let serverEpoch = randomUUID()
 let stateRevision = 0
+let recordingAvailable = false
+let recordingMutable = false
+let recordingState = 'NOT_RECORDING'
+let recordingEpoch = 0
+let recordingPolicyTransitionInProgress = false
 let liveAudioControlPublicKeyMessage = null
 let privateControlOverlayEnvelope = null
 const PRIVATE_CONTROL_SIGNAL_MAX_CIPHERTEXT_BYTES = 4096
@@ -43,11 +48,17 @@ const audienceAllowedTypes = new Set([
   'LIVE_AUDIO_ACTIVE_PARTICIPANT_PROFILE',
   'PRIVATE_CONTROL_SIGNAL',
   'LIVE_AUDIO_REMOVE_ACTIVE_PARTICIPANT',
+  'AUDIENCE_RECORDING_CONFIRMATION',
+])
+const recordingTransitionSafeTypes = new Set([
+  'SERVER_TIME_PING',
+  'LIVE_AUDIO_SNAPSHOT_REQUEST',
 ])
 const admittedAudienceOnlyTypes = new Set([
   'LIVE_AUDIO_PARTICIPANT_STATUS',
   'LIVE_AUDIO_ACTIVE_PARTICIPANT_PROFILE',
   'LIVE_AUDIO_REMOVE_ACTIVE_PARTICIPANT',
+  'AUDIENCE_RECORDING_CONFIRMATION',
 ])
 
 const makeRevisionEnvelope = (revision = stateRevision) => ({
@@ -82,6 +93,32 @@ const getDefaultAccessMode = () =>
     : 'PUBLIC'
 
 let accessMode = getDefaultAccessMode()
+
+const configureRecordingPolicy = (policy = {}) => {
+  recordingAvailable = policy.recordingAvailable === true
+  recordingMutable = policy.recordingMutable === true
+  recordingState = recordingAvailable && policy.recordingDefault === 'RECORDING'
+    ? 'RECORDING'
+    : 'NOT_RECORDING'
+  recordingEpoch = recordingState === 'RECORDING' ? 1 : 0
+}
+
+const getRecordingPolicy = () => ({
+  recordingAvailable,
+  recordingMutable,
+  recordingState,
+  recordingEpoch,
+})
+
+const hasCurrentRecordingConfirmation = (participantId) => {
+  if (recordingState !== 'RECORDING') return true
+  const record = audienceAccessRecords.get(participantId)
+  return Boolean(
+    record?.accessState === 'ADMITTED' &&
+    record.recordingConfirmation?.presentationSessionId === presentationSessionId &&
+    record.recordingConfirmation?.recordingEpoch === recordingEpoch
+  )
+}
 
 const getAudienceResumeTtlMs = () => {
   const raw = Number.parseInt(process.env.SEFER_AUDIENCE_RESUME_TTL_HOURS || '24', 10)
@@ -119,6 +156,9 @@ const makeAudienceAccessState = (record) => ({
   accessState: record.accessState,
   retryAt: record.retryAt,
   expiresAt: record.expiresAt,
+  recordingConfirmedEpoch: record.recordingConfirmation?.presentationSessionId === presentationSessionId
+    ? record.recordingConfirmation.recordingEpoch
+    : undefined,
   stateRevision,
 })
 
@@ -338,6 +378,9 @@ const getLiveAudioParticipantSnapshot = () => ({
     isAliasVisibleToActiveParticipants: participant.isAliasVisibleToActiveParticipants ?? false,
     canViewActiveParticipants: participant.canViewActiveParticipants ?? false,
     isAliasHiddenByControl: participant.isAliasHiddenByControl ?? false,
+    recordingConfirmationEpoch: participant.recordingConfirmationSessionId === presentationSessionId
+      ? participant.recordingConfirmationEpoch
+      : undefined,
     connected: Boolean(participant.ws && participant.ws.readyState === WebSocket.OPEN),
     disconnectedAt: participant.disconnectedAt,
     updatedAt: participant.updatedAt,
@@ -422,6 +465,7 @@ const makeOperationalSnapshot = ({ liveKitState, quizAggregate } = {}) => {
       .map((participant) => participant.participantId),
     policies: {
       accessMode,
+      ...getRecordingPolicy(),
     },
     audienceAccessRequests: Array.from(audienceAccessRecords.values())
       .filter((record) => record.accessState === 'WAITING')
@@ -512,6 +556,9 @@ const getLiveAudioParticipantState = (participantId) => {
     isAliasVisibleToActiveParticipants: participant.isAliasVisibleToActiveParticipants ?? false,
     canViewActiveParticipants: participant.canViewActiveParticipants ?? false,
     isAliasHiddenByControl: participant.isAliasHiddenByControl ?? false,
+    recordingConfirmationEpoch: participant.recordingConfirmationSessionId === presentationSessionId
+      ? participant.recordingConfirmationEpoch
+      : undefined,
     connected: Boolean(participant.ws && participant.ws.readyState === WebSocket.OPEN),
     disconnectedAt: participant.disconnectedAt,
     updatedAt: participant.updatedAt,
@@ -537,9 +584,12 @@ const resetWsServerStateForTests = () => {
   serverEpoch = randomUUID()
   stateRevision = 0
   accessMode = getDefaultAccessMode()
+  configureRecordingPolicy()
+  recordingPolicyTransitionInProgress = false
 }
 
 const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) => {
+  configureRecordingPolicy(snapshotProviders.recordingPolicy)
   const wss = new WebSocketServer({
     server: httpServer,
     path: '/ws',
@@ -1009,6 +1059,32 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
     broadcast(message)
   }
 
+  const makeRecordingPolicyMessage = (revisionEnvelope = makeRevisionEnvelope(), changedDuringSession = false) => ({
+    type: 'SESSION_RECORDING_POLICY',
+    ...revisionEnvelope,
+    ...getRecordingPolicy(),
+    changedDuringSession,
+    updatedAt: Date.now(),
+  })
+
+  const broadcastRecordingPolicy = (revisionEnvelope, changedDuringSession) => {
+    broadcast(makeRecordingPolicyMessage(revisionEnvelope, changedDuringSession))
+  }
+
+  const sendRecordingPolicyResult = (ws, msg, result, reason) => {
+    sendJson(ws, {
+      type: 'SESSION_RECORDING_POLICY_RESULT',
+      commandId: msg.commandId,
+      result,
+      ...(reason ? { reason } : {}),
+      presentationSessionId,
+      serverEpoch,
+      stateRevision,
+      recordingState,
+      recordingEpoch,
+    })
+  }
+
   const handleAudienceAccessBind = (meta, msg) => {
     if (meta?.role !== 'audience') return
     const record = authorizeAudienceCredential(msg.credential, { requireAdmitted: false })
@@ -1110,6 +1186,158 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
     commitStateMutation()
     for (const record of audienceAccessRecords.values()) notifyAudienceAccessRecord(record)
     broadcastAccessPolicy()
+  }
+
+  const handleSessionRecordingPolicyUpdate = async (meta, msg) => {
+    const issuer = liveAudioControls.get(meta?.controlSessionId)
+    if (
+      issuer?.controlState !== 'PRINCIPAL' ||
+      issuer.syncRequired ||
+      !recordingMutable ||
+      !['NOT_RECORDING', 'RECORDING'].includes(msg.recordingState) ||
+      msg.presentationSessionId !== presentationSessionId ||
+      !Number.isSafeInteger(msg.expectedStateRevision) ||
+      (msg.recordingState === 'RECORDING' && !recordingAvailable)
+    ) {
+      sendError(meta.ws, 'SESSION_RECORDING_POLICY_FORBIDDEN', 'Recording policy cannot be changed by this Control')
+      sendRecordingPolicyResult(meta.ws, msg, 'NACK', 'FORBIDDEN')
+      return
+    }
+    if (msg.recordingState === recordingState) {
+      sendRecordingPolicyResult(meta.ws, msg, 'ACK')
+      return
+    }
+    if (msg.expectedStateRevision !== stateRevision) {
+      sendError(meta.ws, 'REVISION_CONFLICT', 'Recording policy update used an obsolete state revision')
+      sendRecordingPolicyResult(meta.ws, msg, 'NACK', 'REVISION_CONFLICT')
+      sendOperationalSnapshot(issuer)
+      return
+    }
+
+    const startsRecording = recordingState === 'NOT_RECORDING' && msg.recordingState === 'RECORDING'
+    const expectedSessionId = presentationSessionId
+    if (startsRecording) {
+      recordingPolicyTransitionInProgress = true
+      try {
+        await snapshotProviders.revokeLiveAudioPublishingForRecording?.()
+      } catch {
+        sendError(meta.ws, 'LIVEKIT_PERMISSION_REVOCATION_FAILED', 'Recording was not enabled because Live Audio permissions could not be revoked')
+        sendRecordingPolicyResult(meta.ws, msg, 'NACK', 'LIVEKIT_REVOCATION_FAILED')
+        return
+      } finally {
+        recordingPolicyTransitionInProgress = false
+      }
+      if (
+        presentationSessionId !== expectedSessionId ||
+        recordingState !== 'NOT_RECORDING'
+      ) {
+        sendError(meta.ws, 'REVISION_CONFLICT', 'Recording policy changed while Live Audio permissions were being revoked')
+        sendRecordingPolicyResult(meta.ws, msg, 'NACK', 'REVISION_CONFLICT')
+        sendOperationalSnapshot(issuer)
+        return
+      }
+    }
+    recordingState = msg.recordingState
+    if (startsRecording) recordingEpoch += 1
+
+    if (startsRecording) {
+      for (const record of audienceAccessRecords.values()) {
+        record.recordingConfirmation = undefined
+      }
+    }
+    for (const participant of liveAudioParticipants.values()) {
+      if (startsRecording) {
+        participant.recordingConfirmationSessionId = undefined
+        participant.recordingConfirmationEpoch = undefined
+        participant.isMicrophoneActive = false
+        participant.isMuted = true
+        participant.microphoneTrackState = participant.speakerState === 'GRANTED'
+          ? 'mutedByControl'
+          : participant.microphoneTrackState
+        if (participant.role === 'audience') participant.canPublishAudio = false
+      } else if (participant.role === 'audience' && participant.speakerState === 'GRANTED') {
+        participant.canPublishAudio = true
+      }
+      participant.updatedAt = Date.now()
+    }
+
+    const revisionEnvelope = commitStateMutation()
+    broadcastRecordingPolicy(revisionEnvelope, startsRecording)
+    if (startsRecording) {
+      broadcast({
+        type: 'LIVE_AUDIO_MUTE_ALL',
+        ...revisionEnvelope,
+        recordingEpoch,
+        reason: 'RECORDING_STARTED',
+        createdAt: Date.now(),
+      }, (targetMeta) => targetMeta.role === 'audience' || targetMeta.role === 'presenter')
+    }
+    broadcast(makeSnapshotMessage(), (targetMeta) => (
+      targetMeta.role === 'control' &&
+      isControlAuthorized(liveAudioControls.get(targetMeta.controlSessionId))
+    ))
+    sendRecordingPolicyResult(meta.ws, msg, 'ACK')
+  }
+
+  const handleAudienceRecordingConfirmation = (meta, msg) => {
+    const participant = liveAudioParticipants.get(msg.participantId)
+    const accessRecord = meta?.audienceAccessId
+      ? audienceAccessRecords.get(meta.audienceAccessId)
+      : null
+    if (
+      meta?.role !== 'audience' ||
+      !participant ||
+      participant.ws !== meta.ws ||
+      meta.participantId !== msg.participantId ||
+      !accessRecord ||
+      accessRecord.participantId !== msg.participantId ||
+      accessRecord.accessState !== 'ADMITTED' ||
+      msg.presentationSessionId !== presentationSessionId ||
+      msg.recordingEpoch !== recordingEpoch ||
+      recordingState !== 'RECORDING'
+    ) {
+      sendJson(meta?.ws, {
+        type: 'AUDIENCE_RECORDING_CONFIRMATION_RESULT',
+        result: 'NACK',
+        presentationSessionId,
+        recordingEpoch,
+        stateRevision,
+      })
+      return
+    }
+    if (
+      accessRecord.recordingConfirmation?.presentationSessionId === presentationSessionId &&
+      accessRecord.recordingConfirmation?.recordingEpoch === recordingEpoch
+    ) {
+      sendJson(meta.ws, {
+        type: 'AUDIENCE_RECORDING_CONFIRMATION_RESULT',
+        ...makeRevisionEnvelope(),
+        result: 'ACK',
+        participantId: participant.participantId,
+        recordingEpoch,
+      })
+      return
+    }
+    accessRecord.recordingConfirmation = {
+      presentationSessionId,
+      recordingEpoch,
+      confirmedAt: Date.now(),
+    }
+    participant.recordingConfirmationSessionId = presentationSessionId
+    participant.recordingConfirmationEpoch = recordingEpoch
+    if (participant.speakerState === 'GRANTED' && !participant.isKicked) {
+      participant.canPublishAudio = true
+    }
+    participant.updatedAt = Date.now()
+    const revisionEnvelope = commitStateMutation()
+    routeParticipantStatus(participant, revisionEnvelope)
+    sendJson(meta.ws, {
+      type: 'AUDIENCE_RECORDING_CONFIRMATION_RESULT',
+      ...revisionEnvelope,
+      result: 'ACK',
+      participantId: participant.participantId,
+      recordingEpoch,
+    })
   }
 
   const isAuthorizedToDecide = (control) => canAuthorizeControls(control)
@@ -1347,16 +1575,23 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
 
     const now = Date.now()
     const isKicked = existing?.isKicked === true || status.isKicked === true
+    const requestedAudienceState = status.speakerState === 'REQUESTED'
+      ? 'REQUESTED'
+      : status.speakerState === 'REVOKED'
+        ? 'REVOKED'
+        : 'LISTENER'
     const speakerState = isKicked
       ? 'REVOKED'
-      : typeof status.speakerState === 'string'
-        ? status.speakerState
-        : existing?.speakerState || 'LISTENER'
-    const isMicrophoneActive = isKicked
-      ? false
-      : typeof status.isMicrophoneActive === 'boolean'
-        ? status.isMicrophoneActive
-        : existing?.isMicrophoneActive ?? false
+      : existing?.speakerState === 'GRANTED' || existing?.speakerState === 'MUTED'
+        ? existing.speakerState
+        : requestedAudienceState
+    const canonicalPublishPermission = Boolean(
+      !isKicked &&
+      existing?.canPublishAudio === true &&
+      speakerState === 'GRANTED' &&
+      hasCurrentRecordingConfirmation(participantId)
+    )
+    const isMicrophoneActive = canonicalPublishPermission && status.isMicrophoneActive === true
     const participant = {
       participantId,
       role: meta.role,
@@ -1364,14 +1599,16 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
       ws: meta.ws,
       speakerState,
       canSubscribe: typeof status.canSubscribe === 'boolean' ? status.canSubscribe : existing?.canSubscribe ?? true,
-      canPublishAudio: isKicked ? false : typeof status.canPublishAudio === 'boolean' ? status.canPublishAudio : existing?.canPublishAudio ?? false,
-      isMuted: isKicked ? true : typeof status.isMuted === 'boolean' ? status.isMuted : existing?.isMuted ?? false,
+      canPublishAudio: canonicalPublishPermission,
+      isMuted: isMicrophoneActive ? false : true,
       isActiveAudience: isKicked ? false : typeof status.isActiveAudience === 'boolean' ? status.isActiveAudience : existing?.isActiveAudience ?? false,
       isMicrophoneActive,
       isKicked,
       isAliasVisibleToActiveParticipants: existing?.isAliasVisibleToActiveParticipants ?? false,
       canViewActiveParticipants: existing?.canViewActiveParticipants ?? false,
       isAliasHiddenByControl: existing?.isAliasHiddenByControl ?? !getDefaultModerationVisible(),
+      recordingConfirmationSessionId: existing?.recordingConfirmationSessionId,
+      recordingConfirmationEpoch: existing?.recordingConfirmationEpoch,
       microphonePermissionState: typeof status.microphonePermissionState === 'string'
         ? status.microphonePermissionState
         : existing?.microphonePermissionState || 'unknown',
@@ -1553,7 +1790,7 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
       case 'LIVE_AUDIO_GRANT_SPEAK':
         update(msg.participantId, {
           speakerState: 'GRANTED',
-          canPublishAudio: true,
+          canPublishAudio: hasCurrentRecordingConfirmation(msg.participantId),
           isMuted: true,
           isActiveAudience: true,
           isMicrophoneActive: false,
@@ -1574,7 +1811,7 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
         update(msg.participantId, {
           speakerState: 'GRANTED',
           isMuted: true,
-          canPublishAudio: true,
+          canPublishAudio: hasCurrentRecordingConfirmation(msg.participantId),
           isActiveAudience: true,
           isMicrophoneActive: false,
           isKicked: false,
@@ -1609,7 +1846,7 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
           update(participant.participantId, {
             speakerState: 'GRANTED',
             isMuted: true,
-            canPublishAudio: true,
+            canPublishAudio: hasCurrentRecordingConfirmation(participant.participantId),
             isActiveAudience: true,
             isMicrophoneActive: false,
             isKicked: false,
@@ -1714,6 +1951,8 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
       serverEpoch,
       connectionEpoch: meta.connectionEpoch,
       stateRevision,
+      recordingState,
+      recordingEpoch,
     }))
     broadcastConnectionCounts()
     broadcastMediaMasterStatus()
@@ -1726,13 +1965,14 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
     if (role === 'audience' && liveAudioControlPublicKeyMessage) {
       sendJson(ws, liveAudioControlPublicKeyMessage)
     }
+    sendJson(ws, makeRecordingPolicyMessage())
 
     ws.send(JSON.stringify({
       type: 'AUDIO_TIMELINE_STATE',
       timeline: getTimeline(),
     }))
 
-    ws.on('message', (raw) => {
+    ws.on('message', async (raw) => {
       let msg
       try {
         msg = JSON.parse(raw.toString())
@@ -1758,6 +1998,20 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
           : null
         if (access?.accessState !== 'ADMITTED') return
       }
+      if (
+        recordingPolicyTransitionInProgress &&
+        !recordingTransitionSafeTypes.has(msg.type)
+      ) {
+        if (msg.type === 'SESSION_RECORDING_POLICY_UPDATE') {
+          sendRecordingPolicyResult(ws, msg, 'NACK', 'TRANSITION_IN_PROGRESS')
+        }
+        sendError(
+          ws,
+          'RECORDING_POLICY_TRANSITION_IN_PROGRESS',
+          'Retry after the recording policy transition completes',
+        )
+        return
+      }
 
       switch (msg.type) {
         case 'LIVE_AUDIO_CONTROL_RESUME':
@@ -1778,6 +2032,14 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
 
         case 'SESSION_ACCESS_POLICY_UPDATE':
           if (meta?.role === 'control') handleSessionAccessPolicyUpdate(meta, msg)
+          break
+
+        case 'SESSION_RECORDING_POLICY_UPDATE':
+          if (meta?.role === 'control') await handleSessionRecordingPolicyUpdate(meta, msg)
+          break
+
+        case 'AUDIENCE_RECORDING_CONFIRMATION':
+          handleAudienceRecordingConfirmation(meta, msg)
           break
 
         case 'LIVE_AUDIO_PRIVATE_OVERLAY_PUBLISH':
@@ -2125,6 +2387,14 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
             sendError(ws, 'CONTROL_PENDING_FORBIDDEN', 'Pending controls cannot mutate projection state')
             break
           }
+          if (msg.payload?.command === 'RESET_STATE' && msg.payload.clearSession) {
+            try {
+              await snapshotProviders.revokeLiveAudioPublishingForRecording?.()
+            } catch {
+              sendError(ws, 'LIVEKIT_PERMISSION_REVOCATION_FAILED', 'Session rotation was rejected because Live Audio permissions could not be revoked')
+              break
+            }
+          }
           {
             const accepted = onFallbackMessage ? onFallbackMessage(msg, meta) === true : false
             if (!accepted) break
@@ -2137,6 +2407,7 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
             audienceAccessRecords.clear()
             audienceSseTickets.clear()
             accessMode = getDefaultAccessMode()
+            configureRecordingPolicy(snapshotProviders.recordingPolicy)
             broadcastConnectionCounts()
             broadcastAuthorizationState()
             broadcast(JSON.stringify({
@@ -2144,8 +2415,11 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
               presentationSessionId,
               serverEpoch,
               stateRevision,
+              recordingState,
+              recordingEpoch,
               eventId: randomUUID(),
             }))
+            broadcastRecordingPolicy(makeRevisionEnvelope(), false)
             console.log('[SERVER] Presentation session rotated')
           }
           break
@@ -2161,6 +2435,13 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
           const controlMeta = liveAudioControls.get(meta.controlSessionId)
           if (!isControlAuthorized(controlMeta)) {
             sendError(ws, 'CONTROL_PENDING_FORBIDDEN', 'Pending controls cannot send moderation actions')
+            break
+          }
+          if (
+            msg.type === 'LIVE_AUDIO_GRANT_SPEAK' &&
+            !hasCurrentRecordingConfirmation(msg.participantId)
+          ) {
+            sendError(ws, 'RECORDING_CONFIRMATION_REQUIRED', 'Participant must confirm the active recording epoch before receiving microphone permission')
             break
           }
           const revisionEnvelope = applyModerationState(msg)
@@ -2284,4 +2565,6 @@ export {
   getPresentationSessionId,
   getServerEpoch,
   isAudienceParticipantAdmitted,
+  getRecordingPolicy,
+  hasCurrentRecordingConfirmation,
 }

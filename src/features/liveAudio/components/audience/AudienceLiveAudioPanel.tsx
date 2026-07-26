@@ -30,6 +30,9 @@ interface AudienceLiveAudioPanelProps {
   canViewActiveParticipants: boolean;
   visibleParticipants: string[];
   microphoneDiagnostics?: LiveAudioMicrophoneDiagnostics;
+  recordingState: 'NOT_RECORDING' | 'RECORDING';
+  recordingEpoch: number;
+  recordingConfirmed: boolean;
   variant?: 'overlay' | 'inline';
 }
 
@@ -60,6 +63,9 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
   canViewActiveParticipants,
   visibleParticipants,
   microphoneDiagnostics,
+  recordingState,
+  recordingEpoch,
+  recordingConfirmed,
   variant = 'overlay',
 }) => {
   const [isVisible, setIsVisibleState] = useState<boolean>(() => {
@@ -331,6 +337,7 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
         {reconnectStatus}
 
         {isWordGranted ? (
+          <div className="flex h-full flex-col items-center justify-center gap-0.5">
           <button
             onClick={onToggleMicrophone}
             className={`flex items-center justify-center p-3 rounded-xl transition-colors ${isMicrophoneActive
@@ -341,6 +348,13 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
           >
             {isMicrophoneActive ? <Mic className="w-6 h-6" /> : <MicOff className="w-6 h-6" />}
           </button>
+          {recordingState === 'RECORDING' && (
+            <span className="max-w-24 text-center text-[9px] font-bold leading-tight text-red-200">
+              ⬤ Grabación activa · época {recordingEpoch}
+              {!recordingConfirmed ? ' · confirma antes de hablar' : ''}
+            </span>
+          )}
+          </div>
         ) : (
           <button
             onClick={isPendingWord ? onCancelRequest : onRequestWord}

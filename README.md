@@ -293,6 +293,9 @@ SEFER_SESSION_ACCESS_DEFAULT=PUBLIC
 SEFER_AUDIENCE_RESUME_TTL_HOURS=24
 VITE_SEFER_ACTIVE_ALIAS_VISIBLE_BY_DEFAULT=false
 SEFER_ACTIVE_ALIAS_MODERATION_DEFAULT_VISIBLE=true
+VITE_SEFER_RECORDING_AVAILABLE=false
+VITE_SEFER_RECORDING_DEFAULT=NOT_RECORDING
+VITE_SEFER_RECORDING_MUTABLE=false
 LIVEKIT_URL=
 LIVEKIT_API_KEY=
 LIVEKIT_API_SECRET=
@@ -311,11 +314,17 @@ Endpoints:
   mediante `{ participantId, refreshCredential }`, preserva la identidad y rota
   la credencial en cada éxito. Los roles privilegiados vuelven a demostrar su
   autorización; credenciales ajenas, expiradas o reutilizadas se rechazan.
-- `POST /api/livekit/grant-speak`, `revoke-speak`, `mute-participant`,
+- `POST /api/livekit/revoke-speak`, `mute-participant`,
   `mute-all`, `kick-participant`, `rescue-participant`: requieren
   `role: "control"` y un `controlSessionId` autorizado por WebSocket.
   `audience` recibe 403. `rescue-participant` devuelve al usuario expulsado a
   audiencia activa muda (`LISTENER`) sin abrir ni publicar microfono.
+- La concesion de palabra y los cambios de grabacion se realizan exclusivamente
+  por el WebSocket autoritativo. Cada cambio de grabacion usa `stateRevision`;
+  `recordingEpoch` aumenta solo al comenzar una nueva etapa de grabacion. Las
+  confirmaciones de microfono quedan ligadas a la sesion, epoca y credencial
+  admitida. SeferPresenter declara el estado, pero no controla grabadores
+  externos.
 
 No hay endpoints de consentimiento, alias legible ni chat legible. El backend no
 persiste claves, alias, tokens ni mensajes privados en archivos o base de datos.

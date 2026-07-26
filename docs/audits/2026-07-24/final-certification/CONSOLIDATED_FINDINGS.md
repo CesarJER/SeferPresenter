@@ -30,6 +30,13 @@ rendimiento y accesibilidad. No se detectaron S0.
 | SP-SRE-018 | S2 | Readiness Live Audio comprobaba configuración, no LiveKit. | RoomService acotado, API interna y 503 real; `113ad32`. |
 | A11Y-FINAL-001..006 | S2 | Anuncios cerrados, bloqueo, foco remoto, nombres de acciones y errores no eran plenamente operables. | Regiones vivas neutrales, nombres únicos y restauración de foco; `d449dfc`, `cccb634`. |
 | A11Y-FINAL-007 | S1 | Las actualizaciones en vivo reiniciaban el ciclo de foco del diálogo y expulsaban el cursor mientras se escribía el alias. | Ciclo de foco estable durante toda la apertura y regresión de rerender; `c14e157`. |
+| SP-PRIV-005/007 | S2 | El flujo de audiencia omitía validación completa de consentimiento y perfil tras ciertas limpiezas. | Restauración estricta de perfil y consentimiento; `a5e6263`. |
+| SP-PRIV-008 | S3 | Falta de claridad y recordatorio de grabación para la audiencia. | Cuadros de diálogo y textos actualizados; `a33d530`. |
+| A11Y-FINAL-008 | S2 | Páginas de acceso y privacidad quedaban cortadas sin scroll vertical en dispositivos pequeños. | Estilos de scroll habilitados; `764ece6`. |
+| B-08 | S2 | Las peticiones de palabra no se verificaban completamente contra la credencial de sesión en vivo. | Binding enrutado a credenciales; `0091ceb`. |
+| MC-SYNC-008 | S2 | El cliente enviaba `REVOKED` de forma prematura cancelando sus propias peticiones (mitigación). | Condiciones de guardia en estado pendiente; `d76f49e`. |
+| MC-SYNC-002 | S2 | Permisos de vista de lista activa se perdían al recargar la sesión. | Persistencia en memoria y resincronización al vincular; `59ecd9c`. |
+| SP-PRIV-001 | S1 | El uso de `sessionStorage` era frágil en móviles, perdiendo sesión de Quiz y Panel de Audio. | Migración segura a `localStorage`; `a876409`. |
 
 ## Hallazgos residuales
 

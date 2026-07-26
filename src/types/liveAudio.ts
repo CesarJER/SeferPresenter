@@ -38,6 +38,64 @@ export type ControlPrincipalState = 'PRINCIPAL';
 export type ControlSecondaryState = 'PENDING' | 'AUTHORIZED_SYNCING' | 'AUTHORIZED';
 export type LiveAudioControlState = ControlPrincipalState | ControlSecondaryState;
 export type SpeakerState = 'LISTENER' | 'REQUESTED' | 'GRANTED' | 'MUTED' | 'REVOKED';
+export type RecordingState = 'NOT_RECORDING' | 'RECORDING';
+
+export interface SessionRecordingPolicyMessage {
+  type: 'SESSION_RECORDING_POLICY';
+  presentationSessionId: string;
+  serverEpoch: string;
+  stateRevision: number;
+  eventId: string;
+  recordingAvailable: boolean;
+  recordingMutable: boolean;
+  recordingState: RecordingState;
+  recordingEpoch: number;
+  changedDuringSession: boolean;
+  updatedAt: number;
+}
+
+export interface SessionRecordingPolicyUpdateMessage {
+  type: 'SESSION_RECORDING_POLICY_UPDATE';
+  presentationSessionId: string;
+  expectedStateRevision: number;
+  recordingState: RecordingState;
+  commandId: string;
+}
+
+export interface SessionRecordingPolicyResultMessage {
+  type: 'SESSION_RECORDING_POLICY_RESULT';
+  commandId: string;
+  result: 'ACK' | 'NACK';
+  reason?:
+    | 'FORBIDDEN'
+    | 'REVISION_CONFLICT'
+    | 'LIVEKIT_REVOCATION_FAILED'
+    | 'TRANSITION_IN_PROGRESS';
+  presentationSessionId: string;
+  serverEpoch: string;
+  stateRevision: number;
+  recordingState: RecordingState;
+  recordingEpoch: number;
+}
+
+export interface AudienceRecordingConfirmationMessage {
+  type: 'AUDIENCE_RECORDING_CONFIRMATION';
+  participantId: string;
+  presentationSessionId: string;
+  recordingEpoch: number;
+  requestId: string;
+}
+
+export interface AudienceRecordingConfirmationResultMessage {
+  type: 'AUDIENCE_RECORDING_CONFIRMATION_RESULT';
+  result: 'ACK' | 'NACK';
+  participantId?: string;
+  presentationSessionId: string;
+  serverEpoch?: string;
+  stateRevision: number;
+  eventId?: string;
+  recordingEpoch: number;
+}
 
 export interface LiveAudioRemoteTrack {
   id: string;
@@ -75,6 +133,7 @@ export interface LiveAudioParticipantStatusMessage {
   isAliasVisibleToActiveParticipants?: boolean;
   canViewActiveParticipants?: boolean;
   isAliasHiddenByControl?: boolean;
+  recordingConfirmationEpoch?: number;
   connected?: boolean;
   updatedAt?: number;
 }
@@ -356,6 +415,10 @@ export interface LiveAudioOperationalSnapshot {
   interventionQueue: string[];
   policies: {
     accessMode: 'PUBLIC' | 'CONTROLLED';
+    recordingAvailable: boolean;
+    recordingMutable: boolean;
+    recordingState: RecordingState;
+    recordingEpoch: number;
   };
   audienceAccessRequests: Array<{
     participantId: string;
@@ -452,4 +515,9 @@ export type LiveAudioBroadcastMessage =
   | LiveAudioRequestAliasesMessage
   | LiveAudioSnapshotRequestMessage
   | LiveAudioSnapshotMessage
-  | LiveAudioSnapshotPatchMessage;
+  | LiveAudioSnapshotPatchMessage
+  | SessionRecordingPolicyMessage
+  | SessionRecordingPolicyUpdateMessage
+  | SessionRecordingPolicyResultMessage
+  | AudienceRecordingConfirmationMessage
+  | AudienceRecordingConfirmationResultMessage;

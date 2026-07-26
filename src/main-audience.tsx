@@ -328,6 +328,9 @@ function AudienceApp() {
             subscribeToWsMessage={subscribeToWsMessage}
             clientId={clientIdRef.current}
             audienceSession={audienceSession}
+            presentationSessionId={audienceAccess.presentationSessionId}
+            initialRecordingConfirmedEpoch={audienceAccess.recordingConfirmedEpoch}
+            audienceAccessCredential={audienceAccess.credential ?? ''}
           >
             {audienceScreenElement}
           </LiveAudioContainer>

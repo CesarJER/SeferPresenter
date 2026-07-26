@@ -15,6 +15,7 @@ export interface AudienceAccessSnapshot {
   accessState: AudienceAccessState;
   retryAt?: number;
   expiresAt?: number;
+  recordingConfirmedEpoch?: number;
   stateRevision: number;
 }
 

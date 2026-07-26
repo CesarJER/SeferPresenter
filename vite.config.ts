@@ -28,6 +28,8 @@ export default defineConfig(({ mode }) => {
     test: {
       environment: 'node',
       include: ['__tests__/**/*.test.*'],
+      pool: 'threads',
+      fileParallelism: false,
     },
     plugins: [react(), operatorManifestPlugin],
     build: {

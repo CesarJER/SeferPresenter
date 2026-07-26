@@ -12,6 +12,8 @@ import {
   getLiveAudioControlSnapshot,
   getLiveAudioParticipantState,
   getPresentationSessionId,
+  getRecordingPolicy,
+  hasCurrentRecordingConfirmation,
   getServerEpoch,
   getSessionAccessMode,
   issueAudienceSseTicket,
@@ -1287,6 +1289,8 @@ liveKitApi = createLiveKitApi({
   getLiveAudioControlSnapshot,
   getLiveAudioParticipantState,
   isLiveAudioControlAuthorized,
+  getRecordingPolicy,
+  hasCurrentRecordingConfirmation,
 })
 
 let wsServer
@@ -1305,6 +1309,9 @@ server.listen(port, () => {
       kicked: [],
     },
     getQuizAggregateSnapshot,
+    recordingPolicy: operatorManifest,
+    revokeLiveAudioPublishingForRecording: () =>
+      liveKitApi?.revokeAudiencePublishingForRecording?.(),
   })
   console.log(`SeferPresenter local backend listening on http://localhost:${port}${staticLabel}`)
   console.log(`SeferPresenter WebSocket disponible en ws://localhost:${port}/ws`)

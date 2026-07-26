@@ -101,6 +101,9 @@ const AudienceScreen = ({
       canViewActiveParticipants={liveAudio.canViewActiveParticipants}
       visibleParticipants={liveAudio.visibleParticipants}
       microphoneDiagnostics={liveAudio.microphoneDiagnostics}
+      recordingState={liveAudio.recordingState}
+      recordingEpoch={liveAudio.recordingEpoch}
+      recordingConfirmed={liveAudio.recordingConfirmed}
       variant="inline"
     />
   ) : null;

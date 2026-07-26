@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { randomUUID } from 'node:crypto';
 import { createLiveKitApi } from '../server/livekit-server.mjs';
 
 interface ApiResponse {
@@ -161,5 +162,96 @@ describe('LiveKit token endpoint security', () => {
       refreshCredential: token.refreshCredential,
     });
     expect(expired.status).toBe(401);
+  });
+
+  it('binds Audience refresh and publish permission to the same admitted credential', async () => {
+    api.close();
+    const firstParticipantId = randomUUID();
+    const secondParticipantId = randomUUID();
+    const access = new Map([
+      ['credential-first', { participantId: firstParticipantId }],
+      ['credential-second', { participantId: secondParticipantId }],
+    ]);
+    api = createLiveKitApi({
+      isLiveAudioControlAuthorized: () => false,
+      authorizeAudienceCredential: (credential: string) => access.get(credential) ?? null,
+      getLiveAudioParticipantState: (participantId: string) => participantId === firstParticipantId
+        ? {
+            speakerState: 'GRANTED',
+            canPublishAudio: true,
+            canSubscribe: true,
+            isMuted: true,
+          }
+        : null,
+      hasCurrentRecordingConfirmation: (participantId: string) => participantId === firstParticipantId,
+    });
+
+    const issued = await call('/api/livekit/token', {
+      role: 'audience',
+      audienceAccessCredential: 'credential-first',
+    });
+    expect(issued.status).toBe(200);
+    expect(issued.body.participantId).toBe(firstParticipantId);
+    expect(decodeJwtPayload(String(issued.body.token)).video).toMatchObject({ canPublish: true });
+
+    const foreignRefresh = await call('/api/livekit/refresh-token', {
+      participantId: firstParticipantId,
+      refreshCredential: issued.body.refreshCredential,
+      audienceAccessCredential: 'credential-second',
+    });
+    expect(foreignRefresh.status).toBe(403);
+  });
+
+  it('revokes connected Audience publishing through the LiveKit room service', async () => {
+    api.close();
+    const listParticipants = vi.fn().mockResolvedValue([{
+      identity: 'audience-connected',
+      tracks: [{ sid: 'microphone-track', source: 2, muted: false }],
+    }]);
+    const updateParticipant = vi.fn().mockResolvedValue({
+      tracks: [{ sid: 'microphone-track', source: 2, muted: false }],
+    });
+    const mutePublishedTrack = vi.fn().mockResolvedValue({});
+    api = createLiveKitApi({
+      isLiveAudioControlAuthorized: () => false,
+      getLiveAudioParticipantState: () => null,
+      createRoomServiceClient: () => ({
+        listParticipants,
+        updateParticipant,
+        mutePublishedTrack,
+      }),
+    });
+
+    const issued = await issueAudience();
+    listParticipants.mockResolvedValue([{
+      identity: issued.participantIdentity,
+      tracks: [{ sid: 'microphone-track', source: 2, muted: false }],
+    }]);
+
+    await api.revokeAudiencePublishingForRecording();
+
+    expect(listParticipants).toHaveBeenCalledWith('sefer-live-audio');
+    expect(updateParticipant).toHaveBeenCalledWith(
+      'sefer-live-audio',
+      issued.participantIdentity,
+      {
+        permission: {
+          canSubscribe: true,
+          canPublish: false,
+          canPublishData: false,
+          canPublishSources: [],
+        },
+      },
+    );
+    expect(mutePublishedTrack).toHaveBeenCalledWith(
+      'sefer-live-audio',
+      issued.participantIdentity,
+      'microphone-track',
+      true,
+    );
+    expect(api.getState().participants).toContainEqual(expect.objectContaining({
+      participantId: issued.participantId,
+      canPublish: false,
+    }));
   });
 });

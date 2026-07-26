@@ -348,6 +348,44 @@ not part of the technical snapshot and not a ciphertext history.
 snapshot: submitted-answer counts by slide and final-score buckets. It does not
 include individual answers, nominal rankings, display names, or session IDs.
 
+### Declarative recording policy
+
+`server/ws-server.mjs` is the sole authority for `recordingState` and
+`recordingEpoch`. Both fields are included in the operational snapshot and
+`SESSION_RECORDING_POLICY`; every accepted policy change advances
+`stateRevision` exactly once. Only the ready principal Control may send
+`SESSION_RECORDING_POLICY_UPDATE`, and it must provide the exact
+`presentationSessionId` and expected revision. The server returns a correlated
+`SESSION_RECORDING_POLICY_RESULT` ACK/NACK.
+
+`recordingEpoch` advances only on `NOT_RECORDING -> RECORDING`. Audience
+confirmation is bound to the admitted credential's technical participant,
+`presentationSessionId`, and active epoch. A client cannot grant itself speaker
+or publish state through `LIVE_AUDIO_PARTICIPANT_STATUS`; the server derives
+those fields from canonical moderation and confirmation state. Session rotation
+clears every confirmation even if the next session uses the same numeric epoch.
+
+Before accepting a transition to `RECORDING`, the backend uses the LiveKit
+RoomService API to remove Audience publish grants and mute connected microphone
+tracks. The short transition is serialized against other WebSocket mutations.
+If LiveKit revocation fails, the command is NACKed and neither policy nor
+revision changes. The server then invalidates confirmations, closes active
+microphones, broadcasts the new policy and a versioned mute delta. Ending
+recording preserves the epoch and speaking permission; it only removes the
+recording reminder.
+
+LiveKit token issuance and refresh consult the same authoritative participant,
+admission credential, and recording confirmation. The persistent Audience
+credential never appears in a URL. The HTTP grant endpoint is intentionally
+disabled: moderation grants travel only through the versioned WebSocket path so
+LiveKit and the technical snapshot cannot diverge.
+
+Audience presents the recording notice only after an alias has joined the
+session. It records one displayed toast per session/epoch, uses explicit text
+and an icon in a polite live region, and requires a keyboard-operable modal
+confirmation before microphone use. This policy is declarative:
+SeferPresenter does not operate an external recorder.
+
 ### Build And Runtime Optionality
 
 Live Audio has two separate switches:
@@ -386,8 +424,8 @@ data.
 Fase 5.4 adds `server/livekit-server.mjs` for self-hosted LiveKit backend
 endpoints. It keeps participant, token, speaker, mute, kick, and rescue state in memory
 only. If `SEFER_LIVE_AUDIO_ENABLED=false` or any required `LIVEKIT_*` variable is
-missing, `/api/livekit/status` reports disabled or unavailable and the server
-still starts without importing or requiring a LiveKit SDK. Token generation uses
+missing, `/api/livekit/status` reports disabled or unavailable and the base
+application remains usable. Token generation uses
 minimum grants by role: the public endpoint can mint only minimum Audience
 grants. Control additionally requires Basic Auth plus an authorized WS
 `controlSessionId`; Presenter requires Basic Auth. Tokens include only ephemeral LiveKit identity and JSON metadata with the

@@ -31,6 +31,7 @@ interface UseLiveAudioOptions {
   controlSessionId?: string;
   autoConnect?: boolean;
   microphoneVolumePercent?: number;
+  audienceAccessCredential?: string;
 }
 
 interface UseLiveAudioResult {
@@ -179,18 +180,8 @@ const requestToken = async (
   role: LiveAudioParticipantRole,
   roomSession?: string,
   controlSessionId?: string,
+  audienceAccessCredential?: string,
 ) => {
-  let audienceAccessCredential: string | undefined;
-  if (role === 'audience') {
-    try {
-      const stored = JSON.parse(localStorage.getItem('sefer-audience-resume-credential') || 'null') as {
-        credential?: unknown;
-      } | null;
-      if (typeof stored?.credential === 'string') audienceAccessCredential = stored.credential;
-    } catch {
-      audienceAccessCredential = undefined;
-    }
-  }
   const response = await fetch('/api/livekit/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
@@ -201,16 +192,11 @@ const requestToken = async (
   return (await response.json()) as LiveAudioTokenResponse;
 };
 
-const refreshToken = async (participantId: string, refreshCredential: string) => {
-  let audienceAccessCredential: string | undefined;
-  try {
-    const stored = JSON.parse(localStorage.getItem('sefer-audience-resume-credential') || 'null') as {
-      credential?: unknown;
-    } | null;
-    if (typeof stored?.credential === 'string') audienceAccessCredential = stored.credential;
-  } catch {
-    audienceAccessCredential = undefined;
-  }
+const refreshToken = async (
+  participantId: string,
+  refreshCredential: string,
+  audienceAccessCredential?: string,
+) => {
   const response = await fetch('/api/livekit/refresh-token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
@@ -235,6 +221,7 @@ export const useLiveAudio = ({
   controlSessionId,
   autoConnect = true,
   microphoneVolumePercent = 100,
+  audienceAccessCredential,
 }: UseLiveAudioOptions): UseLiveAudioResult => {
   const { availability } = useLiveAudioAvailability();
   const [state, setState] = useState<LiveAudioConnectionState>('disconnected');
@@ -462,7 +449,7 @@ export const useLiveAudio = ({
       const activeParticipantId = participantIdRef.current;
       if (!activeParticipantId || connectionRunRef.current !== runId) return;
 
-      void refreshToken(activeParticipantId, tokenResponse.refreshCredential)
+      void refreshToken(activeParticipantId, tokenResponse.refreshCredential, audienceAccessCredential)
         .then((nextToken) => {
           if (connectionRunRef.current !== runId) return;
           if (nextToken.participantId !== activeParticipantId) {
@@ -476,7 +463,7 @@ export const useLiveAudio = ({
           if (connectionRunRef.current === runId) setState('reconnectFailed');
         });
     }, delayMs);
-  }, []);
+  }, [audienceAccessCredential]);
 
   const publishMicrophone = useCallback(async (options?: { musicMode?: boolean }) => {
     if (!canRolePublish(role)) {
@@ -639,8 +626,8 @@ export const useLiveAudio = ({
         const existingParticipantId = participantIdRef.current;
         console.log(`[LIVEKIT] livekit:connect:start role=${role}`);
         const tokenResponse = existingParticipantId
-          ? await refreshToken(existingParticipantId, tokenRef.current?.refreshCredential || '')
-          : await requestToken(role, roomSession, controlSessionId);
+          ? await refreshToken(existingParticipantId, tokenRef.current?.refreshCredential || '', audienceAccessCredential)
+          : await requestToken(role, roomSession, controlSessionId, audienceAccessCredential);
         if (cancelled || connectionRunRef.current !== runId) return;
         tokenRef.current = tokenResponse;
         setParticipantId(tokenResponse.participantId);
@@ -664,7 +651,7 @@ export const useLiveAudio = ({
           participantIdRef.current = null;
           
           try {
-            const tokenResponse = await requestToken(role, roomSession, controlSessionId);
+            const tokenResponse = await requestToken(role, roomSession, controlSessionId, audienceAccessCredential);
             if (cancelled || connectionRunRef.current !== runId) return;
             tokenRef.current = tokenResponse;
             setParticipantId(tokenResponse.participantId);
@@ -705,6 +692,7 @@ export const useLiveAudio = ({
     };
   }, [
     addRemoteTrack,
+    audienceAccessCredential,
     autoConnect,
     availability,
     clearMicrophoneProcessor,
@@ -789,8 +777,8 @@ export const useLiveAudio = ({
       const activeParticipantId = participantIdRef.current;
       console.log(`[LIVEKIT] livekit:connect:start role=${role} (retryAudio)`);
       const tokenResponse = activeParticipantId
-        ? await refreshToken(activeParticipantId, tokenRef.current?.refreshCredential || '')
-        : await requestToken(role, roomSession, controlSessionId);
+        ? await refreshToken(activeParticipantId, tokenRef.current?.refreshCredential || '', audienceAccessCredential)
+        : await requestToken(role, roomSession, controlSessionId, audienceAccessCredential);
       if (connectionRunRef.current !== runId) return;
       tokenRef.current = tokenResponse;
       setParticipantId(tokenResponse.participantId);
@@ -811,6 +799,7 @@ export const useLiveAudio = ({
     }
   }, [
     addRemoteTrack,
+    audienceAccessCredential,
     clearMicrophoneProcessor,
     clearLifecycleTimers,
     controlSessionId,
