@@ -35,6 +35,8 @@ interface QuizAudienceViewProps {
   /** Scoring support */
   savedScore?: QuizQuestionScore;
   allScores?: Record<string, QuizQuestionScore>;
+  resultSlideIds?: string[];
+  scoreRequestId?: number;
   onSaveScore?: (score: QuizQuestionScore) => void;
   onSendFinalScore?: (rank: number) => void;
   maxBaseCentipunts?: number;
@@ -58,6 +60,8 @@ export const QuizAudienceView: React.FC<QuizAudienceViewProps> = ({
   onBonusClaim,
   savedScore,
   allScores,
+  resultSlideIds,
+  scoreRequestId,
   onSaveScore,
   onSendFinalScore,
   maxBaseCentipunts,
@@ -124,7 +128,9 @@ export const QuizAudienceView: React.FC<QuizAudienceViewProps> = ({
       // Sum everything
       let totalCentipunts = 0;
       const questions: QuizQuestionScore[] = [];
+      const resultSlideIdSet = resultSlideIds ? new Set(resultSlideIds) : null;
       for (const sc of Object.values(allScores)) {
+        if (resultSlideIdSet && !resultSlideIdSet.has(sc.slideId)) continue;
         totalCentipunts += sc.totalCentipunts;
         questions.push(sc);
       }
@@ -144,7 +150,7 @@ export const QuizAudienceView: React.FC<QuizAudienceViewProps> = ({
         setProfile(p);
       }
     }
-  }, [isResults, allScores, quizData, onSendFinalScore, maxBaseCentipunts]);
+  }, [isResults, allScores, quizData, onSendFinalScore, maxBaseCentipunts, resultSlideIds, scoreRequestId]);
 
   return (
     <div className="flex h-full w-full flex-col gap-3 overflow-auto px-4 py-4 pointer-events-auto">

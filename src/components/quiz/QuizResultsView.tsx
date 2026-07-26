@@ -9,7 +9,7 @@
 
 import React from 'react';
 import { motion } from 'framer-motion';
-import { Trophy, Star, Users } from 'lucide-react';
+import { RefreshCw, Trophy, Star, Users } from 'lucide-react';
 import type { QuizResultProfile } from '../../types/presentation';
 import type { QuizRangeStats, QuizTotalScore } from '../../types/quiz';
 import { formatCentipunts, calcResultRanges } from '../../utils/quizUtils';
@@ -21,6 +21,8 @@ interface QuizResultsControllerProps {
   rangeStats: QuizRangeStats[];
   totalSessions: number;
   maxBaseCentipunts: number;
+  registeredQuestionCount: number;
+  onRecalculateResults: () => void;
 }
 
 export const QuizResultsController: React.FC<QuizResultsControllerProps> = ({
@@ -28,6 +30,8 @@ export const QuizResultsController: React.FC<QuizResultsControllerProps> = ({
   rangeStats,
   totalSessions,
   maxBaseCentipunts,
+  registeredQuestionCount,
+  onRecalculateResults,
 }) => {
   const sorted = [...profiles].sort((a, b) => a.rank - b.rank);
   const ranges = calcResultRanges(sorted, maxBaseCentipunts);
@@ -38,6 +42,17 @@ export const QuizResultsController: React.FC<QuizResultsControllerProps> = ({
         <Users size={12} />
         <span>{totalSessions} participantes</span>
       </div>
+
+      <button
+        type="button"
+        onClick={onRecalculateResults}
+        disabled={registeredQuestionCount === 0}
+        className="flex items-center justify-center gap-1.5 rounded-md border border-violet-700 bg-violet-950/50 px-2.5 py-1.5 text-[10px] font-bold text-violet-200 transition-colors hover:bg-violet-900/60 disabled:cursor-not-allowed disabled:opacity-40"
+        title="Recalcular usando las preguntas marcadas en verde"
+      >
+        <RefreshCw size={11} />
+        Recalcular
+      </button>
 
       <div className="overflow-hidden rounded-lg border border-gray-800 bg-gray-900/50">
         <table className="w-full text-left border-collapse">

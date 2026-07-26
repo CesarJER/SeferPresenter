@@ -16,6 +16,7 @@ interface AudienceScreenProps {
   background: string;
   fontScale: number;
   presentationTitle: string;
+  presentationId: string | null;
   scriptureState: ScriptureNavState | null;
   slide: Slide | null;
   videoState: VideoState | null;
@@ -23,6 +24,8 @@ interface AudienceScreenProps {
   quizCurrentSubslideIndex?: number;
   quizTimerState?: QuizTimerState;
   quizMaxBaseCentipunts?: number;
+  quizResultSlideIds?: string[];
+  quizScoreRequestId?: number;
   autoduckState?: AutoduckState;
   onPlaybackBlocked?: (blocked: boolean) => void;
 }
@@ -32,6 +35,7 @@ const AudienceScreen = ({
   background,
   fontScale,
   presentationTitle,
+  presentationId,
   scriptureState,
   slide,
   videoState,
@@ -39,10 +43,12 @@ const AudienceScreen = ({
   quizCurrentSubslideIndex = 0,
   quizTimerState,
   quizMaxBaseCentipunts,
+  quizResultSlideIds,
+  quizScoreRequestId,
   autoduckState,
   onPlaybackBlocked,
 }: AudienceScreenProps) => {
-  const audienceAnswers = useAudienceAnswers();
+  const audienceAnswers = useAudienceAnswers(presentationId);
   const activeSubslide = quizSubslides[quizCurrentSubslideIndex];
   const isCitaVerse = activeSubslide?.kind === 'cita-verse';
 
@@ -132,6 +138,8 @@ const AudienceScreen = ({
           onBonusClaim={(claimed) => audienceAnswers.setBonusClaim(slide.id, claimed)}
           savedScore={audienceAnswers.getScores()[slide.id]}
           allScores={audienceAnswers.getScores()}
+          resultSlideIds={quizResultSlideIds}
+          scoreRequestId={quizScoreRequestId}
           onSaveScore={(score) => audienceAnswers.saveScore(slide.id, score)}
           onSendFinalScore={audienceAnswers.sendFinalScore}
           maxBaseCentipunts={quizMaxBaseCentipunts}

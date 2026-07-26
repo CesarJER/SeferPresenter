@@ -39,7 +39,7 @@ El backend local vive en `server/local-server.mjs`. Mantiene inicialmente la mis
 - `POST /api/audio-telemetry`
 - `POST /api/video-telemetry`
 - `POST /api/display-telemetry`
-- `GET /api/backgrounds`
+- `GET /api/backgrounds` (imágenes AVIF, GIF, JPEG, PNG, SVG y WebP; vídeo MP4 y WebM)
 - `GET /api/audio`
 - `GET /api/audio-sync`
 - `POST /api/audio-sync`
@@ -184,6 +184,13 @@ Canales principales:
   para cifrar la lista visible de nicks.
 
 La audiencia muestra la misma imagen viva del presenter, sin controles de navegacion ni apertura del panel de control.
+
+Las respuestas y puntuaciones de quiz se separan por presentacion. En una
+diapositiva de resultados, Control puede recalcular las categorias usando las
+preguntas marcadas en verde, es decir, las que tienen respuestas registradas.
+El servidor conserva esas respuestas durante la sesion para que Control pueda
+recuperarlas tras una recarga, y solicita a Audience que reenvie sus nuevas
+puntuaciones en cada recalculo.
 
 `PRIVATE_CONTROL_SIGNAL` es un contenedor tecnico cifrado para senales privadas
 entre Audience y controles autorizados. No contiene alias, mensajes ni

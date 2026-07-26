@@ -408,6 +408,7 @@ export function scoreAnswer(data: QuizData, answer: QuizAudienceAnswer): QuizQue
 
 export function calcMaxBaseCentipunts(quizSlides: QuizData[]): number {
   return quizSlides.reduce((acc, data) => {
+    if (data.isResultsSlide) return acc;
     let max = 50;
     if (data.citaRef) max += 50;
     return acc + max;
