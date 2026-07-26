@@ -22,6 +22,7 @@ export const parsePublicCatalogs = (envJson) => {
       const title = String(item.title || '').trim()
       const description = item.description !== undefined ? String(item.description).trim() : undefined
       const rawTags = Array.isArray(item.tags) ? item.tags : []
+      const countSefer = item.count_sefer ?? false
 
       if (!id) {
         console.error('[Public Catalogs] Error: Catalog missing id')
@@ -33,6 +34,10 @@ export const parsePublicCatalogs = (envJson) => {
       }
       if (!title) {
         console.error(`[Public Catalogs] Error: Catalog '${id}' missing title`)
+        return []
+      }
+      if (typeof countSefer !== 'boolean') {
+        console.error(`[Public Catalogs] Error: Catalog '${id}' count_sefer must be boolean`)
         return []
       }
 
@@ -77,7 +82,8 @@ export const parsePublicCatalogs = (envJson) => {
         path: rawPath,
         title,
         ...(description ? { description } : {}),
-        tags
+        tags,
+        count_sefer: countSefer,
       })
     }
 

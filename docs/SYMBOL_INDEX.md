@@ -71,7 +71,9 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
 - `AudienceScreen` - `src/components/audience/AudienceScreen.tsx`: audience route projection/quiz selection.
 - `CatalogApp` - `src/components/catalog/CatalogApp.tsx`: public catalog root component, handles routing.
 - `CatalogIndex` - `src/components/catalog/CatalogIndex.tsx`: displays available public catalogs.
-- `CatalogViewer` - `src/components/catalog/CatalogViewer.tsx`: displays presentations for a given public catalog.
+- `CatalogViewer` - `src/components/catalog/CatalogViewer.tsx`: displays presentations for a given public catalog with safe excerpts and search highlighting.
+- `src/utils/catalogCards.ts` - pure catalog card count, title-slide,
+  plain-text excerpt, and accent-insensitive highlight helpers.
 - `ActiveParticipantsPanel` - `src/features/liveAudio/components/audience/ActiveParticipantsPanel.tsx`: audience-side alias-sharing checkbox and authorized visible participant list.
 - `PwaRestartButton` - `src/components/shared/PwaRestartButton.tsx`: confirmed reload/update action for installed audience/control PWAs.
 - Proposed Live Audio components - future optional runtime components under

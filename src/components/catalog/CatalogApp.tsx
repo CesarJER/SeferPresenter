@@ -6,7 +6,9 @@ export interface CatalogDef {
   id: string;
   path: string;
   title: string;
+  description?: string;
   tags: string[];
+  count_sefer: boolean;
 }
 
 export const CatalogApp: React.FC = () => {
