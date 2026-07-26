@@ -216,7 +216,8 @@ const validateOperationalParticipantSnapshot = (
   if (typeof value.role !== 'string' || !liveAudioParticipantRoles.has(value.role as LiveAudioParticipantRole)) {
     errors.push(`${path}.role no es valido.`);
   }
-  if (value.alias !== undefined && typeof value.alias !== 'string') errors.push(`${path}.alias debe ser texto.`);
+  if (value.alias !== undefined) errors.push(`${path}.alias no puede formar parte del snapshot del servidor.`);
+  if (value.activeListPublicKey !== undefined) errors.push(`${path}.activeListPublicKey no puede formar parte del snapshot del servidor.`);
   if (typeof value.operationalRole !== 'string' || !liveAudioOperationalRoles.has(value.operationalRole)) {
     errors.push(`${path}.operationalRole no es valido.`);
   }
@@ -894,7 +895,17 @@ const validateLiveAudioBroadcastMessage = (value: Record<string, unknown>): Vali
       validateOptionalCreatedAt(value, value.type, errors);
       break;
     case 'LIVE_AUDIO_SNAPSHOT_PATCH':
-      if (!isRecord(value.snapshot)) errors.push('snapshot debe ser un objeto.');
+      if (!isRecord(value.snapshot)) {
+        errors.push('snapshot debe ser un objeto.');
+      } else if (
+        Array.isArray(value.snapshot.participants) &&
+        value.snapshot.participants.some((participant) => (
+          isRecord(participant) &&
+          (participant.alias !== undefined || participant.activeListPublicKey !== undefined)
+        ))
+      ) {
+        errors.push('snapshot no puede contener alias ni claves efimeras de Audience.');
+      }
       validateOptionalCreatedAt(value, value.type, errors);
       break;
     default:

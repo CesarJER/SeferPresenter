@@ -160,10 +160,10 @@ so `/proteccion-datos` works without LiveKit. Keep Live Audio optional: disabled
 or misconfigured LiveKit must leave `/presenter`, `/control`, and `/audience`
 usable in presentation-only mode.
 
-For active participant visibility, Audience sends
-`LIVE_AUDIO_ACTIVE_PARTICIPANT_PROFILE` with alias, sharing preference, and
-public key when it joins or changes visibility. `LiveAudioControlContainer.tsx`
-computes and distributes only the encrypted `VISIBLE_ACTIVE_PARTICIPANTS` list,
+For active participant visibility, Audience sends only its sharing preference
+through `LIVE_AUDIO_ACTIVE_PARTICIPANT_PROFILE`; alias and ephemeral public key
+travel in `PRIVATE_CONTROL_SIGNAL`. `LiveAudioControlContainer.tsx` keeps the
+alias map in memory and distributes only the encrypted `VISIBLE_ACTIVE_PARTICIPANTS` list,
 while `AudienceLiveAudioPanel.tsx` and `ActiveParticipantsPanel.tsx` render the
 audience-side checkbox/list. Authorization state is clear WebSocket state;
 only the list of visible nicks is encrypted.

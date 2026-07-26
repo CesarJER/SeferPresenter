@@ -59,7 +59,6 @@ export interface LiveAudioParticipantStatusMessage {
   type: 'LIVE_AUDIO_PARTICIPANT_STATUS';
   participantId: string;
   role: LiveAudioParticipantRole;
-  alias?: string;
   operationalRole?: LiveAudioOperationalRole;
   microphonePermissionState?: MicrophonePermissionState;
   microphoneTrackState?: MicrophoneTrackState;
@@ -74,7 +73,6 @@ export interface LiveAudioParticipantStatusMessage {
   isAliasVisibleToActiveParticipants?: boolean;
   canViewActiveParticipants?: boolean;
   isAliasHiddenByControl?: boolean;
-  activeListPublicKey?: string;
   connected?: boolean;
   updatedAt?: number;
 }
@@ -153,8 +151,6 @@ export interface LiveAudioRemoveActiveParticipantMessage {
 export interface LiveAudioActiveParticipantProfileMessage {
   type: 'LIVE_AUDIO_ACTIVE_PARTICIPANT_PROFILE';
   participantId: string;
-  alias: string;
-  activeListPublicKey: string;
   isAliasVisibleToActiveParticipants: boolean;
   createdAt?: number;
 }
@@ -243,7 +239,6 @@ export interface LiveAudioRequestAliasesMessage {
 export interface LiveAudioOperationalParticipantSnapshot {
   participantId: string;
   role: LiveAudioParticipantRole;
-  alias?: string;
   operationalRole: LiveAudioOperationalRole;
   microphonePermissionState: MicrophonePermissionState;
   microphoneTrackState: MicrophoneTrackState;
@@ -257,7 +252,6 @@ export interface LiveAudioOperationalParticipantSnapshot {
   isAliasVisibleToActiveParticipants?: boolean;
   canViewActiveParticipants?: boolean;
   isAliasHiddenByControl?: boolean;
-  activeListPublicKey?: string;
   connected: boolean;
   connectedAt?: number;
   disconnectedAt?: number;
