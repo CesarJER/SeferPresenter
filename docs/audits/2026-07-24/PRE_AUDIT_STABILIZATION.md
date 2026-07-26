@@ -5,6 +5,11 @@
 This phase stabilized architecture that would otherwise invalidate findings
 from the production audit. It does not certify the product.
 
+After this phase, the dedicated multi-Control audit identified a blocking
+synchronization defect. The curated next gate is recorded in
+`MULTI_CONTROL_SYNC_AUDIT.md`; broader stabilization/certification must not
+resume until that gate passes.
+
 ## Changes
 
 1. Audience projection sync now uses `/api/audience/state` and
