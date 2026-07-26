@@ -316,6 +316,9 @@ LiveKit para que anuncie la dirección nueva.
 
 ## Verificacion recomendada
 
+El registro de estabilización previo a la auditoría de producción está en
+`docs/audits/2026-07-24/PRE_AUDIT_STABILIZATION.md`.
+
 Antes de cerrar cambios importantes:
 
 ```bash
