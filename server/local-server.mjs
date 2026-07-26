@@ -48,7 +48,7 @@ import {
   validateAudioSyncPayload,
   validatePresentationsPayload,
 } from './content-validation.mjs'
-import { writeJsonSafely } from './json-persistence.mjs'
+import { readJsonWithRecovery, writeJsonSafely } from './json-persistence.mjs'
 import { resolvePathInsideRoot } from './path-containment.mjs'
 import { deriveAudienceProjectionState } from './audience-projection-state.mjs'
 import {
@@ -235,17 +235,16 @@ const readBody = (req, maxBytes = 5 * 1024 * 1024) =>
     req.on('error', reject)
   })
 
-const readJsonFile = (filePath, fallback) => {
-  if (!fs.existsSync(filePath)) return fallback
-  const content = fs.readFileSync(filePath, 'utf-8').replace(/^\uFEFF/, '')
-  return JSON.parse(content)
+const getBackupPath = (filePath) => {
+  const configuredBackupDir = process.env.SEFER_BACKUP_DIR?.trim()
+  return configuredBackupDir
+    ? path.join(configuredBackupDir, `${path.basename(filePath)}.bak`)
+    : `${filePath}.bak`
 }
 
 const persistJson = (filePath, value) => {
   const configuredBackupDir = process.env.SEFER_BACKUP_DIR?.trim()
-  const backupPath = configuredBackupDir
-    ? path.join(configuredBackupDir, `${path.basename(filePath)}.bak`)
-    : `${filePath}.bak`
+  const backupPath = getBackupPath(filePath)
   if (configuredBackupDir) fs.mkdirSync(configuredBackupDir, { recursive: true })
   const result = writeJsonSafely(filePath, value, {
     backupPath,
@@ -257,28 +256,47 @@ const persistJson = (filePath, value) => {
   return result
 }
 
-const readPresentationsCache = () => {
-  try {
-    const validation = validatePresentationsPayload(readJsonFile(path.join(rootDir, 'presentations.json'), []))
+const readValidatedJsonWithRecovery = (filePath, fallback, validate, label) => {
+  const validateValue = (value) => {
+    const validation = validate(value)
     if (!validation.ok) throw new Error(formatValidationError(validation))
-    presentationsCache = normalizePresentations(validation.value)
-  } catch (error) {
-    console.error(`[PRESENTATIONS] Stored data rejected: ${error.message}`)
-    presentationsCache = []
+    return validation.value
   }
+
+  const backupPath = getBackupPath(filePath)
+  try {
+    const result = readJsonWithRecovery({
+      filePath,
+      backupPath,
+      fallback,
+      validate: validateValue,
+    })
+    if (result.recovered) {
+      console.warn(`[${label}] Primary data restored from validated backup: ${backupPath}`)
+    }
+    return result.value
+  } catch (error) {
+    throw new Error(`${label} data rejected; refusing to continue. ${error.message}`)
+  }
+}
+
+const readPresentationsCache = () => {
+  const filePath = path.join(rootDir, 'presentations.json')
+  presentationsCache = normalizePresentations(
+    readValidatedJsonWithRecovery(filePath, [], validatePresentationsPayload, 'PRESENTATIONS')
+  )
   publicPresentationsCache = buildPublicPresentations(presentationsCache, getPublicCatalogs())
   return presentationsCache
 }
 
 const readAudioSyncMapsCache = () => {
-  try {
-    const validation = validateAudioSyncPayload(readJsonFile(path.join(rootDir, 'audio_sync.json'), []))
-    if (!validation.ok) throw new Error(formatValidationError(validation))
-    audioSyncMapsCache = validation.value
-  } catch (error) {
-    console.error(`[AUDIO_SYNC] Stored data rejected: ${error.message}`)
-    audioSyncMapsCache = []
-  }
+  const filePath = path.join(rootDir, 'audio_sync.json')
+  audioSyncMapsCache = readValidatedJsonWithRecovery(
+    filePath,
+    [],
+    validateAudioSyncPayload,
+    'AUDIO_SYNC'
+  )
   return audioSyncMapsCache
 }
 
@@ -1295,9 +1313,9 @@ liveKitApi = createLiveKitApi({
 
 let wsServer
 
+readAudioSyncMapsCache()
+readPresentationsCache()
 server.listen(port, () => {
-  readAudioSyncMapsCache()
-  readPresentationsCache()
   const staticLabel = staticDir ? `, serving ${path.relative(rootDir, staticDir)}` : ''
   wsServer = createWsServer(server, handleWsMessageFromClient, {
     getLiveKitState: () => liveKitApi?.getState?.() || {
