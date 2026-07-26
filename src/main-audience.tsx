@@ -205,13 +205,14 @@ function AudienceApp() {
     }
     : activeSlide, [activeBackground, activeSlide, scriptureState]);
 
-  const maxBaseCentipunts = useMemo(() => {
+  const fullMaxBaseCentipunts = useMemo(() => {
     if (!currentPresentation) return 0;
     const allQuizData = currentPresentation.slides
       .filter(s => s.type === 'quiz' && s.quizData)
       .map(s => s.quizData!);
     return calcMaxBaseCentipunts(allQuizData);
   }, [currentPresentation]);
+  const maxBaseCentipunts = quizState?.maxBaseCentipunts ?? fullMaxBaseCentipunts;
 
   const handleEnableAudienceMedia = useCallback(async () => {
     await resumeManagedMediaAudio();
@@ -270,6 +271,7 @@ function AudienceApp() {
       background={activeBackground}
       fontScale={currentPresentation?.fontScale ?? 1}
       presentationTitle={currentPresentation?.title || ''}
+      presentationId={currentPresentation?.id ?? null}
       scriptureState={quizScriptureState || scriptureState}
       slide={activePresenterSlide}
       videoState={videoState}
@@ -277,6 +279,8 @@ function AudienceApp() {
       quizCurrentSubslideIndex={quizCurrentSubslideIndex}
       quizTimerState={quizTimer.timerState}
       quizMaxBaseCentipunts={maxBaseCentipunts}
+      quizResultSlideIds={quizState?.resultQuizSlideIds}
+      quizScoreRequestId={quizState?.scoreRequestId}
       autoduckState={autoduckState}
       onPlaybackBlocked={handlePlaybackBlocked}
     />

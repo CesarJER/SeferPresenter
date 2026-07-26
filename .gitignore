@@ -7,7 +7,7 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-
+tmp/*
 legacy
 node_modules
 dist
@@ -34,5 +34,8 @@ launcher
 *.sw?
 .agents
 .env*
+*.bak[0-9]
+*.bak
+
 
 public/logo.svg

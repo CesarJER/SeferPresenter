@@ -1,31 +1,62 @@
+x-logging: &bounded-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   app:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: sefer-presenter-app
+      args:
+        VITE_SEFER_LIVE_AUDIO_BUILD: ${VITE_SEFER_LIVE_AUDIO_BUILD:-false}
+        VITE_SEFER_ACTIVE_ALIAS_VISIBLE_BY_DEFAULT: ${VITE_SEFER_ACTIVE_ALIAS_VISIBLE_BY_DEFAULT:-false}
+        VITE_AUTODUCK_ROLES: ${VITE_AUTODUCK_ROLES:-control,audience}
+        VITE_ORGANIZATION_NAME: ${VITE_ORGANIZATION_NAME:-}
+        VITE_ORGANIZATION_LEGAL_ID: ${VITE_ORGANIZATION_LEGAL_ID:-}
+        VITE_ORGANIZATION_EMAIL: ${VITE_ORGANIZATION_EMAIL:-}
+        VITE_ORGANIZATION_WEBSITE: ${VITE_ORGANIZATION_WEBSITE:-}
     restart: unless-stopped
+    stop_grace_period: 15s
     environment:
-      - SEFER_REQUIRE_AUTH=${SEFER_REQUIRE_AUTH:-false}
+      - SEFER_REQUIRE_AUTH=${SEFER_REQUIRE_AUTH:-true}
       - SEFER_CONTROL_PASSWORD=${SEFER_CONTROL_PASSWORD:-}
+      - SEFER_ALLOWED_ORIGINS=${SEFER_ALLOWED_ORIGINS:-}
       - SEFER_LIVE_AUDIO_ENABLED=${SEFER_LIVE_AUDIO_ENABLED:-false}
       - LIVEKIT_URL=${LIVEKIT_URL:-}
       - LIVEKIT_API_KEY=${LIVEKIT_API_KEY:-}
       - LIVEKIT_API_SECRET=${LIVEKIT_API_SECRET:-}
+      - LIVEKIT_ROOM_NAME=${LIVEKIT_ROOM_NAME:-sefer-live-audio}
       - SEFER_LIVE_AUDIO_PUBLIC_LISTEN=${SEFER_LIVE_AUDIO_PUBLIC_LISTEN:-true}
+      - SEFER_LIVE_AUDIO_TOKEN_TTL_MINUTES=${SEFER_LIVE_AUDIO_TOKEN_TTL_MINUTES:-30}
+      - SEFER_LIVE_AUDIO_REJOIN_GRACE_SECONDS=${SEFER_LIVE_AUDIO_REJOIN_GRACE_SECONDS:-60}
+      - SEFER_LIVE_AUDIO_ALLOW_DELEGATED_MODERATORS=${SEFER_LIVE_AUDIO_ALLOW_DELEGATED_MODERATORS:-true}
+      - SEFER_LIVE_AUDIO_CONTROL_CODE_TTL_SECONDS=${SEFER_LIVE_AUDIO_CONTROL_CODE_TTL_SECONDS:-90}
+      - SEFER_ACTIVE_ALIAS_MODERATION_DEFAULT_VISIBLE=${SEFER_ACTIVE_ALIAS_MODERATION_DEFAULT_VISIBLE:-true}
       - SEFER_PUBLIC_CATALOGS_JSON=${SEFER_PUBLIC_CATALOGS_JSON:-}
+      - SEFER_BACKUP_DIR=/app/backups
+      - SEFER_FORCE_IN_PLACE_PERSISTENCE=${SEFER_FORCE_IN_PLACE_PERSISTENCE:-false}
     volumes:
       - ${DATA_DIR:-.}/presentations.json:/app/presentations.json
       - ${DATA_DIR:-.}/audio_sync.json:/app/audio_sync.json
-      - ${DATA_DIR:-.}/public/audio:/app/public/audio
-      - ${DATA_DIR:-.}/public/backgrounds:/app/public/backgrounds
-      - ${DATA_DIR:-.}/public/videos:/app/public/videos
+      - ${DATA_DIR:-.}/public/audio:/app/public/audio:ro
+      - ${DATA_DIR:-.}/public/backgrounds:/app/public/backgrounds:ro
+      - ${DATA_DIR:-.}/public/videos:/app/public/videos:ro
+      - sefer_backups:/app/backups
     expose:
       - "8787"
+    healthcheck:
+      test: [ "CMD", "node", "-e", "fetch('http://127.0.0.1:8787/api/livekit/status').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))" ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    logging: *bounded-logging
 
   caddy:
-    image: caddy:2-alpine
-    container_name: sefer-presenter-proxy
+    # Local audit pin: Caddy v2.11.4.
+    image: caddy@sha256:77c07d5ebfa5be9fd6c820d2094ae662c9e7eeb9bf98346b7f639900263ee2a2
     restart: unless-stopped
     ports:
       - "80:80"
@@ -34,44 +65,74 @@ services:
     environment:
       - DOMAIN=${DOMAIN:-localhost}
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
     depends_on:
-      - app
-      - livekit
+      app:
+        condition: service_healthy
+        restart: true
+    logging: *bounded-logging
 
   redis:
-    image: redis:7-alpine
-    container_name: sefer-presenter-redis
+    # Local audit pin: Redis 7.4.9.
+    image: redis@sha256:6ab0b6e7381779332f97b8ca76193e45b0756f38d4c0dcda72dbb3c32061ab99
+    profiles: [ "live-audio" ]
     restart: unless-stopped
     command: redis-server --save "" --appendonly no
     mem_limit: 512m
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    logging: *bounded-logging
 
   livekit:
-    image: livekit/livekit-server:latest
-    container_name: sefer-presenter-livekit
+    # Local audit pin: LiveKit v1.13.1.
+    image: livekit/livekit-server@sha256:2c6869d2d5ff6c9c0166f47be1c92dad6928bfecfa5e4060a6ece48db8accfa3
+    profiles: [ "live-audio" ]
     restart: unless-stopped
-    entrypoint: /bin/sh -c "export NODE_IP=$$(wget -qO- http://api.ipify.org || wget -qO- http://icanhazip.com || wget -qO- http://ifconfig.me/ip) && exec /livekit-server"
+    entrypoint:
+      - /bin/sh
+      - -ec
+      - |
+        test -n "$${LIVEKIT_API_KEY}" || { echo "LIVEKIT_API_KEY is required" >&2; exit 1; }
+        test -n "$${LIVEKIT_API_SECRET}" || { echo "LIVEKIT_API_SECRET is required" >&2; exit 1; }
+        export LIVEKIT_KEYS="$${LIVEKIT_API_KEY}: $${LIVEKIT_API_SECRET}"
+        export NODE_IP="$${LIVEKIT_NODE_IP}"
+        if [ -z "$$NODE_IP" ]; then
+          echo "LIVEKIT_NODE_IP not set, attempting to auto-detect public IP..."
+          NODE_IP=$$(wget -qO- http://api.ipify.org || wget -qO- http://icanhazip.com || wget -qO- http://ifconfig.me/ip)
+        fi
+        test -n "$$NODE_IP" || { echo "Could not determine NODE_IP" >&2; exit 1; }
+        export NODE_IP
+        exec /livekit-server
     environment:
-      - "LIVEKIT_KEYS=${LIVEKIT_API_KEY:-devkey}: ${LIVEKIT_API_SECRET:-secret}"
+      - LIVEKIT_API_KEY=${LIVEKIT_API_KEY:-}
+      - LIVEKIT_API_SECRET=${LIVEKIT_API_SECRET:-}
+      - LIVEKIT_NODE_IP=${LIVEKIT_NODE_IP:-}
       - "REDIS_HOST=redis:6379"
       - "UDP_PORT=50000-50050"
     ports:
-      - "7880:7880/tcp"
       - "50000-50050:50000-50050/udp"
     mem_limit: 4g
     memswap_limit: 4g
     cpus: "8"
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy
+        restart: true
     healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:7880/alive" ]
+      test: [ "CMD-SHELL", "wget -qO- http://127.0.0.1:7880/alive >/dev/null || exit 1" ]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
+    logging: *bounded-logging
 
 volumes:
   caddy_data:
   caddy_config:
+  sefer_backups:

@@ -477,6 +477,8 @@ function ControlApp() {
         quizCurrentSubslideIndex={quizState?.currentSubslideIndex ?? 0}
         quizTimerState={quizState?.timerState ?? { status: 'idle', timerStartedAt: null, timerDurationMs: 30000, pausedRemainingMs: null }}
         quizPresenterDemoSelection={activeSlide && quizState?.presenterDemoSelection ? quizState.presenterDemoSelection[activeSlide.id] : null}
+        quizMaxBaseCentipunts={quizState?.maxBaseCentipunts}
+        quizResultSlideIds={quizState?.resultQuizSlideIds}
         onQuizSubslideSelect={(idx) => {
           const foundIdx = steps.findIndex(
             (s) => s.slideIndex === currentSlideIndex && s.type === 'quiz' && s.subslideIndex === idx

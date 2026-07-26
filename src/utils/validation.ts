@@ -973,6 +973,23 @@ export const validateRemoteStatePayload = (value: unknown): ValidationResult<Par
   }
   if (value.quizState !== undefined) {
     if (value.quizState === null || isRecord(value.quizState)) {
+      if (isRecord(value.quizState)) {
+        if (value.quizState.presentationId !== undefined && typeof value.quizState.presentationId !== 'string') {
+          errors.push('remote.quizState.presentationId debe ser texto.');
+        }
+        if (value.quizState.maxBaseCentipunts !== undefined && (!isFiniteNumber(value.quizState.maxBaseCentipunts) || value.quizState.maxBaseCentipunts < 0)) {
+          errors.push('remote.quizState.maxBaseCentipunts debe ser numero >= 0.');
+        }
+        if (value.quizState.scoreRequestId !== undefined && (typeof value.quizState.scoreRequestId !== 'number' || !Number.isInteger(value.quizState.scoreRequestId) || value.quizState.scoreRequestId < 0)) {
+          errors.push('remote.quizState.scoreRequestId debe ser entero >= 0.');
+        }
+        for (const field of ['completedQuizSlideIds', 'resultQuizSlideIds'] as const) {
+          const ids = value.quizState[field];
+          if (ids !== undefined && (!Array.isArray(ids) || ids.some((id) => typeof id !== 'string'))) {
+            errors.push(`remote.quizState.${field} debe ser un array de textos.`);
+          }
+        }
+      }
       next.quizState = value.quizState as QuizSyncState | null;
     } else {
       errors.push('remote.quizState debe ser objeto o null.');
@@ -1160,6 +1177,14 @@ export const validateSyncMessage = (value: unknown): ValidationResult<BroadcastM
           break;
         case 'QUIZ_ADJUST_TIMER':
           if (!isFiniteNumber(payload.seconds) || (payload.seconds as number) < 1) baseErrors.push('seconds debe ser numero >= 1');
+          break;
+        case 'QUIZ_RECALCULATE_RESULTS':
+          if (!Array.isArray(payload.slideIds) || payload.slideIds.some((id) => typeof id !== 'string')) {
+            baseErrors.push('slideIds debe ser un array de textos');
+          }
+          break;
+        case 'QUIZ_CLEAR_QUESTION_RESULTS':
+          if (typeof payload.slideId !== 'string') baseErrors.push('slideId debe ser texto');
           break;
         case 'QUIZ_DEMO_SELECT':
           if (payload.optionId !== null && typeof payload.optionId !== 'string') baseErrors.push('optionId debe ser texto o null');

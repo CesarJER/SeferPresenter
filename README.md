@@ -185,6 +185,13 @@ Canales principales:
 
 La audiencia muestra la misma imagen viva del presenter, sin controles de navegacion ni apertura del panel de control.
 
+Las respuestas y puntuaciones de quiz se separan por presentacion. En una
+diapositiva de resultados, Control puede recalcular las categorias usando las
+preguntas marcadas en verde, es decir, las que tienen respuestas registradas.
+El servidor conserva esas respuestas durante la sesion para que Control pueda
+recuperarlas tras una recarga, y solicita a Audience que reenvie sus nuevas
+puntuaciones en cada recalculo.
+
 `PRIVATE_CONTROL_SIGNAL` es un contenedor tecnico cifrado para senales privadas
 entre Audience y controles autorizados. No contiene alias, mensajes ni
 configuracion de micro en claro, y el servidor debe limitarse a validar/rutear
