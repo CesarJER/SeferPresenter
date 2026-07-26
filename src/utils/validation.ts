@@ -263,6 +263,15 @@ const validateOperationalSnapshot = (snapshot: unknown, path: string, errors: st
   }
   if (typeof snapshot.snapshotId !== 'string' || snapshot.snapshotId.trim() === '') errors.push(`${path}.snapshotId debe ser texto no vacio.`);
   if (!isFiniteNumber(snapshot.createdAt)) errors.push(`${path}.createdAt debe ser numero.`);
+  if (typeof snapshot.presentationSessionId !== 'string' || snapshot.presentationSessionId.trim() === '') {
+    errors.push(`${path}.presentationSessionId debe ser texto no vacio.`);
+  }
+  if (typeof snapshot.serverEpoch !== 'string' || snapshot.serverEpoch.trim() === '') {
+    errors.push(`${path}.serverEpoch debe ser texto no vacio.`);
+  }
+  if (!Number.isInteger(snapshot.stateRevision) || Number(snapshot.stateRevision) < 0) {
+    errors.push(`${path}.stateRevision debe ser entero no negativo.`);
+  }
   if (!isRecord(snapshot.connectionCounts)) {
     errors.push(`${path}.connectionCounts debe ser un objeto.`);
   } else {
@@ -933,6 +942,22 @@ const validateLiveAudioBroadcastMessage = (value: Record<string, unknown>): Vali
     case 'LIVE_AUDIO_SNAPSHOT_REQUEST':
       if (value.controlSessionId !== undefined && typeof value.controlSessionId !== 'string') {
         errors.push('controlSessionId debe ser texto.');
+      }
+      if (
+        value.lastAppliedStateRevision !== undefined &&
+        (!Number.isInteger(value.lastAppliedStateRevision) || Number(value.lastAppliedStateRevision) < 0)
+      ) {
+        errors.push('lastAppliedStateRevision debe ser entero no negativo.');
+      }
+      if (
+        value.reason !== undefined &&
+        value.reason !== 'CONNECT' &&
+        value.reason !== 'RECONNECT' &&
+        value.reason !== 'GAP' &&
+        value.reason !== 'STALE_SNAPSHOT' &&
+        value.reason !== 'NACK'
+      ) {
+        errors.push('reason no es valido.');
       }
       validateOptionalCreatedAt(value, value.type, errors);
       break;

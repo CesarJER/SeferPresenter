@@ -64,6 +64,15 @@ export function useControlAuthorization(options: UseControlAuthorizationOptions)
   const [allowDelegatedModerators, setAllowDelegatedModerators] = useState(true);
   const [secondsRemaining, setSecondsRemaining] = useState(0);
   const sendMessageRef = useRef(sendMessage);
+  const revisionRef = useRef<{
+    presentationSessionId: string | null;
+    serverEpoch: string | null;
+    stateRevision: number;
+  }>({
+    presentationSessionId: null,
+    serverEpoch: null,
+    stateRevision: -1,
+  });
 
   useEffect(() => {
     sendMessageRef.current = sendMessage;
@@ -88,21 +97,83 @@ export function useControlAuthorization(options: UseControlAuthorizationOptions)
     setPendingControls(normalizePendingControls(message.pendingControls));
   }, []);
 
+  const acceptRevision = useCallback((payload: Record<string, unknown>): boolean => {
+    const presentationSessionId = typeof payload.presentationSessionId === 'string'
+      ? payload.presentationSessionId
+      : null;
+    const serverEpoch = typeof payload.serverEpoch === 'string' ? payload.serverEpoch : null;
+    const stateRevision = Number.isInteger(payload.stateRevision) ? Number(payload.stateRevision) : null;
+    if (!presentationSessionId || !serverEpoch || stateRevision === null) return true;
+
+    const current = revisionRef.current;
+    const sameStream = (
+      current.presentationSessionId === presentationSessionId &&
+      current.serverEpoch === serverEpoch
+    );
+    if (!sameStream) {
+      revisionRef.current = { presentationSessionId, serverEpoch, stateRevision };
+      return true;
+    }
+    if (stateRevision < current.stateRevision) return false;
+    if (current.stateRevision >= 0 && stateRevision > current.stateRevision + 1) {
+      sendMessageRef.current('LIVE_AUDIO_SNAPSHOT_REQUEST', makeSyncMessage({
+        type: 'LIVE_AUDIO_SNAPSHOT_REQUEST',
+        controlSessionId: undefined,
+        lastAppliedStateRevision: current.stateRevision,
+        reason: 'GAP',
+        createdAt: Date.now(),
+      }));
+      return false;
+    }
+    revisionRef.current.stateRevision = stateRevision;
+    return true;
+  }, []);
+
   useEffect(() => {
     const unsubscribe = subscribeToWsMessage((type, payload) => {
       if (type === 'WELCOME') {
         if (typeof payload.controlSessionId === 'string') setControlSessionId(payload.controlSessionId);
         if (isControlState(payload.controlState)) setControlState(payload.controlState);
+        if (
+          typeof payload.presentationSessionId === 'string' &&
+          typeof payload.serverEpoch === 'string' &&
+          Number.isInteger(payload.stateRevision)
+        ) {
+          revisionRef.current = {
+            presentationSessionId: payload.presentationSessionId,
+            serverEpoch: payload.serverEpoch,
+            stateRevision: Number(payload.stateRevision),
+          };
+        }
         return;
       }
 
       if (type === 'LIVE_AUDIO_CONTROL_AUTHORIZATION_STATE') {
+        if (!acceptRevision(payload)) return;
         applyAuthorizationState(payload);
+        return;
+      }
+
+      if (type === 'LIVE_AUDIO_SNAPSHOT') {
+        const snapshot = payload.snapshot;
+        if (!snapshot || typeof snapshot !== 'object') return;
+        const value = snapshot as Record<string, unknown>;
+        if (
+          typeof value.presentationSessionId === 'string' &&
+          typeof value.serverEpoch === 'string' &&
+          Number.isInteger(value.stateRevision)
+        ) {
+          revisionRef.current = {
+            presentationSessionId: value.presentationSessionId,
+            serverEpoch: value.serverEpoch,
+            stateRevision: Number(value.stateRevision),
+          };
+        }
       }
     });
 
     return unsubscribe;
-  }, [applyAuthorizationState, subscribeToWsMessage]);
+  }, [acceptRevision, applyAuthorizationState, subscribeToWsMessage]);
 
   useEffect(() => {
     setSecondsRemaining(getSecondsRemaining(codeExpiresAt));

@@ -184,6 +184,10 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
   `src/features/liveAudio/utils/controlAuthorizationFlow.ts`: pure correlated
   ACK/NACK/timeout state machine used to prevent E2E key-transfer failure from
   authorizing a secondary Control.
+- `createControlSyncReducerState` / `reduceControlSyncEnvelope` -
+  `src/features/liveAudio/utils/controlSyncReducer.ts`: authoritative snapshot
+  replacement, monotonic delta application, deduplication, gap buffering, and
+  stream/session reset for multi-Control synchronization.
 
 ## Types
 

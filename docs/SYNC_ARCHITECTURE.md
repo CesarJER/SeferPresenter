@@ -216,6 +216,16 @@ Control uses `lastSentListRef` to avoid re-sending unchanged visible lists.
   messages, ciphertext history, aliases, or audience ephemeral public keys.
   A newly authorized Control receives the shared Control session key E2E and
   requests fresh encrypted alias signals from Audience.
+- Operational state is ordered by a server-owned monotonic `stateRevision`
+  scoped to `presentationSessionId`. Snapshots include `serverEpoch` and the
+  current revision; revisioned deltas include an `eventId`. A snapshot replaces
+  client maps instead of merging them. Clients buffer out-of-order deltas,
+  ignore duplicate/stale events, and request a fresh snapshot on connect,
+  reconnect, stream change, or revision gap. Reading a snapshot never advances
+  the revision; each accepted canonical mutation advances it exactly once.
+- This snapshot-plus-revision protocol replaces reconstruction from historical
+  incrementals. A Control must not remain divergent or materialize “Sin nick”
+  merely because it joined after an event was emitted.
 - The WebSocket server keeps the current authorized Control public key in memory
   and replays it to audience clients that connect later, so nicknames and
   private messages can be encrypted even when Control was already open.

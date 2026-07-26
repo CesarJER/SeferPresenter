@@ -301,6 +301,9 @@ export interface LiveAudioOperationalQuizAggregateSnapshot {
 export interface LiveAudioOperationalSnapshot {
   snapshotId: string;
   createdAt: number;
+  presentationSessionId: string;
+  serverEpoch: string;
+  stateRevision: number;
   connectionCounts: {
     totalConnections: number;
     audienceConnections: number;
@@ -338,6 +341,8 @@ export interface LiveAudioOperationalSnapshot {
 export interface LiveAudioSnapshotRequestMessage {
   type: 'LIVE_AUDIO_SNAPSHOT_REQUEST';
   controlSessionId?: string;
+  lastAppliedStateRevision?: number;
+  reason?: 'CONNECT' | 'RECONNECT' | 'GAP' | 'STALE_SNAPSHOT' | 'NACK';
   createdAt?: number;
 }
 
