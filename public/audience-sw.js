@@ -1,6 +1,7 @@
-const SW_VERSION = '1.2.0';
+const SW_VERSION = 'dev';
 const CACHE_PREFIX = 'sefer-pwa';
 const CACHE_NAME = `${CACHE_PREFIX}-v${SW_VERSION}`;
+const BUILD_ASSETS = [];
 
 const CORE_ASSETS = [
   '/audience.html',
@@ -8,6 +9,7 @@ const CORE_ASSETS = [
   '/metadata.json',
   '/audience-cache-assets.txt',
   '/logo.svg',
+  ...BUILD_ASSETS,
 ];
 
 const MEDIA_EXTENSIONS = new Set([
@@ -204,7 +206,7 @@ const staleWhileRevalidate = async (request) => {
 const shouldRuntimeCacheUrl = (url) => !isNeverCacheUrl(url) && !isMediaUrl(url);
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(cacheConfiguredAssets().then(() => self.skipWaiting()));
+  event.waitUntil(cacheConfiguredAssets());
 });
 
 self.addEventListener('activate', (event) => {

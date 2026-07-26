@@ -36,7 +36,8 @@ export const registerScopedServiceWorker = async (
   if (!('serviceWorker' in nav)) return null;
 
   try {
-    const registration = await nav.serviceWorker.register('/audience-sw.js', { scope });
+    const workerUrl = import.meta.env.PROD ? '/audience-sw-build.js' : '/audience-sw.js';
+    const registration = await nav.serviceWorker.register(workerUrl, { scope });
     if (registration.waiting) {
       return registration;
     }

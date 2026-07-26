@@ -145,7 +145,7 @@ El service worker `public/audience-sw.js` sirve ambos scopes. Cachea:
 - TSV biblicos bajo demanda;
 - assets extra listados manualmente en `public/audience-cache-assets.txt`.
 
-El archivo `public/audience-cache-assets.txt` acepta una ruta publica por linea y comentarios con `#`. No cachea endpoints vivos (`/api/*`, SSE, `/ws`, `/rtc/*`, LiveKit/tokens) ni videos/audios pesados. Si hay una actualizacion de service worker esperando, el boton de reinicio de la PWA la activa antes de recargar, sin borrar nick, respuestas de quiz ni estado local persistente.
+El archivo `public/audience-cache-assets.txt` acepta una ruta publica por linea y comentarios con `#`. No cachea endpoints vivos (`/api/*`, SSE, `/ws`, `/rtc/*`, LiveKit/tokens) ni videos/audios pesados. El build genera `audience-sw-build.js` con todos los JS/CSS hash del bundle, de modo que el primer arranque instalado puede cargar el shell sin red. Un worker nuevo permanece en espera hasta que el boton de reinicio de la PWA lo activa antes de recargar, sin borrar nick, respuestas de quiz ni estado local persistente.
 
 ### Diagnostico de permisos de microfono
 

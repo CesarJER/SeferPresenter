@@ -76,6 +76,11 @@ The service worker continues to cache only the application shell, scripture,
 images and explicitly configured static resources. Every `/api` route, SSE/WS,
 ticket, token and LiveKit path remains network-only.
 
+Production builds emit `audience-sw-build.js` with the actual hashed JS/CSS
+bundle filenames and a deterministic cache version. Installation precaches
+those assets but does not call `skipWaiting`; an update activates only after the
+existing restart control sends `SKIP_WAITING`, preventing mixed-version pages.
+
 After verified admission, Audience mirrors the latest authorized projection
 snapshot and quiz drafts into a separate IndexedDB record bound to
 `presentationSessionId`, technical participant ID, the SHA-256 digest of the

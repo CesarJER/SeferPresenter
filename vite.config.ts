@@ -1,8 +1,10 @@
 import { defineConfig } from 'vitest/config'
 import { loadEnv, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
+import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { buildOperatorManifest } from './server/operator-config.mjs'
+import { createAudienceServiceWorkerSource } from './server/pwa-build.mjs'
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
@@ -20,6 +22,21 @@ export default defineConfig(({ mode }) => {
       })
     },
   }
+  const audienceServiceWorkerPlugin: Plugin = {
+    name: 'sefer-audience-service-worker',
+    enforce: 'post',
+    generateBundle(_, bundle) {
+      const template = readFileSync(resolve(__dirname, 'public/audience-sw.js'), 'utf8')
+      this.emitFile({
+        type: 'asset',
+        fileName: 'audience-sw-build.js',
+        source: createAudienceServiceWorkerSource(
+          template,
+          Object.values(bundle).map((output) => output.fileName),
+        ),
+      })
+    },
+  }
 
   return {
     define: {
@@ -31,7 +48,7 @@ export default defineConfig(({ mode }) => {
       pool: 'threads',
       fileParallelism: false,
     },
-    plugins: [react(), operatorManifestPlugin],
+    plugins: [react(), operatorManifestPlugin, audienceServiceWorkerPlugin],
     build: {
       rollupOptions: {
         input: {

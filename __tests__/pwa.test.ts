@@ -31,10 +31,13 @@ const loadServiceWorkerHelpers = () => {
 };
 
 describe('PWA service worker policy', () => {
-  it('exports version 1.2.0 and explicit cache helper decisions', () => {
+  it('exports a development version and explicit cache helper decisions', () => {
+    const source = readFileSync('public/audience-sw.js', 'utf8');
     const helpers = loadServiceWorkerHelpers();
 
-    expect(helpers.SW_VERSION).toBe('1.2.0');
+    expect(helpers.SW_VERSION).toBe('dev');
+    expect(source).not.toContain('cacheConfiguredAssets().then(() => self.skipWaiting())');
+    expect(source).toContain("event.data?.type === 'SKIP_WAITING'");
 
     [
       '/api/state',
