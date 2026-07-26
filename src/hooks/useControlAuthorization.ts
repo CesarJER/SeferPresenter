@@ -36,7 +36,7 @@ const getSecondsRemaining = (expiresAt: number | null): number => {
 };
 
 const isControlState = (value: unknown): value is LiveAudioControlState =>
-  value === 'PRINCIPAL' || value === 'PENDING' || value === 'AUTHORIZED';
+  value === 'PRINCIPAL' || value === 'PENDING' || value === 'AUTHORIZED_SYNCING' || value === 'AUTHORIZED';
 
 const normalizePendingControls = (value: unknown): PendingControlAuthorization[] => {
   if (!Array.isArray(value)) return [];

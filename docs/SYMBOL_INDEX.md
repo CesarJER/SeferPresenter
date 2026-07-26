@@ -180,6 +180,10 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
   `hasVisibleParticipantsChanged` -
   `src/features/liveAudio/utils/activeParticipants.ts`: pure helpers for
   Control-owned visible alias list filtering, A-Z ordering, and send suppression.
+- `createControlAuthorizationAttempt` / `advanceControlAuthorizationAttempt` -
+  `src/features/liveAudio/utils/controlAuthorizationFlow.ts`: pure correlated
+  ACK/NACK/timeout state machine used to prevent E2E key-transfer failure from
+  authorizing a secondary Control.
 
 ## Types
 

@@ -15,11 +15,13 @@ export const ImportExportPanel: React.FC<ImportExportPanelProps> = ({
   const handleExport = () => {
     try {
       const dataStr = JSON.stringify(presentations, null, 2);
-      const dataUri = 'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr);
+      const blob = new Blob([dataStr], { type: 'application/json;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
       const linkElement = document.createElement('a');
-      linkElement.setAttribute('href', dataUri);
+      linkElement.setAttribute('href', url);
       linkElement.setAttribute('download', 'sefer_presenter_presentations.json');
       linkElement.click();
+      setTimeout(() => URL.revokeObjectURL(url), 100);
     } catch (err) {
       alert('Error al exportar las presentaciones: ' + (err as Error).message);
     }

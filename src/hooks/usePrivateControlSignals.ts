@@ -2,9 +2,15 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
   ControlKeyRotatedMessage,
   LiveAudioControlAuthorizedMessage,
+  LiveAudioControlKeyTransferResultMessage,
   LiveAudioControlJoinRequestMessage,
   PrivateControlSignalMessage,
 } from '../types/liveAudio';
+import {
+  advanceControlAuthorizationAttempt,
+  createControlAuthorizationAttempt,
+  type ControlAuthorizationAttempt,
+} from '../features/liveAudio/utils/controlAuthorizationFlow';
 import {
   decrypt,
   decryptWithNonceReplayProtection,
@@ -22,7 +28,7 @@ import { makeSyncMessage } from '../utils/syncProtocol';
 import { isValidPrivateControlSignal } from '../utils/validation';
 
 type PrivateSignalRole = 'control' | 'audience';
-type LiveAudioControlState = 'PRINCIPAL' | 'AUTHORIZED' | 'PENDING';
+type LiveAudioControlState = 'PRINCIPAL' | 'AUTHORIZED_SYNCING' | 'AUTHORIZED' | 'PENDING';
 type WsSubscriber = (handler: (type: string, payload: Record<string, unknown>) => void) => () => void;
 type WsSender = (type: string, payload?: unknown) => boolean;
 
@@ -84,6 +90,15 @@ const parseSignalPlaintext = (plaintext: string): unknown => {
 const serializeSignalValue = (value: unknown): string =>
   typeof value === 'string' ? value : JSON.stringify(value);
 
+const classifyPrivateSignal = (value: unknown): PrivateControlSignalMessage['signalClass'] => {
+  if (value && typeof value === 'object' && 'type' in value) {
+    const signalType = String((value as { type?: unknown }).type);
+    if (signalType === 'PRIVATE_MESSAGE' || signalType === 'message') return 'PRIVATE_MESSAGE';
+    if (signalType === 'ACTIVE_PROFILE' || signalType.includes('ALIAS')) return 'PROFILE_STATE';
+  }
+  return 'CONTROL_STATE';
+};
+
 export function usePrivateControlSignals(options: UsePrivateControlSignalsOptions): PrivateControlSignalsState {
   const {
     role,
@@ -116,6 +131,11 @@ export function usePrivateControlSignals(options: UsePrivateControlSignalsOption
   const onPrivateSignalRef = useRef(onPrivateSignal);
   const onControlKeyRotatedRef = useRef(onControlKeyRotated);
   const onErrorRef = useRef(onError);
+  const pendingAuthorizationTransfersRef = useRef(new Map<string, {
+    attempt: ControlAuthorizationAttempt;
+    resolve: (approved: boolean) => void;
+    timeoutId: ReturnType<typeof setTimeout>;
+  }>());
 
   useEffect(() => {
     sendMessageRef.current = sendMessage;
@@ -138,6 +158,11 @@ export function usePrivateControlSignals(options: UsePrivateControlSignalsOption
     currentControlPublicKeyRef.current = null;
     setKeyId(null);
     setControlPublicKey(null);
+    for (const pending of pendingAuthorizationTransfersRef.current.values()) {
+      clearTimeout(pending.timeoutId);
+      pending.resolve(false);
+    }
+    pendingAuthorizationTransfersRef.current.clear();
   }, []);
 
   const ensureAudienceKeyPair = useCallback(async () => {
@@ -236,6 +261,7 @@ export function usePrivateControlSignals(options: UsePrivateControlSignalsOption
     const ephemeralPublicKey = await exportPublicKey(audienceKeyPair);
     const message = makeSyncMessage({
       type: 'PRIVATE_CONTROL_SIGNAL' as const,
+      signalClass: classifyPrivateSignal(value),
       fromParticipantId: participantId,
       ...(signalOptions.toControlSessionId ? { toControlSessionId: signalOptions.toControlSessionId } : {}),
       keyId: activeKeyId,
@@ -261,6 +287,7 @@ export function usePrivateControlSignals(options: UsePrivateControlSignalsOption
 
     const message = makeSyncMessage({
       type: 'PRIVATE_CONTROL_SIGNAL' as const,
+      signalClass: classifyPrivateSignal(value),
       fromParticipantId: participantId,
       toParticipantId: targetParticipantId,
       keyId: currentKeyIdRef.current,
@@ -307,11 +334,13 @@ export function usePrivateControlSignals(options: UsePrivateControlSignalsOption
     const transferKey = await deriveSharedKey(transferKeyPair.privateKey, receiverPublicKey);
     const exportedPrivateKey = await exportPrivateKey(sessionKeyPairRef.current.privateKey);
     const encrypted = await encrypt(transferKey, exportedPrivateKey);
+    const transferId = createId('control-transfer');
 
     const message = makeSyncMessage({
       type: 'LIVE_AUDIO_CONTROL_AUTHORIZED' as const,
       controlSessionId: request.controlSessionId,
       authorizedByControlSessionId: controlSessionId,
+      transferId,
       keyId: currentKeyIdRef.current,
       sessionPublicKey: currentControlPublicKeyRef.current,
       transferPublicKey: await exportPublicKey(transferKeyPair),
@@ -320,7 +349,38 @@ export function usePrivateControlSignals(options: UsePrivateControlSignalsOption
       createdAt: Date.now(),
     });
 
-    return sendMessageRef.current(message.type, message);
+    const attempt = createControlAuthorizationAttempt({
+      targetControlSessionId: request.controlSessionId,
+      transferId,
+      keyId: currentKeyIdRef.current,
+      expiresAt: Date.now() + 10_000,
+    });
+
+    return new Promise<boolean>((resolve) => {
+      const timeoutId = setTimeout(() => {
+        const pending = pendingAuthorizationTransfersRef.current.get(transferId);
+        if (!pending) return;
+        const transition = advanceControlAuthorizationAttempt(
+          pending.attempt,
+          { type: 'TIMEOUT' },
+          Date.now(),
+        );
+        pendingAuthorizationTransfersRef.current.delete(transferId);
+        pending.resolve(transition.shouldApprove);
+      }, 10_000);
+
+      pendingAuthorizationTransfersRef.current.set(transferId, { attempt, resolve, timeoutId });
+      if (!sendMessageRef.current(message.type, message)) {
+        clearTimeout(timeoutId);
+        pendingAuthorizationTransfersRef.current.delete(transferId);
+        const transition = advanceControlAuthorizationAttempt(
+          attempt,
+          { type: 'TRANSFER_FAILED', reason: 'SEND_FAILED' },
+          Date.now(),
+        );
+        resolve(transition.shouldApprove);
+      }
+    });
   }, [controlSessionId, role, transportReady]);
 
   const handlePrivateControlSignal = useCallback(async (payload: Record<string, unknown>) => {
@@ -373,6 +433,7 @@ export function usePrivateControlSignals(options: UsePrivateControlSignalsOption
 
     const message = payload as unknown as LiveAudioControlAuthorizedMessage;
     if (
+      !message.transferId ||
       !message.encryptedSessionPrivateKey ||
       !message.nonce ||
       !message.transferPublicKey ||
@@ -380,22 +441,76 @@ export function usePrivateControlSignals(options: UsePrivateControlSignalsOption
       !message.keyId ||
       !authorizationKeyPairRef.current
     ) {
+      sendMessageRef.current('LIVE_AUDIO_CONTROL_KEY_TRANSFER_RESULT', makeSyncMessage({
+        type: 'LIVE_AUDIO_CONTROL_KEY_TRANSFER_RESULT',
+        controlSessionId,
+        transferId: message.transferId || 'invalid-transfer',
+        keyId: message.keyId || 'invalid-key',
+        result: 'NACK',
+        reason: 'INVALID_TRANSFER',
+        createdAt: Date.now(),
+      }));
       return;
     }
 
-    const senderPublicKey = await importPublicKey(message.transferPublicKey);
-    const transferKey = await deriveSharedKey(authorizationKeyPairRef.current.privateKey, senderPublicKey);
-    const exportedPrivateKey = await decrypt(transferKey, message.encryptedSessionPrivateKey, message.nonce);
-    const privateKey = await importPrivateKey(exportedPrivateKey);
-    const publicKey = await importPublicKey(message.sessionPublicKey);
+    try {
+      const senderPublicKey = await importPublicKey(message.transferPublicKey);
+      const transferKey = await deriveSharedKey(authorizationKeyPairRef.current.privateKey, senderPublicKey);
+      const exportedPrivateKey = await decrypt(transferKey, message.encryptedSessionPrivateKey, message.nonce);
+      const privateKey = await importPrivateKey(exportedPrivateKey);
+      const publicKey = await importPublicKey(message.sessionPublicKey);
 
-    sessionKeyPairRef.current = { privateKey, publicKey };
-    usedNonceKeysRef.current.clear();
-    currentKeyIdRef.current = message.keyId;
-    currentControlPublicKeyRef.current = message.sessionPublicKey;
-    setKeyId(message.keyId);
-    setControlPublicKey(message.sessionPublicKey);
+      sessionKeyPairRef.current = { privateKey, publicKey };
+      usedNonceKeysRef.current.clear();
+      currentKeyIdRef.current = message.keyId;
+      currentControlPublicKeyRef.current = message.sessionPublicKey;
+      setKeyId(message.keyId);
+      setControlPublicKey(message.sessionPublicKey);
+      sendMessageRef.current('LIVE_AUDIO_CONTROL_KEY_TRANSFER_RESULT', makeSyncMessage({
+        type: 'LIVE_AUDIO_CONTROL_KEY_TRANSFER_RESULT',
+        controlSessionId,
+        transferId: message.transferId,
+        keyId: message.keyId,
+        result: 'ACK',
+        createdAt: Date.now(),
+      }));
+    } catch (error) {
+      sendMessageRef.current('LIVE_AUDIO_CONTROL_KEY_TRANSFER_RESULT', makeSyncMessage({
+        type: 'LIVE_AUDIO_CONTROL_KEY_TRANSFER_RESULT',
+        controlSessionId,
+        transferId: message.transferId,
+        keyId: message.keyId,
+        result: 'NACK',
+        reason: 'IMPORT_FAILED',
+        createdAt: Date.now(),
+      }));
+      throw error;
+    }
   }, [controlSessionId, role]);
+
+  const handleControlTransferResult = useCallback((payload: Record<string, unknown>) => {
+    const message = payload as unknown as LiveAudioControlKeyTransferResultMessage;
+    const pending = pendingAuthorizationTransfersRef.current.get(message.transferId);
+    if (!pending) return;
+    const transition = advanceControlAuthorizationAttempt(
+      pending.attempt,
+      {
+        type: 'ACK_RECEIVED',
+        ack: {
+          outcome: message.result,
+          targetControlSessionId: message.controlSessionId,
+          transferId: message.transferId,
+          keyId: message.keyId,
+          reason: message.reason,
+        },
+      },
+      Date.now(),
+    );
+    if (transition.attempt === pending.attempt) return;
+    clearTimeout(pending.timeoutId);
+    pendingAuthorizationTransfersRef.current.delete(message.transferId);
+    pending.resolve(transition.shouldApprove);
+  }, []);
 
   useEffect(() => {
     const unsubscribe = subscribeToWsMessage((type, payload) => {
@@ -441,6 +556,11 @@ export function usePrivateControlSignals(options: UsePrivateControlSignalsOption
 
       if (type === 'LIVE_AUDIO_CONTROL_AUTHORIZED') {
         void handleControlAuthorized(payload).catch(reportError);
+        return;
+      }
+
+      if (type === 'LIVE_AUDIO_CONTROL_KEY_TRANSFER_RESULT') {
+        handleControlTransferResult(payload);
       }
     });
 
@@ -448,6 +568,7 @@ export function usePrivateControlSignals(options: UsePrivateControlSignalsOption
   }, [
     clearPrivateState,
     handleControlAuthorized,
+    handleControlTransferResult,
     handlePrivateControlSignal,
     negotiateAudienceKey,
     reportError,

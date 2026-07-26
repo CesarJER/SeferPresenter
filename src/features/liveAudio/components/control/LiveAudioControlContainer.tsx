@@ -362,20 +362,35 @@ export default function LiveAudioControlContainer({
   }, [controlState, verificationCode, requestControlAuthorization]);
 
   const handleApproveRequest = useCallback((sessionId: string) => {
-    const joinReq = joinRequests[sessionId];
-    if (joinReq) {
-      void authorizeSecondaryControl(joinReq)
-        .catch(err => console.error('Failed to authorize secondary control crypto', err))
-        .finally(() => onApproveRequest(sessionId));
-    } else {
-      onApproveRequest(sessionId);
+    const pending = authorizationRequests.find(request => request.controlSessionId === sessionId);
+    const joinReq = joinRequests[sessionId] ?? (
+      pending?.recipientPublicKey
+        ? {
+            type: 'LIVE_AUDIO_CONTROL_JOIN_REQUEST' as const,
+            controlSessionId: pending.controlSessionId,
+            verificationCode: pending.verificationCode,
+            recipientPublicKey: pending.recipientPublicKey,
+            messageId: pending.joinRequestId,
+          }
+        : null
+    );
+    if (!joinReq) {
+      console.error('Cannot authorize Control without its current E2E public key');
+      return;
     }
-    setJoinRequests(prev => {
-      const next = { ...prev };
-      delete next[sessionId];
-      return next;
-    });
-  }, [authorizeSecondaryControl, joinRequests, onApproveRequest]);
+
+    void authorizeSecondaryControl(joinReq)
+      .then((transferred) => {
+        if (!transferred) return;
+        onApproveRequest(sessionId);
+        setJoinRequests(prev => {
+          const next = { ...prev };
+          delete next[sessionId];
+          return next;
+        });
+      })
+      .catch(err => console.error('Failed to authorize secondary control crypto', err));
+  }, [authorizationRequests, authorizeSecondaryControl, joinRequests, onApproveRequest]);
 
   const handleDismissMessage = useCallback((id: string) => {
     setMessages(prev => prev.filter(m => m.id !== id));
