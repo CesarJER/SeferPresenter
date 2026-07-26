@@ -132,6 +132,7 @@ export default function LiveAudioControlContainer({
     startRemoteAudio,
   } = useLiveAudio({
     role: 'control',
+    controlSessionId: controlSessionId || undefined,
     autoConnect: availability === 'enabled' && isControlAuthorized,
     microphoneVolumePercent: microphoneVolume,
   });
@@ -147,6 +148,16 @@ export default function LiveAudioControlContainer({
   useEffect(() => {
     if (!subscribeToWsMessage) return;
     const unsubscribe = subscribeToWsMessage((type, payload) => {
+      if (type === 'PRESENTATION_SESSION_ROTATED') {
+        setParticipantsMap({});
+        setParticipantAliases({});
+        setParticipantEphemeralKeys({});
+        setMessages([]);
+        setJoinRequests({});
+        setConnectionCounts(null);
+        lastSentListRef.current = '';
+        return;
+      }
       if (type === 'LIVE_AUDIO_SNAPSHOT') {
         const snapshot = payload.snapshot as LiveAudioOperationalSnapshot | undefined;
         if (!snapshot || !Array.isArray(snapshot.participants)) return;

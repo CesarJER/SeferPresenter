@@ -34,5 +34,8 @@ launcher
 *.sw?
 .agents
 .env*
+*.bak[0-9]
+*.bak
+
 
 public/logo.svg
