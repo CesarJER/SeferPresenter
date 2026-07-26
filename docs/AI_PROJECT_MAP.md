@@ -25,6 +25,8 @@ Fast map for agents. Use real paths only; this repo does not currently have
   projection rendering; route-specific Control/Audience roots live separately.
 - `README.md`: human overview, routes, scripts, backend endpoints, verification.
 - `server/local-server.mjs`: local backend, static serving, SSE, persistence endpoints, auth gate, and WebSocket attachment.
+- `server/dev.mjs`: loads the same Vite-mode `.env` values for the development
+  backend and frontend so operator-policy validation cannot diverge.
 - `server/audience-projection-state.mjs`: allowlisted public snapshot containing
   only the active projected slide and the functional state Audience needs.
 - `server/ws-server.mjs`: WebSocket `/ws` server for backend-owned audio timeline messages.
@@ -33,7 +35,13 @@ Fast map for agents. Use real paths only; this repo does not currently have
 - `server/projection-state-reducer.mjs`: pure backend-consumable reducer for supported projection `REMOTE_COMMAND` payloads into canonical `SYNC_STATE` state.
 - `server/authUtils.mjs`: shared utility checking if basic authentication is required or valid under `SEFER_REQUIRE_AUTH` and `SEFER_CONTROL_PASSWORD`.
 - `src/types/liveAudio.ts`: optional Live Audio protocol contracts and role state types; no LiveKit connection code.
-- `vite.config.ts`: Vite config, development proxy, and multi-entry build inputs.
+- `vite.config.ts`: Vite config, development proxy, multi-entry build inputs,
+  validated public operator constants, and `operator-manifest.json` emission.
+- `server/operator-config.mjs`: validates required structured operator policy at
+  build and startup, checks build/runtime access-mode consistency, and reads the
+  optional bounded UTF-8 `privacy.local.md`.
+- `src/utils/operatorConfig.ts`: typed frontend access to the operator
+  configuration embedded at build time.
 
 ## Folder Responsibilities
 
@@ -60,6 +68,11 @@ Fast map for agents. Use real paths only; this repo does not currently have
 - `scripts/`: generated data and utility scripts.
 - `__tests__/`: Vitest tests for utils and selected hooks.
 - `public/`: static assets, PWA files, generated book TSVs and metadata.
+
+Operator-specific narrative belongs only in ignored `privacy.local.md` (see
+`docs/examples/privacy.example.md`). The canonical repository must contain
+variable names, validation and neutral product facts, never deployment-specific
+identity or legal assertions.
 
 ## Common Change Paths
 

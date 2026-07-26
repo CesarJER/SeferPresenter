@@ -64,6 +64,9 @@ docs in the same change. Do not leave these files stale.
 - `node_modules/`, `dist/`: dependencies/build output.
 - `legacy/`: local historical record, not product code.
 - `presentations.json` and `audio_sync.json`: user/data files. Edit only when the task explicitly targets them.
+- `*.local.*`: reserved exclusively for ignored operator-specific/private
+  adaptations such as `privacy.local.md`. Never use this pattern for
+  project-relevant source, tests, migrations, audit evidence, or documentation.
 
 ## Verification
 

@@ -6,6 +6,7 @@ const publicApiGetPaths = new Set([
   '/api/quiz-events',
   '/api/public-catalogs',
   '/api/audience-cache-assets',
+  '/api/privacy-document',
 ])
 
 const firstHeaderValue = (value) => {

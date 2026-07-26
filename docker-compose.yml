@@ -17,6 +17,12 @@ services:
         VITE_ORGANIZATION_LEGAL_ID: ${VITE_ORGANIZATION_LEGAL_ID:-}
         VITE_ORGANIZATION_EMAIL: ${VITE_ORGANIZATION_EMAIL:-}
         VITE_ORGANIZATION_WEBSITE: ${VITE_ORGANIZATION_WEBSITE:-}
+        VITE_SEFER_LEGAL_BASIS: ${VITE_SEFER_LEGAL_BASIS:-}
+        VITE_SEFER_PRIVACY_URL: ${VITE_SEFER_PRIVACY_URL:-}
+        VITE_SEFER_RECORDING_AVAILABLE: ${VITE_SEFER_RECORDING_AVAILABLE:-}
+        VITE_SEFER_RECORDING_DEFAULT: ${VITE_SEFER_RECORDING_DEFAULT:-}
+        VITE_SEFER_RECORDING_MUTABLE: ${VITE_SEFER_RECORDING_MUTABLE:-}
+        VITE_SEFER_SESSION_ACCESS_DEFAULT: ${VITE_SEFER_SESSION_ACCESS_DEFAULT:-}
     restart: unless-stopped
     stop_grace_period: 15s
     environment:
@@ -39,12 +45,14 @@ services:
       - SEFER_PUBLIC_CATALOGS_JSON=${SEFER_PUBLIC_CATALOGS_JSON:-}
       - SEFER_BACKUP_DIR=/app/backups
       - SEFER_FORCE_IN_PLACE_PERSISTENCE=${SEFER_FORCE_IN_PLACE_PERSISTENCE:-false}
+      - SEFER_PRIVACY_LOCAL_PATH=/app/config/privacy.local.md
     volumes:
       - ${DATA_DIR:-.}/presentations.json:/app/presentations.json
       - ${DATA_DIR:-.}/audio_sync.json:/app/audio_sync.json
       - ${DATA_DIR:-.}/public/audio:/app/public/audio:ro
       - ${DATA_DIR:-.}/public/backgrounds:/app/public/backgrounds:ro
       - ${DATA_DIR:-.}/public/videos:/app/public/videos:ro
+      - ${DATA_DIR:-.}/config:/app/config:ro
       - sefer_backups:/app/backups
     expose:
       - "8787"

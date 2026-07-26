@@ -15,7 +15,14 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
   quiz, PWA/media and optional Live Audio wiring.
 - `src/main-control.tsx` - standalone React root for control mode; orchestrates control state and sync wiring without presenter/media elements.
 - `src/main-catalog.tsx` - standalone React root for the public catalog interface.
-- `vite.config.ts` - Vite multi-entry input configuration.
+- `vite.config.ts` - Vite multi-entry input configuration plus validated,
+  build-time operator manifest emission.
+- `server/operator-config.mjs` - shared build/startup validation for the public
+  operator manifest and bounded UTF-8 `privacy.local.md`.
+- `src/utils/operatorConfig.ts` - typed, immutable access to the public operator
+  configuration embedded by Vite.
+- `DataProtectionPage` - `src/components/shared/DataProtectionPage.tsx`: public
+  technical/operator privacy view and safe rendering of optional local Markdown.
 - `public/audience-sw.js` - shared PWA service worker for `/audience` and `/control`, versioned as `1.2.0`; arbitrary runtime media is network-only.
 - `public/manifest.webmanifest` - Audience PWA manifest scoped to `/audience` and using `public/logo.svg`.
 - `public/control-manifest.webmanifest` - Control PWA manifest scoped to `/control` and using `public/logo.svg`.
