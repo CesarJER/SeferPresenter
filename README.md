@@ -8,7 +8,12 @@ SeferPresenter es una aplicacion React/Vite para proyectar presentaciones con so
 - **Control**: abre `/control`. Permite seleccionar presentaciones, editar slides, cambiar fondos, controlar audio/video y navegar textos.
 - **Editor de audio**: abre `/audio-editor`. Permite asociar pistas de audio a presentaciones y cues de diapositiva.
 - **Audiencia**: abre `/audience`. Muestra la misma proyeccion visual que presenter, en modo solo lectura y sincronizada.
-- **Catálogo Público**: rutas dinámicas configurables vía `SEFER_PUBLIC_CATALOG_TAGS` en `.env` (ej: `/himnos`). Muestra una versión pública, segura y de solo lectura de las presentaciones, omitiendo metadatos privados y bloques de medios.
+- **Catálogo Público**: rutas dinámicas configurables mediante
+  `SEFER_PUBLIC_CATALOGS_JSON` en `.env`. Muestra una versión pública, segura y
+  de solo lectura de las presentaciones, omitiendo metadatos privados y bloques
+  de medios. Cada catálogo acepta `count_sefer: true|false`; decide únicamente
+  si las referencias Tanaj/Sefer cuentan en el número mostrado, sin ocultarlas
+  ni excluirlas de búsqueda.
 - **Proteccion de datos**: `/proteccion-datos` queda como ruta publica (accesible sin autenticacion) para el aviso de privacidad del futuro modulo de voz en vivo.
 - **Modo sin LiveKit**: la aplicacion conserva el uso solo presentacion. Si LiveKit esta desactivado, mal configurado o no soportado, `/presenter`, `/control`, `/audio-editor`, `/audience` y catálogos deben seguir cargando sin requerir voz en vivo.
 
@@ -76,8 +81,10 @@ endpoints HTTP existentes siguen activos.
 
 Si necesitas probar el stack completo con proxy, Redis y LiveKit, activa el
 perfil opcional con `docker compose --profile live-audio up --build`. El perfil
-requiere `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` y `LIVEKIT_NODE_IP`; no usa
-credenciales de desarrollo ni consulta servicios publicos para descubrir la IP.
+requiere `LIVEKIT_API_KEY` y `LIVEKIT_API_SECRET`. `LIVEKIT_NODE_IP` tiene
+prioridad cuando se define; si queda vacío,
+`SEFER_LIVEKIT_AUTO_DISCOVER_IP=true` habilita un fallback mediante proveedores
+HTTPS, con timeout, reintentos acotados y validación de IPv4 pública.
 Antes de construirlo, activa tambien `SEFER_LIVE_AUDIO_ENABLED=true` y
 `VITE_SEFER_LIVE_AUDIO_BUILD=true` en el entorno.
 `npm run dev` sigue siendo util
@@ -296,6 +303,16 @@ registra y solo usa escritura in-place después de crear esa copia durable.
 ## Legacy
 
 `legacy/` es registro local de desarrollo. No forma parte del producto, no debe ir al build y queda fuera de ESLint.
+
+Los patrones `*.local` y `*.local.*` están reservados para adaptaciones privadas
+de una instalación. Nunca deben contener código, pruebas o documentación
+canónica del producto.
+
+La imagen de producción se construye deliberadamente con Vite y sirve `dist`.
+Cada operador puede realizar su propio build para incorporar logos y variables
+`VITE_*` públicas; multimedia, fondos y datos se montan en tiempo de ejecución.
+Tras un cambio de IP pública actualizado mediante DDNS, hay que reiniciar
+LiveKit para que anuncie la dirección nueva.
 
 ## Verificacion recomendada
 

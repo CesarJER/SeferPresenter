@@ -1,6 +1,6 @@
 # SeferPresenter stabilization audit — 2026-07-22
 
-Audit target: commit `7692e7c8eb83ab891b250dc2c1af554e79a338ab` on
+Audit target: commit `a2c8ce052154621b0b2b14d7bc31b1be322e31cf` on
 `main`. Discovery was read-only; no production source was changed before the
 findings were consolidated.
 
