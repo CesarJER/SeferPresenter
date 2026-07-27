@@ -253,6 +253,7 @@ const SeferControlPanel: React.FC<SeferControlPanelProps> = ({
             {/* Hebrew */}
             <div
               dir={/[\u0590-\u05FF]/.test(currentVerse.verseNikud || '') ? "rtl" : "ltr"}
+              lang={/[\u0590-\u05FF]/.test(currentVerse.verseNikud || '') ? 'he' : undefined}
               className={`text-sm leading-relaxed text-[#f3c96a] font-bold ${/[\u0590-\u05FF]/.test(currentVerse.verseNikud || '') ? "text-right" : "text-left"}`}
               style={{ fontFamily: /[\u0590-\u05FF]/.test(currentVerse.verseNikud || '') ? "'Frank Ruhl Libre', 'SBL Hebrew', serif" : 'inherit' }}
               dangerouslySetInnerHTML={{ __html: sanitizeSlideHtml(currentVerse.verseNikudSanitized ?? currentVerse.verseNikud) }}

@@ -3,7 +3,7 @@
 ## Línea base
 
 - Rama: `codex/final-certification`
-- Código remediado: `a876409`
+- Código remediado: `e6be288`
 - Node.js: `v24.15.0`
 - npm: `11.12.1`
 - Docker Engine: `29.6.1`
@@ -18,7 +18,7 @@ Resultado final de la frontera de código:
 
 ```text
 npm.cmd run test
-49 archivos, 362 pruebas: PASS
+49 archivos, 356 pruebas: PASS
 
 npx.cmd tsc --noEmit
 PASS
@@ -37,7 +37,7 @@ livekitSecurity.test.ts + serverAuth.test.ts
 2 archivos, 31 pruebas: PASS
 
 LiveAudioAccessibility.test.tsx
-1 archivo, 15 pruebas: PASS
+1 archivo, 13 pruebas: PASS
 ```
 
 ## Docker y red interna

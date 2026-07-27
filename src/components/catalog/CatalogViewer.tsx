@@ -2,6 +2,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import type { CatalogDef } from './CatalogApp';
 import type { Presentation } from '../../types/presentation';
 import { ArrowLeft, Search, FileText, BookOpen, AlignLeft, LayoutGrid } from 'lucide-react';
+import { sanitizeSlideHtml } from '../../utils/hebrewText';
 
 interface CatalogViewerProps {
   catalog: CatalogDef;
@@ -170,7 +171,7 @@ export const CatalogViewer: React.FC<CatalogViewerProps> = ({ catalog, presentat
                             <div 
                               key={idx} 
                               className={`text-base sm:text-lg font-medium ${colorClass}`}
-                              dangerouslySetInnerHTML={{ __html: line }}
+                              dangerouslySetInnerHTML={{ __html: sanitizeSlideHtml(line) }}
                             />
                           );
                         })}
@@ -193,7 +194,7 @@ export const CatalogViewer: React.FC<CatalogViewerProps> = ({ catalog, presentat
                         <div 
                           key={idx} 
                           className={`text-base sm:text-lg font-medium ${colorClass}`}
-                          dangerouslySetInnerHTML={{ __html: line }}
+                          dangerouslySetInnerHTML={{ __html: sanitizeSlideHtml(line) }}
                         />
                       );
                     })}
@@ -206,7 +207,7 @@ export const CatalogViewer: React.FC<CatalogViewerProps> = ({ catalog, presentat
                         <div 
                           key={idx} 
                           className="text-base sm:text-lg text-amber-950 font-medium"
-                          dangerouslySetInnerHTML={{ __html: line }}
+                          dangerouslySetInnerHTML={{ __html: sanitizeSlideHtml(line) }}
                         />
                       );
                     })}
@@ -320,7 +321,7 @@ const PresentationCard: React.FC<PresentationCardProps> = ({ presentation, catal
       {snippet && (
         <div 
           className="text-xs text-amber-600/80 mt-2 italic border-l-2 border-amber-300 pl-2 line-clamp-2"
-          dangerouslySetInnerHTML={{ __html: snippet }}
+          dangerouslySetInnerHTML={{ __html: sanitizeSlideHtml(snippet) }}
         />
       )}
     </div>

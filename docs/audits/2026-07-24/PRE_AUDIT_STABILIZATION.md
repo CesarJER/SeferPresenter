@@ -46,7 +46,7 @@ test failure.
 
 ## Git history
 
-- `97f6d1b` — `fix(audience): restore public projection sync`
-- `3adc312` — `security(live-audio): keep aliases end-to-end encrypted`
-- `1282526` — `feat(catalog): add configurable counts and search excerpts`
-- `c7d3d26` — `ops(livekit): harden dynamic IP fallback and healthcheck`
+- `10c7cc9` — `fix(audience): restore public projection sync`
+- `f69a359` — `security(live-audio): keep aliases end-to-end encrypted`
+- `e78bb1c` — `feat(catalog): add configurable counts and search excerpts`
+- `0f81566` — `ops(livekit): harden dynamic IP fallback and healthcheck`

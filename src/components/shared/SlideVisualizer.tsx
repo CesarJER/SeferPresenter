@@ -302,6 +302,7 @@ const SlideVisualizer: React.FC<SlideVisualizerProps> = ({
                   {/* Line 0 (Hebrew/Greek) */}
                   <div
                     dir={textDir}
+                    lang={isRtl ? 'he' : undefined}
                     className={`text-sm md:text-base leading-relaxed text-[#f3c96a] font-bold ${textAlignment}`}
                     style={{ fontFamily: isRtl ? "'Frank Ruhl Libre', 'SBL Hebrew', serif" : 'inherit' }}
                     dangerouslySetInnerHTML={{ __html: safeLine0 }}
@@ -326,6 +327,7 @@ const SlideVisualizer: React.FC<SlideVisualizerProps> = ({
                 <div className="rounded-lg bg-gray-900/60 border border-gray-800/60 p-2.5">
                   <div
                     dir={textDir}
+                    lang={isRtl ? 'he' : undefined}
                     className={`text-sm md:text-base leading-relaxed text-white font-bold ${textAlignment}`}
                     style={{ fontFamily: isRtl ? "'Frank Ruhl Libre', 'SBL Hebrew', serif" : 'inherit' }}
                     dangerouslySetInnerHTML={{ __html: safeLine0 }}

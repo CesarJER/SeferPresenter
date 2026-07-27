@@ -7,13 +7,13 @@ dynamic announcements, reflow, contrast, and screen-reader behavior for Base
 and Live Audio. Automated checks are necessary but do not replace physical
 testing with NVDA, VoiceOver, and TalkBack.
 
-The phase starts from baseline `e8da9e3`. A profile cannot receive `GO` while a
+The phase starts from baseline `cdc1049`. A profile cannot receive `GO` while a
 required manual case is missing or while a reproducible WCAG 2.2 A/AA failure
 remains open.
 
 ## Regression closure: alias input focus
 
-Commit `c14e157` closes `A11Y-FINAL-007`. The intervention dialog now keeps one
+Commit `e6be288` closes `A11Y-FINAL-007`. The intervention dialog now keeps one
 focus lifecycle for the complete time it remains open. Incoming live state may
 rerender its parent and replace callbacks without returning focus to the
 launcher, moving it to the dialog title, or discarding the alias being typed.

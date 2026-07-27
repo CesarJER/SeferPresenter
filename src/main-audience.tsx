@@ -25,7 +25,9 @@ import { DEFAULT_AUDIO_STATE } from './types/audio';
 
 import './index.css';
 
-const LiveAudioContainer = React.lazy(() => import('./features/liveAudio/components/audience/LiveAudioAudienceContainer'));
+const LiveAudioContainer = import.meta.env.VITE_SEFER_LIVE_AUDIO_BUILD !== 'false'
+  ? React.lazy(() => import('./features/liveAudio/components/audience/LiveAudioAudienceContainer'))
+  : null;
 
 function AudienceApp() {
   const [currentPresentation, setCurrentPresentation] = useState<Presentation | null>(null);
@@ -272,6 +274,7 @@ function AudienceApp() {
       fontScale={currentPresentation?.fontScale ?? 1}
       presentationTitle={currentPresentation?.title || ''}
       presentationId={currentPresentation?.id ?? null}
+      quizDisplayName={audienceSession.aliasVisible ? audienceSession.nick : undefined}
       scriptureState={quizScriptureState || scriptureState}
       slide={activePresenterSlide}
       videoState={videoState}
@@ -288,17 +291,19 @@ function AudienceApp() {
 
   return (
     <>
-      <React.Suspense fallback={audienceScreenElement}>
-        <LiveAudioContainer
-          availability={liveAudioAvailability.availability}
-          wsSend={wsSend}
-          subscribeToWsMessage={subscribeToWsMessage}
-          clientId={clientIdRef.current}
-          audienceSession={audienceSession}
-        >
-          {audienceScreenElement}
-        </LiveAudioContainer>
-      </React.Suspense>
+      {LiveAudioContainer ? (
+        <React.Suspense fallback={audienceScreenElement}>
+          <LiveAudioContainer
+            availability={liveAudioAvailability.availability}
+            wsSend={wsSend}
+            subscribeToWsMessage={subscribeToWsMessage}
+            clientId={clientIdRef.current}
+            audienceSession={audienceSession}
+          >
+            {audienceScreenElement}
+          </LiveAudioContainer>
+        </React.Suspense>
+      ) : audienceScreenElement}
       {shouldShowMediaUnlock && (
         <button
           type="button"

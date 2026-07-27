@@ -125,8 +125,8 @@ Use these checklists before implementing future tasks.
 - Keep the readable alias list E2E encrypted. The server may store technical
   flags, but must not compute or broadcast aliases in clear text.
 - Keep `isAliasVisibleToActiveParticipants` lifecycle identical to the audience
-  nick: initialize from `localStorage`, persist checkbox changes, and clear it
-  on logout, session rotation, kick, and remove.
+  nick: page-session only, never persisted, and clear it on logout, session
+  rotation, kick, and remove.
 - Keep `isAliasVisibleToActiveParticipants`, `isAliasHiddenByControl`, and
   `canViewActiveParticipants` orthogonal.
 - Audience active profiles (`LIVE_AUDIO_ACTIVE_PARTICIPANT_PROFILE`) may carry

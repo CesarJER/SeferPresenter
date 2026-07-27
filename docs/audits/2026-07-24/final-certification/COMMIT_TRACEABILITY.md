@@ -2,29 +2,22 @@
 
 | Commit | Fase / hallazgos | Verificación principal |
 | --- | --- | --- |
-| `765fa3b` | Exportación mediante Blob | Regresión de descarga, build |
-| `c754e68` | Autorización Control atómica, ACK/NACK | Pruebas WS/autorización |
-| `9bf32f0` | `stateRevision`, snapshot, delta, gap y resync | Reducer y servidor multi-Control |
-| `ca99342` | Reanudación Control y overlay E2E | Snapshot/overlay/READY |
-| `26c3bf4` | Público/Controlado y Audience versionado | Acceso, tickets y reconexión |
-| `57bc681` | TTL y almacén offline protegido | PWA/admisión/limpieza |
-| `e07b462` | Operador y `privacy.local.md` | Build/arranque/Markdown |
-| `e8da9e3` | `recordingEpoch` y confirmaciones | Políticas, rotación y micrófono |
-| `d449dfc` | Semántica y anuncios Live Audio | Accesibilidad dirigida |
-| `cccb634` | Restauración de foco | Transiciones remotas e inbox |
-| `7ba39d8` | B-03, SP-SRE-014/015 | Backups, permisos y fail-closed |
-| `29a7c43` | B-01/02/05/07 | Quiz, privacidad y rotación |
-| `3adb91d` | B-04/06, L-01/02 | Credenciales, cuotas y overlay |
-| `d5fe035` | SP-PERF-006/007 | Assets hash y activación SW |
-| `113ad32` | SP-SRE-016/018 | ICE/TCP, API interna, readiness y Docker |
-| `c14e157` | A11Y-FINAL-007 | Persistencia de foco y texto del alias durante rerenders |
-| `a5e6263` | Privacidad | Restauración de perfil y consentimiento de audiencia |
-| `a33d530` | SP-PRIV-008 | Clarificación de consentimiento y recordatorio de grabación |
-| `764ece6` | Accesibilidad | Permitir scroll en páginas de acceso y privacidad |
-| `0091ceb` | Autorización | Vinculación de petición de palabra a credencial de audiencia |
-| `d76f49e` | MC-SYNC-008 | Prevención de estado REVOKED prematuro (mitigación frontend) |
-| `59ecd9c` | Autorización | Persistencia y resincronización de permisos de vista de lista activa |
-| `a876409` | SP-PRIV-001 / Estabilidad | Migración de sesión y estado del quiz a localStorage para estabilidad móvil |
+| `13c82ae` | Exportación mediante Blob | Regresión de descarga, build |
+| `eb5a894` | Autorización Control atómica, ACK/NACK | Pruebas WS/autorización |
+| `386fbda` | `stateRevision`, snapshot, delta, gap y resync | Reducer y servidor multi-Control |
+| `2af9a95` | Reanudación Control y overlay E2E | Snapshot/overlay/READY |
+| `82db9a8` | Público/Controlado y Audience versionado | Acceso, tickets y reconexión |
+| `a5055b0` | TTL y almacén offline protegido | PWA/admisión/limpieza |
+| `fd0d25f` | Operador y `privacy.local.md` | Build/arranque/Markdown |
+| `cdc1049` | `recordingEpoch` y confirmaciones | Políticas, rotación y micrófono |
+| `b597b3a` | Semántica y anuncios Live Audio | Accesibilidad dirigida |
+| `4f1bf16` | Restauración de foco | Transiciones remotas e inbox |
+| `bec62f0` | B-03, SP-SRE-014/015 | Backups, permisos y fail-closed |
+| `7e938c4` | B-01/02/05/07 | Quiz, privacidad y rotación |
+| `bc7bd2c` | B-04/06, L-01/02 | Credenciales, cuotas y overlay |
+| `b913ce4` | SP-PERF-006/007 | Assets hash y activación SW |
+| `a433d3b` | SP-SRE-016/018 | ICE/TCP, API interna, readiness y Docker |
+| `e6be288` | A11Y-FINAL-007 | Persistencia de foco y texto del alias durante rerenders |
 
 En cada frontera se ejecutaron pruebas dirigidas, TypeScript y ESLint. Las
 fronteras arquitectónicas incluyeron la suite completa y build. El resultado

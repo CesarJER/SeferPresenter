@@ -18,6 +18,7 @@ export class IosAudioBufferPlayer extends EventTarget {
   private source: AudioBufferSourceNode | null = null;
   private buffer: AudioBuffer | null = null;
   private loadPromise: Promise<void> | null = null;
+  private loadAbortController: AbortController | null = null;
   private loadVersion = 0;
   private desiredPlaying = false;
   private offsetSec = 0;
@@ -116,6 +117,9 @@ export class IosAudioBufferPlayer extends EventTarget {
   removeAttribute(name: string): void {
     this.attributes.delete(name);
     if (name === 'src') {
+      this.loadVersion += 1;
+      this.abortPendingLoad();
+      this.loadPromise = null;
       this.sourceUrl = '';
       this.clearTrack();
       this.pauseStreamOutput();
@@ -125,31 +129,52 @@ export class IosAudioBufferPlayer extends EventTarget {
   load(): void {
     const url = this.sourceUrl;
     const version = ++this.loadVersion;
+    this.abortPendingLoad();
     this.clearTrack();
     this.fallbackActive = false;
     if (!url) {
+      this.loadPromise = null;
       this.pauseStreamOutput();
       return;
     }
 
-    this.loadPromise = fetch(url, { credentials: 'same-origin' })
-      .then(response => {
+    const controller = new AbortController();
+    this.loadAbortController = controller;
+    const isCurrentLoad = () => (
+      version === this.loadVersion &&
+      this.loadAbortController === controller &&
+      !controller.signal.aborted
+    );
+
+    this.loadPromise = (async () => {
+      try {
+        const response = await fetch(url, {
+          credentials: 'same-origin',
+          signal: controller.signal,
+        });
+        if (!isCurrentLoad()) return;
         if (!response.ok) throw new Error(`Audio request failed (${response.status})`);
-        return response.arrayBuffer();
-      })
-      .then(data => this.context.decodeAudioData(data))
-      .then(buffer => {
-        if (version !== this.loadVersion) return;
+
+        const data = await response.arrayBuffer();
+        if (!isCurrentLoad()) return;
+
+        const buffer = await this.context.decodeAudioData(data);
+        if (!isCurrentLoad()) return;
+
         this.buffer = buffer;
         this.dispatchEvent(new Event('loadedmetadata'));
         this.dispatchEvent(new Event('durationchange'));
         if (this.desiredPlaying) void this.startWhenReady().catch(() => {});
-      })
-      .catch(error => {
-        if (version !== this.loadVersion) return;
+      } catch (error) {
+        if (!isCurrentLoad()) return;
         console.error('[iOS AudioBuffer] Falling back to native audio:', error);
         this.activateFallback();
-      });
+      } finally {
+        if (this.loadAbortController === controller) {
+          this.loadAbortController = null;
+        }
+      }
+    })();
   }
 
   async play(): Promise<void> {
@@ -179,6 +204,8 @@ export class IosAudioBufferPlayer extends EventTarget {
 
   destroy(): void {
     this.loadVersion += 1;
+    this.abortPendingLoad();
+    this.loadPromise = null;
     this.desiredPlaying = false;
     this.stopSource();
     this.buffer = null;
@@ -246,6 +273,11 @@ export class IosAudioBufferPlayer extends EventTarget {
     this.stopSource();
     this.buffer = null;
     this.offsetSec = 0;
+  }
+
+  private abortPendingLoad(): void {
+    this.loadAbortController?.abort();
+    this.loadAbortController = null;
   }
 
   private normalizePosition(value: number): number {

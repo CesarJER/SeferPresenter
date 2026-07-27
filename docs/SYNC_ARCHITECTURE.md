@@ -130,11 +130,12 @@ authorization.
 ### Participantes Activos Visibles (E2E)
 
 Active audience participants may voluntarily share their alias with other active
-participants. The user preference is `isAliasVisibleToActiveParticipants`, saved
-in `localStorage` as `sefer-audience-alias-visible` alongside
-`sefer-audience-nick`; logout, session rotation, kick, and remove reset it to
-false. `VITE_SEFER_ACTIVE_ALIAS_VISIBLE_BY_DEFAULT=false` keeps the checkbox
-off unless explicitly configured otherwise.
+participants. Alias, technical audience ID and
+`isAliasVisibleToActiveParticipants` are page-session state and are not stored
+in `localStorage`; startup removes keys left by older versions. Logout and
+presentation-session rotation purge them, rotate the technical ID and clear quiz
+identity/state. `VITE_SEFER_ACTIVE_ALIAS_VISIBLE_BY_DEFAULT=false` keeps the
+checkbox off unless explicitly configured otherwise.
 
 The readable list is never computed or broadcast by the server. Audience sends
 its active profile to authorized Control in clear via
@@ -274,7 +275,8 @@ subscription, exposes remote audio tracks, and opens the microphone only when
 is exposed so UI can keep remote playback behind a browser/user gesture.
 
 Fase 5.11 hardens long sessions and mobile networks. `useLiveAudio.ts` refreshes
-tokens through `POST /api/livekit/refresh-token` with a two-minute safety margin,
+tokens through `POST /api/livekit/refresh-token` with a two-minute safety margin
+and a one-use rotating `refreshCredential`,
 keeps the same ephemeral `participantId` on refresh, exposes reconnecting,
 reconnected, and prolonged reconnect-failure states, and stops all local tracks
 when microphone publication ends, the user disconnects, or the component
@@ -287,14 +289,16 @@ endpoints. It keeps participant, token, speaker, mute, kick, and rescue state in
 only. If `SEFER_LIVE_AUDIO_ENABLED=false` or any required `LIVEKIT_*` variable is
 missing, `/api/livekit/status` reports disabled or unavailable and the server
 still starts without importing or requiring a LiveKit SDK. Token generation uses
-minimum grants by role: audience can subscribe only, while control can publish
-audio. Tokens include only ephemeral LiveKit identity and JSON metadata with the
+minimum grants by role: the public endpoint can mint only minimum Audience
+grants. Control additionally requires Basic Auth plus an authorized WS
+`controlSessionId`; Presenter requires Basic Auth. Tokens include only ephemeral LiveKit identity and JSON metadata with the
 UUID `participantId`; no alias is included. Mutating moderation endpoints require
 an authorized WebSocket Control session from `server/ws-server.mjs`; audience
 requests are rejected with 403.
 
-`/api/livekit/refresh-token` reissues tokens for active in-memory participants
-and consults the WebSocket participant state so a granted audience speaker can
+`/api/livekit/refresh-token` requires `participantId` plus the rotating secret,
+stores only its SHA-256 hash, rejects replay/foreign/expired credentials, and
+consults the WebSocket participant state so a granted audience speaker can
 receive microphone-only publish permission without changing `participantId` or
 recovering any private alias/message history.
 `/api/livekit/rescue-participant` clears kicked state for an authorized Control
@@ -411,7 +415,9 @@ Backend-owned or backend-mirrored pieces:
 - `/api/display-telemetry`
 - `/api/presentations`
 - `/api/audio-sync`
-- `/api/quiz-answer` and `/api/quiz-events` (POST is unauthenticated to allow audience submissions, whereas GET `/api/quiz-events` filters individual answers and scores to only broadcast them to authenticated control panel connections)
+- `/api/quiz-answer` and `/api/quiz-events` (POST accepts only bounded answer or
+  score shapes publicly; clear commands require authentication when enabled;
+  GET filters individual answers/scores to authenticated Control connections)
 - `/api/audience/state` and `/api/audience/events`
 - `/api/backgrounds` (lists all available image and video background files)
 - `/api/audio` (lists all available audio tracks)
@@ -423,7 +429,9 @@ Backend-owned or backend-mirrored pieces:
 - `/ws` operational Live Audio snapshots for authorized Control handoff; these
   are ephemeral, memory-only, and separate from `SYNC_STATE`
 
-Telemetry POST endpoints validate the existing message shape before broadcast:
+With `SEFER_REQUIRE_AUTH=true`, administrative GET/POST APIs use an explicit
+protected allowlist boundary; browser mutations and WebSocket upgrades must be
+same-origin or match `SEFER_ALLOWED_ORIGINS`. Telemetry POST endpoints validate the existing message shape before broadcast:
 `AUDIO_TELEMETRY` requires `audioState`, `VIDEO_TELEMETRY` requires
 `videoState` or `null`, and `DISPLAY_TELEMETRY` requires the display background
 fields with their basic types.
@@ -456,7 +464,11 @@ Controller UI state:
 
 Quiz answers and personal scoring are fundamentally anonymous and decoupled from Live Audio identity. The architecture enforces the following privacy rules:
 
-- **Session Storage:** Individual answers and scoring remain in audience `localStorage`; the server also keeps the submitted answers in volatile memory for the active quiz session. This lets a reconnected Control recover the session without writing quiz answers to disk. The snapshot endpoint is reserved for Control when authentication is enabled.
+- **Session Storage:** Individual answers and scoring may remain in audience
+  `localStorage` during the active presentation session, but logout or session
+  rotation clears the maps and rotates the page-scoped quiz ID. The server keeps
+  submitted answers only in volatile memory so Control can reconnect without
+  writing quiz answers to disk.
 - **Presentation Scope:** Answer and score maps are nested by `presentationId`.
   `QUIZ_ANSWER`, `QUIZ_FINAL_SCORE`, and `QUIZ_CLEAR_ANSWERS` also carry that ID,
   and Control ignores messages from any presentation other than the active one.
