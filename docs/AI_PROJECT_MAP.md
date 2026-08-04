@@ -18,7 +18,7 @@ Fast map for agents. Use real paths only; this repo does not currently have
 - `src/main-audience.tsx`: standalone Audience root with read-only projection,
   quiz, media/PWA and optional Live Audio wiring.
 - `src/main-control.tsx`: standalone control React root; loads the control panel tree without presenter dependencies.
-- `public/audience-sw.js`: shared PWA service worker for `/audience` and `/control` scopes, with network-first shells and no caching for live endpoints or large media.
+- `public/audience-sw.js`: shared PWA service worker for `/audience` and `/control` scopes, with network-first shells and no caching for live endpoints, legal documents or large media.
 - `public/manifest.webmanifest`: Audience PWA manifest scoped to `/audience`.
 - `public/control-manifest.webmanifest`: Control PWA manifest scoped to `/control`.
 - `src/App.tsx`: Presenter/default-root state, synchronization, media and
@@ -105,6 +105,8 @@ Start with:
 - `src/utils/syncProtocol.ts`
 - `src/utils/validation.ts`
 - `src/hooks/useSyncState.ts`
+- `src/hooks/useQuizAnswers.ts` and `server/authUtils.mjs` when changing the
+  public Audience versus authenticated Control SSE boundary
 - `server/projection-state-reducer.mjs`
 - `src/App.tsx`
 - `server/local-server.mjs`
@@ -139,6 +141,10 @@ Start with:
 - `server/livekit-server.mjs` and `server/local-server.mjs` for Fase 5.4
   self-hosted token, status, refresh, participant identity preservation, and
   moderation/rescue endpoints plus anonymous quiz aggregate snapshot input
+- `server/privacy-session-manifest.mjs` when changing the local, non-nominative
+  recording-session evidence written from accepted broadcast transitions
+- `server/static-cache-policy.mjs` when changing fail-closed, no-store handling
+  for the legal route and Markdown documents
 - `docs/SYNC_ARCHITECTURE.md`
 - `docs/COMPONENT_OWNERSHIP.md`
 
@@ -159,12 +165,28 @@ or misconfigured LiveKit must leave `/presenter`, `/control`, and `/audience`
 usable in presentation-only mode.
 
 For active participant visibility, Audience sends
-`LIVE_AUDIO_ACTIVE_PARTICIPANT_PROFILE` with alias, sharing preference, and
-public key when it joins or changes visibility. `LiveAudioControlContainer.tsx`
-computes and distributes only the encrypted `VISIBLE_ACTIVE_PARTICIPANTS` list,
-while `AudienceLiveAudioPanel.tsx` and `ActiveParticipantsPanel.tsx` render the
-audience-side checkbox/list. Authorization state is clear WebSocket state;
-only the list of visible nicks is encrypted.
+`LIVE_AUDIO_ACTIVE_PARTICIPANT_PROFILE` with a random participant identifier,
+sharing preference, public key and an alias envelope encrypted for the primary
+Control. `LiveAudioControlContainer.tsx` decrypts the alias and distributes the
+authorized visible list encrypted for each secondary Control and Audience;
+the server only routes ciphertext. `AudienceLiveAudioPanel.tsx` and
+`ActiveParticipantsPanel.tsx` render the opt-in/list. Authorization state and
+random identifiers remain clear WebSocket state; aliases do not.
+
+`DataProtectionPage.tsx` loads the exact Markdown selected through
+`VITE_PRIVACY_POLICY_PATH`, constrained to `/legal/*.md`, and renders it through
+`LegalMarkdown.tsx` with GFM tables, raw HTML disabled and responsive styles.
+The page exposes the document version and complete SHA-256, but not the internal
+source path.
+The neutral versionable fallback is `public/legal/privacy.md`; operator variants
+must stay under an ignored `public/legal/<operator>.local/` directory.
+
+`CollapsiblePrivacyNotice.tsx` loads the first-layer table selected by
+`VITE_PRIVACY_SUMMARY_PATH` immediately before the full-policy link. It shows
+the policy version and short SHA-256 and blocks microphone confirmation if the
+summary or policy cannot load. Its neutral fallback is
+`public/legal/privacy-summary.md`; operator-specific tables remain legal
+documents inside `public/legal/<operator>.local/`.
 
 Build/runtime split:
 

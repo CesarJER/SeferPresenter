@@ -92,9 +92,9 @@ Use these checklists before implementing future tasks.
   the oldest authorized Control.
 - Keep Control handoff snapshots server-owned in `server/ws-server.mjs`.
   Authorized Controls may request/receive `LIVE_AUDIO_SNAPSHOT`; pending
-  Controls must not receive it. Sensitive snapshot overlays learned from Control
-  patches must stay ephemeral and encrypted in server memory with a key derived
-  from `SEFER_CONTROL_PASSWORD`; do not persist them to disk.
+  Controls must not receive it. Snapshots may contain technical state and quiz
+  aggregates only; reject aliases and private-signal content rather than storing
+  a server-decryptable overlay.
 - Rescue actions must clear `isKicked` and return the participant to active
   muted `LISTENER` without opening or publishing microphone tracks.
 - Keep Control authorization UI compact and separate from `MenuPopup.tsx`;
@@ -102,6 +102,8 @@ Use these checklists before implementing future tasks.
   approval/rejection decisions without persisting codes or messages.
 - Treat UUID format as a syntax check only. Backend runtime must verify the
   participant is bound to an active WebSocket/session and authorized role.
+- Keep authentication fail-closed: absence of `SEFER_REQUIRE_AUTH` means enabled.
+  Only local development tooling may opt out explicitly.
 - Do not add `acceptedNotice`, `consentGiven`, `privacyAcceptedAt`, equivalents,
   consent endpoints, or persisted privacy acknowledgement records.
 - Do not log aliases, private text, keys, ciphertext, or full private signal
@@ -129,9 +131,9 @@ Use these checklists before implementing future tasks.
   rotation, kick, and remove.
 - Keep `isAliasVisibleToActiveParticipants`, `isAliasHiddenByControl`, and
   `canViewActiveParticipants` orthogonal.
-- Audience active profiles (`LIVE_AUDIO_ACTIVE_PARTICIPANT_PROFILE`) may carry
-  alias, sharing preference, and the public key in clear to authorized Control.
-  Do not require private-signal readiness for authorization state.
+- Audience active profiles (`LIVE_AUDIO_ACTIVE_PARTICIPANT_PROFILE`) must never
+  carry an alias. They may carry only the technical participant ID, sharing
+  preference and public key; the alias itself must use `PRIVATE_CONTROL_SIGNAL`.
 - Control Principal computes the A-Z list locally with
   `computeVisibleActiveParticipants` and sends only the nick list
   (`VISIBLE_ACTIVE_PARTICIPANTS`) inside targeted `PRIVATE_CONTROL_SIGNAL`
@@ -144,6 +146,41 @@ Use these checklists before implementing future tasks.
   join again cleanly.
 - Update `src/types/liveAudio.ts`, `server/ws-server.mjs`, Live Audio audience
   and control UI, tests, `docs/SYNC_ARCHITECTURE.md`, and `README.md` together.
+
+## When Modifying External Broadcast State
+
+- Treat `off/live/recording` as an authorized operator declaration, not as streaming
+  telemetry or proof that a platform is recording.
+- On every new `live` or `recording` revision, revoke existing Audience speaker
+  grants, close locally published tracks and require a fresh explicit
+  confirmation before any Audience or Control microphone can publish again.
+- Keep passive Audience clients outside the active profile/list permission path.
+- Add protocol validation and regression tests whenever the state contract or
+  microphone transition changes.
+
+## When Modifying Privacy Storage, Logs, or Legal Documents
+
+- Store Audience session references, quiz answers and scores only through
+  `src/utils/privacyStorage.ts`; preserve its versioned envelope, 1-168 hour
+  clamp and idempotent purge of expired/legacy values.
+- Do not add client IP, `User-Agent`, aliases, private payloads, tokens or quiz
+  detail to product logs. Caddy, LiveKit and Redis output is intentionally
+  discarded at the Docker driver boundary.
+- Docker size rotation is not temporal retention. Preserve and test the safe
+  Compose-recreation script and require host task installation before claiming
+  a seven-day maximum.
+- Keep `public/legal/` limited to legal documents. `DataProtectionPage` must
+  render the exact Markdown selected under `/legal/` and show version/SHA-256
+  without exposing its internal file path. Use `LegalMarkdown` for GFM tables
+  and keep raw HTML and images disabled.
+- Keep the first-layer table in a separate legal Markdown chosen by
+  `VITE_PRIVACY_SUMMARY_PATH` and render it in the pre-intervention privacy
+  notice immediately before the full-policy link, not beside the alias field.
+  The general fallback must remain neutral; entity identity, contact and
+  specific recipients belong in the operator's ignored
+  `/legal/<operator>.local/` document.
+- Operator legal documents and audit records remain in their respective
+  `.local` paths; never put reports or operational evidence in `public/legal/`.
 
 ## When Editing Validation/Import/Export
 
@@ -181,6 +218,8 @@ Use these checklists before implementing future tasks.
   replacement artwork casually.
 - Never cache live endpoints: `/api/*`, SSE endpoints, `/ws`, `/rtc/*`,
   LiveKit/tokens, or token-bearing URLs.
+- Never cache `/legal/*` or `/proteccion-datos`; legal Markdown and its route
+  must use network-only `no-store` behavior and fail visibly when unavailable.
 - Never precache large videos or audio. Control may read video metadata for
   editor/catalog duration fields, but Audience should not mass-download
   presenter backgrounds or videos.

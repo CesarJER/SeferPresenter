@@ -47,7 +47,9 @@ Live synchronized state:
 - Full state: `SYNC_STATE` in `src/types/sync.ts`.
 - Remote commands: `REMOTE_COMMAND` in `src/types/sync.ts`.
 - Lightweight media/display updates: `AUDIO_TELEMETRY`, `VIDEO_TELEMETRY`, `DISPLAY_TELEMETRY`.
-- Quiz answer events: `/api/quiz-answer` and `/api/quiz-events` in `server/local-server.mjs`.
+- Quiz answer events: public `/api/quiz-answer` and `/api/quiz-events`, plus
+  authenticated `/api/quiz-control-events` and `/api/quiz-control-state`, in
+  `server/local-server.mjs`.
 
 Derived UI state:
 

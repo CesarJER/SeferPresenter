@@ -9,7 +9,11 @@ SeferPresenter es una aplicacion React/Vite para proyectar presentaciones con so
 - **Editor de audio**: abre `/audio-editor`. Permite asociar pistas de audio a presentaciones y cues de diapositiva.
 - **Audiencia**: abre `/audience`. Muestra la misma proyeccion visual que presenter, en modo solo lectura y sincronizada.
 - **Catálogo Público**: rutas dinámicas configurables vía `SEFER_PUBLIC_CATALOG_TAGS` en `.env` (ej: `/himnos`). Muestra una versión pública, segura y de solo lectura de las presentaciones, omitiendo metadatos privados y bloques de medios.
-- **Proteccion de datos**: `/proteccion-datos` queda como ruta publica (accesible sin autenticacion) para el aviso de privacidad del futuro modulo de voz en vivo.
+- **Proteccion de datos**: `/proteccion-datos` carga el Markdown legal configurado
+  mediante `VITE_PRIVACY_POLICY_PATH`, lo presenta como documento legible con
+  tablas GFM y muestra su version y SHA-256 completo. La ruta interna del
+  fichero no se expone al usuario. La ruta permanece publica para que pueda
+  consultarse antes de participar.
 - **Modo sin LiveKit**: la aplicacion conserva el uso solo presentacion. Si LiveKit esta desactivado, mal configurado o no soportado, `/presenter`, `/control`, `/audio-editor`, `/audience` y catálogos deben seguir cargando sin requerir voz en vivo.
 
 ## Scripts
@@ -25,6 +29,7 @@ npm run start:local  # backend local sirviendo dist/
 npm run test         # Vitest
 npm run lint         # ESLint
 npx tsc --noEmit     # verificacion estricta de tipos
+npm run index:memory # re-indexar grafo AST con codebase-memory-mcp
 ```
 
 Los scripts `predev`, `prebuild` y `prebuild:web` regeneran `public/books/*.tsv` y `public/metadata.json` desde los datos biblicos externos.
@@ -47,9 +52,13 @@ El backend local vive en `server/local-server.mjs`. Mantiene inicialmente la mis
 - `POST /api/presentations`
 - `GET /api/public-catalogs`
 - `GET /api/public-catalogs/:id/presentations`
-- `GET /api/audience/state`
-- `GET /api/audience/events`
+- `GET /api/audience/state` (snapshot `SYNC_STATE` público con la diapositiva activa)
+- `GET /api/audience/events` (actualizaciones equivalentes por SSE)
 - `GET /api/audience-cache-assets`
+- `POST /api/quiz-answer`
+- `GET /api/quiz-events` (eventos públicos no sensibles)
+- `GET /api/quiz-control-events` (agregados, requiere autenticación)
+- `POST /api/quiz-control-state` (snapshot agregado, requiere autenticación)
 - `GET /api/livekit/status`
 - `POST /api/livekit/token`
 - `POST /api/livekit/refresh-token`
@@ -70,8 +79,11 @@ endpoints HTTP existentes siguen activos.
 
 Si necesitas probar el stack completo con proxy, Redis y LiveKit, activa el
 perfil opcional con `docker compose --profile live-audio up --build`. El perfil
-requiere `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` y `LIVEKIT_NODE_IP`; no usa
-credenciales de desarrollo ni consulta servicios publicos para descubrir la IP.
+requiere `LIVEKIT_API_KEY` y `LIVEKIT_API_SECRET`. Configure `LIVEKIT_NODE_IP`
+de forma expresa. Para servidores con IP dinámica puede habilitar
+conscientemente `LIVEKIT_NODE_IP_AUTO_DETECT=true`; el contenedor consulta solo
+proveedores HTTPS permitidos, valida una respuesta IPv4 y falla si no obtiene
+una válida.
 Antes de construirlo, activa tambien `SEFER_LIVE_AUDIO_ENABLED=true` y
 `VITE_SEFER_LIVE_AUDIO_BUILD=true` en el entorno.
 `npm run dev` sigue siendo util
@@ -80,9 +92,11 @@ contenedorizado cuando quieres validar la ruta completa de voz en vivo.
 
 En desarrollo, `npm run dev` arranca el backend local y Vite juntos. Vite proxya `/api` a `http://localhost:8787`. Si arrancas solo `npm run dev:frontend`, debes tener `npm run dev:backend` abierto en otra terminal. Para pruebas locales estables, ejecuta `npm run build` y despues `npm run start:local`.
 
-## Seguridad por fases
+## Seguridad
 
-En LAN/local no se exige autenticacion por defecto. Si se expone el servidor por puerto abierto o dominio, activa proteccion declarativa:
+La autenticacion administrativa esta habilitada por defecto incluso cuando
+`SEFER_REQUIRE_AUTH` no existe. Configure una clave fuerte antes de arrancar el
+backend de produccion:
 
 ```bash
 SEFER_REQUIRE_AUTH=true
@@ -90,7 +104,44 @@ SEFER_CONTROL_PASSWORD=una-clave-fuerte
 npm run start:local
 ```
 
-Con `SEFER_REQUIRE_AUTH=true`, `/control`, `/audio-editor` y endpoints mutantes bajo `/api` quedan protegidos con Basic Auth.
+Con `SEFER_REQUIRE_AUTH=true`, `/control`, `/audio-editor`, `/presenter`, APIs
+administrativas y WebSocket privilegiado quedan protegidos con Basic Auth.
+`npm run dev` establece de forma explicita `SEFER_REQUIRE_AUTH=false` si la
+variable no fue definida; no use ese opt-out para un despliegue expuesto.
+
+## Privacidad local, documento legal y logs
+
+- `VITE_PRIVACY_POLICY_PATH` solo admite Markdown bajo `/legal/`. Puede apuntar
+  a un fichero ignorado como
+  `/legal/<operator>.local/privacy-policy-es.local.md`.
+- `VITE_PRIVACY_SUMMARY_PATH` selecciona, con la misma contencion bajo
+  `/legal/`, la información básica de primera capa mostrada en el aviso previo a
+  intervenir. El fallback neutral es `/legal/privacy-summary.md`; cada operador
+  puede usar `/legal/<operator>.local/privacy-summary-es.local.md` con su tabla
+  de responsable, finalidad, legitimacion, destinatarios y derechos.
+- `VITE_SEFER_AUDIENCE_STORAGE_TTL_HOURS` controla la caducidad de sesión,
+  respuestas y puntuaciones Audience: 24 horas por defecto, entre 1 y 168.
+- Caddy no reenvia `X-Real-IP` ni `X-Forwarded-For` a Node/LiveKit.
+- Docker descarta la salida de Caddy, LiveKit y Redis; la aplicación usa el
+  driver `local`, comprimido y limitado a tres ficheros de 5 MB.
+- Docker no ofrece caducidad por días en ese driver. En Windows, instale
+  `scripts/install-docker-log-retention-task.ps1`; la tarea ejecuta diariamente
+  `scripts/rotate-docker-logs.ps1`, que recrea servicios a las 144 horas y deja
+  que Docker elimine los logs con el contenedor antiguo. Los volúmenes y bind
+  mounts permanecen intactos.
+- `SEFER_PRIVACY_LOCAL_PATH` señala la raíz local ignorada que recibe los
+  manifiestos de sesión. Al pasar a `recording`, el backend crea un JSON
+  `.local` sin asistentes, alias, voz, IP ni identificadores de sesión; al salir
+  de grabación lo completa de forma atómica.
+- `SEFER_EXTERNAL_BROADCAST_CHANNELS`, `SEFER_DEPLOYMENT_VERSION` y
+  `SEFER_BROADCAST_NOTICE_VERSION` identifican canales y versiones en ese
+  manifiesto. `VITE_PRIVACY_POLICY_PATH` aporta versión y SHA-256 del aviso.
+
+Ejecute primero la comprobación no mutante:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/rotate-docker-logs.ps1 -DryRun
+```
 
 ## PWA de audiencia y control
 
@@ -106,7 +157,7 @@ El service worker `public/audience-sw.js` sirve ambos scopes. Cachea:
 - TSV biblicos bajo demanda;
 - assets extra listados manualmente en `public/audience-cache-assets.txt`.
 
-El archivo `public/audience-cache-assets.txt` acepta una ruta publica por linea y comentarios con `#`. No cachea endpoints vivos (`/api/*`, SSE, `/ws`, `/rtc/*`, LiveKit/tokens) ni videos/audios pesados. Si hay una actualizacion de service worker esperando, el boton de reinicio de la PWA la activa antes de recargar, sin borrar nick, respuestas de quiz ni estado local persistente.
+El archivo `public/audience-cache-assets.txt` acepta una ruta publica por linea y comentarios con `#`. No cachea endpoints vivos (`/api/*`, SSE, `/ws`, `/rtc/*`, LiveKit/tokens), documentos `/legal/*` ni videos/audios pesados. La ruta `/proteccion-datos` y el Markdown legal usan red con `no-store`: si no hay red no se presenta una política obsoleta como vigente. Si hay una actualizacion de service worker esperando, el boton de reinicio de la PWA la activa antes de recargar, sin borrar nick, respuestas de quiz ni estado local persistente.
 
 ### Diagnostico de permisos de microfono
 
@@ -161,6 +212,8 @@ La aplicacion se organiza por consumidor:
 - `docs/SYNC_ARCHITECTURE.md`: arquitectura actual de sincronizacion y direccion backend-ready.
 - `docs/SYMBOL_INDEX.md`: indice de simbolos y archivos importantes.
 - `docs/ai-navigation.md`: vista condensada de navegacion para lectura rapida.
+- `docs/privacy/README.md`: separacion entre documentacion tecnica/plantillas
+  versionables y adaptaciones privadas `*.local.*` de cada operador.
 
 ## Sincronizacion
 
@@ -184,18 +237,26 @@ Canales principales:
 - `LIVE_AUDIO_SNAPSHOT_REQUEST` / `LIVE_AUDIO_SNAPSHOT`: snapshot operacional
   efimero para Controles autorizados, con participantes, cola, autorizaciones,
   estado LiveKit y agregados anonimos de quiz. Controles pendientes no lo reciben.
-- `LIVE_AUDIO_ACTIVE_PARTICIPANT_PROFILE`: perfil activo claro enviado solo a
-  Controles autorizados con alias, preferencia de visibilidad y clave publica
-  para cifrar la lista visible de nicks.
+- `LIVE_AUDIO_ACTIVE_PARTICIPANT_PROFILE`: perfil tecnico claro enviado solo a
+  Controles autorizados con `participantId`, preferencia de visibilidad y clave
+  publica. El alias viaja exclusivamente dentro de `PRIVATE_CONTROL_SIGNAL`.
+- `LIVE_AUDIO_SET_EXTERNAL_BROADCAST_STATE` /
+  `LIVE_AUDIO_EXTERNAL_BROADCAST_STATE`: declaracion manual `off/live/recording`
+  de un Control autorizado. Cada cambio a directo o grabacion revoca permisos
+  de microfono anteriores y exige una nueva confirmacion antes de publicar voz.
+  Si se configura una raíz local, la transición a `recording` también inicia un
+  manifiesto técnico no nominativo y la salida de ese estado lo finaliza.
 
 La audiencia muestra la misma imagen viva del presenter, sin controles de navegacion ni apertura del panel de control.
 
-Las respuestas y puntuaciones de quiz se separan por presentacion. En una
-diapositiva de resultados, Control puede recalcular las categorias usando las
-preguntas marcadas en verde, es decir, las que tienen respuestas registradas.
-El servidor conserva esas respuestas durante la sesion para que Control pueda
-recuperarlas tras una recarga, y solicita a Audience que reenvie sus nuevas
-puntuaciones en cada recalculo.
+Las respuestas detalladas y puntuaciones exactas del quiz permanecen en el
+navegador Audience y se separan por presentacion. El servidor transforma cada
+aporte en contadores agregados, conserva solo hashes de identificadores
+independientes por pregunta o resultado para evitar duplicados y nunca entrega
+a Control respuestas individuales, alias o un historial enlazable. En una
+diapositiva de resultados, Audience recalcula localmente y aporta solo su rango
+para la revision solicitada. El servidor no publica estadísticas hasta reunir
+al menos tres aportes en el ámbito correspondiente.
 
 `PRIVATE_CONTROL_SIGNAL` es un contenedor tecnico cifrado para senales privadas
 entre Audience y controles autorizados. No contiene alias, mensajes ni
@@ -255,7 +316,17 @@ SEFER_ACTIVE_ALIAS_MODERATION_DEFAULT_VISIBLE=true
 LIVEKIT_URL=
 LIVEKIT_API_KEY=
 LIVEKIT_API_SECRET=
+LIVEKIT_NODE_IP=
+LIVEKIT_NODE_IP_AUTO_DETECT=false
+LIVEKIT_LOGGING_LEVEL=warn
 LIVEKIT_ROOM_NAME=sefer-live-audio
+VITE_PRIVACY_POLICY_PATH=/legal/privacy.md
+VITE_PRIVACY_SUMMARY_PATH=/legal/privacy-summary.md
+VITE_SEFER_AUDIENCE_STORAGE_TTL_HOURS=24
+SEFER_PRIVACY_LOCAL_PATH=./privacy-audit.local
+SEFER_EXTERNAL_BROADCAST_CHANNELS=
+SEFER_DEPLOYMENT_VERSION=unversioned
+SEFER_BROADCAST_NOTICE_VERSION=broadcast-notice-v1
 ```
 
 Endpoints:
@@ -277,10 +348,10 @@ Endpoints:
   audiencia activa muda (`LISTENER`) sin abrir ni publicar microfono.
 
 No hay endpoints de consentimiento, alias legible ni chat legible. El backend no
-persiste claves, alias, tokens ni mensajes privados en archivos o base de datos.
-El snapshot operacional vive solo en memoria; las partes sensibles que el
-servidor llega a conocer por parches de Control autorizado se cifran con una
-clave derivada de `SEFER_CONTROL_PASSWORD` y no se guardan en disco.
+acepta alias en perfiles o snapshots operacionales y no persiste claves, alias,
+tokens ni mensajes privados en archivos o base de datos. El snapshot operacional
+vive solo en memoria y contiene exclusivamente estado tecnico y agregados de
+quiz; no contiene texto privado, respuestas individuales ni alias legibles.
 
 Compose conserva copias de recuperación fsync de `presentations.json` y
 `audio_sync.json` en el volumen `sefer_backups`. En un montaje individual de

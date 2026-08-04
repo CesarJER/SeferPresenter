@@ -47,6 +47,9 @@ Shared:
 - `src/components/shared/FormatLegend.tsx`
 - `src/components/shared/DataProtectionLink.tsx`
 - `src/components/shared/DataProtectionPage.tsx`
+- `src/components/shared/LegalMarkdown.tsx`: safe, responsive Markdown/GFM
+  renderer shared by legal policy and first-layer notices; raw HTML and images
+  stay disabled.
 - `src/components/shared/PwaRestartButton.tsx`: shared confirmed PWA reload action for installable audience/control shells; it must not clear localStorage or session state.
 - Live Audio shared widgets such as `LiveAudioStatusBadge.tsx` and
 
@@ -58,12 +61,34 @@ Catalog:
   `LiveAudioTrackOutput.tsx` belong under
   `src/features/liveAudio/components/shared/`. Future `LiveAudioNotice.tsx`,
   `CollapsiblePrivacyNotice.tsx`, `LiveAudioAliasInput.tsx`, and
-  `ControlVerificationCode.tsx` should also stay there when implemented. Core
+  `ControlVerificationCode.tsx` stay there. Core
   legal affordances such as `DataProtectionLink.tsx` and
   `DataProtectionPage.tsx` can live outside the LiveKit module so
   `/proteccion-datos` remains available even when
   `VITE_SEFER_LIVE_AUDIO_BUILD=false`. Privacy notice checkboxes must remain
-  local UI state and must not emit consent records.
+  local UI state and must not emit consent records. The age-path selection and
+  parental declaration follow the same rule: they gate the local action but are
+  not sent to the server or persisted.
+
+- `src/components/shared/DataProtectionPage.tsx` owns loading and displaying the
+  configured legal Markdown, including its version and complete SHA-256; it
+  must not expose the internal source path. Its `100dvh` container owns vertical
+  scrolling because the global body remains overflow-hidden for projection
+  modes. Validation, title/version parsing, display preparation and hashing stay
+  in `src/utils/legalDocument.ts`.
+
+- `src/features/liveAudio/components/shared/CollapsiblePrivacyNotice.tsx` owns
+  loading and displaying the configured first-layer table immediately before
+  the policy link. It consumes `LegalMarkdown` and
+  `VITE_PRIVACY_SUMMARY_PATH`, shows policy version/short hash and keeps the
+  microphone barrier closed if legal content is unavailable.
+- `src/features/liveAudio/components/shared/LiveAudioAliasInput.tsx` owns only
+  the temporary-alias field and its concise technical visibility explanation;
+  it must not duplicate the first-layer table.
+
+- `server/privacy-session-manifest.mjs` owns local recording-transition evidence.
+  It may consume only non-nominative deployment/notice metadata and must never
+  become a participant, consent, alias or message store.
 
 Hooks:
 

@@ -20,28 +20,33 @@ Presenter may still emit real media telemetry from its DOM media elements, but
 it is not required for Control-to-Audience navigation.
 
 The local backend keeps SSE connections alive with `data: heartbeat\n\n` every
-30 seconds on `/api/state-events`, `/api/audience/events`, and
-`/api/quiz-events`. Closed or errored SSE responses are removed from the server
-client sets, and failed SSE writes are dropped from future broadcasts.
+30 seconds on `/api/state-events`, `/api/audience/events`, `/api/quiz-events`,
+and `/api/quiz-control-events`. Audience uses a `SYNC_STATE`-compatible public
+snapshot/events pair containing only the active slide plus the functional media,
+quiz, scripture and display state required to render it. Control quiz aggregates use the authenticated Control
+event route; their delivery does not depend on an optional Basic Auth header on
+the public Audience stream. Closed or errored SSE responses are removed from
+the server client sets, and failed SSE writes are dropped from future broadcasts.
 
 Main message types live in `src/types/sync.ts`:
 
-- `SYNC_STATE`: full state needed to initialize or resynchronize clients.
+- `SYNC_STATE`: canonical synchronization envelope. Control/Presenter receive
+  the full presentation; Audience receives the same functional contract with
+  the presentation reduced to its active slide.
 - `REMOTE_COMMAND`: operator intent sent from control to the backend reducer.
 - `AUDIO_TELEMETRY`: lightweight audio playback updates.
 - `VIDEO_TELEMETRY`: lightweight video playback updates.
 - `DISPLAY_TELEMETRY`: background lock/override updates.
 - `AUDIO_SYNC_MAPS_UPDATE`: audio cue map updates.
 - `SET_AUTODUCK_STATE`: Autoduck status and fade factor to lower media volume automatically when active speakers are detected.
-- `REQUEST_STATE`: clients ask for a fresh backend snapshot; clients also fetch
-  `/api/state` directly on startup.
+- `REQUEST_STATE`: clients ask for a fresh backend snapshot; Control/Presenter
+  fetch `/api/state` and Audience fetches `/api/audience/state` on startup.
 - `WELCOME`: sent by the server upon WebSocket connection, providing client ID, role, server time, and presentation session ID.
 - `PRESENTATION_SESSION_ROTATED`: announces a new presentation session ID, which forces clients to update/sync.
 - `SERVER_TIME_PING` / `SERVER_TIME_PONG`: round-trip clock sync messages for estimating client-to-server clock offset.
 - `AUDIO_TIMELINE_ACTION`: control action dispatched to the server audio timeline.
 - `AUDIO_TIMELINE_STATE`: server-broadcasted timeline playback status.
 - `AUDIO_PRESENTATION_CLOCK`: periodic message containing the current estimated position of the audio playback.
-- `AUDIENCE_STATE_UPDATE`: client-facing read-only presentation/scripture state for the audience view.
 - `MEDIA_MASTER_STATUS`: server-broadcasted status determining if the current control client is the media master (e.g. when there is no active presenter).
 - `ERROR`: technical error code and message.
 - Live Audio family: optional LiveKit-ready technical messages that stay
@@ -72,6 +77,10 @@ in `BroadcastMessage` as a separate family:
 - `LIVE_AUDIO_CONNECTION_COUNTS`: server-owned WebSocket counts for total
   connected presenter/control/audience clients. Control uses this for the total
   audience indicator so passive listeners are included.
+- `LIVE_AUDIO_ACTIVE_PARTICIPANT_PROFILE`: technical active-participant profile
+  containing `participantId`, visibility preference and an Audience public key.
+  An alias is invalid in this clear-text message and must use the private E2E
+  channel.
 - `LIVE_AUDIO_GRANT_SPEAK`, `LIVE_AUDIO_REVOKE_SPEAK`: Control-authorized
   speaker permission changes by `participantId`.
 - `LIVE_AUDIO_MUTE_PARTICIPANT`, `LIVE_AUDIO_MUTE_ALL`,
@@ -100,6 +109,10 @@ in `BroadcastMessage` as a separate family:
   hand-state refreshes, and private messages to authorized Controls; authorized
   Controls use it for targeted microphone configuration to a specific audience
   participant.
+- `LIVE_AUDIO_SET_EXTERNAL_BROADCAST_STATE` and
+  `LIVE_AUDIO_EXTERNAL_BROADCAST_STATE`: authorized operator declaration and
+  server-owned revision for `off`, `live`, or `recording`. This is not automatic
+  streaming detection.
 
 `PRIVATE_CONTROL_SIGNAL` has the exact public envelope:
 
@@ -138,16 +151,14 @@ identity/state. `VITE_SEFER_ACTIVE_ALIAS_VISIBLE_BY_DEFAULT=false` keeps the
 checkbox off unless explicitly configured otherwise.
 
 The readable list is never computed or broadcast by the server. Audience sends
-its active profile to authorized Control in clear via
-`LIVE_AUDIO_ACTIVE_PARTICIPANT_PROFILE`; that profile contains the current alias,
-the user's sharing preference, and the audience public key that Control needs
-to encrypt the visible list back to that participant. Control patches only the
-technical preference and operational alias into `LIVE_AUDIO_SNAPSHOT_PATCH`,
-computes the visible A-Z list with `computeVisibleActiveParticipants`, and sends
+only `participantId`, its sharing preference and its public key in clear via
+`LIVE_AUDIO_ACTIVE_PARTICIPANT_PROFILE`. It sends the alias separately inside
+an encrypted `PRIVATE_CONTROL_SIGNAL` to authorized Control. Control computes
+the visible A-Z list with `computeVisibleActiveParticipants` and sends
 `{ type: 'VISIBLE_ACTIVE_PARTICIPANTS', participants, updatedAt }` back as a
 targeted encrypted private signal to each active viewer whose
-`canViewActiveParticipants` flag is true. Only the list payload is encrypted;
-authorization changes travel as clear technical WebSocket messages.
+`canViewActiveParticipants` flag is true. The server neither receives a readable
+alias in the active profile nor accepts one in snapshot patches.
 
 The server owns only technical fields in memory and snapshots:
 `isAliasVisibleToActiveParticipants`, `canViewActiveParticipants`,
@@ -170,7 +181,8 @@ Control uses `lastSentListRef` to avoid re-sending unchanged visible lists.
 `server/ws-server.mjs` filters Live Audio messages by Control state:
 
 - Audience WebSocket clients may send only `SERVER_TIME_PING`, their own
-  `LIVE_AUDIO_PARTICIPANT_STATUS`, and `PRIVATE_CONTROL_SIGNAL`.
+  `LIVE_AUDIO_PARTICIPANT_STATUS`, technical
+  `LIVE_AUDIO_ACTIVE_PARTICIPANT_PROFILE`, and `PRIVATE_CONTROL_SIGNAL`.
 - Audience `PRIVATE_CONTROL_SIGNAL` messages are accepted only when
   `fromParticipantId` is a UUID v4 bound to the active WebSocket connection, the
   ciphertext is base64 and at most 4096 bytes, the nonce decodes to 12 bytes,
@@ -197,11 +209,11 @@ Control uses `lastSentListRef` to avoid re-sending unchanged visible lists.
   `LIVE_AUDIO_SNAPSHOT_PATCH` support Control handoff. Only authorized Controls
   receive or publish operational snapshots; pending Controls receive an error
   and no snapshot. The snapshot includes connected-user counts, participants,
-  operational aliases known to authorized Control, logical roles (`pasivo`,
+  logical roles (`pasivo`,
   `activo`, `cola`, `orador`, `control`, `presenter`), microphone permission/track state,
   speaker state, intervention queue, Control authorizations, relevant LiveKit
   state, and anonymous quiz aggregates. It does not include historical private
-  messages or ciphertext history.
+  messages, ciphertext history or aliases.
 - The WebSocket server keeps the current authorized Control public key in memory
   and replays it to audience clients that connect later, so nicknames and
   private messages can be encrypted even when Control was already open.
@@ -211,6 +223,17 @@ Control uses `lastSentListRef` to avoid re-sending unchanged visible lists.
   to active-muted `LISTENER`; kick moves the participant to passive `REVOKED`
   with `isKicked=true`; rescue clears `isKicked` and returns the participant to
   active muted `LISTENER` with `canPublishAudio=false` and no published track.
+- An authorized Control owns the external broadcast declaration. Every change
+  to `live` or `recording` increments a server revision, revokes all existing
+  Audience speaker grants and tells affected clients to close published tracks.
+  Audience and Control must explicitly confirm microphone publication again for
+  that revision. Changing the declaration does not start, stop or inspect OBS;
+  the operator must set it before and after the external broadcast.
+- `server/privacy-session-manifest.mjs` observes the accepted transition on the
+  backend. Entering `recording` starts one non-nominative `.local.json` manifest;
+  leaving it finalizes that manifest. This evidence is serialized through an
+  internal write queue, is not a WebSocket message, and never enters
+  `SYNC_STATE` or an operational snapshot.
 - `allowDelegatedModerators` is controlled by
   `SEFER_LIVE_AUDIO_ALLOW_DELEGATED_MODERATORS` and defaults to true. When false,
   only the principal Control may authorize pending Controls.
@@ -237,12 +260,10 @@ subscriber events and ignores them on BroadcastChannel/SSE paths.
 ### Operational Snapshot Privacy
 
 `server/ws-server.mjs` keeps the Control handoff snapshot in process memory only.
-Sensitive snapshot overlays that the server can learn from authorized Control
-patches, such as operational aliases and microphone state hints, are encrypted
-with AES-256-GCM using a key derived from `SEFER_CONTROL_PASSWORD`. If that
-environment variable is not set, the fallback key remains local to the process
-and the snapshot still is not persisted to disk. The server never stores private
-message history, private signal plaintext, private keys, or ciphertext logs in
+It accepts only allowlisted technical participant and microphone state; aliases
+and private-signal content are rejected rather than stored in a
+server-decryptable overlay. The server never stores private message history,
+private signal plaintext, private keys, ciphertext logs or readable aliases in
 the snapshot.
 
 `server/local-server.mjs` contributes only anonymous quiz aggregates to the
@@ -393,10 +414,23 @@ Current local/browser state includes:
 
 - Stored presenter state and background lock in `localStorage`.
 - Control editor UI state such as draft text, expanded rows, fullscreen, panel visibility.
-- Audience answer/session state managed by `src/hooks/useQuizAnswers.ts`, partitioned by `presentationId` in local storage and in every quiz submission/final-score message.
+- Audience detailed answer/score state managed by `src/hooks/useQuizAnswers.ts`
+  and partitioned by `presentationId` in versioned, expiring local-storage
+  envelopes. The default TTL is 24 hours and is clamped to 1-168 hours. Network contributions
+  contain independent submission IDs per aggregation scope, never a stable quiz
+  session ID.
 - DOM media element refs and loaded media metadata.
 
 Keep these local unless another device/mode must observe them.
+
+### Legal Document Boundary
+
+`DataProtectionPage` does not embed operator facts. It fetches the Markdown
+selected by `VITE_PRIVACY_POLICY_PATH`, which is constrained to `/legal/*.md`,
+and displays the declared version plus a browser-computed SHA-256. The neutral
+fallback is `public/legal/privacy.md`; an operator may build with an ignored
+`.local` legal path. A fetch failure is visible and does not silently substitute
+different legal wording. Audit reports remain outside `public/legal/`.
 
 ## Backend-Ready Direction
 
@@ -407,7 +441,7 @@ Control commands are reduced in the backend before being broadcast as
 
 Backend-owned or backend-mirrored pieces:
 
-- `/api/state` and `/api/state-events`
+- `/api/state` and `/api/state-events` for authenticated Control/Presenter
 - `/api/command`, which reduces supported `REMOTE_COMMAND` payloads into
   canonical `SYNC_STATE`
 - `/api/audio-telemetry`
@@ -415,10 +449,14 @@ Backend-owned or backend-mirrored pieces:
 - `/api/display-telemetry`
 - `/api/presentations`
 - `/api/audio-sync`
-- `/api/quiz-answer` and `/api/quiz-events` (POST accepts only bounded answer or
-  score shapes publicly; clear commands require authentication when enabled;
-  GET filters individual answers/scores to authenticated Control connections)
-- `/api/audience/state` and `/api/audience/events`
+- `/api/quiz-answer`, public `/api/quiz-events`, authenticated
+  `/api/quiz-control-events`, and `/api/quiz-control-state` (POST accepts only
+  bounded aggregate contributions; clear commands require authentication when
+  enabled; Control receives aggregate snapshots and never individual answers
+  or exact scores)
+- `/api/audience/state` and `/api/audience/events`, used by Audience instead of
+  the protected full-state routes; both carry a valid `SYNC_STATE` reduced to
+  the active slide without dropping media, quiz, scripture or display state
 - `/api/backgrounds` (lists all available image and video background files)
 - `/api/audio` (lists all available audio tracks)
 - `/api/audience-cache-assets` (returns the list of static assets to be cached by the PWA)
@@ -429,9 +467,12 @@ Backend-owned or backend-mirrored pieces:
 - `/ws` operational Live Audio snapshots for authorized Control handoff; these
   are ephemeral, memory-only, and separate from `SYNC_STATE`
 
-With `SEFER_REQUIRE_AUTH=true`, administrative GET/POST APIs use an explicit
-protected allowlist boundary; browser mutations and WebSocket upgrades must be
-same-origin or match `SEFER_ALLOWED_ORIGINS`. Telemetry POST endpoints validate the existing message shape before broadcast:
+Authentication is required unless `SEFER_REQUIRE_AUTH=false` is explicitly set.
+Administrative GET/POST APIs use an explicit protected allowlist boundary;
+privileged WebSocket roles require the same Basic authentication, and browser
+mutations/upgrades must be same-origin or match `SEFER_ALLOWED_ORIGINS`.
+`server/dev.mjs` opts out only for local development when the variable is absent.
+Telemetry POST endpoints validate the existing message shape before broadcast:
 `AUDIO_TELEMETRY` requires `audioState`, `VIDEO_TELEMETRY` requires
 `videoState` or `null`, and `DISPLAY_TELEMETRY` requires the display background
 fields with their basic types.
@@ -460,30 +501,35 @@ Controller UI state:
 - Panel toggles.
 - Temporary local previews.
 
-## Quiz Privacy and Identity (Phase 5)
+## Quiz Privacy and Identity
 
 Quiz answers and personal scoring are fundamentally anonymous and decoupled from Live Audio identity. The architecture enforces the following privacy rules:
 
-- **Session Storage:** Individual answers and scoring may remain in audience
-  `localStorage` during the active presentation session, but logout or session
-  rotation clears the maps and rotates the page-scoped quiz ID. The server keeps
-  submitted answers only in volatile memory so Control can reconnect without
-  writing quiz answers to disk.
-- **Presentation Scope:** Answer and score maps are nested by `presentationId`.
-  `QUIZ_ANSWER`, `QUIZ_FINAL_SCORE`, and `QUIZ_CLEAR_ANSWERS` also carry that ID,
-  and Control ignores messages from any presentation other than the active one.
-- **Separate Session IDs:** The quiz module generates its own ephemeral `sessionId` on first interaction. This ID is strictly separated from the LiveKit `participantId`. The quiz hook (`useQuizAnswers`) does not share state with `useLiveAudio` or `usePrivateControlSignals`.
-- **Aggregated Results:** The controller receives aggregated session scores and answers to calculate overall ranges and statistics for the results slide. The controller does not project nominal rankings, aliases, or performance history.
+- **Local Detail:** Individual answers and exact scoring remain in Audience
+  `localStorage` during the active presentation session inside a TTL envelope.
+  Expiration, legacy/malformed data, logout or presentation rotation clears
+  those maps. They are not sent to Control.
+- **Presentation Scope:** Aggregate maps are partitioned by `presentationId`.
+  `QUIZ_ANSWER_AGGREGATE`, `QUIZ_QUESTION_RESULT_AGGREGATE`,
+  `QUIZ_FINAL_SCORE_AGGREGATE`, and `QUIZ_CLEAR_ANSWERS` carry that ID, and
+  Control ignores snapshots for any other presentation.
+- **Unlinkable Submission IDs:** Audience generates a different random
+  `submissionId` for each question answer, question-result contribution and
+  final-result request. The server hashes these scope-specific values only for
+  duplicate/capacity control; there is no quiz-wide ID to link a participant's
+  answers or associate them with Live Audio.
+- **Aggregate-Only Control:** The server increments per-option, citation-result
+  and final-rank counters immediately, then discards the raw contribution.
+  Control receives only these counts, never a display name, answer set, exact
+  score or nominal ranking. Slide and final-result distributions remain hidden
+  until their aggregation scope contains at least three submissions.
 - **Partial Quiz Results:** Questions with submitted answers are marked in green
   in Control. From the results slide, Control may emit `QUIZ_RECALCULATE_RESULTS`
   with those marked IDs; the backend validates them against the active
   presentation, recalculates the maximum score, increments `scoreRequestId`, and
   broadcasts the same result cut to Presenter and Audience. Audience recalculates
-  and resends its final score for every request, including repeated recalculations
-  of the same cut. Control also
-  recomputes each received session total from only those selected answers, so
-  category counts update immediately. Clearing a question removes its stored
-  answers, result inclusion, and green marker.
+  locally and submits only the resulting rank for that request ID. Clearing a
+  question removes its aggregate counters, result inclusion and green marker.
 - **No Participant Profiling:** There is no historical performance tracking by participant. Quiz session data is ephemeral and disappears when the server session is cleared or the server process stops.
 - **Special Activities:** Any future activity (like a named contest) that requires deviating from this anonymous aggregated model must not be implemented in the base MVP and requires explicit documentation and user consent flows prior to participation.
 

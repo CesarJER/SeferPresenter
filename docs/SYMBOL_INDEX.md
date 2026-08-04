@@ -16,7 +16,7 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
 - `src/main-control.tsx` - standalone React root for control mode; orchestrates control state and sync wiring without presenter/media elements.
 - `src/main-catalog.tsx` - standalone React root for the public catalog interface.
 - `vite.config.ts` - Vite multi-entry input configuration.
-- `public/audience-sw.js` - shared PWA service worker for `/audience` and `/control`, versioned as `1.2.0`; arbitrary runtime media is network-only.
+- `public/audience-sw.js` - shared PWA service worker for `/audience` and `/control`, versioned as `1.3.0`; legal documents and arbitrary runtime media are not cached.
 - `public/manifest.webmanifest` - Audience PWA manifest scoped to `/audience` and using `public/logo.svg`.
 - `public/control-manifest.webmanifest` - Control PWA manifest scoped to `/control` and using `public/logo.svg`.
 
@@ -93,7 +93,22 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
 - [AutoResizeInput](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/components/shared/AutoResizeInput.tsx) - `src/components/shared/AutoResizeInput.tsx`: auto-resizing text input.
 - [CustomSearchSelect](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/components/shared/CustomSearchSelect.tsx) - `src/components/shared/CustomSearchSelect.tsx`: combobox widget.
 - [DataProtectionLink](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/components/shared/DataProtectionLink.tsx) - `src/components/shared/DataProtectionLink.tsx`: shared data protection link.
-- [DataProtectionPage](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/components/shared/DataProtectionPage.tsx) - `src/components/shared/DataProtectionPage.tsx`: standalone data protection terms page.
+- [DataProtectionPage](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/components/shared/DataProtectionPage.tsx) - `src/components/shared/DataProtectionPage.tsx`: responsive standalone data-protection page with version and complete integrity hash, without exposing the source path.
+- `LegalMarkdown` - `src/components/shared/LegalMarkdown.tsx`: shared safe
+  Markdown/GFM renderer for legal text and tables; raw HTML and images are
+  disabled.
+- `configuredPrivacyPolicyPath`, `configuredPrivacySummaryPath`,
+  `normalizeLegalMarkdownPath`, `extractLegalDocumentTitle`,
+  `extractLegalDocumentVersion`, `prepareLegalMarkdownForDisplay`, `sha256Hex` -
+  `src/utils/legalDocument.ts`: contained legal Markdown selection, display
+  preparation and integrity metadata.
+- `CollapsiblePrivacyNotice` -
+  `src/features/liveAudio/components/shared/CollapsiblePrivacyNotice.tsx`:
+  microphone barrier plus configured first-layer table, policy link and
+  version/short hash.
+- `LiveAudioAliasInput` -
+  `src/features/liveAudio/components/shared/LiveAudioAliasInput.tsx`: temporary
+  alias input without duplicated legal table.
 - [FormatLegend](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/components/shared/FormatLegend.tsx) - `src/components/shared/FormatLegend.tsx`: slide editor styling guide legend.
 
 ## Sync Modules
@@ -108,7 +123,18 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
   `LIVE_AUDIO_ACTIVE_PARTICIPANT_PROFILE`,
   `LIVE_AUDIO_REMOVE_ACTIVE_PARTICIPANT` - `src/types/liveAudio.ts` and
   `server/ws-server.mjs`: technical Live Audio visibility/profile messages and
-  remove-vs-block behavior.
+  remove-vs-block behavior. The clear active profile contains no alias.
+- `LIVE_AUDIO_SET_EXTERNAL_BROADCAST_STATE` /
+  `LIVE_AUDIO_EXTERNAL_BROADCAST_STATE` - `src/types/liveAudio.ts`,
+  `server/ws-server.mjs`, and Live Audio Control/Audience containers: authorized
+  manual `off/live/recording` declaration, revision broadcast, microphone
+  revocation and fresh-confirmation boundary.
+- `createPrivacySessionManifestRecorder` -
+  `server/privacy-session-manifest.mjs`: atomic, non-nominative local evidence
+  for accepted `recording` transitions; wired by `server/local-server.mjs` into
+  the WebSocket server transition callback.
+- `getStaticCacheHeaders` - `server/static-cache-policy.mjs`: HTTP `no-store`
+  headers for `/proteccion-datos` and `/legal/*`.
 - `VISIBLE_ACTIVE_PARTICIPANTS` - private encrypted payload inside
   `PRIVATE_CONTROL_SIGNAL`, not a public WebSocket message.
 - `isAliasVisibleToActiveParticipants`, `isAliasHiddenByControl`,
@@ -151,11 +177,21 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
 - `server/json-persistence.mjs`: fsynced temp/backup persistence with atomic
   rename and an explicit single-file bind-mount fallback.
 - `server/path-containment.mjs`: static-file containment using `path.relative`.
-- `server/quiz-message-validation.mjs`: bounded public quiz message shapes.
+- `server/quiz-message-validation.mjs`: bounded aggregate-only quiz contribution
+  shapes; individual answer/session payloads are rejected.
 - `server/timelineManager.mjs`: backend-owned audio timeline state and action reducer.
 - `server/audio-timeline-sync.mjs`: pure helpers for estimating backend audio
   timeline position and mapping audio cue positions to slide/verse selections.
 - [server/authUtils.mjs](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/server/authUtils.mjs) - `server/authUtils.mjs`: server-side authentication helpers based on `SEFER_REQUIRE_AUTH` and `SEFER_CONTROL_PASSWORD`.
+- `readExpiringStorage`, `writeExpiringStorage`,
+  `AUDIENCE_PRIVACY_STORAGE_TTL_MS` - `src/utils/privacyStorage.ts`: versioned
+  Audience TTL envelopes and idempotent expiry/legacy purge.
+- `scripts/rotate-docker-logs.ps1` /
+  `scripts/install-docker-log-retention-task.ps1`: bounded-age container
+  recreation and Windows scheduled-task installer.
+- `analyseLogText` / `hasPotentialPrivacyLeak` -
+  `scripts/privacy-log-audit.mjs`: count-only runtime log inspection without
+  echoing matched lines.
 
 ## Validation Modules
 
@@ -180,8 +216,11 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
 
 - `Presentation`, `Slide`, `VideoState`, `ScriptureNavState`, `AppMode` - `src/types/presentation.ts`.
 - `AudioState`, `AudioSyncMap`, `AudioSyncCue`, `AudioSyncMode`, `AudioTimelineState`, `AudioTimelineAction` - `src/types/audio.ts`.
-- `QuizTimerState`, `QuizSubslide`, `QuizAudienceAnswer`, `QuizSyncState` - `src/types/quiz.ts`.
-- `BroadcastMessage`, `DisplayTelemetryState`, `AudiencePublicState` - `src/types/sync.ts`.
+- `QuizTimerState`, `QuizSubslide`, `QuizAudienceAnswer`, `QuizSyncState`,
+  `QuizSlideAggregate`, `QuizAggregateSnapshot` - `src/types/quiz.ts`.
+- `BroadcastMessage`, `DisplayTelemetryState` - `src/types/sync.ts`.
+- `makeAudienceSyncStateMessage` - `server/projection-state-reducer.mjs`:
+  produces the valid public `SYNC_STATE` envelope with only the active slide.
 - `LiveAudioAvailability`, `LiveAudioConnectionState`,
   `LiveAudioTokenResponse`, `ControlPrincipalState`, `ControlSecondaryState`,
   `SpeakerState`, `LiveAudioRemoteTrack`,
@@ -191,7 +230,8 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
   `LiveAudioKickParticipantMessage`, `LiveAudioControlPublicKeyMessage`,
   `LiveAudioControlJoinRequestMessage`,
   `LiveAudioControlAuthorizedMessage`, `ControlKeyRotatedMessage`,
-  `PrivateControlSignalMessage` - `src/types/liveAudio.ts`.
+  `PrivateControlSignalMessage`, `LiveAudioExternalBroadcastState` -
+  `src/types/liveAudio.ts`.
 
 ## Data/Content Modules
 
