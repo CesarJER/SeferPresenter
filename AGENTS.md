@@ -19,6 +19,7 @@ only the owner files for the task.
 - `docs/CHANGE_GUIDE.md`: implementation checklists.
 - `docs/SYNC_ARCHITECTURE.md`: sync and backend-ready behavior.
 - `docs/SYMBOL_INDEX.md`: navigation-critical symbols.
+- `docs/CODEBASE_MEMORY.md`: codebase-memory-mcp knowledge graph integration and query guidelines.
 - `docs/ai-navigation.md`: condensed overview kept for quick reading.
 
 ## Architecture Rules
