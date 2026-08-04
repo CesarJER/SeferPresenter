@@ -79,7 +79,7 @@ describe('useAudienceSession', () => {
     expect(result.current.nick).toBe('');
     expect(result.current.deviceId).not.toBe(initialDeviceId);
     expect(result.current.presentationSessionId).toBe('session-new');
-    expect(localStorage.getItem('sefer-audience-session-id')).toBe('session-new');
+    expect(JSON.parse(localStorage.getItem('sefer-audience-session-id') || '{}').data).toBe('session-new');
     expect(localStorage.getItem('sefer-quiz-session-id')).toBeNull();
   });
 });

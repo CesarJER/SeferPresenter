@@ -16,10 +16,17 @@ describe('server HTTP security policy', () => {
     delete process.env.SEFER_ALLOWED_ORIGINS;
   });
 
+  it('requires authentication by default when the variable is absent', () => {
+    delete process.env.SEFER_REQUIRE_AUTH;
+    expect(isProtectedRequestPath('/api/presentations', 'GET')).toBe(true);
+    expect(isProtectedRequestPath('/control', 'GET')).toBe(true);
+  });
+
   it.each([
     ['GET', '/api/audience/state', false],
     ['GET', '/api/audience/events', false],
     ['GET', '/api/quiz-events', false],
+    ['GET', '/api/quiz-control-events', true],
     ['GET', '/api/public-catalogs', false],
     ['GET', '/api/public-catalogs/main/presentations', false],
     ['GET', '/api/public-catalogs/main/presentations/pres-1', false],

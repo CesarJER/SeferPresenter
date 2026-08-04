@@ -38,7 +38,7 @@ interface QuizAudienceViewProps {
   resultSlideIds?: string[];
   scoreRequestId?: number;
   onSaveScore?: (score: QuizQuestionScore) => void;
-  onSendFinalScore?: (rank: number) => void;
+  onSendFinalScore?: (rank: number, requestId: number) => void;
   maxBaseCentipunts?: number;
   liveAudioPanel?: React.ReactNode;
 }
@@ -141,13 +141,11 @@ export const QuizAudienceView: React.FC<QuizAudienceViewProps> = ({
       };
       setTotalScore(aggregated);
 
-      // We just send the points to the controller, the controller figures out the rank
-      onSendFinalScore?.(totalCentipunts);
-
       if (maxBaseCentipunts && maxBaseCentipunts > 0) {
         const ranges = calcResultRanges(quizData.resultProfiles, maxBaseCentipunts);
         const p = selectResultProfile(totalCentipunts, ranges, quizData.resultProfiles);
         setProfile(p);
+        if (p) onSendFinalScore?.(p.rank, scoreRequestId ?? 0);
       }
     }
   }, [isResults, allScores, quizData, onSendFinalScore, maxBaseCentipunts, resultSlideIds, scoreRequestId]);

@@ -59,14 +59,14 @@ describe('QuizAudienceView result score requests', () => {
     );
 
     await waitFor(() => expect(onSendFinalScore).toHaveBeenCalledTimes(1));
-    expect(onSendFinalScore).toHaveBeenLastCalledWith(50);
+    expect(onSendFinalScore).toHaveBeenLastCalledWith(1, 1);
 
     rerender(
       <QuizAudienceView {...baseProps} scoreRequestId={2} onSendFinalScore={onSendFinalScore} />,
     );
 
     await waitFor(() => expect(onSendFinalScore).toHaveBeenCalledTimes(2));
-    expect(onSendFinalScore).toHaveBeenLastCalledWith(50);
+    expect(onSendFinalScore).toHaveBeenLastCalledWith(1, 2);
   });
 
   it('shows the concise Recalcular button and invokes it', () => {

@@ -112,6 +112,24 @@ const getActiveSlide = (state) => {
   return state.slideIndex >= 0 && state.slideIndex < slides.length ? slides[state.slideIndex] : null;
 };
 
+export const makeAudienceSyncStateMessage = (state) => {
+  const normalized = normalizeProjectionState(state);
+  const slide = getActiveSlide(normalized);
+  return makeSyncState({
+    ...normalized,
+    presentation: normalized.presentation
+      ? { ...normalized.presentation, slides: slide ? [slide] : [] }
+      : null,
+    slideIndex: slide ? 0 : -1,
+    stepIndex: 0,
+  }, {
+    clientId: normalized.clientId,
+    origin: normalized.origin,
+    now: state.timestamp,
+    messageId: state.messageId,
+  });
+};
+
 const parseCitaRef = (citaRef) => {
   if (typeof citaRef !== 'string') return null;
   const clean = citaRef.trim().replace(/^\[(?:Tanaj|Sefer)\s+/i, '').replace(/\]$/, '');

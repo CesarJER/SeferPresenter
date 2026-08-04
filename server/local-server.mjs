@@ -1,6 +1,7 @@
 import fs from 'node:fs'
 import http from 'node:http'
 import path from 'node:path'
+import { createHash } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import { createLiveKitApi } from './livekit-server.mjs'
 import {
@@ -17,6 +18,7 @@ import {
 } from './authUtils.mjs'
 import {
   getDefaultProjectionState,
+  makeAudienceSyncStateMessage,
   makeProjectionSyncStateMessage,
   normalizeProjectionState,
   reduceProjectionCommand,
@@ -30,7 +32,11 @@ import {
 } from './audio-timeline-sync.mjs'
 import { getPublicCatalogs } from './public-catalog-config.mjs'
 import { buildPublicPresentations } from './public-presentations-builder.mjs'
-import { validatePublicQuizMessage } from './quiz-message-validation.mjs'
+import {
+  isQuizAggregateGroupPublishable,
+  QUIZ_MIN_AGGREGATE_GROUP_SIZE,
+  validatePublicQuizMessage,
+} from './quiz-message-validation.mjs'
 import {
   formatValidationError,
   validateAudioSyncPayload,
@@ -38,6 +44,8 @@ import {
 } from './content-validation.mjs'
 import { writeJsonSafely } from './json-persistence.mjs'
 import { resolvePathInsideRoot } from './path-containment.mjs'
+import { createPrivacySessionManifestRecorder } from './privacy-session-manifest.mjs'
+import { getStaticCacheHeaders } from './static-cache-policy.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const rootDir = path.resolve(__dirname, '..')
@@ -46,6 +54,9 @@ const port = Number(process.env.SEFER_PORT || 8787)
 const staticArgIndex = process.argv.indexOf('--static')
 const staticDir = path.resolve(rootDir, staticArgIndex >= 0 ? process.argv[staticArgIndex + 1] || 'dist' : 'dist')
 const sseHeartbeatMs = 30_000
+const privacySessionManifestRecorder = createPrivacySessionManifestRecorder({
+  publicDir,
+})
 
 let currentState = makeProjectionSyncStateMessage(getDefaultProjectionState(), {
   clientId: 'server',
@@ -62,15 +73,15 @@ let publicPresentationsCache = []
 const pausedSseClients = new WeakSet()
 const pendingSseBodies = new WeakMap()
 const quizAggregateState = {
-  submittedSessionsBySlideId: new Map(),
+  slides: new Map(),
+  answerSubmissionHashesBySlideId: new Map(),
+  resultSubmissionHashesBySlideId: new Map(),
   finalScoreBuckets: new Map(),
-  finalScoreSessions: new Map(),
-  answerSessions: new Map(),
-  finalScoreValues: new Map(),
+  finalScoreSubmissionHashes: new Map(),
+  finalScoreRequestIds: new Map(),
   updatedAt: null,
 }
-const maxQuizSessionsPerPresentation = 5_000
-const maxQuizAnswersPerSession = 500
+const maxQuizSubmissionsPerAggregate = 5_000
 
 const contentTypes = {
   '.avif': 'image/avif',
@@ -80,6 +91,7 @@ const contentTypes = {
   '.ico': 'image/x-icon',
   '.js': 'text/javascript; charset=utf-8',
   '.json': 'application/json; charset=utf-8',
+  '.md': 'text/markdown; charset=utf-8',
   '.m4a': 'audio/mp4',
   '.mp3': 'audio/mpeg',
   '.mp4': 'video/mp4',
@@ -275,13 +287,13 @@ const walkAssets = (directories, matcher) => {
 
 const broadcast = (body) => {
   writeSseSet(clients, body)
-  const audienceBody = JSON.stringify(deriveAudienceState(currentState))
+  const audienceBody = JSON.stringify(makeAudienceSyncStateMessage(currentState))
   writeSseSet(audienceClients, audienceBody)
 }
 
 const broadcastQuizAnswer = (body, parsed) => {
   const type = parsed?.type
-  const isSensitive = type === 'QUIZ_ANSWER' || type === 'QUIZ_FINAL_SCORE'
+  const isSensitive = type === 'QUIZ_AGGREGATE_SNAPSHOT'
 
   for (const client of quizClients) {
     if (isSensitive && !client.isControl) {
@@ -291,32 +303,35 @@ const broadcastQuizAnswer = (body, parsed) => {
   }
 }
 
-const scoreBucketForCentipunts = (value) => {
-  if (!Number.isFinite(value)) return null
-  const score = Math.max(0, Math.floor(value))
-  const lower = Math.floor(score / 100) * 100
-  return `${lower}-${lower + 99}`
-}
-
 const quizScopePrefix = (presentationId) => `${encodeURIComponent(presentationId)}::`
 const quizScopedKey = (presentationId, value) => `${quizScopePrefix(presentationId)}${value}`
-const clearQuizScope = (presentationId) => {
+const hashQuizSubmissionId = (presentationId, kind, scope, submissionId) => createHash('sha256')
+  .update(`${presentationId}\u001f${kind}\u001f${scope}\u001f${submissionId}`)
+  .digest('base64url')
+
+const clearQuizFinalScores = (presentationId) => {
   const prefix = quizScopePrefix(presentationId)
-  for (const key of quizAggregateState.submittedSessionsBySlideId.keys()) {
-    if (key.startsWith(prefix)) quizAggregateState.submittedSessionsBySlideId.delete(key)
-  }
   for (const key of quizAggregateState.finalScoreBuckets.keys()) {
     if (key.startsWith(prefix)) quizAggregateState.finalScoreBuckets.delete(key)
   }
-  for (const key of quizAggregateState.finalScoreSessions.keys()) {
-    if (key.startsWith(prefix)) quizAggregateState.finalScoreSessions.delete(key)
+  for (const key of quizAggregateState.finalScoreSubmissionHashes.keys()) {
+    if (key.startsWith(prefix)) quizAggregateState.finalScoreSubmissionHashes.delete(key)
   }
-  for (const key of quizAggregateState.answerSessions.keys()) {
-    if (key.startsWith(prefix)) quizAggregateState.answerSessions.delete(key)
+  quizAggregateState.finalScoreRequestIds.delete(presentationId)
+}
+
+const clearQuizScope = (presentationId) => {
+  const prefix = quizScopePrefix(presentationId)
+  for (const key of quizAggregateState.slides.keys()) {
+    if (key.startsWith(prefix)) quizAggregateState.slides.delete(key)
   }
-  for (const key of quizAggregateState.finalScoreValues.keys()) {
-    if (key.startsWith(prefix)) quizAggregateState.finalScoreValues.delete(key)
+  for (const key of quizAggregateState.answerSubmissionHashesBySlideId.keys()) {
+    if (key.startsWith(prefix)) quizAggregateState.answerSubmissionHashesBySlideId.delete(key)
   }
+  for (const key of quizAggregateState.resultSubmissionHashesBySlideId.keys()) {
+    if (key.startsWith(prefix)) quizAggregateState.resultSubmissionHashesBySlideId.delete(key)
+  }
+  clearQuizFinalScores(presentationId)
 }
 
 const canAcceptQuizAggregateMessage = (message) => {
@@ -324,21 +339,25 @@ const canAcceptQuizAggregateMessage = (message) => {
   if (!activePresentationId || message.presentationId !== activePresentationId) {
     return 'Quiz message does not match the active presentation'
   }
-  if (message.type !== 'QUIZ_ANSWER' && message.type !== 'QUIZ_FINAL_SCORE') return null
-  const prefix = quizScopePrefix(activePresentationId)
-  const sessionKey = quizScopedKey(activePresentationId, message.sessionId)
-  const knownSession = quizAggregateState.answerSessions.has(sessionKey) || quizAggregateState.finalScoreSessions.has(sessionKey)
-  if (!knownSession) {
-    const knownSessionIds = new Set([
-      ...Array.from(quizAggregateState.answerSessions.keys()).filter((key) => key.startsWith(prefix)),
-      ...Array.from(quizAggregateState.finalScoreSessions.keys()).filter((key) => key.startsWith(prefix)),
-    ])
-    if (knownSessionIds.size >= maxQuizSessionsPerPresentation) return 'Quiz session capacity reached'
+  if (message.type === 'QUIZ_ANSWER_AGGREGATE' || message.type === 'QUIZ_QUESTION_RESULT_AGGREGATE') {
+    const slideKey = quizScopedKey(activePresentationId, message.slideId)
+    const store = message.type === 'QUIZ_ANSWER_AGGREGATE'
+      ? quizAggregateState.answerSubmissionHashesBySlideId
+      : quizAggregateState.resultSubmissionHashesBySlideId
+    const submissions = store.get(slideKey)
+    const hash = hashQuizSubmissionId(activePresentationId, message.type, message.slideId, message.submissionId)
+    if (submissions && !submissions.has(hash) && submissions.size >= maxQuizSubmissionsPerAggregate) {
+      return 'Quiz aggregate capacity reached'
+    }
   }
-  if (message.type === 'QUIZ_ANSWER') {
-    const session = quizAggregateState.answerSessions.get(sessionKey)
-    if (session && !session.answers?.[message.slideId] && Object.keys(session.answers || {}).length >= maxQuizAnswersPerSession) {
-      return 'Quiz answer capacity reached'
+  if (message.type === 'QUIZ_FINAL_SCORE_AGGREGATE') {
+    const currentRequestId = quizAggregateState.finalScoreRequestIds.get(activePresentationId)
+    if (currentRequestId !== undefined && message.requestId < currentRequestId) return 'Stale quiz result request'
+    const requestKey = quizScopedKey(activePresentationId, `result:${message.requestId}`)
+    const submissions = quizAggregateState.finalScoreSubmissionHashes.get(requestKey)
+    const hash = hashQuizSubmissionId(activePresentationId, message.type, String(message.requestId), message.submissionId)
+    if (submissions && !submissions.has(hash) && submissions.size >= maxQuizSubmissionsPerAggregate) {
+      return 'Quiz aggregate capacity reached'
     }
   }
   return null
@@ -352,59 +371,72 @@ const updateQuizAggregate = (message) => {
     : currentState.presentation?.id
   if (!presentationId) return
 
-  if (message.type === 'QUIZ_ANSWER') {
-    if (typeof message.sessionId !== 'string' || typeof message.slideId !== 'string') return
-    if (!isObjectRecord(message.answer) || message.answer.submitted !== true) return
-
+  if (message.type === 'QUIZ_ANSWER_AGGREGATE') {
+    if (typeof message.submissionId !== 'string' || typeof message.slideId !== 'string') return
     const slideKey = quizScopedKey(presentationId, message.slideId)
-    const sessions = quizAggregateState.submittedSessionsBySlideId.get(slideKey) || new Set()
-    sessions.add(message.sessionId)
-    quizAggregateState.submittedSessionsBySlideId.set(slideKey, sessions)
-    const sessionKey = quizScopedKey(presentationId, message.sessionId)
-    const existingSession = quizAggregateState.answerSessions.get(sessionKey) || {
-      sessionId: message.sessionId,
-      presentationId,
-      answers: {},
+    const hash = hashQuizSubmissionId(presentationId, message.type, message.slideId, message.submissionId)
+    const submissions = quizAggregateState.answerSubmissionHashesBySlideId.get(slideKey) || new Set()
+    if (submissions.has(hash)) return
+    submissions.add(hash)
+    quizAggregateState.answerSubmissionHashesBySlideId.set(slideKey, submissions)
+    const aggregate = quizAggregateState.slides.get(slideKey) || {
+      submittedCount: 0,
+      optionCounts: {},
+      citaHits: 0,
+      citaMisses: 0,
     }
-    quizAggregateState.answerSessions.set(sessionKey, {
-      ...existingSession,
-      displayName: typeof message.displayName === 'string' ? message.displayName.slice(0, 80) : existingSession.displayName,
-      answers: {
-        ...existingSession.answers,
-        [message.slideId]: {
-          slideId: message.slideId,
-          selectedOptionIds: Array.isArray(message.answer.selectedOptionIds)
-            ? message.answer.selectedOptionIds.filter((id) => typeof id === 'string')
-            : [],
-          submitted: true,
-          submittedAt: Number.isFinite(message.answer.submittedAt) ? message.answer.submittedAt : now,
-          bonusReadingClaimed: message.answer.bonusReadingClaimed === true,
-          ...(typeof message.answer.citaBook === 'string' ? { citaBook: message.answer.citaBook.slice(0, 80) } : {}),
-          ...(typeof message.answer.citaChapter === 'string' ? { citaChapter: message.answer.citaChapter.slice(0, 16) } : {}),
-          ...(typeof message.answer.citaVerseStart === 'string' ? { citaVerseStart: message.answer.citaVerseStart.slice(0, 16) } : {}),
-          ...(typeof message.answer.citaVerseEnd === 'string' ? { citaVerseEnd: message.answer.citaVerseEnd.slice(0, 16) } : {}),
-        },
-      },
+    const optionCounts = { ...aggregate.optionCounts }
+    for (const optionId of new Set(message.selectedOptionIds)) {
+      optionCounts[optionId] = (optionCounts[optionId] || 0) + 1
+    }
+    quizAggregateState.slides.set(slideKey, {
+      ...aggregate,
+      submittedCount: aggregate.submittedCount + 1,
+      optionCounts,
     })
     quizAggregateState.updatedAt = now
     return
   }
 
-  if (message.type === 'QUIZ_FINAL_SCORE') {
-    if (typeof message.sessionId !== 'string' || !Number.isFinite(message.totalCentipunts)) return
-    const sessionKey = quizScopedKey(presentationId, message.sessionId)
-    const previousBucket = quizAggregateState.finalScoreSessions.get(sessionKey)
-    if (previousBucket) {
-      const previousCount = quizAggregateState.finalScoreBuckets.get(previousBucket) || 0
-      if (previousCount <= 1) quizAggregateState.finalScoreBuckets.delete(previousBucket)
-      else quizAggregateState.finalScoreBuckets.set(previousBucket, previousCount - 1)
+  if (message.type === 'QUIZ_QUESTION_RESULT_AGGREGATE') {
+    if (typeof message.submissionId !== 'string' || typeof message.slideId !== 'string') return
+    const slideKey = quizScopedKey(presentationId, message.slideId)
+    const hash = hashQuizSubmissionId(presentationId, message.type, message.slideId, message.submissionId)
+    const submissions = quizAggregateState.resultSubmissionHashesBySlideId.get(slideKey) || new Set()
+    if (submissions.has(hash)) return
+    submissions.add(hash)
+    quizAggregateState.resultSubmissionHashesBySlideId.set(slideKey, submissions)
+    const aggregate = quizAggregateState.slides.get(slideKey) || {
+      submittedCount: 0,
+      optionCounts: {},
+      citaHits: 0,
+      citaMisses: 0,
     }
+    quizAggregateState.slides.set(slideKey, {
+      ...aggregate,
+      citaHits: aggregate.citaHits + (message.isCitaCorrect ? 1 : 0),
+      citaMisses: aggregate.citaMisses + (message.isCitaCorrect ? 0 : 1),
+    })
+    quizAggregateState.updatedAt = now
+    return
+  }
 
-    const rawBucket = scoreBucketForCentipunts(message.totalCentipunts)
-    const bucket = rawBucket ? quizScopedKey(presentationId, rawBucket) : null
-    if (!bucket) return
-    quizAggregateState.finalScoreSessions.set(sessionKey, bucket)
-    quizAggregateState.finalScoreValues.set(sessionKey, Math.max(0, Math.floor(message.totalCentipunts)))
+  if (message.type === 'QUIZ_FINAL_SCORE_AGGREGATE') {
+    if (typeof message.submissionId !== 'string' || !Number.isInteger(message.requestId) || !Number.isInteger(message.rank)) return
+    const currentRequestId = quizAggregateState.finalScoreRequestIds.get(presentationId)
+    if (currentRequestId === undefined || message.requestId > currentRequestId) {
+      clearQuizFinalScores(presentationId)
+      quizAggregateState.finalScoreRequestIds.set(presentationId, message.requestId)
+    } else if (message.requestId < currentRequestId) {
+      return
+    }
+    const requestKey = quizScopedKey(presentationId, `result:${message.requestId}`)
+    const hash = hashQuizSubmissionId(presentationId, message.type, String(message.requestId), message.submissionId)
+    const submissions = quizAggregateState.finalScoreSubmissionHashes.get(requestKey) || new Set()
+    if (submissions.has(hash)) return
+    submissions.add(hash)
+    quizAggregateState.finalScoreSubmissionHashes.set(requestKey, submissions)
+    const bucket = quizScopedKey(presentationId, `result:${message.requestId}:rank:${message.rank}`)
     quizAggregateState.finalScoreBuckets.set(bucket, (quizAggregateState.finalScoreBuckets.get(bucket) || 0) + 1)
     quizAggregateState.updatedAt = now
     return
@@ -412,23 +444,11 @@ const updateQuizAggregate = (message) => {
 
   if (message.type === 'QUIZ_CLEAR_ANSWERS') {
     if (typeof message.slideId === 'string') {
-      quizAggregateState.submittedSessionsBySlideId.delete(quizScopedKey(presentationId, message.slideId))
-      const prefix = quizScopePrefix(presentationId)
-      for (const [key, session] of quizAggregateState.answerSessions.entries()) {
-        if (!key.startsWith(prefix) || !session.answers?.[message.slideId]) continue
-        const answers = { ...session.answers }
-        delete answers[message.slideId]
-        quizAggregateState.answerSessions.set(key, { ...session, answers })
-      }
-      for (const key of quizAggregateState.finalScoreBuckets.keys()) {
-        if (key.startsWith(prefix)) quizAggregateState.finalScoreBuckets.delete(key)
-      }
-      for (const key of quizAggregateState.finalScoreSessions.keys()) {
-        if (key.startsWith(prefix)) quizAggregateState.finalScoreSessions.delete(key)
-      }
-      for (const key of quizAggregateState.finalScoreValues.keys()) {
-        if (key.startsWith(prefix)) quizAggregateState.finalScoreValues.delete(key)
-      }
+      const slideKey = quizScopedKey(presentationId, message.slideId)
+      quizAggregateState.slides.delete(slideKey)
+      quizAggregateState.answerSubmissionHashesBySlideId.delete(slideKey)
+      quizAggregateState.resultSubmissionHashesBySlideId.delete(slideKey)
+      clearQuizFinalScores(presentationId)
     } else {
       clearQuizScope(presentationId)
     }
@@ -439,46 +459,67 @@ const updateQuizAggregate = (message) => {
 const getQuizAggregateSnapshot = () => {
   const presentationId = currentState.presentation?.id
   if (!presentationId) return {
+    slides: {},
     submittedAnswersBySlideId: {},
     finalScoreRanges: {},
     totalFinalScores: 0,
+    minimumGroupSize: QUIZ_MIN_AGGREGATE_GROUP_SIZE,
+    finalScoreRequestId: null,
     updatedAt: quizAggregateState.updatedAt,
   }
   const prefix = quizScopePrefix(presentationId)
-  const scopedFinalSessions = Array.from(quizAggregateState.finalScoreSessions.keys())
-    .filter((key) => key.startsWith(prefix))
-  return ({
-  submittedAnswersBySlideId: Object.fromEntries(
-    Array.from(quizAggregateState.submittedSessionsBySlideId.entries())
-      .filter(([key]) => key.startsWith(prefix))
-      .map(([key, sessions]) => [key.slice(prefix.length), sessions.size]),
-  ),
-  finalScoreRanges: Object.fromEntries(
-    Array.from(quizAggregateState.finalScoreBuckets.entries())
-      .filter(([key]) => key.startsWith(prefix))
-      .map(([key, count]) => [key.slice(prefix.length), count]),
-  ),
-  totalFinalScores: scopedFinalSessions.length,
-  updatedAt: quizAggregateState.updatedAt,
-  })
+  const requestId = quizAggregateState.finalScoreRequestIds.get(presentationId)
+  const requestKey = requestId === undefined ? null : quizScopedKey(presentationId, `result:${requestId}`)
+  const rankPrefix = requestId === undefined
+    ? null
+    : quizScopedKey(presentationId, `result:${requestId}:rank:`)
+  const slides = Object.fromEntries(
+    Array.from(quizAggregateState.slides.entries())
+      .filter(([key, aggregate]) => (
+        key.startsWith(prefix)
+        && isQuizAggregateGroupPublishable(aggregate.submittedCount)
+      ))
+      .map(([key, aggregate]) => [key.slice(prefix.length), aggregate]),
+  )
+  const rawTotalFinalScores = requestKey
+    ? (quizAggregateState.finalScoreSubmissionHashes.get(requestKey)?.size || 0)
+    : 0
+  const publishFinalScores = isQuizAggregateGroupPublishable(rawTotalFinalScores)
+  return {
+    slides,
+    submittedAnswersBySlideId: Object.fromEntries(
+      Object.entries(slides).map(([slideId, aggregate]) => [slideId, aggregate.submittedCount]),
+    ),
+    finalScoreRanges: Object.fromEntries(
+      Array.from(quizAggregateState.finalScoreBuckets.entries())
+        .filter(([key]) => publishFinalScores && rankPrefix !== null && key.startsWith(rankPrefix))
+        .map(([key, count]) => [key.slice(key.lastIndexOf(':') + 1), count]),
+    ),
+    totalFinalScores: publishFinalScores ? rawTotalFinalScores : 0,
+    minimumGroupSize: QUIZ_MIN_AGGREGATE_GROUP_SIZE,
+    finalScoreRequestId: requestId ?? null,
+    updatedAt: quizAggregateState.updatedAt,
+  }
 }
 
 const getQuizControlSnapshot = (presentationId) => {
-  const prefix = quizScopePrefix(presentationId)
+  const activePresentationId = currentState.presentation?.id
+  const aggregate = presentationId === activePresentationId
+    ? getQuizAggregateSnapshot()
+    : {
+        slides: {},
+        submittedAnswersBySlideId: {},
+        finalScoreRanges: {},
+        totalFinalScores: 0,
+        minimumGroupSize: QUIZ_MIN_AGGREGATE_GROUP_SIZE,
+        finalScoreRequestId: null,
+        updatedAt: quizAggregateState.updatedAt,
+      }
   return {
-    type: 'QUIZ_SESSION_SNAPSHOT',
+    type: 'QUIZ_AGGREGATE_SNAPSHOT',
     presentationId,
-    sessions: Object.fromEntries(
-      Array.from(quizAggregateState.answerSessions.entries())
-        .filter(([key]) => key.startsWith(prefix))
-        .map(([key, session]) => [key.slice(prefix.length), session]),
-    ),
-    sessionTotalScores: Object.fromEntries(
-      Array.from(quizAggregateState.finalScoreValues.entries())
-        .filter(([key]) => key.startsWith(prefix))
-        .map(([key, score]) => [key.slice(prefix.length), score]),
-    ),
-    updatedAt: quizAggregateState.updatedAt,
+    aggregate,
+    updatedAt: aggregate.updatedAt,
   }
 }
 
@@ -584,52 +625,6 @@ const heartbeatSseClients = () => {
   writeSseSet(quizClients, 'heartbeat')
 }
 
-const isVideoAsset = (value) => /\.(mp4|webm)$/i.test(value || '')
-const isImageAsset = (value) => /\.(png|jpe?g|gif|webp|svg)$/i.test(value || '')
-
-const deriveBackground = (state, slide) => {
-  let value = ''
-  if (state.backgroundLock) {
-    value = state.lockedBackgroundValue || state.presentation?.background || ''
-  } else {
-    value = state.userSelectedBackground || slide?.background || state.presentation?.background || ''
-  }
-
-  if (isImageAsset(value) && !isVideoAsset(value)) return { kind: 'image', value }
-  return { kind: 'color', value: '#07111f' }
-}
-
-const deriveAudienceState = (state) => {
-  const presentation = state.presentation || null
-  const slideIndex = Number.isInteger(state.slideIndex) ? state.slideIndex : -1
-  const slide = presentation && slideIndex >= 0 ? presentation.slides?.[slideIndex] || null : null
-  const scripture = state.scriptureState
-    ? {
-      reference: `${state.scriptureState.bookAbbrevEs || state.scriptureState.bookEs} ${state.scriptureState.chapter}:${state.scriptureState.verse}`,
-      verseNikud: state.scriptureState.verseNikud,
-      transliteration: state.scriptureState.transliteration,
-      translation: state.scriptureState.translation,
-    }
-    : null
-  const isMediaSlide = slide?.type === 'video' || slide?.lines?.[0]?.trim() === '[IMAGE]'
-
-  return {
-    mode: state.appMode || 'slides',
-    presentationTitle: presentation?.title || '',
-    slide: slide
-      ? {
-        id: slide.id,
-        label: slide.label,
-        lines: isMediaSlide ? [] : slide.lines || [],
-        type: isMediaSlide ? 'media' : scripture ? 'scripture' : 'text',
-      }
-      : null,
-    scripture,
-    background: deriveBackground(state, slide),
-    updatedAt: Date.now(),
-  }
-}
-
 const requireAuth = (req, res, url) => {
   if (!isProtectedRequestPath(url.pathname, req.method || 'GET')) return false
   if (hasValidBasicAuth(req)) return false
@@ -671,7 +666,7 @@ const handleApi = async (req, res, url) => {
   }
 
   if (url.pathname === '/api/audience/state' && req.method === 'GET') {
-    sendJson(res, 200, deriveAudienceState(currentState))
+    sendJson(res, 200, makeAudienceSyncStateMessage(currentState))
     return true
   }
 
@@ -682,17 +677,20 @@ const handleApi = async (req, res, url) => {
       Connection: 'keep-alive',
     })
     registerSseClient(audienceClients, res)
-    writeSse(audienceClients, res, JSON.stringify(deriveAudienceState(currentState)))
+    writeSse(audienceClients, res, JSON.stringify(makeAudienceSyncStateMessage(currentState)))
     return true
   }
 
-  if (url.pathname === '/api/quiz-events' && req.method === 'GET') {
+  if (
+    (url.pathname === '/api/quiz-events' || url.pathname === '/api/quiz-control-events')
+    && req.method === 'GET'
+  ) {
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
       Connection: 'keep-alive',
     })
-    res.isControl = hasValidBasicAuth(req) || !isAuthRequired()
+    res.isControl = url.pathname === '/api/quiz-control-events'
     registerSseClient(quizClients, res)
     return true
   }
@@ -730,7 +728,11 @@ const handleApi = async (req, res, url) => {
         return true
       }
       updateQuizAggregate(parsed)
-      broadcastQuizAnswer(body, parsed)
+      if (parsed.type === 'QUIZ_CLEAR_ANSWERS') {
+        broadcastQuizAnswer(body, parsed)
+      }
+      const aggregateSnapshot = getQuizControlSnapshot(parsed.presentationId)
+      broadcastQuizAnswer(JSON.stringify(aggregateSnapshot), aggregateSnapshot)
       sendJson(res, 200, { success: true })
     } catch (err) {
       sendJson(res, 400, { error: err.message || 'Invalid JSON' })
@@ -977,6 +979,8 @@ const handleApi = async (req, res, url) => {
 const serveFile = (req, res, filePath) => {
   const ext = path.extname(filePath).toLowerCase()
   const contentType = contentTypes[ext] || 'application/octet-stream'
+  const requestPath = new URL(req.url || '/', 'http://localhost').pathname
+  const cacheHeaders = getStaticCacheHeaders(requestPath)
 
   if (!fs.existsSync(filePath)) {
     res.writeHead(404, { 'Content-Type': 'application/json' })
@@ -1005,6 +1009,7 @@ const serveFile = (req, res, filePath) => {
     const chunksize = (end - start) + 1
     const file = fs.createReadStream(filePath, { start, end })
     res.writeHead(206, {
+      ...cacheHeaders,
       'Content-Range': `bytes ${start}-${end}/${totalSize}`,
       'Accept-Ranges': 'bytes',
       'Content-Length': chunksize,
@@ -1013,6 +1018,7 @@ const serveFile = (req, res, filePath) => {
     file.pipe(res)
   } else {
     res.writeHead(200, {
+      ...cacheHeaders,
       'Content-Length': totalSize,
       'Accept-Ranges': 'bytes',
       'Content-Type': contentType
@@ -1213,6 +1219,9 @@ server.listen(port, () => {
       kicked: [],
     },
     getQuizAggregateSnapshot,
+    revokeAllLiveKitSpeakers: () => liveKitApi?.revokeAllSpeakers?.(),
+    recordExternalBroadcastTransition: (transition) =>
+      privacySessionManifestRecorder.recordTransition(transition),
   })
   console.log(`SeferPresenter local backend listening on http://localhost:${port}${staticLabel}`)
   console.log(`SeferPresenter WebSocket disponible en ws://localhost:${port}/ws`)
@@ -1230,7 +1239,9 @@ const shutdown = () => {
   }
   for (const client of wsServer?.clients || []) client.close(1001, 'Server shutting down')
   wsServer?.close()
-  server.close(() => process.exit(0))
+  server.close(() => {
+    privacySessionManifestRecorder.flush().finally(() => process.exit(0))
+  })
   setTimeout(() => process.exit(1), 10_000).unref?.()
 }
 

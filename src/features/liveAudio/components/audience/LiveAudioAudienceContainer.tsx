@@ -6,6 +6,7 @@ import { useLiveAudio } from '../../hooks/useLiveAudio';
 import { usePrivateControlSignals } from '../../../../hooks/usePrivateControlSignals';
 import type {
   LiveAudioAvailability,
+  LiveAudioExternalBroadcastState,
   MicrophonePermissionState,
   MicrophoneTrackState,
   SpeakerState,
@@ -55,6 +56,10 @@ export default function LiveAudioAudienceContainer({
   const [isAliasVisibleToOthers, setIsAliasVisibleToOthers] = useState(audienceSession.aliasVisible);
   const [canViewActiveParticipants, setCanViewActiveParticipants] = useState(false);
   const [visibleParticipants, setVisibleParticipants] = useState<string[]>([]);
+  const [externalBroadcastState, setExternalBroadcastState] = useState<LiveAudioExternalBroadcastState>('off');
+  const [externalBroadcastRevision, setExternalBroadcastRevision] = useState(0);
+  const lastPrivateProfileSignatureRef = useRef('');
+  const microphoneConsentRevisionRef = useRef(0);
   
   const [showInterventionModal, setShowInterventionModal] = useState(false);
   const [showPrivateMessageModal, setShowPrivateMessageModal] = useState(false);
@@ -193,7 +198,6 @@ export default function LiveAudioAudienceContainer({
     return wsSend('LIVE_AUDIO_ACTIVE_PARTICIPANT_PROFILE', {
       type: 'LIVE_AUDIO_ACTIVE_PARTICIPANT_PROFILE',
       participantId,
-      alias,
       activeListPublicKey,
       isAliasVisibleToActiveParticipants: isAliasVisible,
       createdAt: Date.now(),
@@ -203,10 +207,38 @@ export default function LiveAudioAudienceContainer({
   // Listen for grant/revoke messages
   useEffect(() => {
     const unsubscribe = subscribeToWsMessage((type, payload) => {
-      if (type === 'LIVE_AUDIO_REQUEST_ALIASES') {
+      if (type === 'LIVE_AUDIO_EXTERNAL_BROADCAST_STATE') {
+        const state = payload.state;
+        const revision = typeof payload.revision === 'number' && Number.isInteger(payload.revision)
+          ? payload.revision
+          : externalBroadcastRevision;
+        if (state === 'off' || state === 'live' || state === 'recording') {
+          setExternalBroadcastState(state);
+          setExternalBroadcastRevision(revision);
+          if (state === 'off') {
+            microphoneConsentRevisionRef.current = revision;
+          } else if (microphoneConsentRevisionRef.current !== revision && isMicrophoneActive) {
+            void unpublishMicrophone();
+            sendParticipantStatus('GRANTED', {
+              canPublishAudio: true,
+              isMuted: true,
+              isActiveAudience: true,
+              isMicrophoneActive: false,
+            });
+          }
+        }
+      } else if (type === 'LIVE_AUDIO_REQUEST_ALIASES') {
         if (participantId && activeAlias) {
+          lastPrivateProfileSignatureRef.current = '';
           const speakerState = isWordGranted ? 'GRANTED' : (isPendingWord ? 'REQUESTED' : 'LISTENER');
           void publishActiveProfile(activeAlias, isAliasVisibleToOthers);
+          if (privateSignalReady) {
+            void sendPrivateSignal({
+              type: 'ACTIVE_PROFILE',
+              alias: activeAlias,
+              isAliasVisibleToActiveParticipants: isAliasVisibleToOthers,
+            });
+          }
           sendParticipantStatus(
             speakerState,
             {
@@ -327,12 +359,14 @@ export default function LiveAudioAudienceContainer({
     activeAlias,
     publishActiveProfile,
     sendPrivateSignal,
+    privateSignalReady,
     isActive,
     isPendingWord,
     isKicked,
     isAliasVisibleToOthers,
     isMicrophoneActive,
     audienceSession,
+    externalBroadcastRevision,
   ]);
 
   // Sync session state to active state
@@ -398,17 +432,19 @@ export default function LiveAudioAudienceContainer({
 
   useEffect(() => {
     if (!activeAlias) return;
-    if (!isActive && !isPendingWord && !isWordGranted) return;
+    if (!isActive) return;
 
     void publishActiveProfile(activeAlias, isAliasVisibleToOthers);
     if (!privateSignalReady) return;
-    if (isPendingWord || isWordGranted) {
-      void sendPrivateSignal({
-        type: isPendingWord ? 'REQUEST_WORD' : 'ACTIVE_STATE',
-        alias: activeAlias,
-        speakerState: isWordGranted ? 'GRANTED' : isPendingWord ? 'REQUESTED' : 'LISTENER',
-      });
-    }
+    const signature = `${keyRotationCount}:${activeAlias}:${isAliasVisibleToOthers}:${isPendingWord}:${isWordGranted}`;
+    if (signature === lastPrivateProfileSignatureRef.current) return;
+    lastPrivateProfileSignatureRef.current = signature;
+    void sendPrivateSignal({
+      type: isPendingWord ? 'REQUEST_WORD' : isWordGranted ? 'ACTIVE_STATE' : 'ACTIVE_PROFILE',
+      alias: activeAlias,
+      isAliasVisibleToActiveParticipants: isAliasVisibleToOthers,
+      speakerState: isWordGranted ? 'GRANTED' : isPendingWord ? 'REQUESTED' : 'LISTENER',
+    });
   }, [activeAlias, isActive, isAliasVisibleToOthers, isPendingWord, isWordGranted, keyRotationCount, privateSignalReady, publishActiveProfile, sendPrivateSignal]);
 
   const handleStartAudio = useCallback(() => {
@@ -516,6 +552,18 @@ export default function LiveAudioAudienceContainer({
         isMicrophoneActive: false,
       });
     } else {
+      if (
+        externalBroadcastState !== 'off' &&
+        microphoneConsentRevisionRef.current !== externalBroadcastRevision
+      ) {
+        const accepted = window.confirm(
+          externalBroadcastState === 'recording'
+            ? 'La sesión está en directo y grabándose. Confirma que autorizas que tu voz se emita y quede grabada. Evita identificarte y comprueba que no haya voces de fondo; pueden generarse subtítulos automáticos.'
+            : 'La sesión está en directo. Confirma que autorizas que tu voz se emita públicamente. Evita identificarte y comprueba que no haya voces de fondo.',
+        );
+        if (!accepted) return;
+        microphoneConsentRevisionRef.current = externalBroadcastRevision;
+      }
       void publishMicrophone({ musicMode: isMusicMode })
         .then(() => sendParticipantStatus('GRANTED', {
           canPublishAudio: true,
@@ -527,7 +575,7 @@ export default function LiveAudioAudienceContainer({
           console.error("Failed to publish mic:", err);
         });
     }
-  }, [isMicrophoneActive, publishMicrophone, isMusicMode, sendParticipantStatus, unpublishMicrophone]);
+  }, [externalBroadcastRevision, externalBroadcastState, isMicrophoneActive, publishMicrophone, isMusicMode, sendParticipantStatus, unpublishMicrophone]);
 
   const handleRetryAudio = useCallback(() => {
     void retryAudio();
@@ -596,6 +644,7 @@ export default function LiveAudioAudienceContainer({
     visibleParticipants,
     availability,
     microphoneDiagnostics,
+    externalBroadcastState,
   };
 
   return (
@@ -626,6 +675,7 @@ export default function LiveAudioAudienceContainer({
         <AudienceInterventionModal
           onClose={() => setShowInterventionModal(false)}
           defaultAliasVisible={isAliasVisibleToOthers}
+          externalBroadcastState={externalBroadcastState}
           onSubmit={handleSubmitAlias}
         />
       )}

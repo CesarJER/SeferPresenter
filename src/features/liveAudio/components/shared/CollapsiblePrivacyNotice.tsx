@@ -1,103 +1,201 @@
 import React from 'react';
+import { LegalMarkdown } from '../../../../components/shared/LegalMarkdown';
+import type { LiveAudioExternalBroadcastState } from '../../../../types/liveAudio';
+import {
+  configuredPrivacyPolicyPath,
+  configuredPrivacySummaryPath,
+  extractLegalDocumentVersion,
+  prepareLegalMarkdownForDisplay,
+  sha256Hex,
+} from '../../../../utils/legalDocument';
 
 interface CollapsiblePrivacyNoticeProps {
+  externalBroadcastState: LiveAudioExternalBroadcastState;
   onCheckboxesChange: (allChecked: boolean) => void;
 }
 
-export const CollapsiblePrivacyNotice: React.FC<CollapsiblePrivacyNoticeProps> = ({ 
-  onCheckboxesChange
+const stateNotice: Record<LiveAudioExternalBroadcastState, string> = {
+  off: 'No hay retransmisión externa declarada en este momento. Si el estado cambia, los permisos de voz anteriores se revocarán.',
+  live: 'La sesión está declarada en directo. Si publica su micrófono, su voz podrá llegar a destinatarios externos.',
+  recording: 'La sesión está declarada en directo y grabándose. Si publica su micrófono, su voz podrá conservarse en servicios externos del operador.',
+};
+
+interface PolicyIdentity {
+  version: string;
+  sha256: string;
+}
+
+export const CollapsiblePrivacyNotice: React.FC<CollapsiblePrivacyNoticeProps> = ({
+  externalBroadcastState,
+  onCheckboxesChange,
 }) => {
-  const [checkedTerms, setCheckedTerms] = React.useState(false);
-  const [checkedCapacity, setCheckedCapacity] = React.useState(false);
+  const [checkedInformation, setCheckedInformation] = React.useState(false);
+  const [checkedMicrophone, setCheckedMicrophone] = React.useState(false);
+  const [agePath, setAgePath] = React.useState<'age14OrOver' | 'under14' | null>(null);
+  const [checkedGuardian, setCheckedGuardian] = React.useState(false);
+  const [privacySummary, setPrivacySummary] = React.useState<string | null>(null);
+  const [policyIdentity, setPolicyIdentity] = React.useState<PolicyIdentity | null>(null);
+  const [legalLoadError, setLegalLoadError] = React.useState(false);
 
-  const orgName = import.meta.env.VITE_ORGANIZATION_NAME || "la organización";
-  const orgLegalId = import.meta.env.VITE_ORGANIZATION_LEGAL_ID || "";
-  const orgEmail = import.meta.env.VITE_ORGANIZATION_EMAIL || "admin@example.com";
-  // const orgWebsite = import.meta.env.VITE_ORGANIZATION_WEBSITE || "https://example.com";
+  const ageConditionMet = agePath === 'age14OrOver' || (agePath === 'under14' && checkedGuardian);
+  const legalInformationAvailable = Boolean(privacySummary && policyIdentity && !legalLoadError);
+  const allRequirementsMet = checkedInformation && checkedMicrophone && ageConditionMet && legalInformationAvailable;
 
-  const handleTermsChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setCheckedTerms(e.target.checked);
-    onCheckboxesChange(e.target.checked && checkedCapacity);
-  };
+  React.useEffect(() => {
+    const controller = new AbortController();
+    const loadMarkdown = async (path: string): Promise<string> => {
+      const response = await fetch(path, {
+        cache: 'no-store',
+        headers: { Accept: 'text/markdown, text/plain;q=0.9' },
+        signal: controller.signal,
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const text = await response.text();
+      if (!text.trim()) throw new Error('documento vacío');
+      return text;
+    };
 
-  const handleCapacityChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setCheckedCapacity(e.target.checked);
-    onCheckboxesChange(checkedTerms && e.target.checked);
-  };
+    setPrivacySummary(null);
+    setPolicyIdentity(null);
+    setLegalLoadError(false);
+
+    Promise.all([
+      loadMarkdown(configuredPrivacySummaryPath),
+      loadMarkdown(configuredPrivacyPolicyPath),
+    ])
+      .then(async ([summary, policy]) => {
+        const sha256 = await sha256Hex(policy);
+        if (controller.signal.aborted) return;
+        setPrivacySummary(summary);
+        setPolicyIdentity({
+          version: extractLegalDocumentVersion(policy),
+          sha256,
+        });
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setLegalLoadError(true);
+      });
+
+    return () => controller.abort();
+  }, []);
+
+  React.useEffect(() => {
+    onCheckboxesChange(allRequirementsMet);
+  }, [allRequirementsMet, onCheckboxesChange]);
 
   return (
-    <div className="bg-gray-800 rounded-lg p-4 text-sm text-gray-200 shadow-md mb-4 border border-gray-700">
-      <div className="mb-3 text-white font-semibold text-base border-b border-gray-700 pb-2">
+    <div className="mb-4 rounded-lg border border-gray-700 bg-gray-800 p-4 text-sm text-gray-200 shadow-md">
+      <div className="mb-3 border-b border-gray-700 pb-2 text-base font-semibold text-white">
         Aviso antes de intervenir
       </div>
-      
-      <div className="mt-3 text-xs leading-relaxed overflow-x-auto text-gray-300 space-y-3">
-        <p className="text-yellow-300 font-medium">
-          Esta reunión puede ser <strong className="font-bold text-yellow-400">grabada y difundida</strong> por {orgName} a través de sus canales oficiales.
+
+      <div className="mt-3 space-y-3 text-xs leading-relaxed text-gray-300">
+        <p className="font-medium text-yellow-300">{stateNotice[externalBroadcastState]}</p>
+        <p>
+          El micrófono no se activa automáticamente. Requiere autorización de Control, permiso del navegador y una acción local.
         </p>
         <p>
-          Por favor, evite compartir información personal o cualquier otra información que no desee que pueda formar parte de la grabación.
+          Su alias llega cifrado a los Controles autorizados. Solo se comparte con otros participantes activos si usted lo elige y Control lo autoriza.
         </p>
         <p>
-          Si interviene mediante el micrófono, su intervención podrá ser escuchada por los asistentes y su voz podrá formar parte de dichas grabaciones.
+          Los mensajes privados llegan a Control. Evite datos de terceros o información que no sea necesaria para participar.
         </p>
+        <p className="rounded border border-amber-700/60 bg-amber-950/30 p-2 text-amber-100">
+          Antes de hablar, evite decir su nombre completo u otros datos que le identifiquen y compruebe que no se oyen conversaciones o voces de fondo. Las plataformas externas pueden generar subtítulos automáticos de lo que diga.
+        </p>
+        {!privacySummary && !legalLoadError && (
+          <p role="status" className="text-gray-400">Cargando información básica de protección de datos…</p>
+        )}
+        {legalLoadError && (
+          <p role="alert" className="rounded border border-red-700 bg-red-950/40 p-2 text-red-100">
+            No se pudo cargar la información legal aplicable. La intervención por micrófono permanecerá bloqueada.
+          </p>
+        )}
+        {privacySummary && (
+          <section aria-label="Información básica de protección de datos" className="text-xs">
+            <LegalMarkdown variant="dark">
+              {prepareLegalMarkdownForDisplay(privacySummary)}
+            </LegalMarkdown>
+          </section>
+        )}
         <p>
-          El alias temporal y los mensajes privados dirigidos a Control solo serán visibles para Control y los Controles autorizados durante la sesión. No obstante, Control podrá mencionar, leer o responder públicamente al contenido de su mensaje o alias durante la reunión de forma pública para poder atender su petición.
+          Consulte la información legal configurada en{' '}
+          <a className="text-blue-400 underline" href="/proteccion-datos" target="_blank" rel="noreferrer">
+            /proteccion-datos
+          </a>.
+          {policyIdentity && (
+            <span className="text-gray-400">
+              {' '}(versión {policyIdentity.version}; SHA-256 …{policyIdentity.sha256.slice(-12)}).
+            </span>
+          )}
         </p>
-        
-        <table className="w-full text-left border-collapse border border-gray-700 mt-4 mb-4 bg-gray-900 rounded-lg">
-          <tbody>
-            <tr className="border-b border-gray-700">
-              <th className="p-2 border-r border-gray-700 text-white w-1/4 align-top">Responsable</th>
-              <td className="p-2 align-top">{orgName}{orgLegalId ? `, ${orgLegalId}` : ''}. Contacto: <a href={`mailto:${orgEmail}`} className="text-blue-400">{orgEmail}</a>.</td>
-            </tr>
-            <tr className="border-b border-gray-700">
-              <th className="p-2 border-r border-gray-700 text-white align-top">Finalidad</th>
-              <td className="p-2 align-top">Organizar, desarrollar, retransmitir y, en su caso, grabar reuniones, estudios, actividades formativas, cultos y eventos de la comunidad mediante SeferPresenter. Gestionar la participación de los asistentes, solicitudes de palabra, intervenciones por micrófono, mensajes internos y actividades interactivas.</td>
-            </tr>
-            <tr className="border-b border-gray-700">
-              <th className="p-2 border-r border-gray-700 text-white align-top">Legitimación</th>
-              <td className="p-2 align-top">Tratamiento necesario para la organización y desarrollo de actividades religiosas, educativas y comunitarias de la entidad; participación voluntaria del asistente cuando solicita palabra, activa el micrófono o envía mensajes a Control; interés legítimo en la gestión técnica, seguridad y moderación de la sesión; y, cuando proceda, bases específicas aplicables a entidades religiosas y a la difusión de sus actividades.</td>
-            </tr>
-            <tr className="border-b border-gray-700">
-              <th className="p-2 border-r border-gray-700 text-white align-top">Destinatarios</th>
-              <td className="p-2 align-top">Los asistentes conectados podrán escuchar las intervenciones realizadas mediante micrófono. El personal de control autorizado podrá acceder a alias temporales y mensajes dirigidos a moderación durante la sesión. Las grabaciones se difunden publicamente en los canales oficiales de la comunidad. También podrán intervenir proveedores técnicos necesarios para alojamiento, retransmisión, seguridad o publicación de contenidos.</td>
-            </tr>
-            <tr className="border-b border-gray-700">
-              <th className="p-2 border-r border-gray-700 text-white align-top">Derechos</th>
-              <td className="p-2 align-top">Puede ejercer los derechos de acceso, rectificación, supresión, oposición, limitación del tratamiento y, cuando proceda, portabilidad, contactando con <a href={`mailto:${orgEmail}`} className="text-blue-400">{orgEmail}</a>. Las solicitudes relativas a grabaciones se evaluarán individualmente conforme a la normativa aplicable.</td>
-            </tr>
-            <tr>
-              <th className="p-2 border-r border-gray-700 text-white align-top">Información adicional</th>
-              <td className="p-2 align-top">Puede consultar la Política de Privacidad completa en <span className="text-blue-400">/proteccion-datos</span>.</td>
-            </tr>
-          </tbody>
-        </table>
       </div>
 
       <div className="mt-4 space-y-3 pt-3">
-        <label className="flex items-start gap-2 cursor-pointer group">
-          <input 
-            type="checkbox" 
-            className="mt-1 w-4 h-4 rounded border-gray-600 text-blue-500 focus:ring-blue-500 focus:ring-offset-gray-800 bg-gray-700"
-            checked={checkedTerms}
-            onChange={handleTermsChange}
+        <label className="flex cursor-pointer items-start gap-2">
+          <input
+            type="checkbox"
+            className="mt-1 h-4 w-4 rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500"
+            checked={checkedInformation}
+            onChange={(event) => setCheckedInformation(event.target.checked)}
           />
-          <span className="text-sm group-hover:text-white transition-colors">
-            He leído y he comprendido la información sobre privacidad, grabaciones e intervención pública.
+          <span>He leído y comprendido el estado indicado y la información de privacidad aplicable.</span>
+        </label>
+        <label className="flex cursor-pointer items-start gap-2">
+          <input
+            type="checkbox"
+            className="mt-1 h-4 w-4 rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500"
+            checked={checkedMicrophone}
+            onChange={(event) => setCheckedMicrophone(event.target.checked)}
+          />
+          <span>
+            Autorizo específicamente la activación de mi micrófono para esta intervención y comprendo los destinatarios indicados para el estado actual.
           </span>
         </label>
-        <label className="flex items-start gap-2 cursor-pointer group">
-          <input 
-            type="checkbox" 
-            className="mt-1 w-4 h-4 rounded border-gray-600 text-blue-500 focus:ring-blue-500 focus:ring-offset-gray-800 bg-gray-700"
-            checked={checkedCapacity}
-            onChange={handleCapacityChange}
-          />
-          <span className="text-sm group-hover:text-white transition-colors">
-            Declaro tener capacidad para participar o, cuando sea legalmente necesario, contar con la autorización de mis padres, tutores o representantes legales.
-          </span>
-        </label>
+        <fieldset className="space-y-2 rounded border border-gray-700 p-3">
+          <legend className="px-1 text-sm font-medium text-gray-200">Edad y autorización</legend>
+          <label className="flex cursor-pointer items-start gap-2">
+            <input
+              type="radio"
+              name="participant-age-path"
+              value="age14OrOver"
+              checked={agePath === 'age14OrOver'}
+              onChange={() => {
+                setAgePath('age14OrOver');
+                setCheckedGuardian(false);
+              }}
+              className="mt-1 h-4 w-4 border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500"
+            />
+            <span>Tengo 14 años o más.</span>
+          </label>
+          <label className="flex cursor-pointer items-start gap-2">
+            <input
+              type="radio"
+              name="participant-age-path"
+              value="under14"
+              checked={agePath === 'under14'}
+              onChange={() => setAgePath('under14')}
+              className="mt-1 h-4 w-4 border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500"
+            />
+            <span>Tengo menos de 14 años.</span>
+          </label>
+          {agePath === 'under14' && (
+            <label className="ml-6 flex cursor-pointer items-start gap-2 rounded bg-gray-900/60 p-2">
+              <input
+                type="checkbox"
+                checked={checkedGuardian}
+                onChange={(event) => setCheckedGuardian(event.target.checked)}
+                className="mt-1 h-4 w-4 rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500"
+              />
+              <span>
+                Mi padre, madre o tutor legal está presente, ha leído este aviso y autoriza específicamente esta intervención por micrófono.
+              </span>
+            </label>
+          )}
+          <p className="text-xs text-gray-400">
+            Esta selección no se envía ni se conserva. Si no puede declarar una opción válida, puede seguir la sesión sin activar el micrófono.
+          </p>
+        </fieldset>
       </div>
     </div>
   );

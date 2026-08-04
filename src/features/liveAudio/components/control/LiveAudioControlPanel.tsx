@@ -4,6 +4,7 @@ import { LiveAudioQueue } from './LiveAudioQueue';
 import { LiveAudioSpeakers } from './LiveAudioSpeakers';
 import { LiveAudioListeners } from './LiveAudioListeners';
 import type { LiveAudioParticipant } from './LiveAudioParticipantRow';
+import type { LiveAudioExternalBroadcastState } from '../../../../types/liveAudio';
 
 interface LiveAudioControlPanelProps {
   totalAudience: number;
@@ -31,6 +32,8 @@ interface LiveAudioControlPanelProps {
   onRemove?: (id: string) => void;
   onMicrophoneConfigChange?: (id: string, config: { volume?: number; musicMode?: boolean }) => void;
   pendingWordCount: number;
+  externalBroadcastState: LiveAudioExternalBroadcastState;
+  onExternalBroadcastStateChange: (state: LiveAudioExternalBroadcastState) => void;
 }
 
 export const LiveAudioControlPanel: React.FC<LiveAudioControlPanelProps> = ({
@@ -58,7 +61,9 @@ export const LiveAudioControlPanel: React.FC<LiveAudioControlPanelProps> = ({
   onSetActiveListViewPermission,
   onRemove,
   onMicrophoneConfigChange,
-  pendingWordCount
+  pendingWordCount,
+  externalBroadcastState,
+  onExternalBroadcastStateChange,
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isListenVolOpen, setIsListenVolOpen] = useState(false);
@@ -73,6 +78,23 @@ export const LiveAudioControlPanel: React.FC<LiveAudioControlPanelProps> = ({
           ${isExpanded ? 'h-[60vh] max-h-[calc(100vh-80px)] md:h-[450px] opacity-100' : 'h-0 max-h-0 opacity-0 border-none'}`}
       >
         <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
+          <label className="flex flex-col gap-1 rounded border border-gray-700 bg-gray-950/60 p-2 text-xs text-gray-300">
+            <span className="font-semibold">Estado externo declarado</span>
+            <select
+              value={externalBroadcastState}
+              disabled={!isControlAuthorized}
+              onChange={(event) => onExternalBroadcastStateChange(event.target.value as LiveAudioExternalBroadcastState)}
+              className="rounded border border-gray-600 bg-gray-900 px-2 py-1.5 text-white disabled:opacity-50"
+              aria-label="Estado externo de retransmisión y grabación"
+            >
+              <option value="off">Sin retransmisión</option>
+              <option value="live">En directo</option>
+              <option value="recording">En directo y grabando</option>
+            </select>
+            <span className="text-[10px] text-gray-500">
+              Debe cambiarse antes de iniciar o detener la herramienta externa.
+            </span>
+          </label>
           
           {/* Global Actions */}
           <div className="flex gap-2 shrink-0">

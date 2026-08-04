@@ -40,7 +40,6 @@ import {
   serializeQuizToText,
   serializeResultProfiles,
   calcMaxBaseCentipunts,
-  scoreAnswer,
 } from '../../utils/quizUtils';
 
 interface MenuPopupProps {
@@ -84,7 +83,6 @@ interface MenuPopupProps {
   quizTimerState?: QuizTimerState;
   quizPresenterDemoSelection?: QuizOptionId | null;
   quizMaxBaseCentipunts?: number;
-  quizResultSlideIds?: string[];
   onQuizSubslideSelect?: (idx: number) => void;
   onQuizStartTimer?: () => void;
   onQuizPauseTimer?: () => void;
@@ -170,7 +168,6 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
   quizTimerState,
   quizPresenterDemoSelection = null,
   quizMaxBaseCentipunts,
-  quizResultSlideIds,
   onQuizSubslideSelect = () => { },
   onQuizStartTimer = () => { },
   onQuizPauseTimer = () => { },
@@ -212,16 +209,6 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
     controllerAnswers.clearSlideAnswers(slideId);
     emitCommand?.({ command: 'QUIZ_CLEAR_QUESTION_RESULTS', slideId });
   };
-  const controllerResultScoreOverrides = quizResultSlideIds
-    ? Object.fromEntries(Object.entries(controllerAnswers.sessions).map(([sessionId, session]) => {
-      const totalCentipunts = quizQuestionSlides.reduce((total, slide) => {
-        if (!quizResultSlideIds.includes(slide.id) || !slide.quizData) return total;
-        const answer = session.answers[slide.id];
-        return answer?.submitted ? total + scoreAnswer(slide.quizData, answer).totalCentipunts : total;
-      }, 0);
-      return [sessionId, totalCentipunts];
-    }))
-    : undefined;
   const isActiveScriptureSlide = !!activeSlide && (activeSlide.type === 'sefer' || activeSlide.type === 'tanaj' || !!activeSlide.scriptureBook);
 
   const [id, setId] = useState('');
@@ -1839,26 +1826,12 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
 
                     {activeSlide?.type === 'quiz' && activeSlide.quizData && quizTimerState && (() => {
                       const optionCounts: Record<string, number> = {};
+                      const slideAggregate = controllerAnswers.getSlideAggregate(activeSlide.id);
                       for (const opt of activeSlide.quizData.options) {
-                        optionCounts[opt.id] = 0;
+                        optionCounts[opt.id] = slideAggregate.optionCounts[opt.id] ?? 0;
                       }
-                      let citaHits = 0;
-                      let citaMisses = 0;
-                      for (const session of Object.values(controllerAnswers.sessions)) {
-                        const answer = session.answers[activeSlide.id];
-                        if (answer?.submitted) {
-                          for (const optId of answer.selectedOptionIds) {
-                            if (optionCounts[optId] !== undefined) {
-                              optionCounts[optId]++;
-                            }
-                          }
-                          if (activeSlide.quizData.citaRef && !activeSlide.quizData.citaReviewRef) {
-                            const score = scoreAnswer(activeSlide.quizData, answer);
-                            if (score.citaCentipunts > 0) citaHits++;
-                            else citaMisses++;
-                          }
-                        }
-                      }
+                      const citaHits = slideAggregate.citaHits;
+                      const citaMisses = slideAggregate.citaMisses;
                       return (
                         <QuizControllerView
                           slide={activeSlide}
@@ -1881,8 +1854,8 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                           citaHits={citaHits}
                           citaMisses={citaMisses}
                           onClearAnswers={() => handleClearQuizAnswers(activeSlide.id)}
-                          rangeStats={controllerAnswers.calcRangeStats(activeSlide.quizData.resultProfiles || [], effectiveQuizMaxBaseCentipunts, controllerResultScoreOverrides)}
-                          totalSessions={Object.keys(controllerAnswers.sessions).length}
+                          rangeStats={controllerAnswers.calcRangeStats(activeSlide.quizData.resultProfiles || [])}
+                          totalSessions={controllerAnswers.totalParticipants}
                           maxBaseCentipunts={effectiveQuizMaxBaseCentipunts}
                           registeredQuestionCount={recalculateResultSlideIds.length}
                           onRecalculateResults={handleRecalculateQuizResults}
@@ -1914,26 +1887,12 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
           >
             {activeSlide?.type === 'quiz' && activeSlide.quizData && quizTimerState && (() => {
               const optionCounts: Record<string, number> = {};
+              const slideAggregate = controllerAnswers.getSlideAggregate(activeSlide.id);
               for (const opt of activeSlide.quizData.options) {
-                optionCounts[opt.id] = 0;
+                optionCounts[opt.id] = slideAggregate.optionCounts[opt.id] ?? 0;
               }
-              let citaHits = 0;
-              let citaMisses = 0;
-              for (const session of Object.values(controllerAnswers.sessions)) {
-                const answer = session.answers[activeSlide.id];
-                if (answer?.submitted) {
-                  for (const optId of answer.selectedOptionIds) {
-                    if (optionCounts[optId] !== undefined) {
-                      optionCounts[optId]++;
-                    }
-                  }
-                  if (activeSlide.quizData.citaRef && !activeSlide.quizData.citaReviewRef) {
-                    const score = scoreAnswer(activeSlide.quizData, answer);
-                    if (score.citaCentipunts > 0) citaHits++;
-                    else citaMisses++;
-                  }
-                }
-              }
+              const citaHits = slideAggregate.citaHits;
+              const citaMisses = slideAggregate.citaMisses;
               return (
                 <QuizControllerView
                   slide={activeSlide}
@@ -1956,8 +1915,8 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                   citaHits={citaHits}
                   citaMisses={citaMisses}
                   onClearAnswers={() => handleClearQuizAnswers(activeSlide.id)}
-                  rangeStats={controllerAnswers.calcRangeStats(activeSlide.quizData.resultProfiles || [], effectiveQuizMaxBaseCentipunts, controllerResultScoreOverrides)}
-                  totalSessions={Object.keys(controllerAnswers.sessions).length}
+                  rangeStats={controllerAnswers.calcRangeStats(activeSlide.quizData.resultProfiles || [])}
+                  totalSessions={controllerAnswers.totalParticipants}
                   maxBaseCentipunts={effectiveQuizMaxBaseCentipunts}
                   registeredQuestionCount={recalculateResultSlideIds.length}
                   onRecalculateResults={handleRecalculateQuizResults}

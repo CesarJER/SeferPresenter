@@ -65,6 +65,13 @@ const liveAudioMessageTypes = new Set([
   'LIVE_AUDIO_MUTE_ALL',
   'LIVE_AUDIO_KICK_PARTICIPANT',
   'LIVE_AUDIO_RESCUE_PARTICIPANT',
+  'LIVE_AUDIO_SET_ACTIVE_LIST_VIEW_PERMISSION',
+  'LIVE_AUDIO_ACTIVE_LIST_VIEW_PERMISSION',
+  'LIVE_AUDIO_SET_ALIAS_SHARED_VISIBILITY',
+  'LIVE_AUDIO_REMOVE_ACTIVE_PARTICIPANT',
+  'LIVE_AUDIO_ACTIVE_PARTICIPANT_PROFILE',
+  'LIVE_AUDIO_SET_EXTERNAL_BROADCAST_STATE',
+  'LIVE_AUDIO_EXTERNAL_BROADCAST_STATE',
   'LIVE_AUDIO_CONTROL_PUBLIC_KEY',
   'LIVE_AUDIO_CONTROL_JOIN_REQUEST',
   'LIVE_AUDIO_CONTROL_AUTHORIZED',
@@ -333,6 +340,9 @@ const validateOperationalSnapshot = (snapshot: unknown, path: string, errors: st
     }
     if (!Number.isInteger(quiz.totalFinalScores) || (quiz.totalFinalScores as number) < 0) {
       errors.push(`${path}.quizAggregate.totalFinalScores debe ser entero >= 0.`);
+    }
+    if (!Number.isInteger(quiz.minimumGroupSize) || (quiz.minimumGroupSize as number) < 2) {
+      errors.push(`${path}.quizAggregate.minimumGroupSize debe ser entero >= 2.`);
     }
     if (quiz.updatedAt !== null && !isFiniteNumber(quiz.updatedAt)) errors.push(`${path}.quizAggregate.updatedAt debe ser numero o null.`);
   }
@@ -719,25 +729,6 @@ const validateAudioTimelineState = (value: unknown, path: string): ValidationRes
   return errors.length > 0 ? fail(errors) : ok(value as unknown as AudioTimelineState);
 };
 
-const validateAudiencePublicState = (value: unknown, path: string): ValidationResult<unknown> => {
-  if (!isRecord(value)) return fail([`${path} debe ser un objeto.`]);
-
-  const errors: string[] = [];
-  if (typeof value.mode !== 'string' || !appModes.has(value.mode)) errors.push(`${path}.mode no es valido.`);
-  if (typeof value.presentationTitle !== 'string') errors.push(`${path}.presentationTitle debe ser texto.`);
-  if (value.slide !== null && !isRecord(value.slide)) errors.push(`${path}.slide debe ser objeto o null.`);
-  if (value.scripture !== null && !isRecord(value.scripture)) errors.push(`${path}.scripture debe ser objeto o null.`);
-  if (!isRecord(value.background)) {
-    errors.push(`${path}.background debe ser un objeto.`);
-  } else {
-    if (value.background.kind !== 'image' && value.background.kind !== 'color') errors.push(`${path}.background.kind no es valido.`);
-    if (typeof value.background.value !== 'string') errors.push(`${path}.background.value debe ser texto.`);
-  }
-  if (!isFiniteNumber(value.updatedAt)) errors.push(`${path}.updatedAt debe ser numero.`);
-
-  return errors.length > 0 ? fail(errors) : ok(value);
-};
-
 const validateLiveAudioBroadcastMessage = (value: Record<string, unknown>): ValidationResult<LiveAudioBroadcastMessage> => {
   const errors: string[] = [];
 
@@ -795,6 +786,39 @@ const validateLiveAudioBroadcastMessage = (value: Record<string, unknown>): Vali
         }
       }
       validateOptionalCreatedAt(value, value.type, errors);
+      break;
+    case 'LIVE_AUDIO_SET_ACTIVE_LIST_VIEW_PERMISSION':
+    case 'LIVE_AUDIO_ACTIVE_LIST_VIEW_PERMISSION':
+      validateParticipantId(value.participantId, 'participantId', errors);
+      if (typeof value.canViewActiveParticipants !== 'boolean') errors.push('canViewActiveParticipants debe ser booleano.');
+      validateOptionalCreatedAt(value, value.type, errors);
+      break;
+    case 'LIVE_AUDIO_SET_ALIAS_SHARED_VISIBILITY':
+      validateParticipantId(value.participantId, 'participantId', errors);
+      if (typeof value.isAliasHiddenByControl !== 'boolean') errors.push('isAliasHiddenByControl debe ser booleano.');
+      validateOptionalCreatedAt(value, value.type, errors);
+      break;
+    case 'LIVE_AUDIO_REMOVE_ACTIVE_PARTICIPANT':
+      validateParticipantId(value.participantId, 'participantId', errors);
+      validateOptionalCreatedAt(value, value.type, errors);
+      break;
+    case 'LIVE_AUDIO_ACTIVE_PARTICIPANT_PROFILE':
+      validateParticipantId(value.participantId, 'participantId', errors);
+      if (value.alias !== undefined) errors.push('alias no puede viajar en el perfil operativo.');
+      if (!isValidBase64(value.activeListPublicKey)) errors.push('activeListPublicKey debe ser base64.');
+      if (typeof value.isAliasVisibleToActiveParticipants !== 'boolean') {
+        errors.push('isAliasVisibleToActiveParticipants debe ser booleano.');
+      }
+      validateOptionalCreatedAt(value, value.type, errors);
+      break;
+    case 'LIVE_AUDIO_SET_EXTERNAL_BROADCAST_STATE':
+      if (value.state !== 'off' && value.state !== 'live' && value.state !== 'recording') errors.push('state no es valido.');
+      validateOptionalCreatedAt(value, value.type, errors);
+      break;
+    case 'LIVE_AUDIO_EXTERNAL_BROADCAST_STATE':
+      if (value.state !== 'off' && value.state !== 'live' && value.state !== 'recording') errors.push('state no es valido.');
+      if (!Number.isInteger(value.revision) || (value.revision as number) < 0) errors.push('revision debe ser entero >= 0.');
+      if (!isFiniteNumber(value.updatedAt)) errors.push('updatedAt debe ser numero.');
       break;
     case 'LIVE_AUDIO_CONTROL_PUBLIC_KEY':
       if (typeof value.controlSessionId !== 'string' || value.controlSessionId.trim() === '') errors.push('controlSessionId debe ser texto no vacio.');
@@ -1159,13 +1183,6 @@ export const validateSyncMessage = (value: unknown): ValidationResult<BroadcastM
     if (!isFiniteNumber(value.estimatedPositionSec)) baseErrors.push('estimatedPositionSec debe ser numero.');
     if (!isFiniteNumber(value.serverTimeMs)) baseErrors.push('serverTimeMs debe ser numero.');
     return baseErrors.length > 0 ? fail(baseErrors) : ok(value as unknown as BroadcastMessage);
-  }
-
-  if (value.type === 'AUDIENCE_STATE_UPDATE') {
-    const state = validateAudiencePublicState(value.state, 'state');
-    return baseErrors.length || !state.ok
-      ? fail([...baseErrors, ...state.errors])
-      : ok(value as unknown as BroadcastMessage);
   }
 
   if (liveAudioMessageTypes.has(value.type)) {

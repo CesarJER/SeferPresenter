@@ -1,8 +1,14 @@
 x-logging: &bounded-logging
-  driver: json-file
+  # Docker's local driver rotates by size and uses an efficient compressed
+  # format. Time retention is enforced by scripts/rotate-docker-logs.ps1.
+  driver: local
   options:
-    max-size: "10m"
+    max-size: "5m"
     max-file: "3"
+    compress: "true"
+
+x-no-logging: &no-logging
+  driver: none
 
 services:
   app:
@@ -17,6 +23,9 @@ services:
         VITE_ORGANIZATION_LEGAL_ID: ${VITE_ORGANIZATION_LEGAL_ID:-}
         VITE_ORGANIZATION_EMAIL: ${VITE_ORGANIZATION_EMAIL:-}
         VITE_ORGANIZATION_WEBSITE: ${VITE_ORGANIZATION_WEBSITE:-}
+        VITE_PRIVACY_POLICY_PATH: ${VITE_PRIVACY_POLICY_PATH:-/legal/privacy.md}
+        VITE_PRIVACY_SUMMARY_PATH: ${VITE_PRIVACY_SUMMARY_PATH:-/legal/privacy-summary.md}
+        VITE_SEFER_AUDIENCE_STORAGE_TTL_HOURS: ${VITE_SEFER_AUDIENCE_STORAGE_TTL_HOURS:-24}
     restart: unless-stopped
     stop_grace_period: 15s
     environment:
@@ -35,6 +44,11 @@ services:
       - SEFER_LIVE_AUDIO_CONTROL_CODE_TTL_SECONDS=${SEFER_LIVE_AUDIO_CONTROL_CODE_TTL_SECONDS:-90}
       - SEFER_ACTIVE_ALIAS_MODERATION_DEFAULT_VISIBLE=${SEFER_ACTIVE_ALIAS_MODERATION_DEFAULT_VISIBLE:-true}
       - SEFER_PUBLIC_CATALOGS_JSON=${SEFER_PUBLIC_CATALOGS_JSON:-}
+      - SEFER_PRIVACY_MANIFEST_DIR=/app/privacy-manifests
+      - SEFER_PRIVACY_POLICY_PATH=${VITE_PRIVACY_POLICY_PATH:-/legal/privacy.md}
+      - SEFER_EXTERNAL_BROADCAST_CHANNELS=${SEFER_EXTERNAL_BROADCAST_CHANNELS:-}
+      - SEFER_DEPLOYMENT_VERSION=${SEFER_DEPLOYMENT_VERSION:-unversioned}
+      - SEFER_BROADCAST_NOTICE_VERSION=${SEFER_BROADCAST_NOTICE_VERSION:-broadcast-notice-v1}
       - SEFER_BACKUP_DIR=/app/backups
       - SEFER_FORCE_IN_PLACE_PERSISTENCE=${SEFER_FORCE_IN_PLACE_PERSISTENCE:-false}
     volumes:
@@ -43,6 +57,7 @@ services:
       - ${DATA_DIR:-.}/public/audio:/app/public/audio:ro
       - ${DATA_DIR:-.}/public/backgrounds:/app/public/backgrounds:ro
       - ${DATA_DIR:-.}/public/videos:/app/public/videos:ro
+      - ${SEFER_PRIVACY_LOCAL_PATH:-./privacy-audit.local}/session-manifests.local:/app/privacy-manifests
       - sefer_backups:/app/backups
     expose:
       - "8787"
@@ -52,6 +67,7 @@ services:
       timeout: 5s
       retries: 5
       start_period: 20s
+    # Application logs use a strict field allowlist and bounded local storage.
     logging: *bounded-logging
 
   caddy:
@@ -72,7 +88,9 @@ services:
       app:
         condition: service_healthy
         restart: true
-    logging: *bounded-logging
+    # Proxy/runtime errors can contain peer IP addresses. Health checks remain
+    # available, but Docker does not persist Caddy process output.
+    logging: *no-logging
 
   redis:
     # Local audit pin: Redis 7.4.9.
@@ -87,7 +105,8 @@ services:
       timeout: 3s
       retries: 10
       start_period: 5s
-    logging: *bounded-logging
+    # Redis startup/runtime output can include network endpoints.
+    logging: *no-logging
 
   livekit:
     # Local audit pin: LiveKit v1.13.1.
@@ -102,17 +121,39 @@ services:
         test -n "$${LIVEKIT_API_SECRET}" || { echo "LIVEKIT_API_SECRET is required" >&2; exit 1; }
         export LIVEKIT_KEYS="$${LIVEKIT_API_KEY}: $${LIVEKIT_API_SECRET}"
         export NODE_IP="$${LIVEKIT_NODE_IP}"
+        is_ipv4() {
+          printf '%s\n' "$$1" | awk -F. '
+            NF != 4 { exit 1 }
+            {
+              for (i = 1; i <= 4; i++) {
+                if ($$i !~ /^[0-9]+$$/ || $$i < 0 || $$i > 255) exit 1
+              }
+            }
+          '
+        }
         if [ -z "$$NODE_IP" ]; then
-          echo "LIVEKIT_NODE_IP not set, attempting to auto-detect public IP..."
-          NODE_IP=$$(wget -qO- http://api.ipify.org || wget -qO- http://icanhazip.com || wget -qO- http://ifconfig.me/ip)
+          test "$${LIVEKIT_NODE_IP_AUTO_DETECT}" = "true" || {
+            echo "LIVEKIT_NODE_IP is required unless LIVEKIT_NODE_IP_AUTO_DETECT=true" >&2
+            exit 1
+          }
+          echo "LIVEKIT_NODE_IP not set, using explicit HTTPS auto-detection for the server IP..."
+          for endpoint in https://api.ipify.org https://icanhazip.com; do
+            candidate=$$(wget -qO- -T 5 "$$endpoint" 2>/dev/null | tr -d '\r\n ' || true)
+            if is_ipv4 "$$candidate"; then
+              NODE_IP="$$candidate"
+              break
+            fi
+          done
         fi
-        test -n "$$NODE_IP" || { echo "Could not determine NODE_IP" >&2; exit 1; }
+        is_ipv4 "$$NODE_IP" || { echo "LIVEKIT_NODE_IP is not a valid IPv4 address" >&2; exit 1; }
         export NODE_IP
         exec /livekit-server
     environment:
       - LIVEKIT_API_KEY=${LIVEKIT_API_KEY:-}
       - LIVEKIT_API_SECRET=${LIVEKIT_API_SECRET:-}
       - LIVEKIT_NODE_IP=${LIVEKIT_NODE_IP:-}
+      - LIVEKIT_NODE_IP_AUTO_DETECT=${LIVEKIT_NODE_IP_AUTO_DETECT:-false}
+      - LIVEKIT_LOGGING_LEVEL=${LIVEKIT_LOGGING_LEVEL:-warn}
       - "REDIS_HOST=redis:6379"
       - "UDP_PORT=50000-50050"
     ports:
@@ -125,12 +166,14 @@ services:
         condition: service_healthy
         restart: true
     healthcheck:
-      test: [ "CMD-SHELL", "wget -qO- http://127.0.0.1:7880/alive >/dev/null || exit 1" ]
+      test: [ "CMD-SHELL", "wget -qO- http://127.0.0.1:7880/ >/dev/null || exit 1" ]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
-    logging: *bounded-logging
+    # LiveKit may emit ICE addresses and token-shaped values. Discard process
+    # logs at the Docker boundary instead of attempting fragile redaction.
+    logging: *no-logging
 
 volumes:
   caddy_data:

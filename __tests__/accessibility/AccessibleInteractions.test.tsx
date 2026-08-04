@@ -71,9 +71,9 @@ describe('accessible audience dialogs', () => {
     opener.focus();
     fireEvent.click(opener);
 
-    const dialog = screen.getByRole('dialog', { name: /Participar en la Reuni/i });
+    const dialog = screen.getByRole('dialog', { name: /Participar en la sesi[oó]n/i });
     expect(dialog.getAttribute('aria-modal')).toBe('true');
-    expect(document.activeElement).toBe(screen.getByRole('heading', { name: /Participar en la Reuni/i }));
+    expect(document.activeElement).toBe(screen.getByRole('heading', { name: /Participar en la sesi[oó]n/i }));
     fireEvent.keyDown(document, { key: 'Escape' });
 
     expect(screen.queryByRole('dialog')).toBeNull();

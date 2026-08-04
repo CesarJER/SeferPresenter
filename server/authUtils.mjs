@@ -1,4 +1,5 @@
-export const isAuthRequired = () => process.env.SEFER_REQUIRE_AUTH === 'true'
+// Secure by default. Development tooling opts out explicitly when requested.
+export const isAuthRequired = () => process.env.SEFER_REQUIRE_AUTH !== 'false'
 
 const publicApiGetPaths = new Set([
   '/api/audience/state',

@@ -6,6 +6,10 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const rootDir = path.resolve(__dirname, '..')
 const viteBin = path.join(rootDir, 'node_modules', 'vite', 'bin', 'vite.js')
 const viteArgs = process.argv.slice(2)
+const devEnvironment = {
+  ...process.env,
+  SEFER_REQUIRE_AUTH: process.env.SEFER_REQUIRE_AUTH ?? 'false',
+}
 
 const children = []
 
@@ -14,7 +18,7 @@ const start = (label, command, args) => {
     cwd: rootDir,
     stdio: 'inherit',
     shell: false,
-    env: process.env,
+    env: devEnvironment,
   })
 
   children.push(child)

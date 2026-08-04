@@ -12,6 +12,7 @@ import type {
   PendingControlAuthorization,
   LiveAudioControlJoinRequestMessage,
   LiveAudioControlState,
+  LiveAudioExternalBroadcastState,
 } from '../../../../types/liveAudio';
 import type { WebSocketConnectionStatus } from '../../../../hooks/useWebSocket';
 import { useLiveAudioAvailability } from '../../hooks/useLiveAudioAvailability';
@@ -113,11 +114,14 @@ export default function LiveAudioControlContainer({
   const [participantMicrophoneConfigs, setParticipantMicrophoneConfigs] = useState<Record<string, { volume: number; musicMode: boolean }>>({});
   const [connectionCounts, setConnectionCounts] = useState<LiveAudioConnectionCountsMessage | null>(null);
   const [messages, setMessages] = useState<PrivateMessage[]>([]);
+  const [externalBroadcastState, setExternalBroadcastState] = useState<LiveAudioExternalBroadcastState>('off');
+  const [externalBroadcastRevision, setExternalBroadcastRevision] = useState(0);
   const [joinRequests, setJoinRequests] = useState<Record<string, LiveAudioControlJoinRequestMessage>>({});
   const participantAliasesRef = useRef(participantAliases);
   const aliasRequestSignatureRef = useRef('');
   const lastSentListRef = useRef('');
   const requestedAuthRef = useRef<string | null>(null);
+  const moderatorConsentRevisionRef = useRef(0);
 
   const { availability } = useLiveAudioAvailability();
 
@@ -146,8 +150,28 @@ export default function LiveAudioControlContainer({
   }, [isMicrophoneActive]);
 
   useEffect(() => {
+    if (externalBroadcastState === 'off') {
+      moderatorConsentRevisionRef.current = externalBroadcastRevision;
+      return;
+    }
+    if (moderatorConsentRevisionRef.current === externalBroadcastRevision) return;
+    if (isMicrophoneActive) void unpublishMicrophone();
+  }, [externalBroadcastRevision, externalBroadcastState, isMicrophoneActive, unpublishMicrophone]);
+
+  useEffect(() => {
     if (!subscribeToWsMessage) return;
     const unsubscribe = subscribeToWsMessage((type, payload) => {
+      if (type === 'LIVE_AUDIO_EXTERNAL_BROADCAST_STATE') {
+        const state = payload.state;
+        const revision = payload.revision;
+        if (state === 'off' || state === 'live' || state === 'recording') {
+          setExternalBroadcastState(state);
+          if (typeof revision === 'number' && Number.isInteger(revision) && revision >= 0) {
+            setExternalBroadcastRevision(revision);
+          }
+        }
+        return;
+      }
       if (type === 'PRESENTATION_SESSION_ROTATED') {
         setParticipantsMap({});
         setParticipantAliases({});
@@ -168,21 +192,6 @@ export default function LiveAudioControlContainer({
             const existing = next[participant.participantId];
             if (existing?.updatedAt && existing.updatedAt > participant.updatedAt) return;
             next[participant.participantId] = snapshotParticipantToStatus(participant);
-          });
-          return next;
-        });
-        setParticipantAliases(prev => {
-          const next = { ...prev };
-          snapshot.participants.forEach((participant) => {
-            if (participant.role === 'audience' && participant.alias) {
-              next[participant.participantId] = participant.alias;
-            } else if (
-              participant.role === 'audience' &&
-              participant.isActiveAudience === false &&
-              participant.isKicked !== true
-            ) {
-              delete next[participant.participantId];
-            }
           });
           return next;
         });
@@ -237,13 +246,11 @@ export default function LiveAudioControlContainer({
 
       if (type === 'LIVE_AUDIO_ACTIVE_PARTICIPANT_PROFILE') {
         const participantId = typeof payload.participantId === 'string' ? payload.participantId : '';
-        const alias = sanitizeAlias(payload.alias);
         const activeListPublicKey = typeof payload.activeListPublicKey === 'string'
           ? payload.activeListPublicKey
           : '';
-        if (!participantId || !alias || !activeListPublicKey) return;
+        if (!participantId || !activeListPublicKey) return;
         const isAliasVisibleToActiveParticipants = payload.isAliasVisibleToActiveParticipants === true;
-        setParticipantAliases(prev => ({ ...prev, [participantId]: alias }));
         setParticipantEphemeralKeys(prev => ({ ...prev, [participantId]: activeListPublicKey }));
         setParticipantsMap(prev => {
           const existing = prev[participantId];
@@ -256,18 +263,6 @@ export default function LiveAudioControlContainer({
               activeListPublicKey,
             },
           };
-        });
-        wsSend?.('LIVE_AUDIO_SNAPSHOT_PATCH', {
-          type: 'LIVE_AUDIO_SNAPSHOT_PATCH',
-          snapshot: {
-            participants: [{
-              participantId,
-              role: 'audience',
-              alias,
-              isAliasVisibleToActiveParticipants,
-            }],
-          },
-          createdAt: Date.now(),
         });
         return;
       }
@@ -325,17 +320,6 @@ export default function LiveAudioControlContainer({
     const alias = sanitizeAlias(data.alias);
     if (alias) {
       setParticipantAliases(prev => ({ ...prev, [signal.fromParticipantId]: alias }));
-      wsSend?.('LIVE_AUDIO_SNAPSHOT_PATCH', {
-        type: 'LIVE_AUDIO_SNAPSHOT_PATCH',
-        snapshot: {
-          participants: [{
-            participantId: signal.fromParticipantId,
-            role: 'audience',
-            alias,
-          }],
-        },
-        createdAt: Date.now(),
-      });
     }
 
     if (signal.ephemeralPublicKey) {
@@ -528,11 +512,31 @@ export default function LiveAudioControlContainer({
 
   const handleToggleModeratorMic = useCallback(async () => {
     if (isModeratorMuted) {
+      if (
+        externalBroadcastState !== 'off' &&
+        moderatorConsentRevisionRef.current !== externalBroadcastRevision
+      ) {
+        const accepted = window.confirm(
+          externalBroadcastState === 'recording'
+            ? 'La sesión está declarada en directo y grabándose. Confirma que tu voz puede emitirse y quedar grabada. Evita identificarte y comprueba que no haya voces de fondo; pueden generarse subtítulos automáticos.'
+            : 'La sesión está declarada en directo. Confirma que tu voz puede emitirse públicamente. Evita identificarte y comprueba que no haya voces de fondo.',
+        );
+        if (!accepted) return;
+        moderatorConsentRevisionRef.current = externalBroadcastRevision;
+      }
       await publishMicrophone({ musicMode: isModeratorMusicMode });
     } else {
       await unpublishMicrophone();
     }
-  }, [isModeratorMuted, isModeratorMusicMode, publishMicrophone, unpublishMicrophone]);
+  }, [externalBroadcastRevision, externalBroadcastState, isModeratorMuted, isModeratorMusicMode, publishMicrophone, unpublishMicrophone]);
+
+  const handleExternalBroadcastStateChange = useCallback((nextState: LiveAudioExternalBroadcastState) => {
+    wsSend?.('LIVE_AUDIO_SET_EXTERNAL_BROADCAST_STATE', {
+      type: 'LIVE_AUDIO_SET_EXTERNAL_BROADCAST_STATE',
+      state: nextState,
+      createdAt: Date.now(),
+    });
+  }, [wsSend]);
 
   const handleModeratorMusicModeChange = useCallback((nextMusicMode: boolean) => {
     setIsModeratorMusicMode(nextMusicMode);
@@ -794,6 +798,8 @@ export default function LiveAudioControlContainer({
         onRemove={handleRemove}
         onMicrophoneConfigChange={handleParticipantMicrophoneConfigChange}
         pendingWordCount={pendingWordCount}
+        externalBroadcastState={externalBroadcastState}
+        onExternalBroadcastStateChange={handleExternalBroadcastStateChange}
       />
     </>
   );

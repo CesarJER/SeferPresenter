@@ -474,6 +474,7 @@ describe('runtime validation', () => {
           submittedAnswersBySlideId: { slide1: 2 },
           finalScoreRanges: { '0-99': 1 },
           totalFinalScores: 1,
+          minimumGroupSize: 3,
           updatedAt: Date.now(),
         },
       },

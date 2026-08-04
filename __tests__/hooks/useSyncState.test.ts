@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { arePresentationsEqual } from '../../src/hooks/useSyncState';
+import { arePresentationsEqual, getStateSyncPaths } from '../../src/hooks/useSyncState';
 import type { Presentation } from '../../src/types/presentation';
 
 const presentation: Presentation = {
@@ -34,5 +34,16 @@ describe('arePresentationsEqual', () => {
       ...structuredClone(presentation),
       slides: [{ ...structuredClone(presentation.slides[0]), scriptureVerses: [['Changed']] }],
     })).toBe(false);
+  });
+});
+
+describe('getStateSyncPaths', () => {
+  it('keeps Audience on the public minimized state endpoints', () => {
+    expect(getStateSyncPaths(false, false)).toEqual([
+      '/api/audience/state',
+      '/api/audience/events',
+    ]);
+    expect(getStateSyncPaths(true, false)).toEqual(['/api/state', '/api/state-events']);
+    expect(getStateSyncPaths(false, true)).toEqual(['/api/state', '/api/state-events']);
   });
 });

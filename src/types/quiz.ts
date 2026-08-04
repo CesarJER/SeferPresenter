@@ -81,23 +81,6 @@ export const makeEmptyAudienceAnswer = (slideId: string): QuizAudienceAnswer => 
   bonusReadingClaimed: false,
 });
 
-// ── Audience Session ─────────────────────────────────────────────────────────
-
-/**
- * Full quiz session for one audience member.
- * Keyed by slideId in the answers map.
- */
-export interface QuizAudienceSession {
-  /** Random UUID generated on first interaction */
-  sessionId: string;
-  /** Presentation owning every answer in this session snapshot */
-  presentationId: string;
-  /** Optional display name */
-  displayName?: string;
-  /** answers keyed by slide.id */
-  answers: Record<string, QuizAudienceAnswer>;
-}
-
 // ── Presenter Demo ────────────────────────────────────────────────────────────
 
 /**
@@ -142,7 +125,23 @@ export interface QuizRangeStats {
   rank: number;
   title: string;
   count: number;
-  sessionIds: string[];
+}
+
+export interface QuizSlideAggregate {
+  submittedCount: number;
+  optionCounts: Record<string, number>;
+  citaHits: number;
+  citaMisses: number;
+}
+
+export interface QuizAggregateSnapshot {
+  slides: Record<string, QuizSlideAggregate>;
+  submittedAnswersBySlideId: Record<string, number>;
+  finalScoreRanges: Record<string, number>;
+  totalFinalScores: number;
+  minimumGroupSize: number;
+  finalScoreRequestId: number | null;
+  updatedAt: number | null;
 }
 
 // ── Sync extension (preparatory, optional) ───────────────────────────────────

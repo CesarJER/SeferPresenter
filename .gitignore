@@ -13,6 +13,8 @@ node_modules
 dist
 dist-ssr
 *.local
+*.local.*
+public/legal/*.local/
 public
 !public/
 public/*
@@ -20,6 +22,10 @@ public/*
 !public/audience-sw.js
 !public/control-manifest.webmanifest
 !public/manifest.webmanifest
+!public/legal/
+public/legal/*
+!public/legal/privacy.md
+!public/legal/privacy-summary.md
 launcher
 
 # Editor directories and files

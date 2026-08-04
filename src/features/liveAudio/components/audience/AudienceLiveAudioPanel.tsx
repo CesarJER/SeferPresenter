@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Mic, MicOff, Hand, MessageSquare, LogOut, Volume2, VolumeX, Play, RotateCcw, CheckCircle2, Loader2, Users } from 'lucide-react';
-import type { LiveAudioConnectionState, LiveAudioMicrophoneDiagnostics } from '../../../../types/liveAudio';
+import type { LiveAudioConnectionState, LiveAudioExternalBroadcastState, LiveAudioMicrophoneDiagnostics } from '../../../../types/liveAudio';
 import { ActiveParticipantsPanel } from './ActiveParticipantsPanel';
 
 interface AudienceLiveAudioPanelProps {
@@ -30,6 +30,7 @@ interface AudienceLiveAudioPanelProps {
   canViewActiveParticipants: boolean;
   visibleParticipants: string[];
   microphoneDiagnostics?: LiveAudioMicrophoneDiagnostics;
+  externalBroadcastState: LiveAudioExternalBroadcastState;
   variant?: 'overlay' | 'inline';
 }
 
@@ -60,6 +61,7 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
   canViewActiveParticipants,
   visibleParticipants,
   microphoneDiagnostics,
+  externalBroadcastState,
   variant = 'overlay',
 }) => {
   const [isVisible, setIsVisibleState] = useState<boolean>(() => {
@@ -281,11 +283,25 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
           </button>
         )
         : null;
+  const externalBroadcastNotice = externalBroadcastState === 'off'
+    ? null
+    : (
+      <div
+        role="status"
+        className={`flex h-full items-center rounded-full px-3 text-xs font-bold text-white shadow-lg ${
+          externalBroadcastState === 'recording' ? 'bg-red-600/95' : 'bg-orange-600/95'
+        }`}
+        title="Estado declarado por Control para la herramienta externa"
+      >
+        {externalBroadcastState === 'recording' ? '● En directo y grabando' : '● En directo'}
+      </div>
+    );
 
   if (!isActive) {
     return (
       <div ref={panelRootRef} className={wrapperClass} onClick={handlePanelClick} id="audience-bottom-panel">
         <div className={panelClass}>
+          {externalBroadcastNotice}
           {reconnectStatus}
           {!hasAudioStarted && (
             <button
@@ -316,6 +332,7 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
   return (
     <div ref={panelRootRef} className={wrapperClass} onClick={handlePanelClick}>
       <div className={`${panelClass} relative bg-gray-900/70 backdrop-blur-lg border border-white/10 px-2 rounded-2xl shadow-2xl`}>
+        {externalBroadcastNotice}
         {diagnostics}
         {isParticipantsOpen && (
           <div className="absolute bottom-full mb-3 left-0 right-0" onClick={(event) => event.stopPropagation()}>

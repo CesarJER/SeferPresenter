@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_AUDIO_STATE } from '../../src/types/audio';
 import { validateSyncMessage } from '../../src/utils/validation';
 import {
+  makeAudienceSyncStateMessage,
   makeProjectionSyncStateMessage,
   reduceProjectionCommand,
 } from '../../server/projection-state-reducer.mjs';
@@ -83,6 +84,24 @@ const baseState = {
 };
 
 describe('projectionStateReducer', () => {
+  it('builds a valid Audience SYNC_STATE with only the active slide', () => {
+    const fullState = makeProjectionSyncStateMessage({ ...baseState, slideIndex: 2 }, {
+      clientId: 'control-1',
+      origin: 'control',
+      now: 1000,
+      messageId: 'm-audience',
+    });
+    const audienceState = makeAudienceSyncStateMessage(fullState);
+
+    expect(audienceState.type).toBe('SYNC_STATE');
+    expect(audienceState.presentation?.slides).toEqual([presentation.slides[2]]);
+    expect(audienceState.slideIndex).toBe(0);
+    expect(audienceState.quizState).toEqual(fullState.quizState);
+    expect(fullState.presentation?.slides).toHaveLength(4);
+    const validation = validateSyncMessage(audienceState);
+    expect(validation.ok, validation.errors.join('\n')).toBe(true);
+  });
+
   it('reduces SELECT_PRESENTATION_AND_SLIDE from Control into canonical state', () => {
     const result = reduceProjectionCommand(
       baseState,

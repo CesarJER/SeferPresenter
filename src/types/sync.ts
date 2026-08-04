@@ -23,28 +23,6 @@ export interface AutoduckState {
   factor: number;
 }
 
-export interface AudiencePublicState {
-  mode: AppMode;
-  presentationTitle: string;
-  slide: {
-    id: string;
-    label: string;
-    lines: string[];
-    type: 'media' | 'scripture' | 'text';
-  } | null;
-  scripture: {
-    reference: string;
-    verseNikud: string;
-    transliteration: string;
-    translation: string;
-  } | null;
-  background: {
-    kind: 'image' | 'color';
-    value: string;
-  };
-  updatedAt: number;
-}
-
 export interface SyncStatePayload {
   clientId: string;
   origin: 'control' | 'presenter';
@@ -106,6 +84,5 @@ export type BroadcastMessage =
   | ({ type: 'AUDIO_TIMELINE_ACTION'; action: AudioTimelineAction } & SyncProtocolMeta)
   | ({ type: 'AUDIO_TIMELINE_STATE'; timeline: AudioTimelineState } & SyncProtocolMeta)
   | ({ type: 'AUDIO_PRESENTATION_CLOCK'; timelineId: string; estimatedPositionSec: number; serverTimeMs: number } & SyncProtocolMeta)
-  | ({ type: 'AUDIENCE_STATE_UPDATE'; state: AudiencePublicState } & SyncProtocolMeta)
   | (LiveAudioBroadcastMessage & SyncProtocolMeta)
   | ({ type: 'ERROR'; code: string; message: string } & SyncProtocolMeta);

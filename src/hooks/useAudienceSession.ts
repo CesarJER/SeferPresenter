@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { makeClientId } from '../utils/normalizePresentation';
+import { readExpiringStorage, writeExpiringStorage } from '../utils/privacyStorage';
 
 const ALIAS_VISIBLE_KEY = 'sefer-audience-alias-visible';
 const AUDIENCE_DEVICE_ID_KEY = 'sefer-audience-device-id';
@@ -27,7 +28,7 @@ export function useAudienceSession({ subscribeToWsMessage }: UseAudienceSessionP
       String(import.meta.env.VITE_SEFER_ACTIVE_ALIAS_VISIBLE_BY_DEFAULT ?? 'false').toLowerCase() === 'true';
     setAliasVisible(defaultAliasVisible);
 
-    const savedSessionId = localStorage.getItem(AUDIENCE_SESSION_ID_KEY);
+    const savedSessionId = readExpiringStorage<string>(localStorage, AUDIENCE_SESSION_ID_KEY);
     if (savedSessionId) {
       setPresentationSessionId(savedSessionId);
     }
@@ -56,18 +57,18 @@ export function useAudienceSession({ subscribeToWsMessage }: UseAudienceSessionP
       if (type === 'WELCOME') {
         const serverSessionId = payload.presentationSessionId as string | undefined;
         if (serverSessionId) {
-          const localSessionId = localStorage.getItem(AUDIENCE_SESSION_ID_KEY);
+          const localSessionId = readExpiringStorage<string>(localStorage, AUDIENCE_SESSION_ID_KEY);
           if (localSessionId && localSessionId !== serverSessionId) {
             clearLocalSession();
           }
-          localStorage.setItem(AUDIENCE_SESSION_ID_KEY, serverSessionId);
+          writeExpiringStorage(localStorage, AUDIENCE_SESSION_ID_KEY, serverSessionId);
           setPresentationSessionId(serverSessionId);
         }
       } else if (type === 'PRESENTATION_SESSION_ROTATED') {
         const newSessionId = payload.presentationSessionId;
         if (typeof newSessionId !== 'string' || !newSessionId) return;
         clearLocalSession();
-        localStorage.setItem(AUDIENCE_SESSION_ID_KEY, newSessionId);
+        writeExpiringStorage(localStorage, AUDIENCE_SESSION_ID_KEY, newSessionId);
         setPresentationSessionId(newSessionId);
       }
     };

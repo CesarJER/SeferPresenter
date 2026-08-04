@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { createServer, type Server } from 'node:http';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { WebSocket, type WebSocketServer } from 'ws';
 import {
   createWsServer,
@@ -26,6 +26,7 @@ let httpServer: Server;
 let wss: WebSocketServer;
 let baseUrl: string;
 let clients: WsClient[] = [];
+const recordExternalBroadcastTransition = vi.fn();
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -99,12 +100,11 @@ const makeParticipantStatus = (
 
 const makeActiveProfile = (
   participantId: string,
-  alias: string,
-  activeListPublicKey = Buffer.from(`public-key-${alias}`).toString('base64'),
+  keySeed: string,
+  activeListPublicKey = Buffer.from(`public-key-${keySeed}`).toString('base64'),
 ): WsMessage => ({
   type: 'LIVE_AUDIO_ACTIVE_PARTICIPANT_PROFILE',
   participantId,
-  alias,
   activeListPublicKey,
   isAliasVisibleToActiveParticipants: true,
   createdAt: Date.now(),
@@ -115,9 +115,10 @@ describe('visible active participants', () => {
     process.env.SEFER_REQUIRE_AUTH = 'false';
     process.env.SEFER_LIVE_AUDIO_REJOIN_GRACE_SECONDS = '1';
     resetWsServerStateForTests();
+    recordExternalBroadcastTransition.mockReset();
 
     httpServer = createServer();
-    wss = createWsServer(httpServer);
+    wss = createWsServer(httpServer, undefined, { recordExternalBroadcastTransition });
     await new Promise<void>((resolve) => httpServer.listen(0, resolve));
     const address = httpServer.address();
     if (!address || typeof address === 'string') throw new Error('Expected HTTP server address');
@@ -225,13 +226,15 @@ describe('visible active participants', () => {
     expect(getLiveAudioParticipantSnapshot().participants.find((item) => item.participantId === hiddenParticipantId)?.isAliasHiddenByControl).toBe(true);
   });
 
-  it('updates view permission in participant state', async () => {
+  it('updates view permission only for an active participant with an E2E public key', async () => {
     const control = await connectWs('control');
     const audience = await connectWs('audience');
     const participantId = randomUUID();
 
     audience.send(makeParticipantStatus(participantId));
     await waitFor(control, (message) => message.type === 'LIVE_AUDIO_PARTICIPANT_STATUS' && message.participantId === participantId);
+    audience.send(makeActiveProfile(participantId, 'active'));
+    await waitFor(control, (message) => message.type === 'LIVE_AUDIO_ACTIVE_PARTICIPANT_PROFILE' && message.participantId === participantId);
 
     control.send({
       type: 'LIVE_AUDIO_SET_ACTIVE_LIST_VIEW_PERMISSION',
@@ -244,13 +247,15 @@ describe('visible active participants', () => {
     expect(getLiveAudioParticipantSnapshot().participants.find((item) => item.participantId === participantId)?.canViewActiveParticipants).toBe(true);
   });
 
-  it('sends list-view permission changes in clear to the target audience participant', async () => {
+  it('sends list-view permission changes in clear to the active target participant', async () => {
     const control = await connectWs('control');
     const audience = await connectWs('audience');
     const participantId = randomUUID();
 
     audience.send(makeParticipantStatus(participantId));
     await waitFor(control, (message) => message.type === 'LIVE_AUDIO_PARTICIPANT_STATUS' && message.participantId === participantId);
+    audience.send(makeActiveProfile(participantId, 'target'));
+    await waitFor(control, (message) => message.type === 'LIVE_AUDIO_ACTIVE_PARTICIPANT_PROFILE' && message.participantId === participantId);
 
     control.send({
       type: 'LIVE_AUDIO_SET_ACTIVE_LIST_VIEW_PERMISSION',
@@ -267,7 +272,7 @@ describe('visible active participants', () => {
     expect(permission.canViewActiveParticipants).toBe(true);
   });
 
-  it('routes active participant profile with alias and public key to authorized control', async () => {
+  it('routes only the public key and consent flag in the clear active profile', async () => {
     const control = await connectWs('control');
     const audience = await connectWs('audience');
     const participantId = randomUUID();
@@ -275,7 +280,7 @@ describe('visible active participants', () => {
 
     audience.send(makeParticipantStatus(participantId));
     await waitFor(control, (message) => message.type === 'LIVE_AUDIO_PARTICIPANT_STATUS' && message.participantId === participantId);
-    audience.send(makeActiveProfile(participantId, 'Nuevo Nick', activeListPublicKey));
+    audience.send(makeActiveProfile(participantId, 'profile', activeListPublicKey));
 
     const profile = await waitFor(
       control,
@@ -283,10 +288,74 @@ describe('visible active participants', () => {
     );
     const participant = getLiveAudioParticipantSnapshot().participants.find((item) => item.participantId === participantId);
 
-    expect(profile.alias).toBe('Nuevo Nick');
+    expect(profile).not.toHaveProperty('alias');
     expect(profile.activeListPublicKey).toBe(activeListPublicKey);
     expect(participant?.activeListPublicKey).toBe(activeListPublicKey);
     expect(participant?.isAliasVisibleToActiveParticipants).toBe(true);
+  });
+
+  it('rejects list permission for a passive Audience even when an authorized Control targets its id', async () => {
+    const control = await connectWs('control');
+    const audience = await connectWs('audience');
+    const participantId = randomUUID();
+
+    audience.send(makeParticipantStatus(participantId, { isActiveAudience: false }));
+    await waitFor(control, (message) => message.type === 'LIVE_AUDIO_PARTICIPANT_STATUS' && message.participantId === participantId);
+
+    control.send({
+      type: 'LIVE_AUDIO_SET_ACTIVE_LIST_VIEW_PERMISSION',
+      participantId,
+      canViewActiveParticipants: true,
+      createdAt: Date.now(),
+    });
+
+    const error = await waitFor(control, (message) => message.type === 'ERROR' && message.code === 'ACTIVE_AUDIENCE_REQUIRED');
+    expect(error.code).toBe('ACTIVE_AUDIENCE_REQUIRED');
+    expect(getLiveAudioParticipantSnapshot().participants.find((item) => item.participantId === participantId)?.canViewActiveParticipants).toBe(false);
+  });
+
+  it('revokes existing microphone grants before declaring an external recording state', async () => {
+    const control = await connectWs('control');
+    const audience = await connectWs('audience');
+    const participantId = randomUUID();
+
+    audience.send(makeParticipantStatus(participantId, {
+      speakerState: 'GRANTED',
+      canPublishAudio: true,
+      isMuted: false,
+      isMicrophoneActive: true,
+    }));
+    await waitFor(control, (message) => (
+      message.type === 'LIVE_AUDIO_PARTICIPANT_STATUS' &&
+      message.participantId === participantId &&
+      message.speakerState === 'GRANTED'
+    ));
+
+    control.send({
+      type: 'LIVE_AUDIO_SET_EXTERNAL_BROADCAST_STATE',
+      state: 'recording',
+      createdAt: Date.now(),
+    });
+
+    const state = await waitFor(audience, (message) => (
+      message.type === 'LIVE_AUDIO_EXTERNAL_BROADCAST_STATE' && message.state === 'recording'
+    ));
+    await waitFor(audience, (message) => (
+      message.type === 'LIVE_AUDIO_REVOKE_SPEAK' && message.participantId === participantId
+    ));
+
+    expect(state.revision).toBe(1);
+    expect(recordExternalBroadcastTransition).toHaveBeenCalledWith(expect.objectContaining({
+      previousState: 'off',
+      nextState: 'recording',
+      revision: 1,
+    }));
+    expect(getLiveAudioParticipantSnapshot().participants.find((item) => item.participantId === participantId)).toMatchObject({
+      speakerState: 'LISTENER',
+      canPublishAudio: false,
+      isMuted: true,
+      isMicrophoneActive: false,
+    });
   });
 
   it('keeps a raised hand when the participant republishes alias visibility', async () => {

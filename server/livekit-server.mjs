@@ -438,6 +438,16 @@ export const createLiveKitApi = (controlApi) => {
 
   return {
     close: () => clearInterval(cleanupTimer),
+    revokeAllSpeakers: () => {
+      for (const participant of participants.values()) {
+        if (participant.role === 'control') continue
+        participant.speakerState = 'LISTENER'
+        participant.canPublish = false
+        participant.lastSeenAt = Date.now()
+      }
+      roomState.speakers.clear()
+      roomState.muted.clear()
+    },
     getState: () => ({
       enabled: getConfig().enabled,
       available: getConfig().available,

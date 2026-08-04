@@ -8,7 +8,7 @@ interface LiveAudioAliasInputProps {
 
 export const LiveAudioAliasInput: React.FC<LiveAudioAliasInputProps> = ({ alias, onChange, disabled }) => {
   return (
-    <div className="flex flex-col gap-1 mb-4">
+    <div className="mb-4 flex flex-col gap-1">
       <label htmlFor="alias-input" className="text-sm text-gray-300 font-medium">
         Alias temporal
       </label>

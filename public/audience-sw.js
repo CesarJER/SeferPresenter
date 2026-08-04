@@ -1,4 +1,4 @@
-const SW_VERSION = '1.2.0';
+const SW_VERSION = '1.3.0';
 const CACHE_PREFIX = 'sefer-pwa';
 const CACHE_NAME = `${CACHE_PREFIX}-v${SW_VERSION}`;
 
@@ -79,9 +79,18 @@ function isNeverCacheUrl(url) {
     pathname.includes('quiz-events') ||
     pathname.includes('livekit') ||
     pathname.includes('token') ||
+    pathname === '/proteccion-datos' ||
+    pathname.startsWith('/proteccion-datos/') ||
+    pathname.startsWith('/legal/') ||
     search.includes('token=')
   );
 }
+
+const isLegalUrl = (url) => (
+  url.pathname === '/proteccion-datos' ||
+  url.pathname.startsWith('/proteccion-datos/') ||
+  url.pathname.startsWith('/legal/')
+);
 
 function isAudienceShell(url) {
   const pathname = url.pathname;
@@ -232,6 +241,11 @@ self.addEventListener('fetch', (event) => {
 
   const url = new URL(request.url);
 
+  if (isLegalUrl(url)) {
+    event.respondWith(fetch(request, { cache: 'no-store' }));
+    return;
+  }
+
   if (isNeverCacheUrl(url)) return;
 
   if (isAudienceShell(url) || isAudienceHtml(url) || isControlHtml(url)) {
@@ -270,6 +284,7 @@ self.addEventListener('fetch', (event) => {
 const swTestExports = {
   SW_VERSION,
   isNeverCacheUrl,
+  isLegalUrl,
   isMediaUrl,
   isImageUrl,
   isAudienceShell,

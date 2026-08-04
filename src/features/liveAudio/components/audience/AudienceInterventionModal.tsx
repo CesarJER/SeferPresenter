@@ -2,16 +2,19 @@ import React, { useEffect, useRef, useState } from 'react';
 import { CollapsiblePrivacyNotice } from '../shared/CollapsiblePrivacyNotice';
 import { LiveAudioAliasInput } from '../shared/LiveAudioAliasInput';
 import { X } from 'lucide-react';
+import type { LiveAudioExternalBroadcastState } from '../../../../types/liveAudio';
 
 interface AudienceInterventionModalProps {
   onClose: () => void;
   defaultAliasVisible?: boolean;
+  externalBroadcastState: LiveAudioExternalBroadcastState;
   onSubmit: (alias: string, isAliasVisible: boolean) => void;
 }
 
 export const AudienceInterventionModal: React.FC<AudienceInterventionModalProps> = ({
   onClose,
   defaultAliasVisible,
+  externalBroadcastState,
   onSubmit,
 }) => {
   const [alias, setAlias] = useState('');
@@ -73,7 +76,7 @@ export const AudienceInterventionModal: React.FC<AudienceInterventionModalProps>
         
         {/* Header */}
         <div className="flex justify-between items-center p-4 border-b border-gray-800">
-          <h2 ref={titleRef} tabIndex={-1} id="audience-intervention-title" className="text-xl font-semibold text-white outline-none">Participar en la Reunión</h2>
+          <h2 ref={titleRef} tabIndex={-1} id="audience-intervention-title" className="text-xl font-semibold text-white outline-none">Participar en la sesión</h2>
           <button 
             onClick={onClose}
             aria-label="Cerrar dialogo de intervencion"
@@ -85,7 +88,10 @@ export const AudienceInterventionModal: React.FC<AudienceInterventionModalProps>
 
         {/* Body */}
         <div className="p-6 overflow-y-auto">
-          <CollapsiblePrivacyNotice onCheckboxesChange={setIsAgreed} />
+          <CollapsiblePrivacyNotice
+            externalBroadcastState={externalBroadcastState}
+            onCheckboxesChange={setIsAgreed}
+          />
 
           {isAgreed && (
             <form id="intervention-form" onSubmit={handleSubmit} className="animate-in fade-in slide-in-from-bottom-2 duration-300">

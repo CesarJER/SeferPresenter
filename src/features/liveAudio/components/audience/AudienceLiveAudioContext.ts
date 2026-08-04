@@ -4,6 +4,7 @@ import type {
   LiveAudioConnectionQuality,
   LiveAudioAvailability,
   LiveAudioMicrophoneDiagnostics,
+  LiveAudioExternalBroadcastState,
 } from '../../../../types/liveAudio';
 
 export interface AudienceLiveAudioContextValue {
@@ -35,6 +36,7 @@ export interface AudienceLiveAudioContextValue {
   visibleParticipants: string[];
   availability: LiveAudioAvailability;
   microphoneDiagnostics?: LiveAudioMicrophoneDiagnostics;
+  externalBroadcastState: LiveAudioExternalBroadcastState;
 }
 
 export const AudienceLiveAudioContext = createContext<AudienceLiveAudioContextValue | null>(null);

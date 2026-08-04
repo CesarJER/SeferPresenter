@@ -1,4 +1,5 @@
 export type LiveAudioAvailability = 'enabled' | 'disabled' | 'misconfigured' | 'unsupported';
+export type LiveAudioExternalBroadcastState = 'off' | 'live' | 'recording';
 export type LiveAudioConnectionQuality =
   | 'excellent'
   | 'good'
@@ -59,7 +60,6 @@ export interface LiveAudioParticipantStatusMessage {
   type: 'LIVE_AUDIO_PARTICIPANT_STATUS';
   participantId: string;
   role: LiveAudioParticipantRole;
-  alias?: string;
   operationalRole?: LiveAudioOperationalRole;
   microphonePermissionState?: MicrophonePermissionState;
   microphoneTrackState?: MicrophoneTrackState;
@@ -153,7 +153,6 @@ export interface LiveAudioRemoveActiveParticipantMessage {
 export interface LiveAudioActiveParticipantProfileMessage {
   type: 'LIVE_AUDIO_ACTIVE_PARTICIPANT_PROFILE';
   participantId: string;
-  alias: string;
   activeListPublicKey: string;
   isAliasVisibleToActiveParticipants: boolean;
   createdAt?: number;
@@ -243,7 +242,6 @@ export interface LiveAudioRequestAliasesMessage {
 export interface LiveAudioOperationalParticipantSnapshot {
   participantId: string;
   role: LiveAudioParticipantRole;
-  alias?: string;
   operationalRole: LiveAudioOperationalRole;
   microphonePermissionState: MicrophonePermissionState;
   microphoneTrackState: MicrophoneTrackState;
@@ -274,10 +272,31 @@ export interface LiveAudioOperationalControlSnapshot {
 }
 
 export interface LiveAudioOperationalQuizAggregateSnapshot {
+  slides?: Record<string, {
+    submittedCount: number;
+    optionCounts: Record<string, number>;
+    citaHits: number;
+    citaMisses: number;
+  }>;
   submittedAnswersBySlideId: Record<string, number>;
   finalScoreRanges?: Record<string, number>;
   totalFinalScores: number;
+  minimumGroupSize: number;
+  finalScoreRequestId?: number | null;
   updatedAt: number | null;
+}
+
+export interface LiveAudioSetExternalBroadcastStateMessage {
+  type: 'LIVE_AUDIO_SET_EXTERNAL_BROADCAST_STATE';
+  state: LiveAudioExternalBroadcastState;
+  createdAt?: number;
+}
+
+export interface LiveAudioExternalBroadcastStateMessage {
+  type: 'LIVE_AUDIO_EXTERNAL_BROADCAST_STATE';
+  state: LiveAudioExternalBroadcastState;
+  revision: number;
+  updatedAt: number;
 }
 
 export interface LiveAudioOperationalSnapshot {
@@ -361,6 +380,8 @@ export type LiveAudioBroadcastMessage =
   | LiveAudioRescueParticipantMessage
   | LiveAudioSetActiveListViewPermissionMessage
   | LiveAudioSetAliasSharedVisibilityMessage
+  | LiveAudioSetExternalBroadcastStateMessage
+  | LiveAudioExternalBroadcastStateMessage
   | LiveAudioRemoveActiveParticipantMessage
   | LiveAudioActiveParticipantProfileMessage
   | LiveAudioActiveListViewPermissionMessage

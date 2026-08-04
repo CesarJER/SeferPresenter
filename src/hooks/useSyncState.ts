@@ -99,6 +99,12 @@ export const arePresentationsEqual = (left: Presentation | null, right: Presenta
   return areJsonEqual(left, right);
 };
 
+export const getStateSyncPaths = (isControlMode: boolean, isPresenterMode: boolean) => (
+  isControlMode || isPresenterMode
+    ? ['/api/state', '/api/state-events'] as const
+    : ['/api/audience/state', '/api/audience/events'] as const
+);
+
 const areVideoStatesEqual = (left: VideoState | null, right: VideoState | null) => {
   if (left === right) return true;
   if (!left || !right) return false;
@@ -157,6 +163,7 @@ export function useSyncState(props: UseSyncStateProps) {
   const channel = useMemo(() => new BroadcastChannel('sefer-presenter'), []);
   const processedMessageIdsRef = useRef<Set<string>>(new Set());
   const lastControllerUpdateMsRef = useRef<number>(0);
+  const [stateSnapshotPath, stateEventsPath] = getStateSyncPaths(isControlMode, isPresenterMode);
 
   const wsUrl = useMemo(() => {
     if (typeof window === 'undefined') return null;
@@ -524,7 +531,7 @@ export function useSyncState(props: UseSyncStateProps) {
 
   const requestBackendState = useCallback(async () => {
     try {
-      const response = await fetch('/api/state', {
+      const response = await fetch(stateSnapshotPath, {
         method: 'GET',
         headers: { Accept: 'application/json' },
         cache: 'no-store',
@@ -552,7 +559,7 @@ export function useSyncState(props: UseSyncStateProps) {
       console.error('Error requesting backend state snapshot', err);
       return false;
     }
-  }, []);
+  }, [stateSnapshotPath]);
 
   // ── BroadcastChannel listener ─────────────────────────────────────
   useEffect(() => {
@@ -636,7 +643,7 @@ export function useSyncState(props: UseSyncStateProps) {
 
   // ── SSE listener (web mode only) ──────────────────────────────────
   useEffect(() => {
-    const eventSource = new EventSource('/api/state-events');
+    const eventSource = new EventSource(stateEventsPath);
 
     eventSource.onmessage = (event) => {
       try {
@@ -703,7 +710,7 @@ export function useSyncState(props: UseSyncStateProps) {
 
     return () => eventSource.close();
   }, [
-    clientIdRef, isPresenterMode, videoStateRef
+    clientIdRef, isPresenterMode, stateEventsPath, videoStateRef
   ]);
 
   return { channel, syncState, emitCommand, persistState, emitAudioTelemetry, emitVideoTelemetry, emitDisplayTelemetry, wsStatus, wsSend, subscribeToWsMessage, isMediaMaster };

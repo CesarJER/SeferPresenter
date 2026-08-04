@@ -274,7 +274,6 @@ function AudienceApp() {
       fontScale={currentPresentation?.fontScale ?? 1}
       presentationTitle={currentPresentation?.title || ''}
       presentationId={currentPresentation?.id ?? null}
-      quizDisplayName={audienceSession.aliasVisible ? audienceSession.nick : undefined}
       scriptureState={quizScriptureState || scriptureState}
       slide={activePresenterSlide}
       videoState={videoState}

@@ -18,12 +18,13 @@
         "preview": "vite preview",
         "start:local": "node server/local-server.mjs --static dist",
         "pingpong": "node scripts/make-pingpong.js",
+        "index:memory": "npx codebase-memory-mcp cli index_repository --repo-path . --mode fast",
         "test": "vitest run",
         "test:watch": "vitest"
     },
     "dependencies": {
         "@emotion/is-prop-valid": "^1.4.0",
-        "dompurify": "^3.4.3",
+        "dompurify": "^3.4.12",
         "framer-motion": "^12.38.0",
         "livekit-client": "^2.19.2",
         "lucide-react": "^1.16.0",
@@ -31,6 +32,8 @@
         "qrcode.react": "^4.2.0",
         "react": "^19.2.6",
         "react-dom": "^19.2.6",
+        "react-markdown": "^10.1.0",
+        "remark-gfm": "^4.0.1",
         "ws": "^8.21.0"
     },
     "devDependencies": {

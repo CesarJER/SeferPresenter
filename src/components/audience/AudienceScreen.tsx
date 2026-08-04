@@ -28,7 +28,6 @@ interface AudienceScreenProps {
   quizScoreRequestId?: number;
   autoduckState?: AutoduckState;
   onPlaybackBlocked?: (blocked: boolean) => void;
-  quizDisplayName?: string;
 }
 
 const AudienceScreen = ({
@@ -48,9 +47,8 @@ const AudienceScreen = ({
   quizScoreRequestId,
   autoduckState,
   onPlaybackBlocked,
-  quizDisplayName,
 }: AudienceScreenProps) => {
-  const audienceAnswers = useAudienceAnswers(presentationId, quizDisplayName);
+  const audienceAnswers = useAudienceAnswers(presentationId);
   const activeSubslide = quizSubslides[quizCurrentSubslideIndex];
   const isCitaVerse = activeSubslide?.kind === 'cita-verse';
 
@@ -101,6 +99,7 @@ const AudienceScreen = ({
       canViewActiveParticipants={liveAudio.canViewActiveParticipants}
       visibleParticipants={liveAudio.visibleParticipants}
       microphoneDiagnostics={liveAudio.microphoneDiagnostics}
+      externalBroadcastState={liveAudio.externalBroadcastState}
       variant="inline"
     />
   ) : null;

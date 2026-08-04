@@ -22,6 +22,7 @@ const loadServiceWorkerHelpers = () => {
     __SEFER_PWA_TESTING__: {
       SW_VERSION: string;
       isNeverCacheUrl: (url: URL) => boolean;
+      isLegalUrl: (url: URL) => boolean;
       isMediaUrl: (url: URL) => boolean;
       isImageUrl: (url: URL) => boolean;
       isAudienceShell: (url: URL) => boolean;
@@ -31,10 +32,10 @@ const loadServiceWorkerHelpers = () => {
 };
 
 describe('PWA service worker policy', () => {
-  it('exports version 1.2.0 and explicit cache helper decisions', () => {
+  it('exports version 1.3.0 and explicit cache helper decisions', () => {
     const helpers = loadServiceWorkerHelpers();
 
-    expect(helpers.SW_VERSION).toBe('1.2.0');
+    expect(helpers.SW_VERSION).toBe('1.3.0');
 
     [
       '/api/state',
@@ -46,6 +47,9 @@ describe('PWA service worker policy', () => {
       '/rtc/validate',
       '/twirp/livekit.RoomService/ListRooms',
       '/control?token=abc',
+      '/proteccion-datos',
+      '/legal/privacy.md',
+      '/legal/operator.local/privacy-policy.local.md',
     ].forEach((path) => {
       expect(helpers.isNeverCacheUrl(new URL(path, 'https://example.test'))).toBe(true);
     });
@@ -68,6 +72,17 @@ describe('PWA service worker policy', () => {
     expect(helpers.isAudienceShell(new URL('/control', 'https://example.test'))).toBe(true);
     expect(helpers.isAudienceShell(new URL('/assets/index-abc.js', 'https://example.test'))).toBe(false);
     expect(helpers.isAudienceShell(new URL('/videos/Adoradle.mp4', 'https://example.test'))).toBe(false);
+    expect(helpers.isLegalUrl(new URL('/proteccion-datos', 'https://example.test'))).toBe(true);
+    expect(helpers.isLegalUrl(new URL('/legal/privacy.md', 'https://example.test'))).toBe(true);
+    expect(helpers.shouldRuntimeCacheUrl(new URL('/legal/privacy.md', 'https://example.test'))).toBe(false);
+  });
+
+  it('uses network-only no-store handling for legal documents', () => {
+    const source = readFileSync('public/audience-sw.js', 'utf8');
+    const coreAssets = source.match(/const CORE_ASSETS = \[([\s\S]*?)\];/)?.[1] || '';
+    expect(source).toContain("if (isLegalUrl(url))");
+    expect(source).toContain("fetch(request, { cache: 'no-store' })");
+    expect(coreAssets).not.toContain('/legal/');
   });
 });
 
