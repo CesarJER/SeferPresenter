@@ -273,6 +273,15 @@ const handleToken = async ({ req, res, readBody, sendJson, controlApi }) => {
   const body = await readJson(req, readBody)
   const requestedRole = roles.has(body.role) ? body.role : 'audience'
 
+  if (
+    requestedRole === 'audience' &&
+    controlApi?.getSessionAccessMode?.() === 'CONTROLLED' &&
+    !controlApi?.authorizeAudienceCredential?.(body.audienceAccessCredential)
+  ) {
+    sendJson(res, 403, { error: 'Audience admission is required for Live Audio' })
+    return true
+  }
+
   if (requestedRole !== 'audience') {
     if (!hasValidBasicAuth(req)) {
       sendJson(res, 403, { error: 'Privileged Live Audio roles require authentication' })
@@ -311,6 +320,14 @@ const handleRefreshToken = async ({ req, res, readBody, sendJson, controlApi }) 
   }
 
   const existingParticipant = participants.get(body.participantId)
+  if (
+    existingParticipant.role === 'audience' &&
+    controlApi?.getSessionAccessMode?.() === 'CONTROLLED' &&
+    !controlApi?.authorizeAudienceCredential?.(body.audienceAccessCredential)
+  ) {
+    sendJson(res, 403, { error: 'Audience admission is required for Live Audio' })
+    return true
+  }
   if (existingParticipant.expiresAt <= Date.now()) {
     sendJson(res, 401, { error: 'Live Audio session has expired' })
     return true

@@ -10,14 +10,22 @@ export interface PrivateMessage {
   timestamp: number;
 }
 
+export interface AudienceAccessRequestItem {
+  participantId: string;
+  alias: string;
+  requestedAt: number;
+}
+
 interface PrivateControlInboxProps {
   isOpen: boolean;
   isControlAuthorized: boolean;
   messages: PrivateMessage[];
   authorizationRequests: PendingControlAuthorization[];
+  audienceAccessRequests?: AudienceAccessRequestItem[];
   onApproveRequest: (sessionId: string) => void;
   onRejectRequest: (sessionId: string) => void;
   onDismissMessage: (id: string) => void;
+  onAudienceAccessDecision?: (participantId: string, decision: 'ADMIT' | 'REJECT' | 'BLOCK') => void;
 }
 
 export const PrivateControlInbox: React.FC<PrivateControlInboxProps> = ({
@@ -25,9 +33,11 @@ export const PrivateControlInbox: React.FC<PrivateControlInboxProps> = ({
   isControlAuthorized,
   messages,
   authorizationRequests,
+  audienceAccessRequests = [],
   onApproveRequest,
   onRejectRequest,
-  onDismissMessage
+  onDismissMessage,
+  onAudienceAccessDecision = () => {},
 }) => {
   const { availability } = useLiveAudioAvailability();
 
@@ -46,7 +56,7 @@ export const PrivateControlInbox: React.FC<PrivateControlInboxProps> = ({
     );
   }
 
-  const hasItems = messages.length > 0 || authorizationRequests.length > 0;
+  const hasItems = messages.length > 0 || authorizationRequests.length > 0 || audienceAccessRequests.length > 0;
 
   return (
     <div className="fixed top-16 right-0 md:right-4 w-full md:w-[400px] max-h-[70vh] bg-gray-900 border border-gray-700 md:rounded-lg shadow-2xl z-50 flex flex-col">
@@ -99,6 +109,18 @@ export const PrivateControlInbox: React.FC<PrivateControlInboxProps> = ({
               >
                 <X size={14} /> Rechazar
               </button>
+            </div>
+          </div>
+        ))}
+
+        {audienceAccessRequests.map((request) => (
+          <div key={request.participantId} className="rounded-md border border-amber-700/60 bg-amber-950/30 p-3">
+            <div className="mb-2 text-sm font-semibold text-amber-100">Solicitud de Audience</div>
+            <div className="mb-3 text-sm text-white">{request.alias}</div>
+            <div className="grid grid-cols-3 gap-2">
+              <button type="button" onClick={() => onAudienceAccessDecision(request.participantId, 'ADMIT')} className="rounded bg-emerald-700 px-2 py-1.5 text-xs font-bold text-white">Admitir</button>
+              <button type="button" onClick={() => onAudienceAccessDecision(request.participantId, 'REJECT')} className="rounded bg-slate-700 px-2 py-1.5 text-xs font-bold text-white">Rechazar</button>
+              <button type="button" onClick={() => onAudienceAccessDecision(request.participantId, 'BLOCK')} className="rounded bg-red-800 px-2 py-1.5 text-xs font-bold text-white">Bloquear</button>
             </div>
           </div>
         ))}

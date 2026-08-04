@@ -41,6 +41,8 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
 - `useSeferReader` - `src/hooks/useSeferReader.ts`: book/chapter/verse reader state and data loading.
 - `useQuizTimer` - `src/hooks/useQuizTimer.ts`: quiz timer state and transitions.
 - [useAudienceSession](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/hooks/useAudienceSession.ts) - `src/hooks/useAudienceSession.ts`: ephemeral audience identity/alias state, logout purge, and presentation-session rotation.
+- `useAudienceAccess` - `src/hooks/useAudienceAccess.ts`: session credential
+  bootstrap, admission state and single-use Audience SSE tickets.
 - Quiz answer hooks - `src/hooks/useQuizAnswers.ts`: presentation-scoped audience answer sessions and controller aggregation through `useAudienceAnswers` and `useControllerAnswers`.
 - `useQuizAudio` - `src/hooks/useQuizAudio.ts`: quiz feedback sounds.
 - `scriptureNumerals` helpers - `src/hooks/scriptureNumerals.ts`: scripture numeral utilities.
@@ -66,6 +68,9 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
 - `SeferFlowView` - `src/components/presenter/SeferFlowView.tsx`: scripture flow visual.
 - `VerseSidebar` - `src/components/presenter/VerseSidebar.tsx`: verse sidebar visual.
 - `AudienceScreen` - `src/components/audience/AudienceScreen.tsx`: audience route projection/quiz selection.
+- `AudienceAccessGate` - `src/components/audience/AudienceAccessGate.tsx`:
+  full-screen controlled-entry gate that reuses `AudienceInterventionModal` and
+  sends the alias through the E2E private-signal channel.
 - `CatalogApp` - `src/components/catalog/CatalogApp.tsx`: public catalog root component, handles routing.
 - `CatalogIndex` - `src/components/catalog/CatalogIndex.tsx`: displays available public catalogs.
 - `CatalogViewer` - `src/components/catalog/CatalogViewer.tsx`: displays presentations for a given public catalog.
@@ -219,6 +224,8 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
 - `QuizTimerState`, `QuizSubslide`, `QuizAudienceAnswer`, `QuizSyncState`,
   `QuizSlideAggregate`, `QuizAggregateSnapshot` - `src/types/quiz.ts`.
 - `BroadcastMessage`, `DisplayTelemetryState` - `src/types/sync.ts`.
+- `SessionAccessMode`, `AudienceAccessState`, `AudienceAccessSnapshot` -
+  `src/types/audienceAccess.ts`: controlled-entry browser contract.
 - `makeAudienceSyncStateMessage` - `server/projection-state-reducer.mjs`:
   produces the valid public `SYNC_STATE` envelope with only the active slide.
 - `LiveAudioAvailability`, `LiveAudioConnectionState`,

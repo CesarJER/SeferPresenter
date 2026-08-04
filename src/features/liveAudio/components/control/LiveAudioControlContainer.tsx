@@ -117,6 +117,8 @@ export default function LiveAudioControlContainer({
   const [externalBroadcastState, setExternalBroadcastState] = useState<LiveAudioExternalBroadcastState>('off');
   const [externalBroadcastRevision, setExternalBroadcastRevision] = useState(0);
   const [joinRequests, setJoinRequests] = useState<Record<string, LiveAudioControlJoinRequestMessage>>({});
+  const [accessMode, setAccessMode] = useState<'PUBLIC' | 'CONTROLLED'>('PUBLIC');
+  const [audienceAccessRequests, setAudienceAccessRequests] = useState<Record<string, number>>({});
   const participantAliasesRef = useRef(participantAliases);
   const aliasRequestSignatureRef = useRef('');
   const lastSentListRef = useRef('');
@@ -161,6 +163,12 @@ export default function LiveAudioControlContainer({
   useEffect(() => {
     if (!subscribeToWsMessage) return;
     const unsubscribe = subscribeToWsMessage((type, payload) => {
+      if (type === 'WELCOME' || type === 'SESSION_ACCESS_POLICY') {
+        if (payload.accessMode === 'PUBLIC' || payload.accessMode === 'CONTROLLED') {
+          setAccessMode(payload.accessMode);
+          if (payload.accessMode === 'PUBLIC') setAudienceAccessRequests({});
+        }
+      }
       if (type === 'LIVE_AUDIO_EXTERNAL_BROADCAST_STATE') {
         const state = payload.state;
         const revision = payload.revision;
@@ -179,6 +187,7 @@ export default function LiveAudioControlContainer({
         setMessages([]);
         setJoinRequests({});
         setConnectionCounts(null);
+        setAudienceAccessRequests({});
         lastSentListRef.current = '';
         return;
       }
@@ -210,6 +219,26 @@ export default function LiveAudioControlContainer({
         setConnectionCounts({
           type: 'LIVE_AUDIO_CONNECTION_COUNTS',
           ...snapshot.connectionCounts,
+        });
+        setAccessMode(snapshot.policies.accessMode);
+        setAudienceAccessRequests(Object.fromEntries(
+          snapshot.audienceAccessRequests.map((request) => [request.participantId, request.requestedAt]),
+        ));
+        return;
+      }
+
+      if (type === 'AUDIENCE_ACCESS_REQUEST' && typeof payload.participantId === 'string') {
+        setAudienceAccessRequests(current => ({
+          ...current,
+          [payload.participantId as string]: typeof payload.requestedAt === 'number' ? payload.requestedAt : Date.now(),
+        }));
+        return;
+      }
+      if (type === 'AUDIENCE_ACCESS_DECISION_RESULT' && typeof payload.participantId === 'string') {
+        setAudienceAccessRequests(current => {
+          const next = { ...current };
+          delete next[payload.participantId as string];
+          return next;
         });
         return;
       }
@@ -414,6 +443,25 @@ export default function LiveAudioControlContainer({
   const handleDismissMessage = useCallback((id: string) => {
     setMessages(prev => prev.filter(m => m.id !== id));
   }, []);
+
+  const handleAudienceAccessDecision = useCallback((
+    targetParticipantId: string,
+    decision: 'ADMIT' | 'REJECT' | 'BLOCK',
+  ) => {
+    wsSend?.('AUDIENCE_ACCESS_DECISION', {
+      participantId: targetParticipantId,
+      decision,
+      createdAt: Date.now(),
+    });
+  }, [wsSend]);
+
+  const handleAccessModeChange = useCallback(() => {
+    if (controlState !== 'PRINCIPAL') return;
+    wsSend?.('SESSION_ACCESS_POLICY_UPDATE', {
+      accessMode: accessMode === 'PUBLIC' ? 'CONTROLLED' : 'PUBLIC',
+      createdAt: Date.now(),
+    });
+  }, [accessMode, controlState, wsSend]);
 
   const computeVisibleList = useCallback((): string[] => (
     computeVisibleActiveParticipants(participantsMap, participantAliases)
@@ -718,12 +766,60 @@ export default function LiveAudioControlContainer({
     });
   }, [wsSend]);
 
-  if (availability !== 'enabled') {
-    return null;
-  }
-
   const portalTarget = document.getElementById('live-audio-inbox-portal-target');
-  const hasUnread = messages.length > 0 || authorizationRequests.length > 0;
+  const accessRequestItems = Object.entries(audienceAccessRequests).map(([id, requestedAt]) => ({
+    participantId: id,
+    alias: participantAliases[id] || 'Sincronizando alias…',
+    requestedAt,
+  }));
+  const hasUnread = messages.length > 0 || authorizationRequests.length > 0 || accessRequestItems.length > 0;
+  const inboxPortal = portalTarget ? createPortal(
+    <div className="flex items-center gap-2">
+      <button
+        type="button"
+        onClick={handleAccessModeChange}
+        disabled={controlState !== 'PRINCIPAL'}
+        className="rounded border border-slate-600 bg-slate-800 px-2 py-1.5 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"
+        title="Solo el Control principal puede cambiar el modo de acceso"
+      >
+        Acceso: {accessMode === 'PUBLIC' ? 'Público' : 'Controlado'}
+      </button>
+      <PwaRestartButton controlMenu={true} connectionState={state} connectionQuality={connectionQuality} />
+      <div className="relative">
+        <button
+          onClick={() => setIsInboxOpen(!isInboxOpen)}
+          className={`flex items-center justify-center p-2 text-xs font-semibold rounded border transition-all cursor-pointer ${hasUnread
+            ? 'bg-red-600 border-red-500 text-white animate-pulse'
+            : isInboxOpen
+              ? 'bg-blue-600 border-blue-500 text-white'
+              : 'bg-gray-800 border-gray-700 hover:bg-gray-700 text-gray-300 hover:text-white'
+            }`}
+          title="Bandeja Privada"
+        >
+          <Bell size={14} />
+          {hasUnread && (
+            <span className="absolute -top-1 -right-1 bg-white text-red-600 text-[10px] font-bold px-1 rounded-full">
+              {messages.length + authorizationRequests.length + accessRequestItems.length}
+            </span>
+          )}
+        </button>
+      </div>
+      <PrivateControlInbox
+        isOpen={isInboxOpen}
+        isControlAuthorized={isControlAuthorized}
+        messages={messages}
+        authorizationRequests={authorizationRequests}
+        audienceAccessRequests={accessRequestItems}
+        onApproveRequest={handleApproveRequest}
+        onRejectRequest={onRejectRequest}
+        onDismissMessage={handleDismissMessage}
+        onAudienceAccessDecision={handleAudienceAccessDecision}
+      />
+    </div>,
+    portalTarget,
+  ) : null;
+
+  if (availability !== 'enabled') return inboxPortal;
 
   return (
     <>
@@ -735,42 +831,7 @@ export default function LiveAudioControlContainer({
         />
       ))}
 
-      {portalTarget && createPortal(
-        <div className="flex items-center gap-2">
-          <PwaRestartButton controlMenu={true} connectionState={state} connectionQuality={connectionQuality} />
-
-          <div className="relative">
-            <button
-              onClick={() => setIsInboxOpen(!isInboxOpen)}
-              className={`flex items-center justify-center p-2 text-xs font-semibold rounded border transition-all cursor-pointer ${hasUnread
-                ? 'bg-red-600 border-red-500 text-white animate-pulse'
-                : isInboxOpen
-                  ? 'bg-blue-600 border-blue-500 text-white'
-                  : 'bg-gray-800 border-gray-700 hover:bg-gray-700 text-gray-300 hover:text-white'
-                }`}
-              title="Bandeja Privada"
-            >
-              <Bell size={14} />
-              {hasUnread && (
-                <span className="absolute -top-1 -right-1 bg-white text-red-600 text-[10px] font-bold px-1 rounded-full">
-                  {messages.length + authorizationRequests.length}
-                </span>
-              )}
-            </button>
-          </div>
-
-          <PrivateControlInbox
-            isOpen={isInboxOpen}
-            isControlAuthorized={isControlAuthorized}
-            messages={messages}
-            authorizationRequests={authorizationRequests}
-            onApproveRequest={handleApproveRequest}
-            onRejectRequest={onRejectRequest}
-            onDismissMessage={handleDismissMessage}
-          />
-        </div>,
-        portalTarget
-      )}
+      {inboxPortal}
 
       <LiveAudioControlPanel
         totalAudience={totalAudience}

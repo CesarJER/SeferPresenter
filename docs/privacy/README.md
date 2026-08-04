@@ -63,6 +63,9 @@ Informes disponibles:
 - `audits/2026-07-31/PHASE-12-LEGAL-UX.md`: renderizado visual de Markdown legal,
   tabla de primera capa previa a intervenir, huella sin ruta interna y revisión
   responsiva.
+- `audits/2026-08-04/PHASE-13-CLOSURE-REVIEW.md`: reverificación integral con
+  codebase-memory y runtime, estado de cierre, riesgos residuales y evidencia
+  automatizada.
 
 ## Auditorías locales
 

@@ -52,11 +52,13 @@ El backend local vive en `server/local-server.mjs`. Mantiene inicialmente la mis
 - `POST /api/presentations`
 - `GET /api/public-catalogs`
 - `GET /api/public-catalogs/:id/presentations`
-- `GET /api/audience/state` (snapshot `SYNC_STATE` público con la diapositiva activa)
-- `GET /api/audience/events` (actualizaciones equivalentes por SSE)
+- `POST /api/audience/access/bootstrap` (credencial efímera de la sesión Audience)
+- `POST /api/audience/sse-ticket` (ticket de un solo uso para SSE de estado o quiz)
+- `GET /api/audience/state` (snapshot `SYNC_STATE`; exige credencial en modo controlado)
+- `GET /api/audience/events` (SSE equivalente; exige ticket en modo controlado)
 - `GET /api/audience-cache-assets`
 - `POST /api/quiz-answer`
-- `GET /api/quiz-events` (eventos públicos no sensibles)
+- `GET /api/quiz-events` (eventos no sensibles; exige ticket en modo controlado)
 - `GET /api/quiz-control-events` (agregados, requiere autenticación)
 - `POST /api/quiz-control-state` (snapshot agregado, requiere autenticación)
 - `GET /api/livekit/status`
@@ -125,8 +127,9 @@ variable no fue definida; no use ese opt-out para un despliegue expuesto.
 - Docker descarta la salida de Caddy, LiveKit y Redis; la aplicación usa el
   driver `local`, comprimido y limitado a tres ficheros de 5 MB.
 - Docker no ofrece caducidad por días en ese driver. En Windows, instale
-  `scripts/install-docker-log-retention-task.ps1`; la tarea ejecuta diariamente
-  `scripts/rotate-docker-logs.ps1`, que recrea servicios a las 144 horas y deja
+  `scripts/install-docker-log-retention-task.ps1`; el instalador comprueba la
+  retención inmediatamente y programa la siguiente ejecución una semana después.
+  `scripts/rotate-docker-logs.ps1` recrea servicios a las 144 horas y deja
   que Docker elimine los logs con el contenedor antiguo. Los volúmenes y bind
   mounts permanecen intactos.
 - `SEFER_PRIVACY_LOCAL_PATH` señala la raíz local ignorada que recibe los

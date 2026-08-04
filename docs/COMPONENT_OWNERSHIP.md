@@ -36,6 +36,9 @@ Presenter-only:
 Audience:
 
 - `src/components/audience/AudienceScreen.tsx`: audience route selection between projection, Sefer reader, and quiz answer UI.
+- `src/components/audience/AudienceAccessGate.tsx` owns the full-screen admission
+  barrier. `src/hooks/useAudienceAccess.ts` owns its credential and SSE tickets;
+  presentation and quiz components must not implement separate access checks.
 - Live Audio audience UI lives in `src/features/liveAudio/components/audience/`. It exposes `AudienceLiveAudioContext` (managed by `LiveAudioAudienceContainer`) to share state and controls. `AudienceLiveAudioPanel.tsx` owns the active-audience controls, while `ActiveParticipantsPanel.tsx` owns the local alias-sharing checkbox and the Control-authorized visible alias list. Sub-views like `PresenterScreen`, `SeferReaderScreen`, and `QuizAudienceView` receive the rendered `<AudienceLiveAudioPanel />` as a prop (`liveAudioPanel`) to display it contextually without portals. Audience mode remains read-only for presentation controls.
 
 Shared:

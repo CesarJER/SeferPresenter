@@ -111,6 +111,25 @@ type ScoresByPresentation = Record<string, Record<string, QuizQuestionScore>>;
 
 const ANSWERS_STORAGE_KEY = 'sefer-quiz-answers-by-presentation';
 const SCORES_STORAGE_KEY = 'sefer-quiz-scores-by-presentation';
+const AUDIENCE_ACCESS_STORAGE_KEY = 'sefer-audience-access';
+const AUDIENCE_QUIZ_TICKET_KEY = 'sefer-audience-quiz-sse-ticket';
+
+const getAudienceAccessCredential = (): string | null => {
+  try {
+    const stored = JSON.parse(localStorage.getItem(AUDIENCE_ACCESS_STORAGE_KEY) ?? 'null') as { credential?: unknown } | null;
+    return typeof stored?.credential === 'string' ? stored.credential : null;
+  } catch {
+    return null;
+  }
+};
+
+const getAudienceRequestHeaders = (): Record<string, string> => {
+  const credential = getAudienceAccessCredential();
+  return {
+    'Content-Type': 'application/json',
+    ...(credential ? { Authorization: `Bearer ${credential}` } : {}),
+  };
+};
 
 export function useAudienceAnswers(
   presentationId: string | null,
@@ -120,6 +139,7 @@ export function useAudienceAnswers(
   const resultSubmissionIdsRef = useRef<Record<string, string>>({});
   const finalSubmissionIdsRef = useRef<Record<number, string>>({});
   const scopeId = presentationId ?? '';
+  const [ticketRevision, setTicketRevision] = useState(0);
 
   const [answersByPresentation, setAnswersByPresentation] = useState<AnswersByPresentation>(() => {
     try {
@@ -178,6 +198,12 @@ export function useAudienceAnswers(
     return () => window.removeEventListener('sefer-audience-logout', handleLogout);
   }, []);
 
+  useEffect(() => {
+    const handleTicketUpdate = () => setTicketRevision(revision => revision + 1);
+    window.addEventListener('sefer-audience-tickets-updated', handleTicketUpdate);
+    return () => window.removeEventListener('sefer-audience-tickets-updated', handleTicketUpdate);
+  }, []);
+
   // Listen for CLEAR commands from controller and LOGOUT events from PWA identity
   useEffect(() => {
     const processClear = (slideId: string) => {
@@ -215,7 +241,16 @@ export function useAudienceAnswers(
 
     channel.addEventListener('message', handleChannelMessage);
 
-    const eventSource = new EventSource('/api/quiz-events');
+    const credential = getAudienceAccessCredential();
+    const ticket = sessionStorage.getItem(AUDIENCE_QUIZ_TICKET_KEY);
+    if (credential && !ticket) {
+      channel.removeEventListener('message', handleChannelMessage);
+      return;
+    }
+
+    const eventSource = new EventSource(
+      ticket ? `/api/quiz-events?ticket=${encodeURIComponent(ticket)}` : '/api/quiz-events',
+    );
     eventSource.onmessage = (event) => {
       try {
         if (event.data === 'heartbeat') return;
@@ -227,12 +262,17 @@ export function useAudienceAnswers(
         // intentional no-op
       }
     };
+    eventSource.onerror = () => {
+      if (!credential) return;
+      eventSource.close();
+      window.dispatchEvent(new CustomEvent('sefer-audience-sse-refresh-request'));
+    };
 
     return () => {
       channel.removeEventListener('message', handleChannelMessage);
       eventSource.close();
     };
-  }, [channel, scopeId]);
+  }, [channel, scopeId, ticketRevision]);
 
   const getAnswers = useCallback(() => answers, [answers]);
 
@@ -264,7 +304,7 @@ export function useAudienceAnswers(
 
     fetch('/api/quiz-answer', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAudienceRequestHeaders(),
       body: JSON.stringify(msg),
     }).catch(() => {}); // Non-critical — local state is source of truth
   }, [presentationId]);
@@ -351,7 +391,7 @@ export function useAudienceAnswers(
 
     fetch('/api/quiz-answer', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAudienceRequestHeaders(),
       body: JSON.stringify(msg),
     }).catch(() => {});
   }, [presentationId]);
@@ -376,7 +416,7 @@ export function useAudienceAnswers(
     };
     fetch('/api/quiz-answer', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAudienceRequestHeaders(),
       body: JSON.stringify(msg),
     }).catch(() => {});
   }, [presentationId, scopeId]);

@@ -279,6 +279,26 @@ const validateOperationalSnapshot = (snapshot: unknown, path: string, errors: st
   }
   validateStringArray(snapshot.interventionQueue, `${path}.interventionQueue`, errors);
 
+  if (!isRecord(snapshot.policies) || !['PUBLIC', 'CONTROLLED'].includes(snapshot.policies.accessMode as string)) {
+    errors.push(`${path}.policies.accessMode debe ser PUBLIC o CONTROLLED.`);
+  }
+  if (!Array.isArray(snapshot.audienceAccessRequests)) {
+    errors.push(`${path}.audienceAccessRequests debe ser un array.`);
+  } else {
+    snapshot.audienceAccessRequests.forEach((request, index) => {
+      if (!isRecord(request)) {
+        errors.push(`${path}.audienceAccessRequests[${index}] debe ser un objeto.`);
+        return;
+      }
+      if (typeof request.participantId !== 'string' || request.participantId.trim() === '') {
+        errors.push(`${path}.audienceAccessRequests[${index}].participantId debe ser texto no vacio.`);
+      }
+      if (!isFiniteNumber(request.requestedAt)) {
+        errors.push(`${path}.audienceAccessRequests[${index}].requestedAt debe ser numero.`);
+      }
+    });
+  }
+
   if (!isRecord(snapshot.authorizations)) {
     errors.push(`${path}.authorizations debe ser un objeto.`);
   } else {

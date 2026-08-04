@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { WebSocket, type WebSocketServer } from 'ws';
 import {
   createWsServer,
+  bootstrapAudienceAccess,
   getLiveAudioParticipantSnapshot,
   resetWsServerStateForTests,
 } from '../server/ws-server.mjs';
@@ -135,6 +136,39 @@ describe('Live Audio WebSocket routing', () => {
     await new Promise<void>((resolve) => httpServer.close(() => resolve()));
     resetWsServerStateForTests();
     delete process.env.SEFER_LIVE_AUDIO_REJOIN_GRACE_SECONDS;
+    delete process.env.SEFER_SESSION_ACCESS_DEFAULT;
+  });
+
+  it('requires Control admission when the session access mode is controlled', async () => {
+    process.env.SEFER_SESSION_ACCESS_DEFAULT = 'CONTROLLED';
+    resetWsServerStateForTests();
+    const principal = await connectWs('control');
+    const audience = await connectWs('audience');
+    const access = bootstrapAudienceAccess(null);
+
+    await waitFor(principal, (message) => message.type === 'WELCOME');
+    audience.send({ type: 'AUDIENCE_ACCESS_BIND', credential: access.credential });
+    await waitFor(audience, (message) => message.type === 'AUDIENCE_ACCESS_STATE' && message.accessState === 'REQUEST_REQUIRED');
+    audience.send({
+      type: 'AUDIENCE_ACCESS_REQUEST',
+      participantId: access.participantId,
+      createdAt: Date.now(),
+    });
+
+    await waitFor(principal, (message) => (
+      message.type === 'AUDIENCE_ACCESS_REQUEST' && message.participantId === access.participantId
+    ));
+    principal.send({
+      type: 'AUDIENCE_ACCESS_DECISION',
+      participantId: access.participantId,
+      decision: 'ADMIT',
+      createdAt: Date.now(),
+    });
+
+    const admitted = await waitFor(audience, (message) => (
+      message.type === 'AUDIENCE_ACCESS_STATE' && message.accessState === 'ADMITTED'
+    ));
+    expect(admitted.participantId).toBe(access.participantId);
   });
 
   it('routes private audience signals only to authorized controls', async () => {

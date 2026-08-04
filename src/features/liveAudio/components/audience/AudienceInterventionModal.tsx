@@ -7,15 +7,23 @@ import type { LiveAudioExternalBroadcastState } from '../../../../types/liveAudi
 interface AudienceInterventionModalProps {
   onClose: () => void;
   defaultAliasVisible?: boolean;
-  externalBroadcastState: LiveAudioExternalBroadcastState;
+  externalBroadcastState?: LiveAudioExternalBroadcastState;
   onSubmit: (alias: string, isAliasVisible: boolean) => void;
+  dismissible?: boolean;
+  title?: string;
+  submitLabel?: string;
+  submitDisabled?: boolean;
 }
 
 export const AudienceInterventionModal: React.FC<AudienceInterventionModalProps> = ({
   onClose,
   defaultAliasVisible,
-  externalBroadcastState,
+  externalBroadcastState = 'off',
   onSubmit,
+  dismissible = true,
+  title = 'Participar en la sesión',
+  submitLabel = 'Continuar',
+  submitDisabled = false,
 }) => {
   const [alias, setAlias] = useState('');
   const [isAgreed, setIsAgreed] = useState(false);
@@ -27,8 +35,12 @@ export const AudienceInterventionModal: React.FC<AudienceInterventionModalProps>
     const previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     titleRef.current?.focus();
 
+    return () => previouslyFocused?.focus();
+  }, []);
+
+  useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
+      if (event.key === 'Escape' && dismissible) {
         event.preventDefault();
         onClose();
         return;
@@ -51,11 +63,8 @@ export const AudienceInterventionModal: React.FC<AudienceInterventionModalProps>
     };
 
     document.addEventListener('keydown', handleKeyDown);
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown);
-      previouslyFocused?.focus();
-    };
-  }, [onClose]);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [dismissible, onClose]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -76,14 +85,16 @@ export const AudienceInterventionModal: React.FC<AudienceInterventionModalProps>
         
         {/* Header */}
         <div className="flex justify-between items-center p-4 border-b border-gray-800">
-          <h2 ref={titleRef} tabIndex={-1} id="audience-intervention-title" className="text-xl font-semibold text-white outline-none">Participar en la sesión</h2>
-          <button 
-            onClick={onClose}
-            aria-label="Cerrar dialogo de intervencion"
-            className="p-2 text-gray-400 hover:text-white rounded-full hover:bg-gray-800 transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <h2 ref={titleRef} tabIndex={-1} id="audience-intervention-title" className="text-xl font-semibold text-white outline-none">{title}</h2>
+          {dismissible && (
+            <button
+              onClick={onClose}
+              aria-label="Cerrar dialogo de intervencion"
+              className="p-2 text-gray-400 hover:text-white rounded-full hover:bg-gray-800 transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          )}
         </div>
 
         {/* Body */}
@@ -113,19 +124,21 @@ export const AudienceInterventionModal: React.FC<AudienceInterventionModalProps>
 
         {/* Footer */}
         <div className="p-4 border-t border-gray-800 flex justify-end gap-3 bg-gray-900/50 rounded-b-2xl">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 text-sm font-medium text-gray-300 hover:text-white hover:bg-gray-800 rounded-lg transition-colors"
-          >
-            Cancelar
-          </button>
+          {dismissible && (
+            <button
+              onClick={onClose}
+              className="px-4 py-2 text-sm font-medium text-gray-300 hover:text-white hover:bg-gray-800 rounded-lg transition-colors"
+            >
+              Cancelar
+            </button>
+          )}
           <button
             type="submit"
             form="intervention-form"
-            disabled={!isAgreed || !alias.trim()}
+            disabled={!isAgreed || !alias.trim() || submitDisabled}
             className="px-6 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-700 disabled:text-gray-500 text-white text-sm font-medium rounded-lg shadow-lg transition-all"
           >
-            Continuar
+            {submitLabel}
           </button>
         </div>
       </div>

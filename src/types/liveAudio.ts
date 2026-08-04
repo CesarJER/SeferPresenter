@@ -311,6 +311,13 @@ export interface LiveAudioOperationalSnapshot {
   };
   participants: LiveAudioOperationalParticipantSnapshot[];
   interventionQueue: string[];
+  policies: {
+    accessMode: 'PUBLIC' | 'CONTROLLED';
+  };
+  audienceAccessRequests: Array<{
+    participantId: string;
+    requestedAt: number;
+  }>;
   authorizations: {
     principalControlSessionId: string | null;
     controls: LiveAudioOperationalControlSnapshot[];

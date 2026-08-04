@@ -28,6 +28,16 @@ event route; their delivery does not depend on an optional Basic Auth header on
 the public Audience stream. Closed or errored SSE responses are removed from
 the server client sets, and failed SSE writes are dropped from future broadcasts.
 
+Audience access is public by default and can be changed to `CONTROLLED` only by
+the principal Control. In controlled mode the browser first obtains a random,
+session-scoped credential from `/api/audience/access/bootstrap`, binds it to its
+WebSocket and sends the requested alias through the existing E2E private signal.
+Control admits, rejects or blocks the request without the server reading that
+alias. Admission is enforced on the Audience state snapshot, single-use
+STATE/QUIZ SSE tickets, quiz submissions and LiveKit token issuance. The browser
+stores the credential; the backend keeps only its SHA-256 digest and RAM access
+state until presentation-session rotation.
+
 Main message types live in `src/types/sync.ts`:
 
 - `SYNC_STATE`: canonical synchronization envelope. Control/Presenter receive
@@ -49,6 +59,10 @@ Main message types live in `src/types/sync.ts`:
 - `AUDIO_PRESENTATION_CLOCK`: periodic message containing the current estimated position of the audio playback.
 - `MEDIA_MASTER_STATUS`: server-broadcasted status determining if the current control client is the media master (e.g. when there is no active presenter).
 - `ERROR`: technical error code and message.
+- `SESSION_ACCESS_POLICY`, `AUDIENCE_ACCESS_STATE`,
+  `AUDIENCE_ACCESS_REQUEST` and `AUDIENCE_ACCESS_DECISION`: controlled-entry
+  state. Only the principal changes the public/controlled policy; authorized
+  Controls process pending requests from their private inbox.
 - Live Audio family: optional LiveKit-ready technical messages that stay
   outside `SYNC_STATE` and existing `REMOTE_COMMAND` payloads.
 

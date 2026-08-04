@@ -13,6 +13,8 @@ import { DataProtectionLink } from './components/shared/DataProtectionLink';
 import { useLiveAudioAvailability } from './features/liveAudio/hooks/useLiveAudioAvailability';
 import { useAudienceAudioPlayback } from './hooks/useAudienceAudioPlayback';
 import { useAudienceSession } from './hooks/useAudienceSession';
+import { useAudienceAccess } from './hooks/useAudienceAccess';
+import { AudienceAccessGate } from './components/audience/AudienceAccessGate';
 import { useQuizAudio } from './hooks/useQuizAudio';
 import { registerScopedServiceWorker } from './utils/pwaUpdate';
 import { isMediaPlaybackBlockedError, resumeManagedMediaAudio } from './utils/mediaVolume';
@@ -30,6 +32,7 @@ const LiveAudioContainer = import.meta.env.VITE_SEFER_LIVE_AUDIO_BUILD !== 'fals
   : null;
 
 function AudienceApp() {
+  const audienceAccess = useAudienceAccess();
   const [currentPresentation, setCurrentPresentation] = useState<Presentation | null>(null);
   const [currentSlideIndex, setCurrentSlideIndex] = useState<number>(-1);
   const [currentStepIndex, setCurrentStepIndex] = useState<number>(0);
@@ -152,6 +155,11 @@ function AudienceApp() {
     autoduckStateRef,
     setAutoduckState,
     onAudioTimelineState: setAudioTimeline,
+    audienceAccessCredential: audienceAccess.credential,
+    audienceAuthorized: audienceAccess.authorized,
+    audienceSseTicket: audienceAccess.stateSseTicket,
+    onAudienceSseReconnect: audienceAccess.refreshTickets,
+    onWsMessage: audienceAccess.handleWsMessage,
   });
 
   const { serverNow } = useServerClock(wsSend, wsStatus, subscribeToWsMessage);
@@ -287,6 +295,23 @@ function AudienceApp() {
       onPlaybackBlocked={handlePlaybackBlocked}
     />
   );
+
+  if (!audienceAccess.authorized || !audienceAccess.stateSseTicket || !audienceAccess.quizSseTicket) {
+    return (
+      <AudienceAccessGate
+        accessState={audienceAccess.accessState}
+        participantId={audienceAccess.participantId}
+        retryAt={audienceAccess.retryAt}
+        wsStatus={wsStatus}
+        wsSend={wsSend}
+        subscribeToWsMessage={subscribeToWsMessage}
+        onAliasAccepted={(alias, visible) => {
+          audienceSession.login(alias);
+          audienceSession.setAliasVisible(visible);
+        }}
+      />
+    );
+  }
 
   return (
     <>

@@ -56,6 +56,11 @@ interface UseSyncStateProps {
   setQuizState?: (state: QuizSyncState | null) => void;
   setAutoduckState: (state: AutoduckState) => void;
   onAudioTimelineState?: (state: AudioTimelineState) => void;
+  audienceAccessCredential?: string | null;
+  audienceAuthorized?: boolean;
+  audienceSseTicket?: string | null;
+  onAudienceSseReconnect?: () => void;
+  onWsMessage?: (type: string, payload: Record<string, unknown>) => void;
 }
 
 const areJsonEqual = (left: unknown, right: unknown) => JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
@@ -80,6 +85,10 @@ const liveAudioWsOnlyTypes = new Set([
   'LIVE_AUDIO_SNAPSHOT_REQUEST',
   'LIVE_AUDIO_SNAPSHOT',
   'LIVE_AUDIO_SNAPSHOT_PATCH',
+  'AUDIENCE_ACCESS_STATE',
+  'AUDIENCE_ACCESS_REQUEST',
+  'AUDIENCE_ACCESS_DECISION_RESULT',
+  'SESSION_ACCESS_POLICY',
 ]);
 
 const isLiveAudioWsOnlyType = (type: unknown): type is string =>
@@ -158,7 +167,10 @@ export function useSyncState(props: UseSyncStateProps) {
     setLockedBackgroundValue, setUserSelectedBackground, setVideoState,
     setAppMode, setScriptureState, setAudioState, setAudioSyncMaps,
     setQuizState, setAutoduckState, onAudioTimelineState,
+    audienceAccessCredential, audienceAuthorized = true, audienceSseTicket,
+    onAudienceSseReconnect, onWsMessage,
   } = props;
+  const isAudienceMode = !isControlMode && !isPresenterMode;
 
   const channel = useMemo(() => new BroadcastChannel('sefer-presenter'), []);
   const processedMessageIdsRef = useRef<Set<string>>(new Set());
@@ -173,7 +185,11 @@ export function useSyncState(props: UseSyncStateProps) {
   }, [isControlMode, isPresenterMode, clientIdRef]);
 
   const onAudioTimelineStateRef = useRef(onAudioTimelineState);
+  const audienceCredentialRef = useRef(audienceAccessCredential);
+  const onWsMessageRef = useRef(onWsMessage);
   useEffect(() => { onAudioTimelineStateRef.current = onAudioTimelineState; }, [onAudioTimelineState]);
+  useEffect(() => { audienceCredentialRef.current = audienceAccessCredential; }, [audienceAccessCredential]);
+  useEffect(() => { onWsMessageRef.current = onWsMessage; }, [onWsMessage]);
 
   const lastKeyMessageRef = useRef<{type: string, payload: Record<string, unknown>} | null>(null);
   const wsMessageSubscribersRef = useRef<Set<(type: string, payload: Record<string, unknown>) => void>>(new Set());
@@ -189,6 +205,7 @@ export function useSyncState(props: UseSyncStateProps) {
   }, []);
 
   const handleWsMessage = useCallback((type: string, payload: Record<string, unknown>) => {
+    onWsMessageRef.current?.(type, payload);
     if (type === 'LIVE_AUDIO_CONTROL_PUBLIC_KEY' || type === 'CONTROL_KEY_ROTATED') {
       lastKeyMessageRef.current = { type, payload };
     }
@@ -198,6 +215,9 @@ export function useSyncState(props: UseSyncStateProps) {
       controlSessionIdRef.current = payload.controlSessionId as string | undefined;
       console.log(`[CLIENT DBG] WebSocket WELCOME - clientId=${payload.clientId} role=${payload.role} controlSessionId=${payload.controlSessionId}`);
       wsSendRef.current('SERVER_TIME_PING', { clientSentAtMs: Date.now() });
+      if (payload.role === 'audience' && audienceCredentialRef.current) {
+        wsSendRef.current('AUDIENCE_ACCESS_BIND', { credential: audienceCredentialRef.current });
+      }
       return;
     }
     
@@ -226,6 +246,11 @@ export function useSyncState(props: UseSyncStateProps) {
   });
   const wsSendRef = useRef(wsSend);
   useEffect(() => { wsSendRef.current = wsSend; }, [wsSend]);
+  useEffect(() => {
+    if (isAudienceMode && wsStatus === 'open' && audienceAccessCredential) {
+      wsSend('AUDIENCE_ACCESS_BIND', { credential: audienceAccessCredential });
+    }
+  }, [audienceAccessCredential, isAudienceMode, wsSend, wsStatus]);
 
   const [isMediaMaster, setIsMediaMaster] = useState(false);
   const controlSessionIdRef = useRef<string | undefined>(undefined);
@@ -530,10 +555,16 @@ export function useSyncState(props: UseSyncStateProps) {
   }, [applyRemoteState, onRemoteCommand, applyAudioTelemetry, applyDisplayTelemetry, setVideoState, setAudioSyncMaps]);
 
   const requestBackendState = useCallback(async () => {
+    if (isAudienceMode && !audienceAuthorized) return false;
     try {
       const response = await fetch(stateSnapshotPath, {
         method: 'GET',
-        headers: { Accept: 'application/json' },
+        headers: {
+          Accept: 'application/json',
+          ...(isAudienceMode && audienceAccessCredential
+            ? { Authorization: `Bearer ${audienceAccessCredential}` }
+            : {}),
+        },
         cache: 'no-store',
       });
       if (!response.ok) return false;
@@ -559,10 +590,11 @@ export function useSyncState(props: UseSyncStateProps) {
       console.error('Error requesting backend state snapshot', err);
       return false;
     }
-  }, [stateSnapshotPath]);
+  }, [audienceAccessCredential, audienceAuthorized, isAudienceMode, stateSnapshotPath]);
 
   // ── BroadcastChannel listener ─────────────────────────────────────
   useEffect(() => {
+    if (isAudienceMode && !audienceAuthorized) return;
     const handleMessage = (event: MessageEvent) => {
       const rawData = event.data;
       if (rawData?.clientId === clientIdRef.current) return;
@@ -638,12 +670,17 @@ export function useSyncState(props: UseSyncStateProps) {
 
     return () => channel.removeEventListener('message', handleMessage);
   }, [
-    isPresenterMode, channel, clientIdRef, requestBackendState, videoStateRef
+    audienceAuthorized, isAudienceMode, isPresenterMode, channel, clientIdRef, requestBackendState, videoStateRef
   ]);
 
   // ── SSE listener (web mode only) ──────────────────────────────────
   useEffect(() => {
-    const eventSource = new EventSource(stateEventsPath);
+    if (isAudienceMode && (!audienceAuthorized || !audienceSseTicket)) return;
+    const eventSource = new EventSource(
+      isAudienceMode && audienceSseTicket
+        ? `${stateEventsPath}?ticket=${encodeURIComponent(audienceSseTicket)}`
+        : stateEventsPath,
+    );
 
     eventSource.onmessage = (event) => {
       try {
@@ -708,9 +745,16 @@ export function useSyncState(props: UseSyncStateProps) {
       }
     };
 
+    eventSource.onerror = () => {
+      if (!isAudienceMode) return;
+      eventSource.close();
+      onAudienceSseReconnect?.();
+    };
+
     return () => eventSource.close();
   }, [
-    clientIdRef, isPresenterMode, stateEventsPath, videoStateRef
+    audienceAuthorized, audienceSseTicket, clientIdRef, isAudienceMode,
+    isPresenterMode, onAudienceSseReconnect, stateEventsPath, videoStateRef
   ]);
 
   return { channel, syncState, emitCommand, persistState, emitAudioTelemetry, emitVideoTelemetry, emitDisplayTelemetry, wsStatus, wsSend, subscribeToWsMessage, isMediaMaster };

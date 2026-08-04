@@ -450,6 +450,8 @@ describe('runtime validation', () => {
           updatedAt: Date.now(),
         }],
         interventionQueue: [],
+        policies: { accessMode: 'PUBLIC' },
+        audienceAccessRequests: [],
         authorizations: {
           principalControlSessionId: 'control-1',
           controls: [{

@@ -25,6 +25,7 @@ const eventSourceUrls: string[] = [];
 describe('useQuizAnswers - Audience', () => {
   beforeEach(() => {
     localStorage.clear();
+    sessionStorage.clear();
     eventSourceUrls.length = 0;
     vi.mocked(fetch).mockClear();
   });
@@ -93,6 +94,24 @@ describe('useQuizAnswers - Audience', () => {
     expect(payload).not.toHaveProperty('sessionId');
     expect(payload).not.toHaveProperty('displayName');
     expect(payload).not.toHaveProperty('answer');
+  });
+
+  it('usa credencial y ticket efímeros en una sesión controlada', () => {
+    localStorage.setItem('sefer-audience-access', JSON.stringify({
+      presentationSessionId: 'session-1',
+      credential: 'audience-credential',
+    }));
+    sessionStorage.setItem('sefer-audience-quiz-sse-ticket', 'quiz-ticket');
+
+    const { result } = renderHook(() => useAudienceAnswers('presentation-1'));
+    expect(eventSourceUrls).toContain('/api/quiz-events?ticket=quiz-ticket');
+
+    act(() => {
+      result.current.selectRadioOption('slide-1', 'A');
+      result.current.submitAnswer('slide-1');
+    });
+    const request = vi.mocked(fetch).mock.calls.find(([url]) => url === '/api/quiz-answer');
+    expect((request?.[1]?.headers as Record<string, string>).Authorization).toBe('Bearer audience-credential');
   });
 
   it('aisla respuestas y puntuaciones por presentationId', () => {

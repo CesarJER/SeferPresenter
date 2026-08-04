@@ -80,6 +80,16 @@ describe('accessible audience dialogs', () => {
     await waitFor(() => expect(document.activeElement).toBe(opener));
   });
 
+  it('does not steal focus when the parent replaces its close callback', () => {
+    const view = render(<AudienceInterventionModal onClose={vi.fn()} onSubmit={vi.fn()} />);
+    const cancel = screen.getByRole('button', { name: 'Cancelar' });
+    cancel.focus();
+
+    view.rerender(<AudienceInterventionModal onClose={vi.fn()} onSubmit={vi.fn()} />);
+
+    expect(document.activeElement).toBe(cancel);
+  });
+
   it('focuses the private message field and confines forward Tab focus', () => {
     render(<AudiencePrivateControlMessage onClose={vi.fn()} onSend={vi.fn(() => true)} />);
 

@@ -9,6 +9,11 @@ import {
   getLiveAudioControlSnapshot,
   getLiveAudioParticipantState,
   isLiveAudioControlAuthorized,
+  authorizeAudienceCredential,
+  bootstrapAudienceAccess,
+  consumeAudienceSseTicket,
+  getSessionAccessMode,
+  issueAudienceSseTicket,
 } from './ws-server.mjs'
 import {
   hasAllowedRequestOrigin,
@@ -643,7 +648,52 @@ const requireAuth = (req, res, url) => {
   return true
 }
 
+const getBearerCredential = (req) => {
+  const header = req.headers.authorization
+  return typeof header === 'string' && header.startsWith('Bearer ') ? header.slice(7) : null
+}
+
+const requireControlledAudience = (req, res) => {
+  if (getSessionAccessMode() !== 'CONTROLLED') return true
+  if (authorizeAudienceCredential(getBearerCredential(req))) return true
+  sendJson(res, 401, { error: 'Audience admission required' })
+  return false
+}
+
+const invalidateAudienceStreams = () => {
+  for (const response of audienceClients) response.end()
+  audienceClients.clear()
+  for (const response of quizClients) {
+    if (!response.isControl) {
+      response.end()
+      quizClients.delete(response)
+    }
+  }
+}
+
 const handleApi = async (req, res, url) => {
+  if (url.pathname === '/api/audience/access/bootstrap' && req.method === 'POST') {
+    try {
+      const body = JSON.parse(await readBody(req) || '{}')
+      sendJson(res, 200, bootstrapAudienceAccess(body.credential))
+    } catch {
+      sendJson(res, 400, { error: 'Invalid audience bootstrap request' })
+    }
+    return true
+  }
+
+  if (url.pathname === '/api/audience/sse-ticket' && req.method === 'POST') {
+    try {
+      const body = JSON.parse(await readBody(req) || '{}')
+      const ticket = issueAudienceSseTicket(getBearerCredential(req), body.purpose)
+      if (!ticket) sendJson(res, 401, { error: 'Audience admission required' })
+      else sendJson(res, 200, { ticket })
+    } catch {
+      sendJson(res, 400, { error: 'Invalid SSE ticket request' })
+    }
+    return true
+  }
+
   if (url.pathname.startsWith('/api/livekit/')) {
     const handled = await liveKitApi.handle({ req, res, url, readBody, sendJson })
     if (handled) return true
@@ -666,11 +716,19 @@ const handleApi = async (req, res, url) => {
   }
 
   if (url.pathname === '/api/audience/state' && req.method === 'GET') {
+    if (!requireControlledAudience(req, res)) return true
     sendJson(res, 200, makeAudienceSyncStateMessage(currentState))
     return true
   }
 
   if (url.pathname === '/api/audience/events' && req.method === 'GET') {
+    const access = url.searchParams.has('ticket')
+      ? consumeAudienceSseTicket(url.searchParams.get('ticket'), 'STATE')
+      : null
+    if (getSessionAccessMode() === 'CONTROLLED' && !access) {
+      sendJson(res, 401, { error: 'Audience admission required' })
+      return true
+    }
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
@@ -685,6 +743,15 @@ const handleApi = async (req, res, url) => {
     (url.pathname === '/api/quiz-events' || url.pathname === '/api/quiz-control-events')
     && req.method === 'GET'
   ) {
+    if (url.pathname === '/api/quiz-events') {
+      const access = url.searchParams.has('ticket')
+        ? consumeAudienceSseTicket(url.searchParams.get('ticket'), 'QUIZ')
+        : null
+      if (getSessionAccessMode() === 'CONTROLLED' && !access) {
+        sendJson(res, 401, { error: 'Audience admission required' })
+        return true
+      }
+    }
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
@@ -710,6 +777,7 @@ const handleApi = async (req, res, url) => {
   }
 
   if (url.pathname === '/api/quiz-answer' && req.method === 'POST') {
+    if (!requireControlledAudience(req, res)) return true
     try {
       const body = await readBody(req)
       const parsed = JSON.parse(body)
@@ -1201,6 +1269,8 @@ liveKitApi = createLiveKitApi({
   getLiveAudioControlSnapshot,
   getLiveAudioParticipantState,
   isLiveAudioControlAuthorized,
+  authorizeAudienceCredential,
+  getSessionAccessMode,
 })
 
 let wsServer
@@ -1222,6 +1292,7 @@ server.listen(port, () => {
     revokeAllLiveKitSpeakers: () => liveKitApi?.revokeAllSpeakers?.(),
     recordExternalBroadcastTransition: (transition) =>
       privacySessionManifestRecorder.recordTransition(transition),
+    invalidateAudienceStreams,
   })
   console.log(`SeferPresenter local backend listening on http://localhost:${port}${staticLabel}`)
   console.log(`SeferPresenter WebSocket disponible en ws://localhost:${port}/ws`)

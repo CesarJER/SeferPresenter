@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto'
+import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'
 import { WebSocket, WebSocketServer } from 'ws'
 import { applyAction, getTimeline } from './timelineManager.mjs'
 import { hasAllowedRequestOrigin, isAuthRequired, hasValidBasicAuth } from './authUtils.mjs'
@@ -7,6 +7,8 @@ const wsClients = new Map()
 const roles = new Set(['presenter', 'control', 'audience', 'unknown'])
 const liveAudioControls = new Map()
 const liveAudioParticipants = new Map()
+const audienceAccessRecords = new Map()
+const audienceSseTickets = new Map()
 let presentationSessionId = randomUUID()
 let liveAudioControlPublicKeyMessage = null
 let externalBroadcastState = {
@@ -34,9 +36,16 @@ const liveAudioModerationTypes = new Set([
 ])
 const audienceAllowedTypes = new Set([
   'SERVER_TIME_PING',
+  'AUDIENCE_ACCESS_BIND',
+  'AUDIENCE_ACCESS_REQUEST',
   'LIVE_AUDIO_PARTICIPANT_STATUS',
   'LIVE_AUDIO_ACTIVE_PARTICIPANT_PROFILE',
   'PRIVATE_CONTROL_SIGNAL',
+  'LIVE_AUDIO_REMOVE_ACTIVE_PARTICIPANT',
+])
+const admittedAudienceOnlyTypes = new Set([
+  'LIVE_AUDIO_PARTICIPANT_STATUS',
+  'LIVE_AUDIO_ACTIVE_PARTICIPANT_PROFILE',
   'LIVE_AUDIO_REMOVE_ACTIVE_PARTICIPANT',
 ])
 
@@ -53,6 +62,83 @@ const allowDelegatedModerators = () =>
 
 const getDefaultModerationVisible = () =>
   String(process.env.SEFER_ACTIVE_ALIAS_MODERATION_DEFAULT_VISIBLE || 'true').toLowerCase() !== 'false'
+
+const getDefaultAccessMode = () =>
+  String(process.env.SEFER_SESSION_ACCESS_DEFAULT || 'PUBLIC').toUpperCase() === 'CONTROLLED'
+    ? 'CONTROLLED'
+    : 'PUBLIC'
+
+let accessMode = getDefaultAccessMode()
+
+const createAudienceCredential = () => randomBytes(32).toString('base64url')
+const hashAudienceCredential = (credential) => createHash('sha256').update(credential, 'utf8').digest()
+
+const findAudienceAccessByCredential = (credential) => {
+  if (typeof credential !== 'string' || credential.length < 32) return null
+  const candidate = hashAudienceCredential(credential)
+  for (const record of audienceAccessRecords.values()) {
+    if (record.credentialHash.length === candidate.length && timingSafeEqual(record.credentialHash, candidate)) {
+      return record
+    }
+  }
+  return null
+}
+
+const makeAudienceAccessState = (record) => ({
+  presentationSessionId,
+  accessMode,
+  participantId: record.participantId,
+  accessState: record.accessState,
+  retryAt: record.retryAt,
+})
+
+const bootstrapAudienceAccess = (credential) => {
+  const existing = findAudienceAccessByCredential(credential)
+  if (existing) return { ...makeAudienceAccessState(existing), credential: undefined }
+
+  const nextCredential = createAudienceCredential()
+  const record = {
+    participantId: randomUUID(),
+    credentialHash: hashAudienceCredential(nextCredential),
+    accessState: accessMode === 'PUBLIC' ? 'ADMITTED' : 'REQUEST_REQUIRED',
+    hasAlias: false,
+    retryAt: undefined,
+    createdAt: Date.now(),
+  }
+  audienceAccessRecords.set(record.participantId, record)
+  return { ...makeAudienceAccessState(record), credential: nextCredential }
+}
+
+const authorizeAudienceCredential = (credential, { requireAdmitted = true } = {}) => {
+  const record = findAudienceAccessByCredential(credential)
+  if (!record) return null
+  if (requireAdmitted && accessMode === 'CONTROLLED' && record.accessState !== 'ADMITTED') return null
+  return record
+}
+
+const issueAudienceSseTicket = (credential, purpose) => {
+  const record = authorizeAudienceCredential(credential)
+  if (!record || (purpose !== 'STATE' && purpose !== 'QUIZ')) return null
+  const ticket = randomBytes(24).toString('base64url')
+  audienceSseTickets.set(ticket, {
+    participantId: record.participantId,
+    purpose,
+    expiresAt: Date.now() + 30_000,
+  })
+  return ticket
+}
+
+const consumeAudienceSseTicket = (ticket, purpose) => {
+  if (typeof ticket !== 'string') return null
+  const issued = audienceSseTickets.get(ticket)
+  audienceSseTickets.delete(ticket)
+  if (!issued || issued.purpose !== purpose || issued.expiresAt <= Date.now()) return null
+  const record = audienceAccessRecords.get(issued.participantId)
+  if (!record || (accessMode === 'CONTROLLED' && record.accessState !== 'ADMITTED')) return null
+  return record
+}
+
+const getSessionAccessMode = () => accessMode
 
 const mergeOperationalSnapshotPatch = (patch) => {
   if (!patch || typeof patch !== 'object') return
@@ -248,6 +334,13 @@ const makeOperationalSnapshot = ({ liveKitState, quizAggregate } = {}) => {
     interventionQueue: participants
       .filter((participant) => participant.speakerState === 'REQUESTED' && !participant.isKicked)
       .map((participant) => participant.participantId),
+    policies: { accessMode },
+    audienceAccessRequests: Array.from(audienceAccessRecords.values())
+      .filter((record) => record.accessState === 'WAITING')
+      .map((record) => ({
+        participantId: record.participantId,
+        requestedAt: record.requestedAt || record.createdAt,
+      })),
     authorizations: {
       principalControlSessionId: findPrincipalControl()?.controlSessionId || null,
       controls: getLiveAudioControlSnapshot().controls,
@@ -348,8 +441,11 @@ const resetWsServerStateForTests = () => {
   wsClients.clear()
   liveAudioControls.clear()
   liveAudioParticipants.clear()
+  audienceAccessRecords.clear()
+  audienceSseTickets.clear()
   liveAudioControlPublicKeyMessage = null
   externalBroadcastState = { state: 'off', revision: 0, updatedAt: Date.now() }
+  accessMode = getDefaultAccessMode()
 }
 
 const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) => {
@@ -423,6 +519,127 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
 
   const sendError = (client, code, message) => {
     sendJson(client, { type: 'ERROR', code, message })
+  }
+
+  const sendAudienceAccessState = (meta, record) => sendJson(meta?.ws, {
+    type: 'AUDIENCE_ACCESS_STATE',
+    ...makeAudienceAccessState(record),
+    eventId: randomUUID(),
+  })
+
+  const notifyAudienceAccessRecord = (record) => {
+    for (const meta of wsClients.values()) {
+      if (meta.role === 'audience' && meta.audienceAccessId === record.participantId) {
+        sendAudienceAccessState(meta, record)
+      }
+    }
+  }
+
+  const broadcastAccessPolicy = () => broadcast({
+    type: 'SESSION_ACCESS_POLICY',
+    presentationSessionId,
+    accessMode,
+    updatedAt: Date.now(),
+  })
+
+  const handleAudienceAccessBind = (meta, msg) => {
+    if (meta?.role !== 'audience') return
+    const record = authorizeAudienceCredential(msg.credential, { requireAdmitted: false })
+    if (!record) {
+      sendJson(meta.ws, {
+        type: 'AUDIENCE_ACCESS_STATE',
+        presentationSessionId,
+        accessMode,
+        accessState: 'CREDENTIAL_OBSOLETE',
+      })
+      return
+    }
+    meta.audienceAccessId = record.participantId
+    meta.participantId = record.participantId
+    sendAudienceAccessState(meta, record)
+  }
+
+  const handleAudienceAccessRequest = (meta, msg) => {
+    if (meta?.role !== 'audience' || !meta.audienceAccessId) return
+    const record = audienceAccessRecords.get(meta.audienceAccessId)
+    if (!record || msg.participantId !== record.participantId) return
+    const now = Date.now()
+    if (accessMode === 'PUBLIC') {
+      record.accessState = 'ADMITTED'
+    } else if (record.accessState === 'BLOCKED') {
+      sendAudienceAccessState(meta, record)
+      return
+    } else if (record.accessState === 'REJECTED' && record.retryAt > now) {
+      sendAudienceAccessState(meta, record)
+      return
+    } else {
+      record.accessState = 'WAITING'
+      record.requestedAt = now
+    }
+    record.hasAlias = true
+    record.retryAt = undefined
+    sendAudienceAccessState(meta, record)
+    if (record.accessState === 'WAITING') {
+      broadcast({
+        type: 'AUDIENCE_ACCESS_REQUEST',
+        participantId: record.participantId,
+        requestedAt: now,
+      }, (targetMeta) => (
+        targetMeta.role === 'control' &&
+        isControlAuthorized(liveAudioControls.get(targetMeta.controlSessionId))
+      ))
+    }
+  }
+
+  const handleAudienceAccessDecision = (meta, msg) => {
+    const issuer = liveAudioControls.get(meta?.controlSessionId)
+    if (!isControlAuthorized(issuer)) return
+    const record = audienceAccessRecords.get(msg.participantId)
+    if (!record || !['ADMIT', 'REJECT', 'BLOCK'].includes(msg.decision)) return
+    if (msg.decision === 'ADMIT') {
+      record.accessState = 'ADMITTED'
+      record.retryAt = undefined
+    } else if (msg.decision === 'REJECT') {
+      record.accessState = 'REJECTED'
+      record.retryAt = Date.now() + 30_000
+    } else {
+      record.accessState = 'BLOCKED'
+      record.retryAt = undefined
+    }
+    notifyAudienceAccessRecord(record)
+    snapshotProviders.invalidateAudienceStreams?.()
+    broadcast({
+      type: 'AUDIENCE_ACCESS_DECISION_RESULT',
+      participantId: record.participantId,
+      decision: msg.decision,
+      decidedByControlSessionId: issuer.controlSessionId,
+      decidedAt: Date.now(),
+    }, (targetMeta) => (
+      targetMeta.role === 'control' &&
+      isControlAuthorized(liveAudioControls.get(targetMeta.controlSessionId))
+    ))
+  }
+
+  const handleSessionAccessPolicyUpdate = (meta, msg) => {
+    const issuer = liveAudioControls.get(meta?.controlSessionId)
+    if (issuer?.controlState !== 'PRINCIPAL' || !['PUBLIC', 'CONTROLLED'].includes(msg.accessMode)) {
+      sendError(meta.ws, 'SESSION_POLICY_FORBIDDEN', 'Only the principal Control may change access mode')
+      return
+    }
+    if (msg.accessMode === accessMode) return
+    accessMode = msg.accessMode
+    for (const record of audienceAccessRecords.values()) {
+      if (accessMode === 'PUBLIC') {
+        record.accessState = 'ADMITTED'
+        record.retryAt = undefined
+      } else if (!record.hasAlias) {
+        record.accessState = 'REQUEST_REQUIRED'
+      }
+      notifyAudienceAccessRecord(record)
+    }
+    audienceSseTickets.clear()
+    snapshotProviders.invalidateAudienceStreams?.()
+    broadcastAccessPolicy()
   }
 
   const sendAuthorizationState = (control) => {
@@ -1088,6 +1305,7 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
       controlSessionId: control?.controlSessionId,
       controlState: control?.controlState,
       presentationSessionId,
+      accessMode,
     }))
     broadcastConnectionCounts()
     broadcastMediaMasterStatus()
@@ -1125,6 +1343,16 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
       }
       if (meta.role === 'audience' && !audienceAllowedTypes.has(msg.type)) {
         return
+      }
+      if (
+        meta.role === 'audience' &&
+        accessMode === 'CONTROLLED' &&
+        admittedAudienceOnlyTypes.has(msg.type)
+      ) {
+        const record = meta.audienceAccessId
+          ? audienceAccessRecords.get(meta.audienceAccessId)
+          : null
+        if (record?.accessState !== 'ADMITTED') return
       }
 
       switch (msg.type) {
@@ -1313,6 +1541,22 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
           break
         }
 
+        case 'AUDIENCE_ACCESS_BIND':
+          handleAudienceAccessBind(meta, msg)
+          break
+
+        case 'AUDIENCE_ACCESS_REQUEST':
+          handleAudienceAccessRequest(meta, msg)
+          break
+
+        case 'AUDIENCE_ACCESS_DECISION':
+          if (meta.role === 'control') handleAudienceAccessDecision(meta, msg)
+          break
+
+        case 'SESSION_ACCESS_POLICY_UPDATE':
+          if (meta.role === 'control') handleSessionAccessPolicyUpdate(meta, msg)
+          break
+
         case 'LIVE_AUDIO_SET_EXTERNAL_BROADCAST_STATE': {
           if (meta?.role !== 'control') break
           const controlMeta = liveAudioControls.get(meta.controlSessionId)
@@ -1405,6 +1649,9 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
             presentationSessionId = randomUUID()
             liveAudioControls.clear()
             liveAudioParticipants.clear()
+            audienceAccessRecords.clear()
+            audienceSseTickets.clear()
+            accessMode = getDefaultAccessMode()
             setExternalBroadcastState('off')
             broadcastConnectionCounts()
             broadcastAuthorizationState()
@@ -1517,4 +1764,9 @@ export {
   hasActivePresenter,
   broadcastWs,
   getMediaMasterClientId,
+  bootstrapAudienceAccess,
+  authorizeAudienceCredential,
+  issueAudienceSseTicket,
+  consumeAudienceSseTicket,
+  getSessionAccessMode,
 }
