@@ -14,6 +14,7 @@ export interface AudienceAccessRequestItem {
   participantId: string;
   alias: string;
   requestedAt: number;
+  accessState: 'WAITING' | 'BLOCKED';
 }
 
 interface PrivateControlInboxProps {
@@ -114,13 +115,15 @@ export const PrivateControlInbox: React.FC<PrivateControlInboxProps> = ({
         ))}
 
         {audienceAccessRequests.map((request) => (
-          <div key={request.participantId} className="rounded-md border border-amber-700/60 bg-amber-950/30 p-3">
-            <div className="mb-2 text-sm font-semibold text-amber-100">Solicitud de Audience</div>
+          <div key={request.participantId} className={`rounded-md border p-3 ${request.accessState === 'BLOCKED' ? 'border-red-700/60 bg-red-950/30' : 'border-amber-700/60 bg-amber-950/30'}`}>
+            <div className={`mb-2 text-sm font-semibold ${request.accessState === 'BLOCKED' ? 'text-red-200' : 'text-amber-100'}`}>
+              {request.accessState === 'BLOCKED' ? 'Nick bloqueado' : 'Solicitud de Audience'}
+            </div>
             <div className="mb-3 text-sm text-white">{request.alias}</div>
-            <div className="grid grid-cols-3 gap-2">
+            <div className={`grid gap-2 ${request.accessState === 'BLOCKED' ? 'grid-cols-1' : 'grid-cols-3'}`}>
               <button type="button" onClick={() => onAudienceAccessDecision(request.participantId, 'ADMIT')} className="rounded bg-emerald-700 px-2 py-1.5 text-xs font-bold text-white">Admitir</button>
-              <button type="button" onClick={() => onAudienceAccessDecision(request.participantId, 'REJECT')} className="rounded bg-slate-700 px-2 py-1.5 text-xs font-bold text-white">Rechazar</button>
-              <button type="button" onClick={() => onAudienceAccessDecision(request.participantId, 'BLOCK')} className="rounded bg-red-800 px-2 py-1.5 text-xs font-bold text-white">Bloquear</button>
+              {request.accessState === 'WAITING' && <button type="button" onClick={() => onAudienceAccessDecision(request.participantId, 'REJECT')} className="rounded bg-slate-700 px-2 py-1.5 text-xs font-bold text-white">Rechazar</button>}
+              {request.accessState === 'WAITING' && <button type="button" onClick={() => onAudienceAccessDecision(request.participantId, 'BLOCK')} className="rounded bg-red-800 px-2 py-1.5 text-xs font-bold text-white">Bloquear</button>}
             </div>
           </div>
         ))}

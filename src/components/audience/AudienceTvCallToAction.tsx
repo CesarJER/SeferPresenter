@@ -25,7 +25,7 @@ const AudienceTvCallToAction: React.FC<AudienceTvCallToActionProps> = ({ domain 
       )}
 
       <div
-        className="w-full max-h-[50px] bg-black/90 text-white p-3 z-50 flex items-center justify-between border-t border-white/10 pointer-events-auto"
+        className="w-full shrink-0 max-h-[50px] bg-black/90 text-white p-3 z-50 flex items-center justify-between border-t border-white/10 pointer-events-auto"
         data-testid="tv-cta-banner"
       >
         <div className="text-[clamp(1rem,3vw,1.4rem)] font-medium flex-1 text-center md:text-left px-4">

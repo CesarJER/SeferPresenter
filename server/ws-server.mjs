@@ -336,10 +336,11 @@ const makeOperationalSnapshot = ({ liveKitState, quizAggregate } = {}) => {
       .map((participant) => participant.participantId),
     policies: { accessMode },
     audienceAccessRequests: Array.from(audienceAccessRecords.values())
-      .filter((record) => record.accessState === 'WAITING')
+      .filter((record) => record.accessState === 'WAITING' || record.accessState === 'BLOCKED')
       .map((record) => ({
         participantId: record.participantId,
         requestedAt: record.requestedAt || record.createdAt,
+        accessState: record.accessState,
       })),
     authorizations: {
       principalControlSessionId: findPrincipalControl()?.controlSessionId || null,
@@ -557,6 +558,7 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
     meta.audienceAccessId = record.participantId
     meta.participantId = record.participantId
     sendAudienceAccessState(meta, record)
+    if (liveAudioControlPublicKeyMessage) sendJson(meta.ws, liveAudioControlPublicKeyMessage)
   }
 
   const handleAudienceAccessRequest = (meta, msg) => {
@@ -913,7 +915,11 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
 
   const bindParticipantToConnection = (meta, participantId, status = {}) => {
     if (!isValidParticipantId(participantId)) return null
-    if (meta.participantId && meta.participantId !== participantId) return null
+    if (meta.participantId && meta.participantId !== participantId) {
+      if (meta.role !== 'audience' || meta.participantId !== meta.audienceAccessId) return null
+      const accessParticipant = liveAudioParticipants.get(meta.participantId)
+      if (accessParticipant?.ws === meta.ws) liveAudioParticipants.delete(meta.participantId)
+    }
 
     const existing = liveAudioParticipants.get(participantId)
     if (existing && existing.ws && existing.ws !== meta.ws && existing.ws.readyState === WebSocket.OPEN) {
@@ -1434,6 +1440,8 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
             microphoneTrackState: existing?.microphoneTrackState,
           })
           if (!participant || participant.isKicked) break
+          const accessRecord = audienceAccessRecords.get(meta.audienceAccessId)
+          if (accessRecord) accessRecord.hasAlias = true
           participant.isAliasVisibleToActiveParticipants = msg.isAliasVisibleToActiveParticipants
           participant.activeListPublicKey = msg.activeListPublicKey
           participant.updatedAt = Date.now()

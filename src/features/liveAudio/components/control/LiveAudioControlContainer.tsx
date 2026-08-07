@@ -118,7 +118,7 @@ export default function LiveAudioControlContainer({
   const [externalBroadcastRevision, setExternalBroadcastRevision] = useState(0);
   const [joinRequests, setJoinRequests] = useState<Record<string, LiveAudioControlJoinRequestMessage>>({});
   const [accessMode, setAccessMode] = useState<'PUBLIC' | 'CONTROLLED'>('PUBLIC');
-  const [audienceAccessRequests, setAudienceAccessRequests] = useState<Record<string, number>>({});
+  const [audienceAccessRequests, setAudienceAccessRequests] = useState<Record<string, { requestedAt: number; accessState: 'WAITING' | 'BLOCKED' }>>({});
   const participantAliasesRef = useRef(participantAliases);
   const aliasRequestSignatureRef = useRef('');
   const lastSentListRef = useRef('');
@@ -222,7 +222,10 @@ export default function LiveAudioControlContainer({
         });
         setAccessMode(snapshot.policies.accessMode);
         setAudienceAccessRequests(Object.fromEntries(
-          snapshot.audienceAccessRequests.map((request) => [request.participantId, request.requestedAt]),
+          snapshot.audienceAccessRequests.map((request) => [request.participantId, {
+            requestedAt: request.requestedAt,
+            accessState: request.accessState,
+          }]),
         ));
         return;
       }
@@ -230,12 +233,24 @@ export default function LiveAudioControlContainer({
       if (type === 'AUDIENCE_ACCESS_REQUEST' && typeof payload.participantId === 'string') {
         setAudienceAccessRequests(current => ({
           ...current,
-          [payload.participantId as string]: typeof payload.requestedAt === 'number' ? payload.requestedAt : Date.now(),
+          [payload.participantId as string]: {
+            requestedAt: typeof payload.requestedAt === 'number' ? payload.requestedAt : Date.now(),
+            accessState: 'WAITING',
+          },
         }));
         return;
       }
       if (type === 'AUDIENCE_ACCESS_DECISION_RESULT' && typeof payload.participantId === 'string') {
         setAudienceAccessRequests(current => {
+          if (payload.decision === 'BLOCK') {
+            return {
+              ...current,
+              [payload.participantId as string]: {
+                requestedAt: current[payload.participantId as string]?.requestedAt ?? Date.now(),
+                accessState: 'BLOCKED',
+              },
+            };
+          }
           const next = { ...current };
           delete next[payload.participantId as string];
           return next;
@@ -767,10 +782,10 @@ export default function LiveAudioControlContainer({
   }, [wsSend]);
 
   const portalTarget = document.getElementById('live-audio-inbox-portal-target');
-  const accessRequestItems = Object.entries(audienceAccessRequests).map(([id, requestedAt]) => ({
+  const accessRequestItems = Object.entries(audienceAccessRequests).map(([id, request]) => ({
     participantId: id,
     alias: participantAliases[id] || 'Sincronizando alias…',
-    requestedAt,
+    ...request,
   }));
   const hasUnread = messages.length > 0 || authorizationRequests.length > 0 || accessRequestItems.length > 0;
   const inboxPortal = portalTarget ? createPortal(

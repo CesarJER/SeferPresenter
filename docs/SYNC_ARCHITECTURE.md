@@ -29,14 +29,23 @@ the public Audience stream. Closed or errored SSE responses are removed from
 the server client sets, and failed SSE writes are dropped from future broadcasts.
 
 Audience access is public by default and can be changed to `CONTROLLED` only by
-the principal Control. In controlled mode the browser first obtains a random,
+the principal Control. Switching an active public session to controlled access
+keeps active participants who already supplied a nick admitted; anonymous and
+later arrivals must request admission. In controlled mode the browser first obtains a random,
 session-scoped credential from `/api/audience/access/bootstrap`, binds it to its
 WebSocket and sends the requested alias through the existing E2E private signal.
+The access credential identifier and the later Live Audio participant identifier
+remain separate on that WebSocket; binding access must not prevent Audience from
+registering its Live Audio identity. The current Control public key is replayed
+when access binds so a request is not lost if the initial key announcement raced
+the Audience UI subscription.
 Control admits, rejects or blocks the request without the server reading that
 alias. Admission is enforced on the Audience state snapshot, single-use
 STATE/QUIZ SSE tickets, quiz submissions and LiveKit token issuance. The browser
 stores the credential; the backend keeps only its SHA-256 digest and RAM access
 state until presentation-session rotation.
+Blocked nicks remain outside and cannot request access again, but stay visible
+to authorized Controls so they can be admitted later.
 
 Main message types live in `src/types/sync.ts`:
 

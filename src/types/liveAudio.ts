@@ -317,6 +317,7 @@ export interface LiveAudioOperationalSnapshot {
   audienceAccessRequests: Array<{
     participantId: string;
     requestedAt: number;
+    accessState: 'WAITING' | 'BLOCKED';
   }>;
   authorizations: {
     principalControlSessionId: string | null;

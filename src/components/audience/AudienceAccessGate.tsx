@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Clock3, ShieldAlert } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import { Clock3, ShieldAlert, ShieldCheck } from 'lucide-react';
 import type { WebSocketConnectionStatus } from '../../hooks/useWebSocket';
 import { usePrivateControlSignals } from '../../hooks/usePrivateControlSignals';
 import type { AudienceAccessState } from '../../types/audienceAccess';
 import type { LiveAudioExternalBroadcastState } from '../../types/liveAudio';
 import { AudienceInterventionModal } from '../../features/liveAudio/components/audience/AudienceInterventionModal';
+import welcomeMarkdown from '../../../config/welcome.md?raw';
 
 interface AudienceAccessGateProps {
   accessState: AudienceAccessState;
@@ -72,43 +74,67 @@ export function AudienceAccessGate({
   const retrySeconds = retryAt ? Math.max(0, Math.ceil((retryAt - now) / 1000)) : 0;
   const mayRequest = accessState === 'REQUEST_REQUIRED' || (accessState === 'REJECTED' && retrySeconds === 0);
 
-  if (mayRequest) {
-    return (
-      <>
-        <AudienceInterventionModal
-          dismissible={false}
-          title="Solicitar acceso a la sesión"
-          submitLabel={sending ? 'Enviando…' : privateSignals.ready ? 'Solicitar acceso' : 'Preparando cifrado…'}
-          submitDisabled={!privateSignals.ready || sending}
-          externalBroadcastState={broadcastState}
-          onClose={() => {}}
-          onSubmit={(alias, visible) => void requestAccess(alias, visible)}
-        />
-        {error && <p role="alert" className="fixed bottom-4 left-1/2 z-[110] -translate-x-1/2 rounded bg-red-950 px-4 py-2 text-sm text-red-200">{error}</p>}
-      </>
-    );
-  }
-
   return (
-    <main className="fixed inset-0 z-[100] grid place-items-center bg-slate-950 p-4 text-slate-100">
-      <section className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900 p-6 shadow-2xl">
-        {accessState === 'WAITING' ? (
-          <div role="status" className="space-y-3">
-            <Clock3 className="h-8 w-8 text-amber-300" aria-hidden="true" />
-            <h1 className="text-xl font-bold">Solicitud en espera</h1>
-            <p className="text-sm text-slate-300">El Control principal debe admitirla antes de mostrar la sesión.</p>
+    <main className="fixed inset-0 z-[100] bg-slate-950 text-slate-100 overflow-y-auto">
+      <div className="min-h-full flex items-center justify-center p-4 py-12">
+        <div className="w-full max-w-md flex flex-col gap-4">
+          <div className="w-full rounded-2xl border border-slate-800 bg-slate-900/90 p-8 shadow-2xl backdrop-blur-md flex flex-col items-center text-center gap-6">
+            <img src="/logo.svg" alt="Logotipo de la organización" className="h-16 w-auto object-contain" />
+            
+            {welcomeMarkdown && (
+              <div className="max-w-none text-slate-300 text-sm leading-relaxed border-t border-b border-slate-800/80 py-4 w-full text-left [&_h1]:text-lg [&_h1]:font-bold [&_h1]:text-white [&_h1]:mb-2 [&_p]:text-slate-300 [&_p]:mb-3 [&_p:last-child]:mb-0 [&_blockquote]:border-l-2 [&_blockquote]:border-blue-500/50 [&_blockquote]:pl-4 [&_blockquote]:italic [&_blockquote]:text-slate-400 [&_blockquote]:my-3">
+                <ReactMarkdown>{welcomeMarkdown}</ReactMarkdown>
+              </div>
+            )}
+
+            {!mayRequest && (
+              <section className="w-full">
+                {accessState === 'WAITING' ? (
+                  <div role="status" className="flex flex-col items-center gap-2 text-amber-300">
+                    <Clock3 className="h-8 w-8 animate-pulse" aria-hidden="true" />
+                    <h1 className="text-lg font-bold text-white">Solicitud en espera</h1>
+                    <p className="text-xs text-slate-400">El Control principal debe admitirla antes de mostrar la sesión.</p>
+                  </div>
+                ) : accessState === 'BLOCKED' ? (
+                  <div role="alert" className="flex flex-col items-center gap-2 text-red-400">
+                    <ShieldAlert className="h-8 w-8" aria-hidden="true" />
+                    <h1 className="text-lg font-bold">Acceso bloqueado</h1>
+                  </div>
+                ) : accessState === 'REJECTED' && retrySeconds > 0 ? (
+                  <div role="status" className="flex flex-col items-center gap-2 text-amber-400">
+                    <Clock3 className="h-8 w-8" aria-hidden="true" />
+                    <p className="text-sm font-medium">Solicitud rechazada. Podrá intentarlo de nuevo en <span className="font-bold">{retrySeconds}</span> segundos.</p>
+                  </div>
+                ) : (
+                  <div role="status" className="flex flex-col items-center gap-2 text-slate-400">
+                    <ShieldCheck className="h-8 w-8 text-blue-400 animate-pulse" aria-hidden="true" />
+                    <p className="text-xs">Preparando acceso seguro…</p>
+                  </div>
+                )}
+              </section>
+            )}
           </div>
-        ) : accessState === 'BLOCKED' ? (
-          <div role="alert" className="space-y-3 text-red-200">
-            <ShieldAlert className="h-8 w-8" aria-hidden="true" />
-            <h1 className="text-xl font-bold">Acceso bloqueado</h1>
-          </div>
-        ) : accessState === 'REJECTED' ? (
-          <p role="status">Solicitud rechazada. Podrá intentarlo de nuevo en {retrySeconds} segundos.</p>
-        ) : (
-          <p role="status">Preparando acceso seguro…</p>
-        )}
-      </section>
+
+          {mayRequest && (
+            <AudienceInterventionModal
+              dismissible={false}
+              inline={true}
+              title="Solicitar acceso a la sesión"
+              submitLabel={sending ? 'Enviando…' : privateSignals.ready ? 'Solicitar acceso' : 'Preparando cifrado…'}
+              submitDisabled={!privateSignals.ready || sending}
+              externalBroadcastState={broadcastState}
+              onClose={() => {}}
+              onSubmit={(alias, visible) => void requestAccess(alias, visible)}
+            />
+          )}
+        </div>
+      </div>
+
+      {error && (
+        <p role="alert" className="fixed bottom-4 left-1/2 z-[110] -translate-x-1/2 rounded bg-red-950/90 border border-red-800 px-4 py-2 text-sm text-red-200 shadow-xl backdrop-blur-md">
+          {error}
+        </p>
+      )}
     </main>
   );
 }

@@ -45,3 +45,5 @@ launcher
 
 
 public/logo.svg
+config/*
+!*.example.md

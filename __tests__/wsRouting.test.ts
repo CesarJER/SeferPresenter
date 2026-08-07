@@ -169,6 +169,94 @@ describe('Live Audio WebSocket routing', () => {
       message.type === 'AUDIENCE_ACCESS_STATE' && message.accessState === 'ADMITTED'
     ));
     expect(admitted.participantId).toBe(access.participantId);
+
+    const liveAudioParticipantId = randomUUID();
+    audience.send(makeParticipantStatus(liveAudioParticipantId));
+    await waitFor(principal, (message) => (
+      message.type === 'LIVE_AUDIO_PARTICIPANT_STATUS' &&
+      message.participantId === liveAudioParticipantId
+    ));
+
+    principal.send({
+      type: 'LIVE_AUDIO_GRANT_SPEAK',
+      participantId: liveAudioParticipantId,
+      createdAt: Date.now(),
+    });
+    const grant = await waitFor(audience, (message) => (
+      message.type === 'LIVE_AUDIO_GRANT_SPEAK' &&
+      message.participantId === liveAudioParticipantId
+    ));
+    expect(grant.participantId).toBe(liveAudioParticipantId);
+
+    principal.send({
+      type: 'AUDIENCE_ACCESS_DECISION',
+      participantId: access.participantId,
+      decision: 'BLOCK',
+      createdAt: Date.now(),
+    });
+    await waitFor(audience, (message) => (
+      message.type === 'AUDIENCE_ACCESS_STATE' && message.accessState === 'BLOCKED'
+    ));
+    principal.send({ type: 'LIVE_AUDIO_SNAPSHOT_REQUEST', createdAt: Date.now() });
+    const snapshot = await waitFor(principal, (message) => {
+      if (message.type !== 'LIVE_AUDIO_SNAPSHOT') return false;
+      const value = message.snapshot as { audienceAccessRequests?: Array<{ participantId: string; accessState: string }> };
+      return value.audienceAccessRequests?.some((request) => (
+        request.participantId === access.participantId && request.accessState === 'BLOCKED'
+      )) === true;
+    });
+    expect(snapshot.type).toBe('LIVE_AUDIO_SNAPSHOT');
+  });
+
+  it('keeps nicked audience admitted and requires access from anonymous audience when switching to controlled', async () => {
+    const principal = await connectWs('control');
+    const nickedAudience = await connectWs('audience');
+    const anonymousAudience = await connectWs('audience');
+    const nickedAccess = bootstrapAudienceAccess(null);
+    const anonymousAccess = bootstrapAudienceAccess(null);
+
+    nickedAudience.send({ type: 'AUDIENCE_ACCESS_BIND', credential: nickedAccess.credential });
+    anonymousAudience.send({ type: 'AUDIENCE_ACCESS_BIND', credential: anonymousAccess.credential });
+    await waitFor(nickedAudience, (message) => (
+      message.type === 'AUDIENCE_ACCESS_STATE' && message.accessState === 'ADMITTED'
+    ));
+    await waitFor(anonymousAudience, (message) => (
+      message.type === 'AUDIENCE_ACCESS_STATE' && message.accessState === 'ADMITTED'
+    ));
+
+    const nickedParticipantId = randomUUID();
+    nickedAudience.send(makeParticipantStatus(nickedParticipantId));
+    nickedAudience.send({
+      type: 'LIVE_AUDIO_ACTIVE_PARTICIPANT_PROFILE',
+      participantId: nickedParticipantId,
+      activeListPublicKey: Buffer.from('nicked-audience-public-key').toString('base64'),
+      isAliasVisibleToActiveParticipants: false,
+      createdAt: Date.now(),
+    });
+    await waitFor(principal, (message) => (
+      message.type === 'LIVE_AUDIO_ACTIVE_PARTICIPANT_PROFILE' &&
+      message.participantId === nickedParticipantId
+    ));
+
+    principal.send({
+      type: 'SESSION_ACCESS_POLICY_UPDATE',
+      accessMode: 'CONTROLLED',
+      createdAt: Date.now(),
+    });
+    await waitFor(nickedAudience, (message) => (
+      message.type === 'SESSION_ACCESS_POLICY' && message.accessMode === 'CONTROLLED'
+    ));
+    await waitFor(anonymousAudience, (message) => (
+      message.type === 'AUDIENCE_ACCESS_STATE' && message.accessState === 'REQUEST_REQUIRED'
+    ));
+
+    nickedAudience.send({ ...makeParticipantStatus(nickedParticipantId), speakerState: 'REQUESTED' });
+    const status = await waitFor(principal, (message) => (
+      message.type === 'LIVE_AUDIO_PARTICIPANT_STATUS' &&
+      message.participantId === nickedParticipantId &&
+      message.speakerState === 'REQUESTED'
+    ));
+    expect(status.participantId).toBe(nickedParticipantId);
   });
 
   it('routes private audience signals only to authorized controls', async () => {

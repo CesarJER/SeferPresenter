@@ -296,6 +296,9 @@ const validateOperationalSnapshot = (snapshot: unknown, path: string, errors: st
       if (!isFiniteNumber(request.requestedAt)) {
         errors.push(`${path}.audienceAccessRequests[${index}].requestedAt debe ser numero.`);
       }
+      if (request.accessState !== 'WAITING' && request.accessState !== 'BLOCKED') {
+        errors.push(`${path}.audienceAccessRequests[${index}].accessState debe ser WAITING o BLOCKED.`);
+      }
     });
   }
 

@@ -4,12 +4,14 @@ import { LiveAudioAliasInput } from '../shared/LiveAudioAliasInput';
 import { X } from 'lucide-react';
 import type { LiveAudioExternalBroadcastState } from '../../../../types/liveAudio';
 
+
 interface AudienceInterventionModalProps {
   onClose: () => void;
   defaultAliasVisible?: boolean;
   externalBroadcastState?: LiveAudioExternalBroadcastState;
   onSubmit: (alias: string, isAliasVisible: boolean) => void;
   dismissible?: boolean;
+  inline?: boolean;
   title?: string;
   submitLabel?: string;
   submitDisabled?: boolean;
@@ -21,6 +23,7 @@ export const AudienceInterventionModal: React.FC<AudienceInterventionModalProps>
   externalBroadcastState = 'off',
   onSubmit,
   dismissible = true,
+  inline = false,
   title = 'Participar en la sesión',
   submitLabel = 'Continuar',
   submitDisabled = false,
@@ -74,13 +77,13 @@ export const AudienceInterventionModal: React.FC<AudienceInterventionModalProps>
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 pointer-events-auto">
+    <div className={inline ? "w-full mt-4" : "fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 pointer-events-auto"}>
       <div
         ref={dialogRef}
-        role="dialog"
-        aria-modal="true"
+        role={inline ? "region" : "dialog"}
+        aria-modal={inline ? undefined : "true"}
         aria-labelledby="audience-intervention-title"
-        className="bg-gray-900 border border-gray-700 rounded-2xl w-full max-w-lg shadow-2xl flex flex-col max-h-[90vh]"
+        className={`bg-gray-900 border border-gray-700 rounded-2xl w-full max-w-lg flex flex-col ${inline ? 'shadow-lg' : 'shadow-2xl max-h-[90vh]'}`}
       >
         
         {/* Header */}

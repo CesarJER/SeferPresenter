@@ -38,7 +38,7 @@ const componentStyles = (variant: 'light' | 'dark'): Components => {
     thead: ({ children }) => <thead className={dark ? 'bg-gray-800' : 'bg-slate-100'}>{children}</thead>,
     tbody: ({ children }) => <tbody>{children}</tbody>,
     tr: ({ children }) => <tr className={`border-b last:border-b-0 ${border}`}>{children}</tr>,
-    th: ({ children }) => <th className={`w-1/4 break-words border-r p-3 align-top font-semibold last:border-r-0 ${border} ${heading}`}>{children}</th>,
+    th: ({ children }) => <th className={`break-words border-r p-3 align-top font-semibold last:border-r-0 ${border} ${heading}`}>{children}</th>,
     td: ({ children }) => <td className={`break-words border-r p-3 align-top leading-6 last:border-r-0 ${border} ${text}`}>{children}</td>,
     a: ({ href, children }) => {
       const external = Boolean(href && /^https?:\/\//i.test(href));
