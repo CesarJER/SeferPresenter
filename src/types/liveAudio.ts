@@ -190,6 +190,8 @@ export interface LiveAudioControlAuthorizedMessage {
   transferPublicKey?: string;
   encryptedSessionPrivateKey?: string;
   nonce?: string;
+  encryptedAliases?: string;
+  aliasesNonce?: string;
   createdAt?: number;
 }
 
@@ -236,6 +238,7 @@ export interface PrivateControlSignalMessage {
 
 export interface LiveAudioRequestAliasesMessage {
   type: 'LIVE_AUDIO_REQUEST_ALIASES';
+  targetParticipantIds?: string[];
   createdAt?: number;
 }
 

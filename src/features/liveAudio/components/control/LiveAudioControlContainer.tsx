@@ -268,7 +268,11 @@ export default function LiveAudioControlContainer({
 
       if (type === 'LIVE_AUDIO_PARTICIPANT_STATUS') {
         const msg = payload as unknown as LiveAudioParticipantStatusMessage;
-        setParticipantsMap(prev => ({ ...prev, [msg.participantId]: msg }));
+        setParticipantsMap(prev => {
+          const existing = prev[msg.participantId];
+          if (existing && JSON.stringify(existing) === JSON.stringify(msg)) return prev;
+          return { ...prev, [msg.participantId]: msg };
+        });
         if (msg.activeListPublicKey) {
           setParticipantEphemeralKeys(prev => ({ ...prev, [msg.participantId]: msg.activeListPublicKey! }));
         }
@@ -360,24 +364,37 @@ export default function LiveAudioControlContainer({
 
   const handlePrivateSignal = useCallback((signal: DecryptedPrivateControlSignal) => {
     const data = getSignalRecord(signal);
+
+    if (data.type === 'ALIASES_SYNC' && data.aliases && typeof data.aliases === 'object') {
+      setParticipantAliases(prev => ({ ...prev, ...(data.aliases as Record<string, string>) }));
+      return;
+    }
+
     const alias = sanitizeAlias(data.alias);
     if (alias) {
-      setParticipantAliases(prev => ({ ...prev, [signal.fromParticipantId]: alias }));
+      setParticipantAliases(prev => {
+        if (prev[signal.fromParticipantId] === alias) return prev;
+        return { ...prev, [signal.fromParticipantId]: alias };
+      });
     }
 
     if (signal.ephemeralPublicKey) {
-      setParticipantEphemeralKeys(prev => ({ ...prev, [signal.fromParticipantId]: signal.ephemeralPublicKey! }));
+      setParticipantEphemeralKeys(prev => {
+        if (prev[signal.fromParticipantId] === signal.ephemeralPublicKey) return prev;
+        return { ...prev, [signal.fromParticipantId]: signal.ephemeralPublicKey! };
+      });
     }
 
     if (typeof data.isAliasVisibleToActiveParticipants === 'boolean') {
+      const visible = data.isAliasVisibleToActiveParticipants as boolean;
       setParticipantsMap(prev => {
         const existing = prev[signal.fromParticipantId];
-        if (!existing) return prev;
+        if (!existing || existing.isAliasVisibleToActiveParticipants === visible) return prev;
         return {
           ...prev,
           [signal.fromParticipantId]: {
             ...existing,
-            isAliasVisibleToActiveParticipants: data.isAliasVisibleToActiveParticipants as boolean,
+            isAliasVisibleToActiveParticipants: visible,
           },
         };
       });
@@ -387,7 +404,7 @@ export default function LiveAudioControlContainer({
           participants: [{
             participantId: signal.fromParticipantId,
             role: 'audience',
-            isAliasVisibleToActiveParticipants: data.isAliasVisibleToActiveParticipants,
+            isAliasVisibleToActiveParticipants: visible,
           }],
         },
         createdAt: Date.now(),
@@ -441,7 +458,7 @@ export default function LiveAudioControlContainer({
   const handleApproveRequest = useCallback((sessionId: string) => {
     const joinReq = joinRequests[sessionId];
     if (joinReq) {
-      void authorizeSecondaryControl(joinReq)
+      void authorizeSecondaryControl(joinReq, participantAliasesRef.current)
         .catch(err => console.error('Failed to authorize secondary control crypto', err))
         .finally(() => onApproveRequest(sessionId));
     } else {
@@ -452,7 +469,7 @@ export default function LiveAudioControlContainer({
       delete next[sessionId];
       return next;
     });
-  }, [authorizeSecondaryControl, joinRequests, onApproveRequest]);
+  }, [authorizeSecondaryControl, joinRequests, onApproveRequest, participantAliasesRef]);
 
   const handleDismissMessage = useCallback((id: string) => {
     setMessages(prev => prev.filter(m => m.id !== id));
@@ -533,8 +550,8 @@ export default function LiveAudioControlContainer({
     );
     if (unresolvedAudienceIds.length === 0) return;
 
-    void requestAliases();
-    const timer = window.setInterval(() => void requestAliases(), 20_000);
+    void requestAliases(unresolvedAudienceIds);
+    const timer = window.setInterval(() => void requestAliases(unresolvedAudienceIds), 20_000);
     return () => window.clearInterval(timer);
   }, [audienceAccessRequests, participantAliases, participantsMap, privateSignalsReady, requestAliases]);
 

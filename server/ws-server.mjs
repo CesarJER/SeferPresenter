@@ -11,13 +11,19 @@ const audienceAccessRecords = new Map()
 const audienceSseTickets = new Map()
 let presentationSessionId = randomUUID()
 let liveAudioControlPublicKeyMessage = null
+const getDefaultExternalBroadcastState = () => {
+  const def = process.env.VITE_SEFER_PUBLICABLE_DEFAULT?.toLowerCase()
+  if (def === 'recording' || def === 'live') return def
+  return 'off'
+}
+
 let externalBroadcastState = {
-  state: 'off',
+  state: getDefaultExternalBroadcastState(),
   revision: 0,
   updatedAt: Date.now(),
 }
 const PRIVATE_CONTROL_SIGNAL_MAX_CIPHERTEXT_BYTES = 4096
-const PRIVATE_CONTROL_SIGNAL_RATE_LIMIT = 5
+const PRIVATE_CONTROL_SIGNAL_RATE_LIMIT = 60
 const PRIVATE_CONTROL_SIGNAL_RATE_WINDOW_MS = 60_000
 const WS_MAX_PAYLOAD_BYTES = 64 * 1024
 const WS_MAX_BUFFERED_BYTES = 512 * 1024
@@ -446,7 +452,7 @@ const resetWsServerStateForTests = () => {
   audienceAccessRecords.clear()
   audienceSseTickets.clear()
   liveAudioControlPublicKeyMessage = null
-  externalBroadcastState = { state: 'off', revision: 0, updatedAt: Date.now() }
+  externalBroadcastState = { state: getDefaultExternalBroadcastState(), revision: 0, updatedAt: Date.now() }
   accessMode = getDefaultAccessMode()
 }
 
@@ -929,15 +935,23 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
   }
 
   const bindParticipantToConnection = (meta, participantId, status = {}) => {
-    if (!isValidParticipantId(participantId)) return null
-    if (meta.participantId && meta.participantId !== participantId) {
-      if (meta.role !== 'audience' || meta.participantId !== meta.audienceAccessId) return null
+    if (!isValidParticipantId(participantId)) {
+      console.log('[DEBUG-BIND] Invalid participantId:', participantId);
+      return null
+    }
+    const isNewParticipantId = meta.participantId && meta.participantId !== participantId
+    if (isNewParticipantId) {
+      if (meta.role !== 'audience' || meta.participantId !== meta.audienceAccessId) {
+        console.log('[DEBUG-BIND] Not audience or not matching audienceAccessId. meta.participantId:', meta.participantId, 'audienceAccessId:', meta.audienceAccessId, 'role:', meta.role);
+        return null
+      }
       const accessParticipant = liveAudioParticipants.get(meta.participantId)
       if (accessParticipant?.ws === meta.ws) liveAudioParticipants.delete(meta.participantId)
     }
 
     const existing = liveAudioParticipants.get(participantId)
     if (existing && existing.ws && existing.ws !== meta.ws && existing.ws.readyState === WebSocket.OPEN) {
+      console.log('[DEBUG-BIND] Existing WS is open and different. existing.ws:', existing.ws !== meta.ws);
       return null
     }
 
@@ -988,6 +1002,10 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
     }
     liveAudioParticipants.set(participantId, participant)
     meta.participantId = participantId
+    if (isNewParticipantId && liveAudioControlPublicKeyMessage && meta.role === 'audience') {
+      console.log('[DEBUG-BIND] Sending public key to new participant:', participantId);
+      sendJson(meta.ws, liveAudioControlPublicKeyMessage)
+    }
     return participant
   }
 
@@ -1053,16 +1071,24 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
   }
 
   const canAcceptPrivateSignal = (meta, msg) => {
+    console.log('[DEBUG] canAcceptPrivateSignal called with meta.participantId:', meta.participantId, 'msg.fromParticipantId:', msg.fromParticipantId);
     const participant = bindParticipantToConnection(meta, msg.fromParticipantId)
-    if (!participant) return false
+    if (!participant) {
+      console.log('[DEBUG] bindParticipantToConnection returned null for', msg.fromParticipantId);
+      return false
+    }
 
     const now = Date.now()
     participant.privateSignalTimestamps = participant.privateSignalTimestamps
       .filter((timestamp) => now - timestamp < PRIVATE_CONTROL_SIGNAL_RATE_WINDOW_MS)
-    if (participant.privateSignalTimestamps.length >= PRIVATE_CONTROL_SIGNAL_RATE_LIMIT) return false
+    if (participant.privateSignalTimestamps.length >= PRIVATE_CONTROL_SIGNAL_RATE_LIMIT) {
+      console.log('[DEBUG] Rate limit reached for', msg.fromParticipantId);
+      return false
+    }
 
     participant.privateSignalTimestamps.push(now)
     participant.updatedAt = now
+    console.log('[DEBUG] canAcceptPrivateSignal APPROVED for', msg.fromParticipantId);
     return true
   }
 
@@ -1716,7 +1742,12 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
             sendError(ws, 'CONTROL_PENDING_FORBIDDEN', 'Pending controls cannot request aliases')
             break
           }
-          broadcast(msg, (targetMeta) => targetMeta.role === 'audience')
+          if (Array.isArray(msg.targetParticipantIds) && msg.targetParticipantIds.length > 0) {
+            const targetSet = new Set(msg.targetParticipantIds)
+            broadcast(msg, (targetMeta) => targetMeta.role === 'audience' && targetSet.has(targetMeta.participantId))
+          } else {
+            broadcast(msg, (targetMeta) => targetMeta.role === 'audience')
+          }
           break
         }
 

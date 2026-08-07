@@ -69,6 +69,8 @@ export const LiveAudioControlPanel: React.FC<LiveAudioControlPanelProps> = ({
   const [isListenVolOpen, setIsListenVolOpen] = useState(false);
   const [isMicVolOpen, setIsMicVolOpen] = useState(false);
 
+  const externalPermission = (import.meta.env.VITE_SEFER_PUBLICABLE_PERMISSION || 'RECORDING').toUpperCase();
+
   return (
     <div className="fixed bottom-0 right-0 md:bottom-4 md:right-4 w-full md:w-[400px] flex flex-col z-40">
       
@@ -78,23 +80,27 @@ export const LiveAudioControlPanel: React.FC<LiveAudioControlPanelProps> = ({
           ${isExpanded ? 'h-[60vh] max-h-[calc(100vh-80px)] md:h-[450px] opacity-100' : 'h-0 max-h-0 opacity-0 border-none'}`}
       >
         <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
-          <label className="flex flex-col gap-1 rounded border border-gray-700 bg-gray-950/60 p-2 text-xs text-gray-300">
-            <span className="font-semibold">Estado externo declarado</span>
-            <select
-              value={externalBroadcastState}
-              disabled={!isControlAuthorized}
-              onChange={(event) => onExternalBroadcastStateChange(event.target.value as LiveAudioExternalBroadcastState)}
-              className="rounded border border-gray-600 bg-gray-900 px-2 py-1.5 text-white disabled:opacity-50"
-              aria-label="Estado externo de retransmisión y grabación"
-            >
-              <option value="off">Sin retransmisión</option>
-              <option value="live">En directo</option>
-              <option value="recording">En directo y grabando</option>
-            </select>
-            <span className="text-[10px] text-gray-500">
-              Debe cambiarse antes de iniciar o detener la herramienta externa.
-            </span>
-          </label>
+          {externalPermission !== 'NONE' && (
+            <label className="flex flex-col gap-1 rounded border border-gray-700 bg-gray-950/60 p-2 text-xs text-gray-300">
+              <span className="font-semibold">Estado externo declarado</span>
+              <select
+                value={externalBroadcastState}
+                disabled={!isControlAuthorized}
+                onChange={(event) => onExternalBroadcastStateChange(event.target.value as LiveAudioExternalBroadcastState)}
+                className="rounded border border-gray-600 bg-gray-900 px-2 py-1.5 text-white disabled:opacity-50"
+                aria-label="Estado externo de retransmisión y grabación"
+              >
+                <option value="off">Sin retransmisión</option>
+                <option value="live">En directo</option>
+                {externalPermission === 'RECORDING' && (
+                  <option value="recording">En directo y grabando</option>
+                )}
+              </select>
+              <span className="text-[10px] text-gray-500">
+                Debe cambiarse antes de iniciar o detener la herramienta externa.
+              </span>
+            </label>
+          )}
           
           {/* Global Actions */}
           <div className="flex gap-2 shrink-0">

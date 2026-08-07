@@ -89,14 +89,14 @@ export const createPrivacySessionManifestRecorder = ({
     await rename(temporary, target)
   }
 
-  const start = async (timestamp) => {
+  const start = async (timestamp, nextState) => {
     if (!resolvedManifestDir || active) return
     const manifestId = createId()
     const policy = await loadPolicyEvidence(publicDir, policyPath)
     const document = {
       schemaVersion: MANIFEST_SCHEMA_VERSION,
       manifestId,
-      status: 'recording',
+      status: nextState,
       startedAt: toIso(timestamp),
       endedAt: null,
       channels: normalizedChannels,
@@ -125,7 +125,7 @@ export const createPrivacySessionManifestRecorder = ({
       ...active.document,
       status: 'completed',
       endedAt: toIso(timestamp),
-      outcome: nextState === 'off' ? 'broadcast-stopped' : 'recording-stopped-live-continues',
+      outcome: nextState === 'off' ? 'broadcast-stopped' : `transitioned-to-${nextState}`,
     }
     await persist(active)
     active = null
@@ -134,10 +134,13 @@ export const createPrivacySessionManifestRecorder = ({
   const applyTransition = async ({ nextState, updatedAt } = {}) => {
     if (!resolvedManifestDir || !['off', 'live', 'recording'].includes(nextState)) return
     const timestamp = Number.isFinite(updatedAt) ? updatedAt : now()
-    if (nextState === 'recording') {
-      await start(timestamp)
-    } else {
+    
+    if (active && active.document.status !== nextState) {
       await finish(timestamp, nextState)
+    }
+
+    if (nextState === 'recording' || nextState === 'live') {
+      await start(timestamp, nextState)
     }
   }
 

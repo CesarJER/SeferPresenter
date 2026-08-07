@@ -43,7 +43,6 @@ export default function LiveAudioAudienceContainer({
   availability,
   wsSend,
   subscribeToWsMessage,
-  clientId,
   audienceSession,
   children
 }: LiveAudioAudienceContainerProps) {
@@ -60,7 +59,7 @@ export default function LiveAudioAudienceContainer({
   const [externalBroadcastRevision, setExternalBroadcastRevision] = useState(0);
   const lastPrivateProfileSignatureRef = useRef('');
   const microphoneConsentRevisionRef = useRef(0);
-  
+
   const [showInterventionModal, setShowInterventionModal] = useState(false);
   const [showPrivateMessageModal, setShowPrivateMessageModal] = useState(false);
 
@@ -108,7 +107,7 @@ export default function LiveAudioAudienceContainer({
     const handleVisibilityChange = () => {
       const audioEl = silenceAudioRef.current;
       if (!audioEl) return;
-      
+
       // Comprobar si hay alguna pista de multimedia normal reproduciéndose
       const isOtherMediaPlaying = () => {
         const mediaElements = document.querySelectorAll('audio, video');
@@ -116,16 +115,16 @@ export default function LiveAudioAudienceContainer({
           const media = el as HTMLMediaElement;
           if (media === audioEl) continue; // Ignorar nuestro silencio
           if (media.srcObject) continue; // Ignorar pistas de LiveKit/WebRTC
-          
+
           if (!media.paused && media.currentTime > 0 && !media.ended && !media.muted) {
             return true;
           }
         }
         return false;
       };
-      
+
       const hasActiveAudio = isOtherMediaPlaying();
-      
+
       if (document.hidden && liveKitState === 'connected' && !hasActiveAudio) {
         audioEl.play().catch(e => console.warn("Silence loop play prevented:", e));
       } else {
@@ -166,7 +165,7 @@ export default function LiveAudioAudienceContainer({
   // 2. Setup private signals
   const { sendPrivateSignal, ready: privateSignalReady, getAudiencePublicKey } = usePrivateControlSignals({
     role: 'audience',
-    participantId: participantId || clientId,
+    participantId: participantId ?? '',
     sendMessage: wsSend,
     subscribeToWsMessage,
     transportReady: availability === 'enabled',
@@ -351,10 +350,10 @@ export default function LiveAudioAudienceContainer({
     });
     return unsubscribe;
   }, [
-    isWordGranted, 
-    participantId, 
-    sendParticipantStatus, 
-    subscribeToWsMessage, 
+    isWordGranted,
+    participantId,
+    sendParticipantStatus,
+    subscribeToWsMessage,
     unpublishMicrophone,
     activeAlias,
     publishActiveProfile,
@@ -502,7 +501,7 @@ export default function LiveAudioAudienceContainer({
       isMicrophoneActive: false,
       isKicked: false,
     });
-    
+
     await publishActiveProfile(alias, isAliasVisible);
   }, [audienceSession, publishActiveProfile, sendParticipantStatus]);
 
@@ -661,11 +660,11 @@ export default function LiveAudioAudienceContainer({
       ))}
 
       {/* Background silence loop to keep WebRTC alive on mobile browsers when no other media is active */}
-      <audio 
-        ref={silenceAudioRef} 
-        src="/audio/sounds/silence.ogg" 
-        loop 
-        playsInline 
+      <audio
+        ref={silenceAudioRef}
+        src="/audio/sounds/silence.ogg"
+        loop
+        playsInline
       />
 
       {isMicrophoneActive && (

@@ -273,13 +273,12 @@ const handleToken = async ({ req, res, readBody, sendJson, controlApi }) => {
   const body = await readJson(req, readBody)
   const requestedRole = roles.has(body.role) ? body.role : 'audience'
 
-  if (
-    requestedRole === 'audience' &&
-    controlApi?.getSessionAccessMode?.() === 'CONTROLLED' &&
-    !controlApi?.authorizeAudienceCredential?.(body.audienceAccessCredential)
-  ) {
-    sendJson(res, 403, { error: 'Audience admission is required for Live Audio' })
-    return true
+  if (requestedRole === 'audience' && controlApi?.getSessionAccessMode?.() === 'CONTROLLED') {
+    const record = controlApi?.authorizeAudienceCredential?.(body.audienceAccessCredential)
+    if (!record) {
+      sendJson(res, 403, { error: 'Audience admission is required for Live Audio' })
+      return true
+    }
   }
 
   if (requestedRole !== 'audience') {

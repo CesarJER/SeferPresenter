@@ -62,9 +62,9 @@ export interface PrivateControlSignalsState {
   sendPrivateSignal: (value: unknown, options?: SendPrivateSignalOptions) => Promise<boolean>;
   sendPrivateSignalToParticipant: (participantId: string, participantPublicKeyBase64: string, value: unknown) => Promise<boolean>;
   getAudiencePublicKey: () => Promise<string | null>;
-  requestAliases: () => Promise<boolean>;
+  requestAliases: (targetParticipantIds?: string[]) => Promise<boolean>;
   requestControlAuthorization: (verificationCode: string) => Promise<boolean>;
-  authorizeSecondaryControl: (request: LiveAudioControlJoinRequestMessage) => Promise<boolean>;
+  authorizeSecondaryControl: (request: LiveAudioControlJoinRequestMessage, aliases?: Record<string, string>) => Promise<boolean>;
   clearPrivateState: () => void;
 }
 
@@ -112,6 +112,7 @@ export function usePrivateControlSignals(options: UsePrivateControlSignalsOption
   const usedNonceKeysRef = useRef<Set<string>>(new Set());
   const currentKeyIdRef = useRef<string | null>(null);
   const currentControlPublicKeyRef = useRef<string | null>(null);
+  const lastAliasRequestTimeRef = useRef<number>(0);
   const sendMessageRef = useRef(sendMessage);
   const onPrivateSignalRef = useRef(onPrivateSignal);
   const onControlKeyRotatedRef = useRef(onControlKeyRotated);
@@ -273,9 +274,14 @@ export function usePrivateControlSignals(options: UsePrivateControlSignalsOption
     return sendMessageRef.current(message.type, message);
   }, [participantId, role]);
 
-  const requestAliases = useCallback(async (): Promise<boolean> => {
+  const requestAliases = useCallback(async (targetParticipantIds?: string[]): Promise<boolean> => {
     if (role !== 'control' || !transportReady) return false;
-    const message = makeSyncMessage({ type: 'LIVE_AUDIO_REQUEST_ALIASES' as const });
+    
+    const now = Date.now();
+    if (now - lastAliasRequestTimeRef.current < 10_000) return false;
+    lastAliasRequestTimeRef.current = now;
+
+    const message = makeSyncMessage({ type: 'LIVE_AUDIO_REQUEST_ALIASES' as const, targetParticipantIds });
     return sendMessageRef.current(message.type, message);
   }, [role, transportReady]);
 
@@ -298,6 +304,7 @@ export function usePrivateControlSignals(options: UsePrivateControlSignalsOption
 
   const authorizeSecondaryControl = useCallback(async (
     request: LiveAudioControlJoinRequestMessage,
+    aliases?: Record<string, string>,
   ): Promise<boolean> => {
     if (role !== 'control' || !transportReady || !request.recipientPublicKey) return false;
     if (!sessionKeyPairRef.current || !currentKeyIdRef.current || !currentControlPublicKeyRef.current) return false;
@@ -308,6 +315,11 @@ export function usePrivateControlSignals(options: UsePrivateControlSignalsOption
     const exportedPrivateKey = await exportPrivateKey(sessionKeyPairRef.current.privateKey);
     const encrypted = await encrypt(transferKey, exportedPrivateKey);
 
+    let encryptedAliases;
+    if (aliases) {
+      encryptedAliases = await encrypt(transferKey, JSON.stringify(aliases));
+    }
+
     const message = makeSyncMessage({
       type: 'LIVE_AUDIO_CONTROL_AUTHORIZED' as const,
       controlSessionId: request.controlSessionId,
@@ -317,6 +329,8 @@ export function usePrivateControlSignals(options: UsePrivateControlSignalsOption
       transferPublicKey: await exportPublicKey(transferKeyPair),
       encryptedSessionPrivateKey: encrypted.ciphertext,
       nonce: encrypted.nonce,
+      encryptedAliases: encryptedAliases?.ciphertext,
+      aliasesNonce: encryptedAliases?.nonce,
       createdAt: Date.now(),
     });
 
@@ -395,6 +409,31 @@ export function usePrivateControlSignals(options: UsePrivateControlSignalsOption
     currentControlPublicKeyRef.current = message.sessionPublicKey;
     setKeyId(message.keyId);
     setControlPublicKey(message.sessionPublicKey);
+
+    if (message.encryptedAliases && message.aliasesNonce) {
+      try {
+        const decryptedAliasesJson = await decrypt(transferKey, message.encryptedAliases, message.aliasesNonce);
+        const decryptedAliases = JSON.parse(decryptedAliasesJson);
+        onPrivateSignalRef.current?.({
+          type: 'PRIVATE_CONTROL_SIGNAL',
+          fromParticipantId: 'system',
+          toControlSessionId: controlSessionId,
+          keyId: message.keyId,
+          ephemeralPublicKey: '',
+          ciphertext: '',
+          plaintext: '',
+          nonce: '',
+          createdAt: Date.now(),
+          receivedAt: Date.now(),
+          value: {
+            type: 'ALIASES_SYNC',
+            aliases: decryptedAliases,
+          }
+        } as DecryptedPrivateControlSignal);
+      } catch (e) {
+        console.warn('LiveAudioControl: Failed to decrypt aliases from authorization message', e);
+      }
+    }
   }, [controlSessionId, role]);
 
   useEffect(() => {

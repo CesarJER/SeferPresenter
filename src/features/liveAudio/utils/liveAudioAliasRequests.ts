@@ -8,7 +8,7 @@ export const getAudienceParticipantsNeedingAliasRequest = (
   [...new Set([
     ...accessParticipantIds,
     ...Object.values(participantsMap)
-      .filter((participant) => participant.role === 'audience' && !participant.isKicked)
+      .filter((participant) => participant.role === 'audience' && !participant.isKicked && participant.isActiveAudience !== false)
       .map((participant) => participant.participantId),
   ])]
     .filter((participantId) => !participantAliases[participantId])

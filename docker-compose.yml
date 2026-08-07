@@ -26,6 +26,8 @@ services:
         VITE_PRIVACY_POLICY_PATH: ${VITE_PRIVACY_POLICY_PATH:-/legal/privacy.md}
         VITE_PRIVACY_SUMMARY_PATH: ${VITE_PRIVACY_SUMMARY_PATH:-/legal/privacy-summary.md}
         VITE_SEFER_AUDIENCE_STORAGE_TTL_HOURS: ${VITE_SEFER_AUDIENCE_STORAGE_TTL_HOURS:-24}
+        VITE_SEFER_PUBLICABLE_PERMISSION: ${VITE_SEFER_PUBLICABLE_PERMISSION:-RECORDING}
+        VITE_SEFER_PUBLICABLE_DEFAULT: ${VITE_SEFER_PUBLICABLE_DEFAULT:-off}
     restart: unless-stopped
     stop_grace_period: 15s
     environment:
@@ -52,6 +54,8 @@ services:
       - SEFER_BROADCAST_NOTICE_VERSION=${SEFER_BROADCAST_NOTICE_VERSION:-broadcast-notice-v1}
       - SEFER_BACKUP_DIR=/app/backups
       - SEFER_FORCE_IN_PLACE_PERSISTENCE=${SEFER_FORCE_IN_PLACE_PERSISTENCE:-false}
+      - VITE_SEFER_PUBLICABLE_PERMISSION=${VITE_SEFER_PUBLICABLE_PERMISSION:-RECORDING}
+      - VITE_SEFER_PUBLICABLE_DEFAULT=${VITE_SEFER_PUBLICABLE_DEFAULT:-off}
     volumes:
       - ${DATA_DIR:-.}/presentations.json:/app/presentations.json
       - ${DATA_DIR:-.}/audio_sync.json:/app/audio_sync.json
