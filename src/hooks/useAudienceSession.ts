@@ -18,15 +18,15 @@ export function useAudienceSession({ subscribeToWsMessage }: UseAudienceSessionP
   const [aliasVisible, setAliasVisible] = useState<boolean>(false);
   const [presentationSessionId, setPresentationSessionId] = useState<string | null>(null);
 
-  // Aliases and participant IDs are page-scoped. Remove values persisted by older versions.
+  // Restore persisted identity from localStorage to prevent alias loss on page reload
   useEffect(() => {
-    localStorage.removeItem(AUDIENCE_DEVICE_ID_KEY);
-    localStorage.removeItem(AUDIENCE_NICK_KEY);
-    localStorage.removeItem(ALIAS_VISIBLE_KEY);
+    const savedNick = readExpiringStorage<string>(localStorage, AUDIENCE_NICK_KEY);
+    if (savedNick) setNick(savedNick);
 
     const defaultAliasVisible =
       String(import.meta.env.VITE_SEFER_ACTIVE_ALIAS_VISIBLE_BY_DEFAULT ?? 'false').toLowerCase() === 'true';
-    setAliasVisible(defaultAliasVisible);
+    const savedAliasVisible = readExpiringStorage<boolean>(localStorage, ALIAS_VISIBLE_KEY);
+    setAliasVisible(savedAliasVisible ?? defaultAliasVisible);
 
     const savedSessionId = readExpiringStorage<string>(localStorage, AUDIENCE_SESSION_ID_KEY);
     if (savedSessionId) {
@@ -70,6 +70,9 @@ export function useAudienceSession({ subscribeToWsMessage }: UseAudienceSessionP
         clearLocalSession();
         writeExpiringStorage(localStorage, AUDIENCE_SESSION_ID_KEY, newSessionId);
         setPresentationSessionId(newSessionId);
+        if (payload.hardRefresh) {
+          setTimeout(() => window.location.reload(), 150);
+        }
       }
     };
 
@@ -77,13 +80,16 @@ export function useAudienceSession({ subscribeToWsMessage }: UseAudienceSessionP
   }, [subscribeToWsMessage, clearLocalSession]);
 
   const login = useCallback((newNick: string) => {
-    setNick(newNick.trim().slice(0, 50));
+    const safeNick = newNick.trim().slice(0, 50);
+    setNick(safeNick);
+    writeExpiringStorage(localStorage, AUDIENCE_NICK_KEY, safeNick);
   }, []);
 
   const logout = clearLocalSession;
 
   const setAliasVisibleCallback = useCallback((value: boolean) => {
     setAliasVisible(value);
+    writeExpiringStorage(localStorage, ALIAS_VISIBLE_KEY, value);
   }, []);
 
   return {

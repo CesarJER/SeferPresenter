@@ -1712,6 +1712,7 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
             broadcast(JSON.stringify({
               type: 'PRESENTATION_SESSION_ROTATED',
               presentationSessionId,
+              hardRefresh: msg.payload.hardRefresh === true
             }))
             console.log('[SERVER] Presentation session rotated')
           }

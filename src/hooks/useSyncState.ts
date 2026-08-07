@@ -156,6 +156,12 @@ const areScriptureStatesEqual = (left: ScriptureNavState | null, right: Scriptur
   );
 };
 
+function handleSessionRotation(hardRefresh?: boolean) {
+  if (hardRefresh) {
+    setTimeout(() => window.location.reload(), 150);
+  }
+}
+
 export function useSyncState(props: UseSyncStateProps) {
   const {
     isControlMode, isPresenterMode, onRemoteCommand, clientIdRef,
@@ -210,6 +216,10 @@ export function useSyncState(props: UseSyncStateProps) {
       lastKeyMessageRef.current = { type, payload };
     }
     wsMessageSubscribersRef.current.forEach(handler => handler(type, payload));
+
+    if (type === 'PRESENTATION_SESSION_ROTATED') {
+      handleSessionRotation(payload.hardRefresh as boolean | undefined);
+    }
     
     if (type === 'WELCOME') {
       controlSessionIdRef.current = payload.controlSessionId as string | undefined;
@@ -609,6 +619,11 @@ export function useSyncState(props: UseSyncStateProps) {
 
       if (isLiveAudioWsOnlyType(data.type)) return;
 
+      if (data.type === 'PRESENTATION_SESSION_ROTATED') {
+        handleSessionRotation(data.hardRefresh as boolean | undefined);
+        return;
+      }
+
       if (data.messageId) {
         if (processedMessageIdsRef.current.has(data.messageId)) return;
         processedMessageIdsRef.current.add(data.messageId);
@@ -724,6 +739,11 @@ export function useSyncState(props: UseSyncStateProps) {
 
           if (safeData.type === 'DISPLAY_TELEMETRY') {
             applyDisplayTelemetryRef.current(safeData as DisplayTelemetryState);
+            return;
+          }
+
+          if (safeData.type === 'PRESENTATION_SESSION_ROTATED') {
+            handleSessionRotation(safeData.hardRefresh as boolean | undefined);
             return;
           }
 

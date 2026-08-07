@@ -117,6 +117,10 @@ export function useAudienceAccess() {
 
   const handleWsMessage = useCallback((type: string, payload: Record<string, unknown>) => {
     if (type === 'PRESENTATION_SESSION_ROTATED' || payload.accessState === 'CREDENTIAL_OBSOLETE') {
+      setSnapshot((current) => ({ ...current, accessState: 'CREDENTIAL_OBSOLETE' }));
+      if (payload.hardRefresh) {
+        setTimeout(() => window.location.reload(), 150);
+      }
       localStorage.removeItem(STORAGE_KEY);
       setCredential(null);
       setStateSseTicket(null);

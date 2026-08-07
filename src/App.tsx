@@ -437,6 +437,10 @@ function App() {
         break;
       case 'RESET_STATE':
         handleResetStateRef.current?.();
+        if (payload.hardRefresh) {
+          // Delay to ensure the WebSocket message is flushed before reloading
+          setTimeout(() => window.location.reload(), 150);
+        }
         break;
     }
   }, [activeQuizData, adjustQuizTimer, completeQuizTimer, pauseQuizTimer, quizAudio, resetQuizTimer, resumeQuizTimer, startQuizTimer, steps]);

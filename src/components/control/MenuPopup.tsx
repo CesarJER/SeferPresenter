@@ -77,7 +77,7 @@ interface MenuPopupProps {
   onAudioSyncMapsChange: (maps: AudioSyncMap[]) => void;
   autoduckState?: import('../../types/sync').AutoduckState;
   onAutoduckStateChange?: (state: import('../../types/sync').AutoduckState) => void;
-  onResetState?: (clearSession?: boolean) => void;
+  onResetState?: (clearSession?: boolean, hardRefresh?: boolean) => void;
   quizSubslides?: QuizSubslide[];
   quizCurrentSubslideIndex?: number;
   quizTimerState?: QuizTimerState;
@@ -2035,10 +2035,11 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
               </button>
               <button
                 type="button"
-                onClick={() => {
+                onClick={(e) => {
                   setShowResetConfirm(false);
                   if (onResetState) {
-                    onResetState(true);
+                    const hardRefresh = e.ctrlKey || e.metaKey || e.shiftKey || e.altKey; // Any modifier just in case
+                    onResetState(true, hardRefresh);
                   }
                 }}
                 className="px-4 py-2 bg-red-900 hover:bg-red-800 text-white rounded font-bold cursor-pointer"

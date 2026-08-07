@@ -67,7 +67,7 @@ export type RemoteCommandPayload =
   | { command: 'VIDEO_STATE_CHANGE'; state: VideoState | null }
   | { command: 'AUDIO_STATE_CHANGE'; state: AudioState }
   | { command: 'SET_AUTODUCK_STATE'; state: AutoduckState }
-  | { command: 'RESET_STATE'; clearSession?: boolean };
+  | { command: 'RESET_STATE'; clearSession?: boolean; hardRefresh?: boolean };
 
 export type BroadcastMessage =
   | ({ type: 'SYNC_STATE' } & SyncStatePayload & SyncProtocolMeta)
@@ -78,7 +78,7 @@ export type BroadcastMessage =
   | ({ type: 'REQUEST_STATE'; clientId?: string } & SyncProtocolMeta)
   | ({ type: 'REMOTE_COMMAND'; clientId: string; payload: RemoteCommandPayload } & SyncProtocolMeta)
   | ({ type: 'WELCOME'; clientId: string; serverTimeMs: number; role?: 'presenter' | 'control' | 'audience' | 'unknown'; presentationSessionId?: string } & SyncProtocolMeta)
-  | ({ type: 'PRESENTATION_SESSION_ROTATED'; presentationSessionId: string } & SyncProtocolMeta)
+  | ({ type: 'PRESENTATION_SESSION_ROTATED'; presentationSessionId: string; hardRefresh?: boolean } & SyncProtocolMeta)
   | ({ type: 'SERVER_TIME_PING'; clientSentAtMs: number } & SyncProtocolMeta)
   | ({ type: 'SERVER_TIME_PONG'; clientSentAtMs: number; serverTimeMs: number } & SyncProtocolMeta)
   | ({ type: 'AUDIO_TIMELINE_ACTION'; action: AudioTimelineAction } & SyncProtocolMeta)
