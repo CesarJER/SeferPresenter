@@ -452,7 +452,8 @@ export const useLiveAudio = ({
 
   const scheduleTokenRefresh = useCallback((tokenResponse: LiveAudioTokenResponse, runId: number) => {
     clearTimer(refreshTimerRef);
-    const delayMs = Math.max(tokenResponse.expiresAt - Date.now() - TOKEN_REFRESH_MARGIN_MS, 5_000);
+    const timeUntilExpiry = tokenResponse.expiresInMs ?? (tokenResponse.expiresAt - Date.now());
+    const delayMs = Math.max(timeUntilExpiry - TOKEN_REFRESH_MARGIN_MS, 5_000);
 
     refreshTimerRef.current = setTimeout(() => {
       const activeParticipantId = participantIdRef.current;

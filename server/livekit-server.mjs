@@ -156,7 +156,8 @@ const issueToken = ({ role, roomSession, controlSessionId, existingParticipant }
   }
 
   const nowSeconds = Math.floor(Date.now() / 1000)
-  const expiresAt = Date.now() + config.tokenTtlMinutes * 60_000
+  const expiresInMs = config.tokenTtlMinutes * 60_000
+  const expiresAt = Date.now() + expiresInMs
   const participantId = existingParticipant?.participantId || randomUUID()
   const participantIdentity = existingParticipant?.participantIdentity || `${role}-${participantId}`
   const room = getRoomName(config, roomSession || existingParticipant?.roomSession)
@@ -199,6 +200,7 @@ const issueToken = ({ role, roomSession, controlSessionId, existingParticipant }
       livekitUrl: config.livekitUrl,
       token,
       expiresAt,
+      expiresInMs,
       participantIdentity,
       participantId,
       refreshCredential,

@@ -376,6 +376,7 @@ export interface LiveAudioTokenResponse {
   token: string;
   refreshCredential: string;
   expiresAt: number;
+  expiresInMs?: number;
   participantIdentity: string;
   participantId: string;
 }
