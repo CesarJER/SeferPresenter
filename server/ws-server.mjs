@@ -38,6 +38,7 @@ const audienceAllowedTypes = new Set([
   'SERVER_TIME_PING',
   'AUDIENCE_ACCESS_BIND',
   'AUDIENCE_ACCESS_REQUEST',
+  'AUDIENCE_ACCESS_LEAVE',
   'LIVE_AUDIO_PARTICIPANT_STATUS',
   'LIVE_AUDIO_ACTIVE_PARTICIPANT_PROFILE',
   'PRIVATE_CONTROL_SIGNAL',
@@ -593,6 +594,20 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
     }
   }
 
+  const handleAudienceAccessLeave = (meta) => {
+    if (meta?.role !== 'audience' || accessMode !== 'CONTROLLED' || !meta.audienceAccessId) return
+    const record = audienceAccessRecords.get(meta.audienceAccessId)
+    if (!record || record.accessState === 'BLOCKED') return
+    record.accessState = 'REQUEST_REQUIRED'
+    record.hasAlias = false
+    record.requestedAt = undefined
+    record.retryAt = undefined
+    releaseParticipantConnection(meta)
+    meta.participantId = meta.audienceAccessId
+    notifyAudienceAccessRecord(record)
+    snapshotProviders.invalidateAudienceStreams?.()
+  }
+
   const handleAudienceAccessDecision = (meta, msg) => {
     const issuer = liveAudioControls.get(meta?.controlSessionId)
     if (!isControlAuthorized(issuer)) return
@@ -978,14 +993,15 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
 
   const releaseParticipantConnection = (meta) => {
     if (meta?.role !== 'audience' || !meta.participantId) return
-    const participant = liveAudioParticipants.get(meta.participantId)
+    const participantId = meta.participantId
+    const participant = liveAudioParticipants.get(participantId)
     if (!participant || participant.ws !== meta.ws) return
 
     participant.ws = null
     participant.disconnectedAt = Date.now()
     participant.cleanupDueAt = participant.disconnectedAt + getRejoinGraceMs()
     clearTimeout(participant.cleanupTimer)
-    participant.cleanupTimer = setTimeout(() => cleanupExpiredParticipant(meta.participantId), getRejoinGraceMs())
+    participant.cleanupTimer = setTimeout(() => cleanupExpiredParticipant(participantId), getRejoinGraceMs())
     participant.cleanupTimer.unref?.()
 
     broadcast({
@@ -1555,6 +1571,10 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
 
         case 'AUDIENCE_ACCESS_REQUEST':
           handleAudienceAccessRequest(meta, msg)
+          break
+
+        case 'AUDIENCE_ACCESS_LEAVE':
+          handleAudienceAccessLeave(meta)
           break
 
         case 'AUDIENCE_ACCESS_DECISION':

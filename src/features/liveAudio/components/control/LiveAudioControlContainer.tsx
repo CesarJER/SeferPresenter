@@ -120,7 +120,6 @@ export default function LiveAudioControlContainer({
   const [accessMode, setAccessMode] = useState<'PUBLIC' | 'CONTROLLED'>('PUBLIC');
   const [audienceAccessRequests, setAudienceAccessRequests] = useState<Record<string, { requestedAt: number; accessState: 'WAITING' | 'BLOCKED' }>>({});
   const participantAliasesRef = useRef(participantAliases);
-  const aliasRequestSignatureRef = useRef('');
   const lastSentListRef = useRef('');
   const requestedAuthRef = useRef<string | null>(null);
   const moderatorConsentRevisionRef = useRef(0);
@@ -527,16 +526,17 @@ export default function LiveAudioControlContainer({
   useEffect(() => {
     if (!privateSignalsReady) return;
 
-    const unresolvedAudienceIds = getAudienceParticipantsNeedingAliasRequest(participantsMap, participantAliases);
+    const unresolvedAudienceIds = getAudienceParticipantsNeedingAliasRequest(
+      participantsMap,
+      participantAliases,
+      Object.keys(audienceAccessRequests),
+    );
+    if (unresolvedAudienceIds.length === 0) return;
 
-    const signature = unresolvedAudienceIds.join('|');
-    if (signature === aliasRequestSignatureRef.current) return;
-    aliasRequestSignatureRef.current = signature;
-
-    if (unresolvedAudienceIds.length > 0) {
-      void requestAliases();
-    }
-  }, [participantAliases, participantsMap, privateSignalsReady, requestAliases]);
+    void requestAliases();
+    const timer = window.setInterval(() => void requestAliases(), 20_000);
+    return () => window.clearInterval(timer);
+  }, [audienceAccessRequests, participantAliases, participantsMap, privateSignalsReady, requestAliases]);
 
   const participants: LiveAudioParticipant[] = useMemo(() => (
     Object.values(participantsMap)

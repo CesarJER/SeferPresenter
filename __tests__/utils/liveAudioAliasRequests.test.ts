@@ -79,4 +79,9 @@ describe('live audio alias request targets', () => {
 
     expect(getAudienceParticipantsNeedingAliasRequest(participants, { a: 'Alberto' })).toEqual([]);
   });
+
+  it('also requests unresolved aliases from controlled-access entries', () => {
+    expect(getAudienceParticipantsNeedingAliasRequest({}, { admitted: 'Ada' }, ['pending', 'admitted']))
+      .toEqual(['pending']);
+  });
 });

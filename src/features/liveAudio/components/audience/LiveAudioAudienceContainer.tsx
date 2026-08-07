@@ -481,8 +481,9 @@ export default function LiveAudioAudienceContainer({
       isMicrophoneActive: false,
       isKicked: false,
     });
+    wsSend('AUDIENCE_ACCESS_LEAVE', { createdAt: Date.now() });
     void unpublishMicrophone();
-  }, [sendParticipantStatus, unpublishMicrophone, audienceSession]);
+  }, [sendParticipantStatus, unpublishMicrophone, audienceSession, wsSend]);
 
   const handleSubmitAlias = useCallback(async (alias: string, isAliasVisible: boolean) => {
     audienceSession.login(alias);

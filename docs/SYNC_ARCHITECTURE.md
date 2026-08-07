@@ -69,9 +69,11 @@ Main message types live in `src/types/sync.ts`:
 - `MEDIA_MASTER_STATUS`: server-broadcasted status determining if the current control client is the media master (e.g. when there is no active presenter).
 - `ERROR`: technical error code and message.
 - `SESSION_ACCESS_POLICY`, `AUDIENCE_ACCESS_STATE`,
-  `AUDIENCE_ACCESS_REQUEST` and `AUDIENCE_ACCESS_DECISION`: controlled-entry
-  state. Only the principal changes the public/controlled policy; authorized
-  Controls process pending requests from their private inbox.
+`AUDIENCE_ACCESS_REQUEST` and `AUDIENCE_ACCESS_DECISION`: controlled-entry
+state. Only the principal changes the public/controlled policy; authorized
+Controls process pending requests from their private inbox.
+`AUDIENCE_ACCESS_LEAVE` returns an admitted Audience client to the access gate
+when it explicitly leaves during a controlled session.
 - Live Audio family: optional LiveKit-ready technical messages that stay
   outside `SYNC_STATE` and existing `REMOTE_COMMAND` payloads.
 
@@ -227,7 +229,8 @@ Control uses `lastSentListRef` to avoid re-sending unchanged visible lists.
 - `LIVE_AUDIO_REQUEST_ALIASES` is an empty public doorbell from authorized
   Controls to audience clients. Audience responses must travel back as encrypted
   `PRIVATE_CONTROL_SIGNAL` payloads such as `ACTIVE_STATE` or `REQUEST_WORD`,
-  never as clear-text alias messages.
+  never as clear-text alias messages. Control also retries this doorbell for
+  unresolved controlled-access nicks.
 - `LIVE_AUDIO_SNAPSHOT_REQUEST`, `LIVE_AUDIO_SNAPSHOT`, and
   `LIVE_AUDIO_SNAPSHOT_PATCH` support Control handoff. Only authorized Controls
   receive or publish operational snapshots; pending Controls receive an error

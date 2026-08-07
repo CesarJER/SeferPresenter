@@ -188,6 +188,26 @@ describe('Live Audio WebSocket routing', () => {
     ));
     expect(grant.participantId).toBe(liveAudioParticipantId);
 
+    audience.send({ type: 'AUDIENCE_ACCESS_LEAVE', createdAt: Date.now() });
+    await waitFor(audience, (message) => (
+      message.type === 'AUDIENCE_ACCESS_STATE' && message.accessState === 'REQUEST_REQUIRED'
+    ));
+    audience.send(makePrivateSignal(access.participantId, 'second-request'));
+    await waitFor(principal, (message) => (
+      message.type === 'PRIVATE_CONTROL_SIGNAL' &&
+      message.fromParticipantId === access.participantId
+    ));
+    audience.send({
+      type: 'AUDIENCE_ACCESS_REQUEST',
+      participantId: access.participantId,
+      createdAt: Date.now(),
+    });
+    await waitFor(principal, (message) => (
+      message.type === 'AUDIENCE_ACCESS_REQUEST' &&
+      message.participantId === access.participantId &&
+      typeof message.requestedAt === 'number'
+    ));
+
     principal.send({
       type: 'AUDIENCE_ACCESS_DECISION',
       participantId: access.participantId,

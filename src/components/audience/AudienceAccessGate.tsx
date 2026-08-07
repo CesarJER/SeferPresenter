@@ -29,6 +29,7 @@ export function AudienceAccessGate({
 }: AudienceAccessGateProps) {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [submittedAlias, setSubmittedAlias] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const [broadcastState, setBroadcastState] = useState<LiveAudioExternalBroadcastState>('off');
   const privateSignals = usePrivateControlSignals({
@@ -40,11 +41,12 @@ export function AudienceAccessGate({
   });
 
   useEffect(() => subscribeToWsMessage((type, payload) => {
-    if (type !== 'LIVE_AUDIO_EXTERNAL_BROADCAST_STATE') return;
-    if (payload.state === 'off' || payload.state === 'live' || payload.state === 'recording') {
+    if (type === 'LIVE_AUDIO_EXTERNAL_BROADCAST_STATE' && (payload.state === 'off' || payload.state === 'live' || payload.state === 'recording')) {
       setBroadcastState(payload.state);
+    } else if (type === 'LIVE_AUDIO_REQUEST_ALIASES' && submittedAlias && privateSignals.ready) {
+      void privateSignals.sendPrivateSignal({ type: 'ACCESS_REQUEST', alias: submittedAlias });
     }
-  }), [subscribeToWsMessage]);
+  }), [privateSignals, submittedAlias, subscribeToWsMessage]);
 
   useEffect(() => {
     if (accessState !== 'REJECTED' || !retryAt) return;
@@ -58,7 +60,9 @@ export function AudienceAccessGate({
     setError(null);
     try {
       const aliasSent = await privateSignals.sendPrivateSignal({ type: 'ACCESS_REQUEST', alias });
-      const requestSent = aliasSent && wsSend('AUDIENCE_ACCESS_REQUEST', {
+      if (!aliasSent) throw new Error('No se pudo enviar el alias.');
+      setSubmittedAlias(alias);
+      const requestSent = wsSend('AUDIENCE_ACCESS_REQUEST', {
         participantId,
         createdAt: Date.now(),
       });
