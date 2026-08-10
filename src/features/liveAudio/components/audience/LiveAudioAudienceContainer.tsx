@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { ReactNode } from 'react';
+import { MessageSquare, X } from 'lucide-react';
 import { AudienceInterventionModal } from './AudienceInterventionModal';
 import { AudiencePrivateControlMessage } from './AudiencePrivateControlMessage';
 import { useLiveAudio } from '../../hooks/useLiveAudio';
@@ -62,6 +63,9 @@ export default function LiveAudioAudienceContainer({
 
   const [showInterventionModal, setShowInterventionModal] = useState(false);
   const [showPrivateMessageModal, setShowPrivateMessageModal] = useState(false);
+  const [receivedControlMessages, setReceivedControlMessages] = useState<
+    Array<{ id: string; senderNick: string; text: string; timestamp: number }>
+  >([]);
 
   const [hasAudioStarted, setHasAudioStarted] = useState(false);
   const [volume, setVolume] = useState(1);
@@ -182,6 +186,16 @@ export default function LiveAudioAudienceContainer({
         }
       } else if (payload.type === 'VISIBLE_ACTIVE_PARTICIPANTS' && Array.isArray(payload.participants)) {
         setVisibleParticipants(payload.participants.filter((participant): participant is string => typeof participant === 'string'));
+      } else if (payload.type === 'CHAT_RESPONSE') {
+        const text = typeof payload.text === 'string' ? payload.text.trim() : '';
+        const senderNick = typeof payload.senderNick === 'string' && payload.senderNick ? payload.senderNick : 'Control';
+        const timestamp = typeof payload.timestamp === 'number' ? payload.timestamp : Date.now();
+        if (text) {
+          setReceivedControlMessages(prev => [
+            ...prev,
+            { id: `${Date.now()}-${Math.random().toString(36).slice(2)}`, senderNick, text, timestamp }
+          ]);
+        }
       }
     }
   });
@@ -685,6 +699,42 @@ export default function LiveAudioAudienceContainer({
           onClose={() => setShowPrivateMessageModal(false)}
           onSend={handleSendPrivateMessage}
         />
+      )}
+
+      {/* Control Responses floating overlay */}
+      {receivedControlMessages.length > 0 && (
+        <div className="fixed top-4 right-4 left-4 md:left-auto md:w-96 z-50 space-y-2 pointer-events-auto">
+          {receivedControlMessages.map((msg) => (
+            <div
+              key={msg.id}
+              className="rounded-xl border border-blue-600/50 bg-gray-900/95 p-3.5 shadow-2xl backdrop-blur-md text-white transition-all animate-in fade-in slide-in-from-top duration-200"
+            >
+              <div className="flex items-center justify-between gap-2 mb-1">
+                <div className="flex items-center gap-1.5 text-xs font-semibold text-blue-300">
+                  <MessageSquare className="h-4 w-4 text-blue-400 shrink-0" />
+                  <span>Mensaje de {msg.senderNick}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] text-gray-400 font-mono">
+                    {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setReceivedControlMessages((prev) => prev.filter((m) => m.id !== msg.id))}
+                    className="text-gray-400 hover:text-white p-0.5 rounded transition-colors"
+                    title="Cerrar mensaje"
+                    aria-label="Cerrar mensaje"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+              <p className="text-xs text-gray-100 leading-relaxed pl-5">
+                "{msg.text}"
+              </p>
+            </div>
+          ))}
+        </div>
       )}
     </AudienceLiveAudioContext.Provider>
   );

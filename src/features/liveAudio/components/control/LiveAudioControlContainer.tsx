@@ -411,6 +411,46 @@ export default function LiveAudioControlContainer({
       });
     }
 
+    if (data.type === 'MESSAGE_REPLY_SYNC') {
+      const messageId = typeof data.messageId === 'string' ? data.messageId : '';
+      const targetParticipantId = typeof data.targetParticipantId === 'string' ? data.targetParticipantId : '';
+      const responseText = typeof data.responseText === 'string' ? data.responseText : '';
+      const repliedBy = typeof data.repliedBy === 'string' ? data.repliedBy : 'Control';
+      const repliedAt = typeof data.repliedAt === 'number' ? data.repliedAt : Date.now();
+      if (responseText) {
+        setMessages(prev => prev.map(m => {
+          if (m.id === messageId || (targetParticipantId && m.fromParticipantId === targetParticipantId)) {
+            const existingReplies = m.replies || [];
+            return {
+              ...m,
+              replies: [...existingReplies, { responseText, repliedBy, repliedAt }],
+            };
+          }
+          return m;
+        }));
+      }
+      return;
+    }
+
+    if (data.type === 'CONTROL_ANNOUNCEMENT') {
+      const content = typeof data.text === 'string'
+        ? data.text.trim()
+        : typeof data.content === 'string'
+          ? data.content.trim()
+          : '';
+      if (content) {
+        const fromAlias = typeof data.senderNick === 'string' && data.senderNick ? data.senderNick : 'Control';
+        setMessages(prev => [...prev, {
+          id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+          fromAlias,
+          content,
+          timestamp: typeof data.timestamp === 'number' ? data.timestamp : Date.now(),
+          isInterControl: true,
+        }]);
+      }
+      return;
+    }
+
     const signalType = typeof data.type === 'string' ? data.type : '';
     const content = typeof data.text === 'string'
       ? data.text.trim()
@@ -418,16 +458,20 @@ export default function LiveAudioControlContainer({
         ? data.content.trim()
         : '';
 
-    if ((signalType === 'PRIVATE_MESSAGE' || signalType === 'message') && content) {
+    if ((signalType === 'PRIVATE_MESSAGE' || signalType === 'message' || signalType === 'ACCESS_REQUEST') && content) {
       const fromAlias = alias || participantAliasesRef.current[signal.fromParticipantId] || 'Sin nick';
+      const isWaitingRoom = Boolean(audienceAccessRequests[signal.fromParticipantId]);
       setMessages(prev => [...prev, {
         id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
         fromAlias,
         content,
         timestamp: Date.now(),
+        fromParticipantId: signal.fromParticipantId,
+        ephemeralPublicKey: signal.ephemeralPublicKey,
+        isWaitingRoom,
       }]);
     }
-  }, [wsSend]);
+  }, [audienceAccessRequests, wsSend]);
 
   const {
     sendPrivateSignalToParticipant,
@@ -470,6 +514,72 @@ export default function LiveAudioControlContainer({
       return next;
     });
   }, [authorizeSecondaryControl, joinRequests, onApproveRequest, participantAliasesRef]);
+
+  const handleReplyToParticipant = useCallback((messageId: string, targetParticipantId: string, text: string) => {
+    if (!targetParticipantId || !text.trim()) return;
+    const targetPublicKey = participantEphemeralKeys[targetParticipantId];
+    if (!targetPublicKey) {
+      console.warn('LiveAudioControl: Cannot reply - participant public key not available for', targetParticipantId);
+      return;
+    }
+
+    const storedNick = localStorage.getItem('sefer_control_operator_nick') || '';
+    const isNickPublic = localStorage.getItem('sefer_control_nick_public') === 'true';
+    const effectiveNick = isNickPublic && storedNick.trim() ? `Control (${storedNick.trim()})` : 'Control';
+    const internalNick = storedNick.trim() ? `Control (${storedNick.trim()})` : 'Control';
+    const now = Date.now();
+
+    void sendPrivateSignalToParticipant(targetParticipantId, targetPublicKey, {
+      type: 'CHAT_RESPONSE',
+      text: text.trim(),
+      senderNick: effectiveNick,
+      timestamp: now,
+    });
+
+    const syncPayload = {
+      type: 'MESSAGE_REPLY_SYNC',
+      messageId,
+      targetParticipantId,
+      responseText: text.trim(),
+      repliedBy: internalNick,
+      repliedAt: now,
+    };
+    wsSend?.('PRIVATE_CONTROL_SIGNAL', syncPayload);
+
+    setMessages(prev => prev.map(m => {
+      if (m.id === messageId || (messageId.startsWith('access-') && m.fromParticipantId === targetParticipantId)) {
+        const existingReplies = m.replies || [];
+        return {
+          ...m,
+          replies: [...existingReplies, { responseText: text.trim(), repliedBy: internalNick, repliedAt: now }],
+        };
+      }
+      return m;
+    }));
+  }, [participantEphemeralKeys, sendPrivateSignalToParticipant, wsSend]);
+
+  const handleSendInterControlMessage = useCallback((text: string) => {
+    if (!text.trim()) return;
+    const storedNick = localStorage.getItem('sefer_control_operator_nick') || '';
+    const internalNick = storedNick.trim() ? `Control (${storedNick.trim()})` : 'Control';
+    const now = Date.now();
+
+    const announcement = {
+      type: 'CONTROL_ANNOUNCEMENT',
+      text: text.trim(),
+      senderNick: internalNick,
+      timestamp: now,
+    };
+    wsSend?.('PRIVATE_CONTROL_SIGNAL', announcement);
+
+    setMessages(prev => [...prev, {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      fromAlias: internalNick,
+      content: text.trim(),
+      timestamp: now,
+      isInterControl: true,
+    }]);
+  }, [wsSend]);
 
   const handleDismissMessage = useCallback((id: string) => {
     setMessages(prev => prev.filter(m => m.id !== id));
@@ -846,6 +956,8 @@ export default function LiveAudioControlContainer({
         onRejectRequest={onRejectRequest}
         onDismissMessage={handleDismissMessage}
         onAudienceAccessDecision={handleAudienceAccessDecision}
+        onReplyToParticipant={handleReplyToParticipant}
+        onSendInterControlMessage={handleSendInterControlMessage}
       />
     </div>,
     portalTarget,

@@ -395,7 +395,7 @@ const broadcastMediaMasterStatus = () => {
   const hasPresenter = hasActivePresenter()
   const principal = findPrincipalControl()
   const masterControlSessionId = (!hasPresenter && principal) ? principal.controlSessionId : null
-  
+
   broadcastWs({
     type: 'MEDIA_MASTER_STATUS',
     masterControlSessionId,
@@ -880,7 +880,7 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
   const routePrivateControlSignalToParticipant = (msg) => {
     broadcast(msg, (meta) => (
       meta.role === 'audience' &&
-      meta.participantId === msg.toParticipantId
+      (meta.participantId === msg.toParticipantId || meta.audienceAccessId === msg.toParticipantId)
     ))
   }
 
@@ -935,23 +935,22 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
   }
 
   const bindParticipantToConnection = (meta, participantId, status = {}) => {
-    if (!isValidParticipantId(participantId)) {
-      console.log('[DEBUG-BIND] Invalid participantId:', participantId);
-      return null
-    }
+    if (!isValidParticipantId(participantId)) return null
     const isNewParticipantId = meta.participantId && meta.participantId !== participantId
     if (isNewParticipantId) {
-      if (meta.role !== 'audience' || meta.participantId !== meta.audienceAccessId) {
-        console.log('[DEBUG-BIND] Not audience or not matching audienceAccessId. meta.participantId:', meta.participantId, 'audienceAccessId:', meta.audienceAccessId, 'role:', meta.role);
-        return null
-      }
+      const isAllowedAccessTransition = meta.role === 'audience' && (
+        meta.participantId === meta.audienceAccessId ||
+        participantId === meta.audienceAccessId
+      )
+      if (!isAllowedAccessTransition) return null
       const accessParticipant = liveAudioParticipants.get(meta.participantId)
-      if (accessParticipant?.ws === meta.ws) liveAudioParticipants.delete(meta.participantId)
+      if (accessParticipant?.ws === meta.ws && meta.participantId === meta.audienceAccessId) {
+        liveAudioParticipants.delete(meta.participantId)
+      }
     }
 
     const existing = liveAudioParticipants.get(participantId)
     if (existing && existing.ws && existing.ws !== meta.ws && existing.ws.readyState === WebSocket.OPEN) {
-      console.log('[DEBUG-BIND] Existing WS is open and different. existing.ws:', existing.ws !== meta.ws);
       return null
     }
 
@@ -1003,7 +1002,6 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
     liveAudioParticipants.set(participantId, participant)
     meta.participantId = participantId
     if (isNewParticipantId && liveAudioControlPublicKeyMessage && meta.role === 'audience') {
-      console.log('[DEBUG-BIND] Sending public key to new participant:', participantId);
       sendJson(meta.ws, liveAudioControlPublicKeyMessage)
     }
     return participant
@@ -1071,37 +1069,43 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
   }
 
   const canAcceptPrivateSignal = (meta, msg) => {
-    console.log('[DEBUG] canAcceptPrivateSignal called with meta.participantId:', meta.participantId, 'msg.fromParticipantId:', msg.fromParticipantId);
     const participant = bindParticipantToConnection(meta, msg.fromParticipantId)
-    if (!participant) {
-      console.log('[DEBUG] bindParticipantToConnection returned null for', msg.fromParticipantId);
-      return false
-    }
+    if (!participant) return false
 
     const now = Date.now()
     participant.privateSignalTimestamps = participant.privateSignalTimestamps
       .filter((timestamp) => now - timestamp < PRIVATE_CONTROL_SIGNAL_RATE_WINDOW_MS)
-    if (participant.privateSignalTimestamps.length >= PRIVATE_CONTROL_SIGNAL_RATE_LIMIT) {
-      console.log('[DEBUG] Rate limit reached for', msg.fromParticipantId);
-      return false
-    }
+    if (participant.privateSignalTimestamps.length >= PRIVATE_CONTROL_SIGNAL_RATE_LIMIT) return false
 
     participant.privateSignalTimestamps.push(now)
     participant.updatedAt = now
-    console.log('[DEBUG] canAcceptPrivateSignal APPROVED for', msg.fromParticipantId);
     return true
   }
 
   const canAcceptControlPrivateSignal = (meta, msg) => {
     const control = liveAudioControls.get(meta.controlSessionId)
     if (!isControlAuthorized(control)) return false
+    if (!msg.toParticipantId) return true
     const participant = liveAudioParticipants.get(msg.toParticipantId)
-    return Boolean(
+    if (
       participant &&
       participant.role === 'audience' &&
       participant.ws &&
       participant.ws.readyState === WebSocket.OPEN
-    )
+    ) {
+      return true
+    }
+    for (const wsMeta of wsClients.values()) {
+      if (
+        wsMeta.role === 'audience' &&
+        (wsMeta.audienceAccessId === msg.toParticipantId || wsMeta.participantId === msg.toParticipantId) &&
+        wsMeta.ws &&
+        wsMeta.ws.readyState === WebSocket.OPEN
+      ) {
+        return true
+      }
+    }
+    return false
   }
 
   const makeReducedParticipantStatus = (msg) => ({
@@ -1792,7 +1796,7 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
         client.terminate()
         continue
       }
-      
+
       client.isAlive = false
       if (client.readyState === WebSocket.OPEN) {
         try {

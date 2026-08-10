@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { Clock3, ShieldAlert, ShieldCheck } from 'lucide-react';
+import { Clock3, ShieldAlert, ShieldCheck, MessageSquare, X } from 'lucide-react';
 import type { WebSocketConnectionStatus } from '../../hooks/useWebSocket';
-import { usePrivateControlSignals } from '../../hooks/usePrivateControlSignals';
+import { usePrivateControlSignals, type DecryptedPrivateControlSignal } from '../../hooks/usePrivateControlSignals';
 import type { AudienceAccessState } from '../../types/audienceAccess';
 import type { LiveAudioExternalBroadcastState } from '../../types/liveAudio';
 import { AudienceInterventionModal } from '../../features/liveAudio/components/audience/AudienceInterventionModal';
+import { AudiencePrivateControlMessage } from '../../features/liveAudio/components/audience/AudiencePrivateControlMessage';
 import welcomeMarkdown from '../../../config/welcome.md?raw';
 
 interface AudienceAccessGateProps {
@@ -32,12 +33,38 @@ export function AudienceAccessGate({
   const [submittedAlias, setSubmittedAlias] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const [broadcastState, setBroadcastState] = useState<LiveAudioExternalBroadcastState>('off');
+  const [showPrivateMessageModal, setShowPrivateMessageModal] = useState(false);
+  const [receivedControlMessages, setReceivedControlMessages] = useState<
+    Array<{ id: string; senderNick: string; text: string; timestamp: number }>
+  >([]);
+
+  const handlePrivateSignal = useCallback((signal: DecryptedPrivateControlSignal) => {
+    const payload = signal.value as Record<string, unknown>;
+    if (payload && typeof payload === 'object' && payload.type === 'CHAT_RESPONSE') {
+      const text = typeof payload.text === 'string' ? payload.text.trim() : '';
+      const senderNick = typeof payload.senderNick === 'string' && payload.senderNick ? payload.senderNick : 'Control';
+      const timestamp = typeof payload.timestamp === 'number' ? payload.timestamp : Date.now();
+      if (text) {
+        setReceivedControlMessages((prev) => [
+          ...prev,
+          {
+            id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+            senderNick,
+            text,
+            timestamp,
+          },
+        ]);
+      }
+    }
+  }, []);
+
   const privateSignals = usePrivateControlSignals({
     role: 'audience',
     participantId: participantId || 'unbound-audience',
     sendMessage: wsSend,
     subscribeToWsMessage,
     transportReady: wsStatus === 'open' && Boolean(participantId),
+    onPrivateSignal: handlePrivateSignal,
   });
 
   useEffect(() => subscribeToWsMessage((type, payload) => {
@@ -75,6 +102,15 @@ export function AudienceAccessGate({
     }
   }, [onAliasAccepted, participantId, privateSignals, sending, wsSend]);
 
+  const handleSendPrivateMessage = useCallback(async (messageText: string): Promise<boolean> => {
+    if (!participantId || !privateSignals.ready) return false;
+    return privateSignals.sendPrivateSignal({
+      type: 'PRIVATE_MESSAGE',
+      text: messageText,
+      alias: submittedAlias || 'En espera',
+    });
+  }, [participantId, privateSignals, submittedAlias]);
+
   const retrySeconds = retryAt ? Math.max(0, Math.ceil((retryAt - now) / 1000)) : 0;
   const mayRequest = accessState === 'REQUEST_REQUIRED' || (accessState === 'REJECTED' && retrySeconds === 0);
 
@@ -92,12 +128,57 @@ export function AudienceAccessGate({
             )}
 
             {!mayRequest && (
-              <section className="w-full">
+              <section className="w-full flex flex-col items-center">
                 {accessState === 'WAITING' ? (
-                  <div role="status" className="flex flex-col items-center gap-2 text-amber-300">
+                  <div role="status" className="flex flex-col items-center gap-2 text-amber-300 w-full">
                     <Clock3 className="h-8 w-8 animate-pulse" aria-hidden="true" />
                     <h1 className="text-lg font-bold text-white">Solicitud en espera</h1>
                     <p className="text-xs text-slate-400">El Control principal debe admitirla antes de mostrar la sesión.</p>
+
+                    <button
+                      type="button"
+                      onClick={() => setShowPrivateMessageModal(true)}
+                      className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800/90 hover:bg-slate-700 px-3.5 py-1.5 text-xs font-medium text-slate-200 hover:text-white transition-colors shadow-sm"
+                    >
+                      <MessageSquare className="h-3.5 w-3.5 text-blue-400" />
+                      <span>Enviar mensaje a los moderadores</span>
+                    </button>
+
+                    {/* Received Messages from Control */}
+                    {receivedControlMessages.length > 0 && (
+                      <div className="w-full mt-4 space-y-2 text-left">
+                        {receivedControlMessages.map((msg) => (
+                          <div
+                            key={msg.id}
+                            className="rounded-xl border border-blue-600/40 bg-blue-950/60 p-3 shadow-lg backdrop-blur-sm"
+                          >
+                            <div className="flex items-center justify-between gap-2 mb-1">
+                              <div className="flex items-center gap-1.5 text-xs font-semibold text-blue-300">
+                                <MessageSquare className="h-3.5 w-3.5 text-blue-400 shrink-0" />
+                                <span>Mensaje de {msg.senderNick}</span>
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-[10px] text-slate-400 font-mono">
+                                  {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => setReceivedControlMessages((prev) => prev.filter((m) => m.id !== msg.id))}
+                                  className="text-slate-400 hover:text-white p-0.5 rounded transition-colors"
+                                  title="Cerrar mensaje"
+                                  aria-label="Cerrar mensaje"
+                                >
+                                  <X className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                            <p className="text-xs text-slate-100 leading-relaxed pl-5">
+                              "{msg.text}"
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 ) : accessState === 'BLOCKED' ? (
                   <div role="alert" className="flex flex-col items-center gap-2 text-red-400">
@@ -133,6 +214,13 @@ export function AudienceAccessGate({
           )}
         </div>
       </div>
+
+      {showPrivateMessageModal && (
+        <AudiencePrivateControlMessage
+          onClose={() => setShowPrivateMessageModal(false)}
+          onSend={handleSendPrivateMessage}
+        />
+      )}
 
       {error && (
         <p role="alert" className="fixed bottom-4 left-1/2 z-[110] -translate-x-1/2 rounded bg-red-950/90 border border-red-800 px-4 py-2 text-sm text-red-200 shadow-xl backdrop-blur-md">

@@ -69,11 +69,11 @@ Main message types live in `src/types/sync.ts`:
 - `MEDIA_MASTER_STATUS`: server-broadcasted status determining if the current control client is the media master (e.g. when there is no active presenter).
 - `ERROR`: technical error code and message.
 - `SESSION_ACCESS_POLICY`, `AUDIENCE_ACCESS_STATE`,
-`AUDIENCE_ACCESS_REQUEST` and `AUDIENCE_ACCESS_DECISION`: controlled-entry
-state. Only the principal changes the public/controlled policy; authorized
-Controls process pending requests from their private inbox.
-`AUDIENCE_ACCESS_LEAVE` returns an admitted Audience client to the access gate
-when it explicitly leaves during a controlled session.
+  `AUDIENCE_ACCESS_REQUEST` and `AUDIENCE_ACCESS_DECISION`: controlled-entry
+  state. Only the principal changes the public/controlled policy; authorized
+  Controls process pending requests from their private inbox.
+  `AUDIENCE_ACCESS_LEAVE` returns an admitted Audience client to the access gate
+  when it explicitly leaves during a controlled session.
 - Live Audio family: optional LiveKit-ready technical messages that stay
   outside `SYNC_STATE` and existing `REMOTE_COMMAND` payloads.
 
@@ -131,9 +131,10 @@ in `BroadcastMessage` as a separate family:
   Control public key.
 - `PRIVATE_CONTROL_SIGNAL`: encrypted bidirectional private container with only
   technical routing fields and ciphertext. Audience uses it for aliases,
-  hand-state refreshes, and private messages to authorized Controls; authorized
-  Controls use it for targeted microphone configuration to a specific audience
-  participant.
+  hand-state refreshes, and private messages to authorized Controls (both in
+  active session and waiting room); authorized Controls use it for targeted
+  microphone configuration, E2E chat responses to participants, inter-control
+  team announcements, and message reply state synchronization.
 - `LIVE_AUDIO_SET_EXTERNAL_BROADCAST_STATE` and
   `LIVE_AUDIO_EXTERNAL_BROADCAST_STATE`: authorized operator declaration and
   server-owned revision for `off`, `live`, or `recording`. This is not automatic
@@ -223,9 +224,9 @@ Control uses `lastSentListRef` to avoid re-sending unchanged visible lists.
   are routed to presenter/authorized Controls, and are also delivered to the
   affected audience participant so its local microphone state can react. They
   are not folded into `SYNC_STATE`.
-- Authorized Controls can send `PRIVATE_CONTROL_SIGNAL` only with a valid
-  `toParticipantId`; the server routes it solely to the active WebSocket bound
-  to that audience participant and does not inspect the ciphertext.
+- Authorized Controls can send `PRIVATE_CONTROL_SIGNAL` targeted to a specific
+  `toParticipantId` or to fellow authorized Controls; the server routes it
+  blindly without inspecting ciphertext.
 - `LIVE_AUDIO_REQUEST_ALIASES` is an empty public doorbell from authorized
   Controls to audience clients. Audience responses must travel back as encrypted
   `PRIVATE_CONTROL_SIGNAL` payloads such as `ACTIVE_STATE` or `REQUEST_WORD`,
