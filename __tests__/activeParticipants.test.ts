@@ -19,7 +19,7 @@ type WsMessage = Record<string, unknown> & { type: string };
 interface WsClient {
   ws: WebSocket;
   messages: WsMessage[];
-  send: (message: WsMessage) => void;
+  send: (message: Record<string, unknown> | LiveAudioParticipantStatusMessage) => void;
 }
 
 let httpServer: Server;
@@ -83,7 +83,7 @@ const connectWs = (role: 'control' | 'audience') =>
 const makeParticipantStatus = (
   participantId: string,
   patch: Partial<LiveAudioParticipantStatusMessage> = {},
-): WsMessage => ({
+): LiveAudioParticipantStatusMessage => ({
   type: 'LIVE_AUDIO_PARTICIPANT_STATUS',
   participantId,
   role: 'audience',
@@ -483,11 +483,11 @@ describe('visible active participants', () => {
 
   it('computes visible aliases with eligibility filters and Spanish A-Z ordering', () => {
     const participantsMap: Record<string, LiveAudioParticipantStatusMessage> = {
-      a: makeParticipantStatus('a' as `${string}-${string}-${string}-${string}-${string}`) as LiveAudioParticipantStatusMessage,
-      b: makeParticipantStatus('b' as `${string}-${string}-${string}-${string}-${string}`, { isAliasHiddenByControl: true }) as LiveAudioParticipantStatusMessage,
-      c: makeParticipantStatus('c' as `${string}-${string}-${string}-${string}-${string}`, { isKicked: true }) as LiveAudioParticipantStatusMessage,
-      d: makeParticipantStatus('d' as `${string}-${string}-${string}-${string}-${string}`, { isActiveAudience: false }) as LiveAudioParticipantStatusMessage,
-      e: makeParticipantStatus('e' as `${string}-${string}-${string}-${string}-${string}`) as LiveAudioParticipantStatusMessage,
+      a: makeParticipantStatus('a' as `${string}-${string}-${string}-${string}-${string}`),
+      b: makeParticipantStatus('b' as `${string}-${string}-${string}-${string}-${string}`, { isAliasHiddenByControl: true }),
+      c: makeParticipantStatus('c' as `${string}-${string}-${string}-${string}-${string}`, { isKicked: true }),
+      d: makeParticipantStatus('d' as `${string}-${string}-${string}-${string}-${string}`, { isActiveAudience: false }),
+      e: makeParticipantStatus('e' as `${string}-${string}-${string}-${string}-${string}`),
     };
 
     participantsMap.a.isAliasVisibleToActiveParticipants = true;
