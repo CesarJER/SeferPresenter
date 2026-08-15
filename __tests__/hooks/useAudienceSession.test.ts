@@ -14,13 +14,11 @@ describe('useAudienceSession', () => {
 
   it('mantiene el alias solo en memoria durante la página activa', () => {
     localStorage.setItem('sefer-audience-nick', 'Alias heredado');
-    localStorage.setItem('sefer-audience-device-id', 'device-heredado');
     localStorage.setItem('sefer-audience-alias-visible', 'true');
     const { result, unmount } = renderHook(() => useAudienceSession({}));
 
     expect(result.current.nick).toBe('');
     expect(localStorage.getItem('sefer-audience-nick')).toBeNull();
-    expect(localStorage.getItem('sefer-audience-device-id')).toBeNull();
     expect(localStorage.getItem('sefer-audience-alias-visible')).toBeNull();
 
     act(() => {
@@ -44,7 +42,6 @@ describe('useAudienceSession', () => {
     const onLogout = vi.fn();
     window.addEventListener('sefer-audience-logout', onLogout);
     const { result } = renderHook(() => useAudienceSession({}));
-    const initialDeviceId = result.current.deviceId;
 
     act(() => {
       result.current.login('TestUser');
@@ -52,7 +49,6 @@ describe('useAudienceSession', () => {
     });
 
     expect(result.current.nick).toBe('');
-    expect(result.current.deviceId).not.toBe(initialDeviceId);
     expect(result.current.presentationSessionId).toBeNull();
     expect(localStorage.getItem('sefer-audience-session-id')).toBeNull();
     expect(localStorage.getItem('sefer-quiz-session-id')).toBeNull();
@@ -69,7 +65,6 @@ describe('useAudienceSession', () => {
     localStorage.setItem('sefer-audience-session-id', 'session-old');
     localStorage.setItem('sefer-quiz-session-id', 'quiz-old');
     const { result } = renderHook(() => useAudienceSession({ subscribeToWsMessage }));
-    const initialDeviceId = result.current.deviceId;
 
     act(() => {
       result.current.login('TestUser');
@@ -77,7 +72,6 @@ describe('useAudienceSession', () => {
     });
 
     expect(result.current.nick).toBe('');
-    expect(result.current.deviceId).not.toBe(initialDeviceId);
     expect(result.current.presentationSessionId).toBe('session-new');
     expect(JSON.parse(localStorage.getItem('sefer-audience-session-id') || '{}').data).toBe('session-new');
     expect(localStorage.getItem('sefer-quiz-session-id')).toBeNull();

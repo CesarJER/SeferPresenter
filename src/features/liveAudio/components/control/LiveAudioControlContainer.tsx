@@ -250,6 +250,15 @@ export default function LiveAudioControlContainer({
               },
             };
           }
+          if (payload.decision === 'UNBLOCK') {
+            return {
+              ...current,
+              [payload.participantId as string]: {
+                requestedAt: current[payload.participantId as string]?.requestedAt ?? Date.now(),
+                accessState: 'WAITING',
+              },
+            };
+          }
           const next = { ...current };
           delete next[payload.participantId as string];
           return next;
@@ -587,7 +596,7 @@ export default function LiveAudioControlContainer({
 
   const handleAudienceAccessDecision = useCallback((
     targetParticipantId: string,
-    decision: 'ADMIT' | 'REJECT' | 'BLOCK',
+    decision: 'ADMIT' | 'REJECT' | 'BLOCK' | 'UNBLOCK',
   ) => {
     wsSend?.('AUDIENCE_ACCESS_DECISION', {
       participantId: targetParticipantId,
@@ -914,7 +923,9 @@ export default function LiveAudioControlContainer({
     alias: participantAliases[id] || 'Sincronizando alias…',
     ...request,
   }));
-  const hasUnread = messages.length > 0 || authorizationRequests.length > 0 || accessRequestItems.length > 0;
+  const pendingAccessCount = Object.values(audienceAccessRequests).filter((r) => r.accessState === 'WAITING').length;
+  const unreadCount = messages.length + authorizationRequests.length + pendingAccessCount;
+  const hasUnread = unreadCount > 0;
   const inboxPortal = portalTarget ? createPortal(
     <div className="flex items-center gap-2">
       <button
@@ -937,11 +948,12 @@ export default function LiveAudioControlContainer({
               : 'bg-gray-800 border-gray-700 hover:bg-gray-700 text-gray-300 hover:text-white'
             }`}
           title="Bandeja Privada"
+          aria-label={`Bandeja Privada: ${unreadCount} solicitudes pendientes`}
         >
           <Bell size={14} />
           {hasUnread && (
             <span className="absolute -top-1 -right-1 bg-white text-red-600 text-[10px] font-bold px-1 rounded-full">
-              {messages.length + authorizationRequests.length + accessRequestItems.length}
+              {unreadCount}
             </span>
           )}
         </button>
@@ -998,6 +1010,7 @@ export default function LiveAudioControlContainer({
         onMute={(id) => void doModerationAction('mute-participant', id)}
         onKick={(id) => void doModerationAction('kick-participant', id)}
         onRescue={(id) => void doModerationAction('rescue-participant', id)}
+        onBlock={(id) => handleAudienceAccessDecision(id, 'BLOCK')}
         onSetAliasSharedVisibility={handleSetAliasSharedVisibility}
         onSetActiveListViewPermission={handleSetActiveListViewPermission}
         onRemove={handleRemove}

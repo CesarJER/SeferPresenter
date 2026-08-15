@@ -26,6 +26,7 @@ interface LiveAudioParticipantRowProps {
   onMute?: (id: string) => void;
   onKick?: (id: string) => void;
   onRescue?: (id: string) => void;
+  onBlock?: (id: string) => void;
   onSetAliasSharedVisibility?: (id: string, hidden: boolean) => void;
   onSetActiveListViewPermission?: (id: string, canView: boolean) => void;
   onRemove?: (id: string) => void;
@@ -43,6 +44,7 @@ export const LiveAudioParticipantRow: React.FC<LiveAudioParticipantRowProps> = (
   onMute,
   onKick,
   onRescue,
+  onBlock,
   onSetAliasSharedVisibility,
   onSetActiveListViewPermission,
   onRemove,
@@ -261,36 +263,53 @@ export const LiveAudioParticipantRow: React.FC<LiveAudioParticipantRowProps> = (
           <button
             onClick={() => onRescue(participant.participantId)}
             className="flex items-center gap-1 bg-blue-700 hover:bg-blue-600 text-white px-2 py-1 rounded text-xs"
-            title="Rescatar como activo sin abrir micrófono"
+            title="Restablecer como activo (permite volver a pedir turno)"
           >
             <RotateCcw size={14} />
-            <span className="hidden sm:inline">Rescatar</span>
+            <span className="hidden sm:inline">Restablecer</span>
           </button>
         )}
 
         {participant.isKicked && onRemove && (
           <button
             onClick={() => {
-              if (window.confirm(`Eliminar a ${displayName} de la sesion activa? Podra volver a unirse.`)) {
+              if (window.confirm(`¿Expulsar a ${displayName} de la sala? Podrá volver a solicitar entrada si lo desea.`)) {
                 onRemove(participant.participantId);
               }
             }}
-            className="text-gray-500 hover:text-red-400 p-1 transition-colors"
-            title="Eliminar de activos (no bloquea, puede volver)"
+            className="flex items-center gap-1 bg-slate-700 hover:bg-slate-600 text-gray-200 px-2 py-1 rounded text-xs transition-colors"
+            title="Expulsar a la puerta (no bloquea, puede volver)"
           >
-            <Trash2 size={16} />
+            <Trash2 size={13} />
+            <span className="hidden sm:inline">Expulsar</span>
+          </button>
+        )}
+
+        {participant.isKicked && onBlock && (
+          <button
+            onClick={() => {
+              if (window.confirm(`¿Bloquear y vetar totalmente a ${displayName}?`)) {
+                onBlock(participant.participantId);
+              }
+            }}
+            className="flex items-center gap-1 bg-red-800 hover:bg-red-700 text-white px-2 py-1 rounded text-xs transition-colors"
+            title="Bloquear acceso totalmente"
+          >
+            <XCircle size={13} />
+            <span className="hidden sm:inline">Bloquear</span>
           </button>
         )}
 
         {onKick && !participant.isKicked && (
           <button
             onClick={() => {
-              if (window.confirm(`¿Expulsar a ${displayName}?`)) {
+              if (window.confirm(`¿Restringir a ${displayName}? Se silenciará y bloqueará su turno.`)) {
                 onKick(participant.participantId);
               }
             }}
-            className="text-gray-500 hover:text-red-500 p-1"
-            title="Expulsar"
+            className="text-gray-500 hover:text-amber-500 p-1 transition-colors"
+            title="Restringir participación"
+            aria-label={`Restringir a ${displayName}`}
           >
             <XCircle size={16} />
           </button>

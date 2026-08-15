@@ -44,7 +44,7 @@ export const LiveAudioStatusBadge: React.FC<LiveAudioStatusBadgeProps> = ({ stat
 
   if (status === 'kicked') {
     return (
-      <div className={`flex items-center justify-center rounded-full bg-red-500/20 p-1.5 ${className}`} title="Expulsado">
+      <div className={`flex items-center justify-center rounded-full bg-red-500/20 p-1.5 ${className}`} title="Restringido (Voz bloqueada)">
         <XCircle size={16} className="text-red-400" />
       </div>
     );

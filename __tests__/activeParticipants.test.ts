@@ -112,6 +112,7 @@ const makeActiveProfile = (
 
 describe('visible active participants', () => {
   beforeEach(async () => {
+    delete process.env.VITE_SEFER_PUBLICABLE_DEFAULT;
     process.env.SEFER_REQUIRE_AUTH = 'false';
     process.env.SEFER_LIVE_AUDIO_REJOIN_GRACE_SECONDS = '1';
     resetWsServerStateForTests();
@@ -137,6 +138,7 @@ describe('visible active participants', () => {
     resetWsServerStateForTests();
     delete process.env.SEFER_LIVE_AUDIO_REJOIN_GRACE_SECONDS;
     delete process.env.SEFER_ACTIVE_ALIAS_MODERATION_DEFAULT_VISIBLE;
+    delete process.env.VITE_SEFER_PUBLICABLE_DEFAULT;
   });
 
   it('rejects making an alias visible when the participant did not consent', async () => {

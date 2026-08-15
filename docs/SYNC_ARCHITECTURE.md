@@ -247,9 +247,14 @@ Control uses `lastSentListRef` to avoid re-sending unchanged visible lists.
 - Moderation state transitions are intentionally explicit: grant moves queued
   or active-muted audience to `GRANTED` with microphone closed; mute keeps the
   participant `GRANTED` but closes the microphone; revoke moves a speaker back
-  to active-muted `LISTENER`; kick moves the participant to passive `REVOKED`
-  with `isKicked=true`; rescue clears `isKicked` and returns the participant to
+  to active-muted `LISTENER`; restrict (kick) moves the participant to restricted
+  `REVOKED` with `isKicked=true` (silenced, without mic/chat participation, but
+  keeping slide viewing); rescue clears `isKicked` and returns the participant to
   active muted `LISTENER` with `canPublishAudio=false` and no published track.
+  `REMOVE` removes the active profile cleanly, returning the client to `REQUEST_REQUIRED`
+  so they can re-enter cleanly. `BLOCK` imposes a full session ban (revoking tokens
+  and closing all chat/interaction channels). `UNBLOCK` transitions a blocked client
+  back to `WAITING` in the moderation waiting room.
 - An authorized Control owns the external broadcast declaration. Every change
   to `live` or `recording` increments a server revision, revokes all existing
   Audience speaker grants and tells affected clients to close published tracks.

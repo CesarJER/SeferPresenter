@@ -50,7 +50,7 @@ interface PrivateControlInboxProps {
   onApproveRequest: (sessionId: string) => void;
   onRejectRequest: (sessionId: string) => void;
   onDismissMessage: (id: string) => void;
-  onAudienceAccessDecision?: (participantId: string, decision: 'ADMIT' | 'REJECT' | 'BLOCK') => void;
+  onAudienceAccessDecision?: (participantId: string, decision: 'ADMIT' | 'REJECT' | 'BLOCK' | 'UNBLOCK') => void;
   onReplyToParticipant?: (messageId: string, participantId: string, text: string) => void;
   onSendInterControlMessage?: (text: string) => void;
 }
@@ -104,8 +104,18 @@ export const PrivateControlInbox: React.FC<PrivateControlInboxProps> = ({
     );
   }
 
+  const pendingAccessRequests = audienceAccessRequests.filter(
+    (req) => req.accessState === 'WAITING',
+  );
+  const blockedAccessRequests = audienceAccessRequests.filter(
+    (req) => req.accessState === 'BLOCKED',
+  );
+
   const hasItems =
-    messages.length > 0 || authorizationRequests.length > 0 || audienceAccessRequests.length > 0;
+    messages.length > 0 ||
+    authorizationRequests.length > 0 ||
+    pendingAccessRequests.length > 0 ||
+    blockedAccessRequests.length > 0;
 
   const handleOperatorNickChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
@@ -286,32 +296,24 @@ export const PrivateControlInbox: React.FC<PrivateControlInboxProps> = ({
           </div>
         )}
 
-        {/* Audience Access Requests */}
-        {audienceAccessRequests.length > 0 && (
+        {/* Audience Access Requests - Pending */}
+        {pendingAccessRequests.length > 0 && (
           <div className="space-y-2">
             <div className="text-[11px] font-semibold text-amber-400 uppercase tracking-wider px-1">
-              Accesos Pendientes ({audienceAccessRequests.length})
+              Accesos Pendientes ({pendingAccessRequests.length})
             </div>
-            {audienceAccessRequests.map((request) => {
+            {pendingAccessRequests.map((request) => {
               const accessReplyId = `access-${request.participantId}`;
               const isReplyingAccess = activeReplyId === accessReplyId;
 
               return (
                 <div
                   key={request.participantId}
-                  className={`rounded-md border p-2.5 ${
-                    request.accessState === 'BLOCKED'
-                      ? 'border-red-700/60 bg-red-950/30'
-                      : 'border-amber-700/60 bg-amber-950/30'
-                  }`}
+                  className="rounded-md border border-amber-700/60 bg-amber-950/30 p-2.5"
                 >
                   <div className="flex items-center justify-between mb-1.5">
-                    <div
-                      className={`text-xs font-semibold ${
-                        request.accessState === 'BLOCKED' ? 'text-red-200' : 'text-amber-100'
-                      }`}
-                    >
-                      {request.accessState === 'BLOCKED' ? 'Nick bloqueado' : 'Solicitud de Entrada'}
+                    <div className="text-xs font-semibold text-amber-100">
+                      Solicitud de Entrada
                     </div>
                     <span className="text-[11px] text-gray-400 font-mono">
                       {formatTime(request.requestedAt)}
@@ -319,52 +321,45 @@ export const PrivateControlInbox: React.FC<PrivateControlInboxProps> = ({
                   </div>
                   <div className="mb-2.5 text-sm font-medium text-white">{request.alias}</div>
 
-                  {request.accessState === 'BLOCKED' ? (
+                  <div className="grid grid-cols-4 gap-1.5">
                     <button
                       type="button"
                       onClick={() => onAudienceAccessDecision(request.participantId, 'ADMIT')}
-                      className="w-full rounded bg-emerald-700 hover:bg-emerald-600 py-1 text-xs font-bold text-white transition-colors"
+                      className="rounded bg-emerald-700 hover:bg-emerald-600 py-1 text-xs font-bold text-white transition-colors"
+                      title="Admitir usuario"
                     >
-                      Desbloquear y Admitir
+                      Admitir
                     </button>
-                  ) : (
-                    <div className="grid grid-cols-4 gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => onAudienceAccessDecision(request.participantId, 'ADMIT')}
-                        className="rounded bg-emerald-700 hover:bg-emerald-600 py-1 text-xs font-bold text-white transition-colors"
-                      >
-                        Admitir
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => onAudienceAccessDecision(request.participantId, 'REJECT')}
-                        className="rounded bg-slate-700 hover:bg-slate-600 py-1 text-xs font-bold text-white transition-colors"
-                      >
-                        Rechazar
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => onAudienceAccessDecision(request.participantId, 'BLOCK')}
-                        className="rounded bg-red-800 hover:bg-red-700 py-1 text-xs font-bold text-white transition-colors"
-                      >
-                        Bloquear
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setActiveReplyId(isReplyingAccess ? null : accessReplyId)}
-                        className={`rounded py-1 text-xs font-bold transition-colors flex items-center justify-center ${
-                          isReplyingAccess
-                            ? 'bg-blue-600 text-white'
-                            : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
-                        }`}
-                        title="Responder al usuario en espera"
-                        aria-label="Responder al usuario en espera"
-                      >
-                        <MessageSquare size={13} />
-                      </button>
-                    </div>
-                  )}
+                    <button
+                      type="button"
+                      onClick={() => onAudienceAccessDecision(request.participantId, 'REJECT')}
+                      className="rounded bg-slate-700 hover:bg-slate-600 py-1 text-xs font-bold text-white transition-colors"
+                      title="Rechazar (cooldown 30s)"
+                    >
+                      Rechazar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onAudienceAccessDecision(request.participantId, 'BLOCK')}
+                      className="rounded bg-red-800 hover:bg-red-700 py-1 text-xs font-bold text-white transition-colors"
+                      title="Bloquear acceso totalmente"
+                    >
+                      Bloquear
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActiveReplyId(isReplyingAccess ? null : accessReplyId)}
+                      className={`rounded py-1 text-xs font-bold transition-colors flex items-center justify-center ${
+                        isReplyingAccess
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+                      }`}
+                      title="Responder al usuario en espera"
+                      aria-label="Responder al usuario en espera"
+                    >
+                      <MessageSquare size={13} />
+                    </button>
+                  </div>
 
                   {renderInlineReplyForm(
                     accessReplyId,
@@ -375,6 +370,34 @@ export const PrivateControlInbox: React.FC<PrivateControlInboxProps> = ({
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {/* Audience Access Requests - Blocked */}
+        {blockedAccessRequests.length > 0 && (
+          <div className="space-y-2">
+            <div className="text-[11px] font-semibold text-red-400 uppercase tracking-wider px-1">
+              Usuarios Bloqueados ({blockedAccessRequests.length})
+            </div>
+            {blockedAccessRequests.map((request) => (
+              <div
+                key={request.participantId}
+                className="rounded-md border border-red-900/50 bg-red-950/20 p-2.5 flex items-center justify-between gap-2"
+              >
+                <div className="min-w-0">
+                  <div className="text-xs font-medium text-red-200 truncate">{request.alias}</div>
+                  <div className="text-[10px] text-gray-500 font-mono">Acceso vetado</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onAudienceAccessDecision(request.participantId, 'UNBLOCK')}
+                  className="rounded bg-slate-700 hover:bg-slate-600 px-3 py-1 text-xs font-bold text-gray-200 hover:text-white transition-colors shrink-0"
+                  title="Desbloquear y mover a solicitudes pendientes"
+                >
+                  Desbloquear
+                </button>
+              </div>
+            ))}
           </div>
         )}
 
@@ -467,30 +490,50 @@ export const PrivateControlInbox: React.FC<PrivateControlInboxProps> = ({
                     </div>
                   )}
 
-                  {/* Actions: Quick Thank & Reply */}
-                  {msg.fromParticipantId && onReplyToParticipant && (
+                  {/* Actions: Quick Thank, Reply & Block */}
+                  {msg.fromParticipantId && (
                     <div className="flex items-center gap-1.5 pt-1 border-t border-gray-700/50">
-                      <button
-                        type="button"
-                        onClick={() => handleQuickThank(msg)}
-                        className="flex items-center gap-1 px-2 py-0.5 rounded bg-gray-700/70 hover:bg-emerald-800/50 hover:text-emerald-200 text-[11px] text-gray-300 transition-colors"
-                        title="Enviar 'Gracias' de confirmación rápida con 1 clic"
-                      >
-                        <Sparkles size={11} className="text-amber-400" /> Agradecer
-                      </button>
+                      {onReplyToParticipant && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => handleQuickThank(msg)}
+                            className="flex items-center gap-1 px-2 py-0.5 rounded bg-gray-700/70 hover:bg-emerald-800/50 hover:text-emerald-200 text-[11px] text-gray-300 transition-colors"
+                            title="Enviar 'Gracias' de confirmación rápida con 1 clic"
+                          >
+                            <Sparkles size={11} className="text-amber-400" /> Agradecer
+                          </button>
 
-                      <button
-                        type="button"
-                        onClick={() => setActiveReplyId(isReplying ? null : msg.id)}
-                        className={`flex items-center gap-1 px-2 py-0.5 rounded text-[11px] transition-colors ${
-                          isReplying
-                            ? 'bg-blue-600 text-white'
-                            : 'bg-gray-700/70 hover:bg-gray-600 text-gray-300'
-                        }`}
-                      >
-                        <CornerDownRight size={11} />{' '}
-                        {msg.replies && msg.replies.length > 0 ? 'Responder de nuevo' : 'Responder'}
-                      </button>
+                          <button
+                            type="button"
+                            onClick={() => setActiveReplyId(isReplying ? null : msg.id)}
+                            className={`flex items-center gap-1 px-2 py-0.5 rounded text-[11px] transition-colors ${
+                              isReplying
+                                ? 'bg-blue-600 text-white'
+                                : 'bg-gray-700/70 hover:bg-gray-600 text-gray-300'
+                            }`}
+                          >
+                            <CornerDownRight size={11} />{' '}
+                            {msg.replies && msg.replies.length > 0 ? 'Responder de nuevo' : 'Responder'}
+                          </button>
+                        </>
+                      )}
+
+                      {onAudienceAccessDecision && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (window.confirm(`¿Bloquear acceso a ${msg.fromAlias}?`)) {
+                              onAudienceAccessDecision(msg.fromParticipantId!, 'BLOCK');
+                            }
+                          }}
+                          className="flex items-center gap-1 px-2 py-0.5 rounded bg-gray-700/70 hover:bg-red-800/60 hover:text-red-200 text-[11px] text-gray-400 transition-colors ml-auto"
+                          title="Bloquear acceso a este participante"
+                          aria-label={`Bloquear acceso a ${msg.fromAlias}`}
+                        >
+                          <ShieldAlert size={11} className="text-red-400" /> Bloquear
+                        </button>
+                      )}
                     </div>
                   )}
 

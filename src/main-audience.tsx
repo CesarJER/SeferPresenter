@@ -296,10 +296,21 @@ function AudienceApp() {
     />
   );
 
-  if (!audienceAccess.authorized || !audienceAccess.stateSseTicket || !audienceAccess.quizSseTicket) {
+  const isGateRequired =
+    !audienceAccess.authorized ||
+    !audienceAccess.stateSseTicket ||
+    !audienceAccess.quizSseTicket ||
+    (audienceAccess.accessMode === 'CONTROLLED' && !audienceSession.nick);
+
+  if (isGateRequired) {
+    const effectiveAccessState =
+      audienceAccess.accessMode === 'CONTROLLED' && !audienceSession.nick && audienceAccess.accessState === 'ADMITTED'
+        ? 'REQUEST_REQUIRED'
+        : audienceAccess.accessState;
+
     return (
       <AudienceAccessGate
-        accessState={audienceAccess.accessState}
+        accessState={effectiveAccessState}
         participantId={audienceAccess.participantId}
         retryAt={audienceAccess.retryAt}
         wsStatus={wsStatus}

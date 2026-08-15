@@ -135,11 +135,11 @@ export const createPrivacySessionManifestRecorder = ({
     if (!resolvedManifestDir || !['off', 'live', 'recording'].includes(nextState)) return
     const timestamp = Number.isFinite(updatedAt) ? updatedAt : now()
     
-    if (active && active.document.status !== nextState) {
+    if (active && nextState !== 'recording') {
       await finish(timestamp, nextState)
     }
 
-    if (nextState === 'recording' || nextState === 'live') {
+    if (nextState === 'recording' && !active) {
       await start(timestamp, nextState)
     }
   }

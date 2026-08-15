@@ -27,6 +27,7 @@ interface LiveAudioControlPanelProps {
   onMute: (id: string) => void;
   onKick: (id: string) => void;
   onRescue: (id: string) => void;
+  onBlock?: (id: string) => void;
   onSetAliasSharedVisibility?: (id: string, hidden: boolean) => void;
   onSetActiveListViewPermission?: (id: string, canView: boolean) => void;
   onRemove?: (id: string) => void;
@@ -57,6 +58,7 @@ export const LiveAudioControlPanel: React.FC<LiveAudioControlPanelProps> = ({
   onMute,
   onKick,
   onRescue,
+  onBlock,
   onSetAliasSharedVisibility,
   onSetActiveListViewPermission,
   onRemove,
@@ -133,29 +135,32 @@ export const LiveAudioControlPanel: React.FC<LiveAudioControlPanelProps> = ({
               onGrant={onGrant}
               onKick={onKick}
               onRescue={onRescue}
+              onBlock={onBlock}
               onSetAliasSharedVisibility={onSetAliasSharedVisibility}
               onSetActiveListViewPermission={onSetActiveListViewPermission}
               onRemove={onRemove}
               onMicrophoneConfigChange={onMicrophoneConfigChange}
             />
             <LiveAudioSpeakers 
-              participants={participants}
+              participants={participants} 
               isControlAuthorized={isControlAuthorized}
               onRevoke={onRevoke}
               onMute={onMute}
               onKick={onKick}
               onRescue={onRescue}
+              onBlock={onBlock}
               onSetAliasSharedVisibility={onSetAliasSharedVisibility}
               onSetActiveListViewPermission={onSetActiveListViewPermission}
               onRemove={onRemove}
               onMicrophoneConfigChange={onMicrophoneConfigChange}
             />
             <LiveAudioListeners 
-              participants={participants}
+              participants={participants} 
               isControlAuthorized={isControlAuthorized}
               onGrant={onGrant}
               onKick={onKick}
               onRescue={onRescue}
+              onBlock={onBlock}
               onSetAliasSharedVisibility={onSetAliasSharedVisibility}
               onSetActiveListViewPermission={onSetActiveListViewPermission}
               onRemove={onRemove}

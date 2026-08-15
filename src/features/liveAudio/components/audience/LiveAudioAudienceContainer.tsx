@@ -51,9 +51,7 @@ export default function LiveAudioAudienceContainer({
   const [isPendingWord, setIsPendingWord] = useState(false);
   const [isWordGranted, setIsWordGranted] = useState(false);
   const [isKicked, setIsKicked] = useState(false);
-  const [activeAlias, setActiveAlias] = useState<string | null>(null);
   const [keyRotationCount, setKeyRotationCount] = useState(0);
-  const [isAliasVisibleToOthers, setIsAliasVisibleToOthers] = useState(audienceSession.aliasVisible);
   const [canViewActiveParticipants, setCanViewActiveParticipants] = useState(false);
   const [visibleParticipants, setVisibleParticipants] = useState<string[]>([]);
   const [externalBroadcastState, setExternalBroadcastState] = useState<LiveAudioExternalBroadcastState>('off');
@@ -75,9 +73,6 @@ export default function LiveAudioAudienceContainer({
   const silenceAudioRef = useRef<HTMLAudioElement | null>(null);
 
   const [portalTarget, setPortalTarget] = useState<Element | null>(null);
-  useEffect(() => {
-    setIsAliasVisibleToOthers(audienceSession.aliasVisible);
-  }, [audienceSession.aliasVisible]);
 
   useEffect(() => {
     const checkPortal = () => {
@@ -201,8 +196,8 @@ export default function LiveAudioAudienceContainer({
   });
 
   const publishActiveProfile = useCallback(async (
-    alias: string | null = activeAlias,
-    isAliasVisible: boolean = isAliasVisibleToOthers,
+    alias: string | null = audienceSession.nick || null,
+    isAliasVisible: boolean = audienceSession.aliasVisible,
   ) => {
     if (!participantId || !alias) return false;
     const activeListPublicKey = await getAudiencePublicKey();
@@ -215,7 +210,7 @@ export default function LiveAudioAudienceContainer({
       isAliasVisibleToActiveParticipants: isAliasVisible,
       createdAt: Date.now(),
     });
-  }, [activeAlias, getAudiencePublicKey, isAliasVisibleToOthers, participantId, wsSend]);
+  }, [audienceSession.aliasVisible, audienceSession.nick, getAudiencePublicKey, participantId, wsSend]);
 
   // Listen for grant/revoke messages
   useEffect(() => {
@@ -241,15 +236,15 @@ export default function LiveAudioAudienceContainer({
           }
         }
       } else if (type === 'LIVE_AUDIO_REQUEST_ALIASES') {
-        if (participantId && activeAlias) {
+        if (participantId && audienceSession.nick) {
           lastPrivateProfileSignatureRef.current = '';
           const speakerState = isWordGranted ? 'GRANTED' : (isPendingWord ? 'REQUESTED' : 'LISTENER');
-          void publishActiveProfile(activeAlias, isAliasVisibleToOthers);
+          void publishActiveProfile(audienceSession.nick, audienceSession.aliasVisible);
           if (privateSignalReady) {
             void sendPrivateSignal({
               type: 'ACTIVE_PROFILE',
-              alias: activeAlias,
-              isAliasVisibleToActiveParticipants: isAliasVisibleToOthers,
+              alias: audienceSession.nick,
+              isAliasVisibleToActiveParticipants: audienceSession.aliasVisible,
             });
           }
           sendParticipantStatus(
@@ -322,8 +317,6 @@ export default function LiveAudioAudienceContainer({
         setIsPendingWord(false);
         setIsWordGranted(false);
         setIsKicked(true);
-        setActiveAlias(null);
-        setIsAliasVisibleToOthers(false);
         setCanViewActiveParticipants(false);
         setVisibleParticipants([]);
         audienceSession.logout();
@@ -354,8 +347,6 @@ export default function LiveAudioAudienceContainer({
         setIsPendingWord(false);
         setIsWordGranted(false);
         setIsKicked(false);
-        setActiveAlias(null);
-        setIsAliasVisibleToOthers(false);
         setCanViewActiveParticipants(false);
         setVisibleParticipants([]);
         audienceSession.logout();
@@ -369,14 +360,12 @@ export default function LiveAudioAudienceContainer({
     sendParticipantStatus,
     subscribeToWsMessage,
     unpublishMicrophone,
-    activeAlias,
     publishActiveProfile,
     sendPrivateSignal,
     privateSignalReady,
     isActive,
     isPendingWord,
     isKicked,
-    isAliasVisibleToOthers,
     isMicrophoneActive,
     audienceSession,
     externalBroadcastRevision,
@@ -386,7 +375,6 @@ export default function LiveAudioAudienceContainer({
   useEffect(() => {
     if (audienceSession.isLoggedIn && audienceSession.nick && !isActive && !isKicked) {
       setIsActive(true);
-      setActiveAlias(audienceSession.nick);
       sendParticipantStatus('LISTENER', {
         canPublishAudio: false,
         isMuted: true,
@@ -444,21 +432,21 @@ export default function LiveAudioAudienceContainer({
   }, [isActive, isPendingWord, isWordGranted, liveKitState, sendPrivateSignal]);
 
   useEffect(() => {
-    if (!activeAlias) return;
+    if (!audienceSession.nick) return;
     if (!isActive) return;
 
-    void publishActiveProfile(activeAlias, isAliasVisibleToOthers);
+    void publishActiveProfile(audienceSession.nick, audienceSession.aliasVisible);
     if (!privateSignalReady) return;
-    const signature = `${keyRotationCount}:${activeAlias}:${isAliasVisibleToOthers}:${isPendingWord}:${isWordGranted}`;
+    const signature = `${keyRotationCount}:${audienceSession.nick}:${audienceSession.aliasVisible}:${isPendingWord}:${isWordGranted}`;
     if (signature === lastPrivateProfileSignatureRef.current) return;
     lastPrivateProfileSignatureRef.current = signature;
     void sendPrivateSignal({
       type: isPendingWord ? 'REQUEST_WORD' : isWordGranted ? 'ACTIVE_STATE' : 'ACTIVE_PROFILE',
-      alias: activeAlias,
-      isAliasVisibleToActiveParticipants: isAliasVisibleToOthers,
+      alias: audienceSession.nick,
+      isAliasVisibleToActiveParticipants: audienceSession.aliasVisible,
       speakerState: isWordGranted ? 'GRANTED' : isPendingWord ? 'REQUESTED' : 'LISTENER',
     });
-  }, [activeAlias, isActive, isAliasVisibleToOthers, isPendingWord, isWordGranted, keyRotationCount, privateSignalReady, publishActiveProfile, sendPrivateSignal]);
+  }, [audienceSession.aliasVisible, audienceSession.nick, isActive, isPendingWord, isWordGranted, keyRotationCount, privateSignalReady, publishActiveProfile, sendPrivateSignal]);
 
   const handleStartAudio = useCallback(() => {
     if (hasAudioStarted || isStartingAudioRef.current) return;
@@ -480,10 +468,8 @@ export default function LiveAudioAudienceContainer({
     setIsPendingWord(false);
     setIsWordGranted(false);
     setIsKicked(false);
-    setActiveAlias(null);
     setShowInterventionModal(false);
     setShowPrivateMessageModal(false);
-    setIsAliasVisibleToOthers(false);
     setCanViewActiveParticipants(false);
     setVisibleParticipants([]);
     audienceSession.logout();
@@ -506,8 +492,6 @@ export default function LiveAudioAudienceContainer({
     setIsPendingWord(false);
     setIsWordGranted(false);
     setIsKicked(false);
-    setActiveAlias(alias);
-    setIsAliasVisibleToOthers(isAliasVisible);
     sendParticipantStatus('LISTENER', {
       canPublishAudio: false,
       isMuted: true,
@@ -521,11 +505,10 @@ export default function LiveAudioAudienceContainer({
 
   const handleAliasVisibilityChange = useCallback((checked: boolean) => {
     audienceSession.setAliasVisible(checked);
-    setIsAliasVisibleToOthers(checked);
     if (isActive) {
-      void publishActiveProfile(activeAlias, checked);
+      void publishActiveProfile(audienceSession.nick, checked);
     }
-  }, [activeAlias, audienceSession, isActive, publishActiveProfile]);
+  }, [audienceSession, isActive, publishActiveProfile]);
 
   const handleCancelRequest = useCallback(() => {
     setIsPendingWord(false);
@@ -537,9 +520,9 @@ export default function LiveAudioAudienceContainer({
     });
     void sendPrivateSignal({
       type: 'CANCEL_REQUEST_WORD',
-      alias: activeAlias ?? undefined,
+      alias: audienceSession.nick || undefined,
     });
-  }, [activeAlias, sendParticipantStatus, sendPrivateSignal]);
+  }, [audienceSession.nick, sendParticipantStatus, sendPrivateSignal]);
 
   const handleRequestWord = useCallback(() => {
     if (isKicked) return;
@@ -552,9 +535,9 @@ export default function LiveAudioAudienceContainer({
     });
     void sendPrivateSignal({
       type: 'REQUEST_WORD',
-      alias: activeAlias ?? undefined,
+      alias: audienceSession.nick || undefined,
     });
-  }, [activeAlias, isKicked, sendParticipantStatus, sendPrivateSignal]);
+  }, [audienceSession.nick, isKicked, sendParticipantStatus, sendPrivateSignal]);
 
   const handleToggleMicrophone = useCallback(() => {
     if (isMicrophoneActive) {
@@ -604,9 +587,9 @@ export default function LiveAudioAudienceContainer({
     return sendPrivateSignal({
       type: 'PRIVATE_MESSAGE',
       text: message,
-      alias: activeAlias ?? undefined,
+      alias: audienceSession.nick || undefined,
     });
-  }, [activeAlias, privateSignalReady, sendPrivateSignal]);
+  }, [audienceSession.nick, privateSignalReady, sendPrivateSignal]);
 
   const handleMusicModeChange = useCallback((nextMusicMode: boolean) => {
     setIsMusicMode(nextMusicMode);
@@ -652,7 +635,7 @@ export default function LiveAudioAudienceContainer({
     onCancelRequest: handleCancelRequest,
     onToggleMicrophone: handleToggleMicrophone,
     onOpenMessage: handleOpenMessage,
-    isAliasVisibleToOthers,
+    isAliasVisibleToOthers: audienceSession.aliasVisible,
     onAliasVisibilityChange: handleAliasVisibilityChange,
     canViewActiveParticipants,
     visibleParticipants,
@@ -688,7 +671,7 @@ export default function LiveAudioAudienceContainer({
       {showInterventionModal && (
         <AudienceInterventionModal
           onClose={() => setShowInterventionModal(false)}
-          defaultAliasVisible={isAliasVisibleToOthers}
+          defaultAliasVisible={audienceSession.aliasVisible}
           externalBroadcastState={externalBroadcastState}
           onSubmit={handleSubmitAlias}
         />

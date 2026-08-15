@@ -23,7 +23,7 @@ let externalBroadcastState = {
   updatedAt: Date.now(),
 }
 const PRIVATE_CONTROL_SIGNAL_MAX_CIPHERTEXT_BYTES = 4096
-const PRIVATE_CONTROL_SIGNAL_RATE_LIMIT = 60
+const PRIVATE_CONTROL_SIGNAL_RATE_LIMIT = 5
 const PRIVATE_CONTROL_SIGNAL_RATE_WINDOW_MS = 60_000
 const WS_MAX_PAYLOAD_BYTES = 64 * 1024
 const WS_MAX_BUFFERED_BYTES = 512 * 1024
@@ -618,13 +618,16 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
     const issuer = liveAudioControls.get(meta?.controlSessionId)
     if (!isControlAuthorized(issuer)) return
     const record = audienceAccessRecords.get(msg.participantId)
-    if (!record || !['ADMIT', 'REJECT', 'BLOCK'].includes(msg.decision)) return
+    if (!record || !['ADMIT', 'REJECT', 'BLOCK', 'UNBLOCK'].includes(msg.decision)) return
     if (msg.decision === 'ADMIT') {
       record.accessState = 'ADMITTED'
       record.retryAt = undefined
     } else if (msg.decision === 'REJECT') {
       record.accessState = 'REJECTED'
       record.retryAt = Date.now() + 30_000
+    } else if (msg.decision === 'UNBLOCK') {
+      record.accessState = 'WAITING'
+      record.retryAt = undefined
     } else {
       record.accessState = 'BLOCKED'
       record.retryAt = undefined

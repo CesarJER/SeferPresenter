@@ -226,6 +226,17 @@ describe('Live Audio WebSocket routing', () => {
       )) === true;
     });
     expect(snapshot.type).toBe('LIVE_AUDIO_SNAPSHOT');
+
+    principal.send({
+      type: 'AUDIENCE_ACCESS_DECISION',
+      participantId: access.participantId,
+      decision: 'UNBLOCK',
+      createdAt: Date.now(),
+    });
+    const unblocked = await waitFor(audience, (message) => (
+      message.type === 'AUDIENCE_ACCESS_STATE' && message.accessState === 'WAITING'
+    ));
+    expect(unblocked.accessState).toBe('WAITING');
   });
 
   it('keeps nicked audience admitted and requires access from anonymous audience when switching to controlled', async () => {
