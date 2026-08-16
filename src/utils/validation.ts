@@ -193,8 +193,8 @@ const validatePrivateControlSignalValue = (
   if (senderRole === 'audience' && msg.toParticipantId !== undefined) {
     errors.push('PRIVATE_CONTROL_SIGNAL.toParticipantId no esta permitido desde audiencia.');
   }
-  if (senderRole === 'control' && msg.toParticipantId === undefined) {
-    errors.push('PRIVATE_CONTROL_SIGNAL.toParticipantId es requerido desde control.');
+  if (senderRole === 'control' && msg.toParticipantId !== undefined) {
+    validateParticipantId(msg.toParticipantId, 'PRIVATE_CONTROL_SIGNAL.toParticipantId', errors);
   }
 
   return errors.length > 0 ? fail(errors) : ok(msg as unknown as PrivateControlSignalMessage);

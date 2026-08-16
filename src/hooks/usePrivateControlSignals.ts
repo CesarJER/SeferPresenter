@@ -61,6 +61,7 @@ export interface PrivateControlSignalsState {
   rotateControlKey: () => Promise<void>;
   sendPrivateSignal: (value: unknown, options?: SendPrivateSignalOptions) => Promise<boolean>;
   sendPrivateSignalToParticipant: (participantId: string, participantPublicKeyBase64: string, value: unknown) => Promise<boolean>;
+  sendPrivateSignalToControls: (value: unknown) => Promise<boolean>;
   getAudiencePublicKey: () => Promise<string | null>;
   requestAliases: (targetParticipantIds?: string[]) => Promise<boolean>;
   requestControlAuthorization: (verificationCode: string) => Promise<boolean>;
@@ -274,6 +275,27 @@ export function usePrivateControlSignals(options: UsePrivateControlSignalsOption
     return sendMessageRef.current(message.type, message);
   }, [participantId, role]);
 
+  const sendPrivateSignalToControls = useCallback(async (
+    value: unknown
+  ): Promise<boolean> => {
+    if (role !== 'control' || !sessionKeyPairRef.current || !currentKeyIdRef.current || !currentControlPublicKeyRef.current) return false;
+
+    const sharedKey = await deriveSharedKey(sessionKeyPairRef.current.privateKey, sessionKeyPairRef.current.publicKey);
+    const encrypted = await encrypt(sharedKey, serializeSignalValue(value));
+
+    const message = makeSyncMessage({
+      type: 'PRIVATE_CONTROL_SIGNAL' as const,
+      fromParticipantId: participantId,
+      keyId: currentKeyIdRef.current,
+      ephemeralPublicKey: currentControlPublicKeyRef.current,
+      ciphertext: encrypted.ciphertext,
+      nonce: encrypted.nonce,
+      createdAt: Date.now(),
+    });
+
+    return sendMessageRef.current(message.type, message);
+  }, [participantId, role]);
+
   const requestAliases = useCallback(async (targetParticipantIds?: string[]): Promise<boolean> => {
     if (role !== 'control' || !transportReady) return false;
     
@@ -341,7 +363,7 @@ export function usePrivateControlSignals(options: UsePrivateControlSignalsOption
     const signal = payload as unknown as PrivateControlSignalMessage;
 
     if (role === 'control') {
-      if (!isValidPrivateControlSignal(payload, 'audience')) return;
+      if (!isValidPrivateControlSignal(payload, 'audience') && !isValidPrivateControlSignal(payload, 'control')) return;
       if (!sessionKeyPairRef.current || payload.keyId !== currentKeyIdRef.current) return;
 
       const participantPublicKey = await importPublicKey(signal.ephemeralPublicKey);
@@ -510,6 +532,7 @@ export function usePrivateControlSignals(options: UsePrivateControlSignalsOption
     rotateControlKey,
     sendPrivateSignal,
     sendPrivateSignalToParticipant,
+    sendPrivateSignalToControls,
     getAudiencePublicKey,
     requestAliases,
     requestControlAuthorization,

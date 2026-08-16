@@ -872,11 +872,14 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
   }
 
   const routePrivateControlSignalToControls = (msg) => {
-    broadcast(msg, (meta) => {
-      if (meta.role !== 'control') return false
-      const control = liveAudioControls.get(meta.controlSessionId)
-      if (!isControlAuthorized(control)) return false
-      return !msg.toControlSessionId || msg.toControlSessionId === control.controlSessionId
+    broadcast(msg, (clientMeta) => {
+      if (clientMeta.role === 'control') {
+        const control = liveAudioControls.get(clientMeta.controlSessionId)
+        if (isControlAuthorized(control)) {
+          return true
+        }
+      }
+      return false
     })
   }
 
@@ -898,7 +901,7 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
     if (msg.toControlSessionId !== undefined && typeof msg.toControlSessionId !== 'string') return false
     if (msg.toParticipantId !== undefined && !isValidParticipantId(msg.toParticipantId)) return false
     if (senderRole === 'audience' && msg.toParticipantId !== undefined) return false
-    if (senderRole === 'control' && !isValidParticipantId(msg.toParticipantId)) return false
+    if (senderRole === 'control' && msg.toParticipantId !== undefined && !isValidParticipantId(msg.toParticipantId)) return false
     if (typeof msg.keyId !== 'string' || msg.keyId.trim() === '') return false
     if (!isValidBase64(msg.ephemeralPublicKey)) return false
     if (!isValidBase64(msg.ciphertext)) return false
@@ -1449,7 +1452,12 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
             }
             if (!validatePrivateControlSignal(msg, 'control')) break
             if (!canAcceptControlPrivateSignal(meta, msg)) break
-            routePrivateControlSignalToParticipant(msg)
+            
+            if (msg.toParticipantId) {
+              routePrivateControlSignalToParticipant(msg)
+            } else {
+              routePrivateControlSignalToControls(msg)
+            }
           }
           break
 

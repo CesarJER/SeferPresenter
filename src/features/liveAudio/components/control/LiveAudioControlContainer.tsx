@@ -441,6 +441,8 @@ export default function LiveAudioControlContainer({
       return;
     }
 
+
+
     if (data.type === 'CONTROL_ANNOUNCEMENT') {
       const content = typeof data.text === 'string'
         ? data.text.trim()
@@ -484,6 +486,7 @@ export default function LiveAudioControlContainer({
 
   const {
     sendPrivateSignalToParticipant,
+    sendPrivateSignalToControls,
     requestAliases,
     ready: privateSignalsReady,
     requestControlAuthorization,
@@ -579,16 +582,8 @@ export default function LiveAudioControlContainer({
       senderNick: internalNick,
       timestamp: now,
     };
-    wsSend?.('PRIVATE_CONTROL_SIGNAL', announcement);
-
-    setMessages(prev => [...prev, {
-      id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-      fromAlias: internalNick,
-      content: text.trim(),
-      timestamp: now,
-      isInterControl: true,
-    }]);
-  }, [wsSend]);
+    sendPrivateSignalToControls(announcement);
+  }, [sendPrivateSignalToControls]);
 
   const handleDismissMessage = useCallback((id: string) => {
     setMessages(prev => prev.filter(m => m.id !== id));
