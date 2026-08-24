@@ -184,6 +184,12 @@ Use these checklists before implementing future tasks.
 
 ## When Editing Validation/Import/Export
 
+- Keep operator-owned JSON under `SEFER_DATA_DIR`; do not add root-level
+  `presentations.json` or `audio_sync.json` back to the product repository.
+- First-run templates belong in `examples/SeferPresenterData/` and may only fill
+  missing targets. Never overwrite an existing instance file during startup.
+- When adding persistent instance files, expose their paths through
+  `server/data-directory.mjs` and add preservation/initialization tests.
 - Treat imports, API responses, localStorage, and sync messages as untrusted.
 - Keep user-facing errors actionable and Spanish when shown in UI.
 - Normalize public asset paths with `normalizePublicPath`.

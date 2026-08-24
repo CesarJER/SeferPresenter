@@ -55,9 +55,11 @@ Fast map for agents. Use real paths only; this repo does not currently have
 - `src/hooks/useControlAuthorization.ts`: Fase 5.3 Control principal/secondary authorization state derived from WebSocket messages.
 - `src/utils/cryptoUtils.ts`: pure Web Crypto helpers for ECDH P-256, AES-GCM 256, base64 encoding, and nonce replay rejection.
 - `server/`: local Node backend and dev launcher.
+- `server/data-directory.mjs`: resolves `SEFER_DATA_DIR`, initializes only missing files from the neutral example, and owns persistent data paths.
 - `scripts/`: generated data and utility scripts.
 - `__tests__/`: Vitest tests for utils and selected hooks.
 - `public/`: static assets, PWA files, generated book TSVs and metadata.
+- `examples/SeferPresenterData/`: neutral first-run template; runtime writes never target this directory.
 
 ## Common Change Paths
 

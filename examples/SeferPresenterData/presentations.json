@@ -1,0 +1,21 @@
+[
+  {
+    "id": "example-welcome",
+    "title": "Example presentation",
+    "background": "",
+    "mode": "standard",
+    "tags": [
+      "example"
+    ],
+    "slides": [
+      {
+        "id": "example-welcome-slide",
+        "label": "Welcome",
+        "lines": [
+          "Welcome to SeferPresenter",
+          "Replace this example with the content for your installation."
+        ]
+      }
+    ]
+  }
+]

@@ -6,6 +6,7 @@ from PIL import Image
 PROJECT_DIR = r"c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter"
 PUBLIC_DIR = os.path.join(PROJECT_DIR, "public")
 LEGACY_DIR = os.path.join(PROJECT_DIR, "legacy")
+DATA_DIR = os.path.abspath(os.environ.get("SEFER_DATA_DIR", os.path.join(PROJECT_DIR, "data.local")))
 FFMPEG_PATH = os.path.join(PROJECT_DIR, "node_modules/ffmpeg-static/ffmpeg.exe")
 
 def backup_and_optimize_images():
@@ -142,7 +143,7 @@ def update_presentations_json(modified_names):
         return
         
     print("\n--- UPDATING PRESENTATIONS.JSON ---")
-    presentations_path = os.path.join(PROJECT_DIR, "presentations.json")
+    presentations_path = os.path.join(DATA_DIR, "presentations.json")
     
     if not os.path.exists(presentations_path):
         print("presentations.json not found")

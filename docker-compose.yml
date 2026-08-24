@@ -54,11 +54,11 @@ services:
       - SEFER_BROADCAST_NOTICE_VERSION=${SEFER_BROADCAST_NOTICE_VERSION:-broadcast-notice-v1}
       - SEFER_BACKUP_DIR=/app/backups
       - SEFER_FORCE_IN_PLACE_PERSISTENCE=${SEFER_FORCE_IN_PLACE_PERSISTENCE:-false}
+      - SEFER_DATA_DIR=/app/data
       - VITE_SEFER_PUBLICABLE_PERMISSION=${VITE_SEFER_PUBLICABLE_PERMISSION:-RECORDING}
       - VITE_SEFER_PUBLICABLE_DEFAULT=${VITE_SEFER_PUBLICABLE_DEFAULT:-off}
     volumes:
-      - ${DATA_DIR:-.}/presentations.json:/app/presentations.json
-      - ${DATA_DIR:-.}/audio_sync.json:/app/audio_sync.json
+      - ${SEFER_DATA_DIR:-./data.local}:/app/data
       - ${DATA_DIR:-.}/public/audio:/app/public/audio:ro
       - ${DATA_DIR:-.}/public/backgrounds:/app/public/backgrounds:ro
       - ${DATA_DIR:-.}/public/videos:/app/public/videos:ro

@@ -16,7 +16,8 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
 - `src/main-control.tsx` - standalone React root for control mode; orchestrates control state and sync wiring without presenter/media elements.
 - `src/main-catalog.tsx` - standalone React root for the public catalog interface.
 - `vite.config.ts` - Vite multi-entry input configuration.
-- `public/audience-sw.js` - shared PWA service worker for `/audience` and `/control`, versioned as `1.3.0`; legal documents and arbitrary runtime media are not cached.
+- `resolveSeferDataDir` / `initializeSeferDataDir` / `getSeferDataPaths` - `server/data-directory.mjs`: external data-root resolution, non-overwriting initialization, and canonical persistent paths.
+- `public/audience-sw.js` - shared PWA service worker for `/audience` and `/control`, versioned as `1.3.1`; legal documents and arbitrary runtime media are not cached.
 - `public/manifest.webmanifest` - Audience PWA manifest scoped to `/audience` and using `public/logo.svg`.
 - `public/control-manifest.webmanifest` - Control PWA manifest scoped to `/control` and using `public/logo.svg`.
 

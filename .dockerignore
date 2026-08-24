@@ -21,6 +21,8 @@
 !public/**
 !config/
 !config/**
+!examples/
+!examples/**
 
 # Runtime media is supplied through read-only bind mounts.
 public/audio/

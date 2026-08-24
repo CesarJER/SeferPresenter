@@ -32,10 +32,10 @@ const loadServiceWorkerHelpers = () => {
 };
 
 describe('PWA service worker policy', () => {
-  it('exports version 1.3.0 and explicit cache helper decisions', () => {
+  it('exports version 1.3.1 and explicit cache helper decisions', () => {
     const helpers = loadServiceWorkerHelpers();
 
-    expect(helpers.SW_VERSION).toBe('1.3.0');
+    expect(helpers.SW_VERSION).toBe('1.3.1');
 
     [
       '/api/state',
@@ -83,6 +83,14 @@ describe('PWA service worker policy', () => {
     expect(source).toContain("if (isLegalUrl(url))");
     expect(source).toContain("fetch(request, { cache: 'no-store' })");
     expect(coreAssets).not.toContain('/legal/');
+  });
+
+  it('loads the instance cache list through the uncached public API', () => {
+    const source = readFileSync('public/audience-sw.js', 'utf8');
+    const coreAssets = source.match(/const CORE_ASSETS = \[([\s\S]*?)\];/)?.[1] || '';
+
+    expect(source).toContain("fetch('/api/audience-cache-assets', { cache: 'no-store' })");
+    expect(coreAssets).not.toContain('/audience-cache-assets.txt');
   });
 });
 

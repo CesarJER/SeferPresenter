@@ -12,6 +12,9 @@ legacy
 node_modules
 dist
 dist-ssr
+/data.local/
+/presentations.json
+/audio_sync.json
 *.local
 *.local.*
 public/legal/*.local/

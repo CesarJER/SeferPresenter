@@ -38,6 +38,7 @@ COPY src ./src
 COPY server ./server
 COPY public ./public
 COPY config ./config
+COPY examples ./examples
 RUN npx tsc -b && npx vite build
 
 FROM node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293 AS production
@@ -58,11 +59,11 @@ RUN npm ci --omit=dev
 COPY --from=builder --chown=node:node /app/dist ./dist
 COPY --from=builder --chown=node:node /app/server ./server
 COPY --from=builder --chown=node:node /app/public ./public
+COPY --from=builder --chown=node:node /app/examples ./examples
 
-# Empty placeholder files for config mounts
-# This prevents Docker from creating directories if the files are missing
-RUN touch /app/presentations.json && \
-    touch /app/audio_sync.json
+RUN mkdir -p /app/data
+
+ENV SEFER_DATA_DIR=/app/data
 
 EXPOSE 8787
 

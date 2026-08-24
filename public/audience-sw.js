@@ -1,4 +1,4 @@
-const SW_VERSION = '1.3.0';
+const SW_VERSION = '1.3.1';
 const CACHE_PREFIX = 'sefer-pwa';
 const CACHE_NAME = `${CACHE_PREFIX}-v${SW_VERSION}`;
 
@@ -6,7 +6,6 @@ const CORE_ASSETS = [
   '/audience.html',
   '/control.html',
   '/metadata.json',
-  '/audience-cache-assets.txt',
   '/logo.svg',
 ];
 
@@ -129,16 +128,15 @@ const shouldCacheResponse = (response) => {
 
 const loadConfiguredAssets = async () => {
   try {
-    const response = await fetch('/audience-cache-assets.txt', { cache: 'no-store' });
+    const response = await fetch('/api/audience-cache-assets', { cache: 'no-store' });
     if (!response.ok) return [];
 
-    const text = await response.text();
+    const assets = await response.json();
+    if (!Array.isArray(assets)) return [];
 
-    return text
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter((line) => line && !line.startsWith('#') && line.startsWith('/'))
-      .filter((path) => !isNeverCacheUrl(new URL(path, self.location.origin)));
+    return assets
+      .filter((assetPath) => typeof assetPath === 'string' && assetPath.startsWith('/'))
+      .filter((assetPath) => !isNeverCacheUrl(new URL(assetPath, self.location.origin)));
   } catch {
     return [];
   }
@@ -256,7 +254,7 @@ self.addEventListener('fetch', (event) => {
 
   if (isMediaUrl(url)) {
     // Media is network-only unless it was explicitly listed for installation in
-    // audience-cache-assets.txt. Avoid filling persistent browser storage with
+    // the instance cache list. Avoid filling persistent browser storage with
     // arbitrary songs/videos requested during a session.
     return;
   }

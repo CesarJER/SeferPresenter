@@ -161,7 +161,7 @@ Library/sync/validation:
 Presentation state:
 
 - `Presentation`, `Slide`, `QuizData`, and media/scripture slide fields in `src/types/presentation.ts`.
-- Persists through `presentations.json` and `/api/presentations`.
+- Persists through `SEFER_DATA_DIR/presentations.json` and `/api/presentations`.
 
 Sync-ready state:
 
@@ -180,7 +180,8 @@ Content data:
 
 - Generated scripture metadata/books under `public/`.
 - Asset lists from backend endpoints.
-- Audio sync maps in `audio_sync.json`.
+- Audio sync maps in `SEFER_DATA_DIR/audio_sync.json`.
+- `server/data-directory.mjs` owns persistent data-root resolution and first-run initialization; API handlers consume its resolved paths.
 
 Derived state:
 

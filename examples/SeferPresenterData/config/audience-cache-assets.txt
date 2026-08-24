@@ -1,0 +1,2 @@
+# Add small, version-stable instance assets here, one public path per line.
+/favicon.svg

@@ -51,10 +51,19 @@ import { writeJsonSafely } from './json-persistence.mjs'
 import { resolvePathInsideRoot } from './path-containment.mjs'
 import { createPrivacySessionManifestRecorder } from './privacy-session-manifest.mjs'
 import { getStaticCacheHeaders } from './static-cache-policy.mjs'
+import {
+  getSeferDataPaths,
+  initializeSeferDataDir,
+  resolveSeferDataDir,
+} from './data-directory.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const rootDir = path.resolve(__dirname, '..')
 const publicDir = path.join(rootDir, 'public')
+const exampleDataDir = path.join(rootDir, 'examples', 'SeferPresenterData')
+const seferDataDir = resolveSeferDataDir({ rootDir })
+const dataInitialization = initializeSeferDataDir({ dataDir: seferDataDir, exampleDir: exampleDataDir })
+const seferDataPaths = getSeferDataPaths(seferDataDir)
 const port = Number(process.env.SEFER_PORT || 8787)
 const staticArgIndex = process.argv.indexOf('--static')
 const staticDir = path.resolve(rootDir, staticArgIndex >= 0 ? process.argv[staticArgIndex + 1] || 'dist' : 'dist')
@@ -62,6 +71,10 @@ const sseHeartbeatMs = 30_000
 const privacySessionManifestRecorder = createPrivacySessionManifestRecorder({
   publicDir,
 })
+
+if (dataInitialization.created.length > 0) {
+  console.info(`[DATA] Initialized ${dataInitialization.created.length} missing file(s) in SEFER_DATA_DIR`)
+}
 
 let currentState = makeProjectionSyncStateMessage(getDefaultProjectionState(), {
   clientId: 'server',
@@ -242,7 +255,7 @@ const persistJson = (filePath, value) => {
 
 const readPresentationsCache = () => {
   try {
-    const validation = validatePresentationsPayload(readJsonFile(path.join(rootDir, 'presentations.json'), []))
+    const validation = validatePresentationsPayload(readJsonFile(seferDataPaths.presentations, []))
     if (!validation.ok) throw new Error(formatValidationError(validation))
     presentationsCache = normalizePresentations(validation.value)
   } catch (error) {
@@ -255,7 +268,7 @@ const readPresentationsCache = () => {
 
 const readAudioSyncMapsCache = () => {
   try {
-    const validation = validateAudioSyncPayload(readJsonFile(path.join(rootDir, 'audio_sync.json'), []))
+    const validation = validateAudioSyncPayload(readJsonFile(seferDataPaths.audioSync, []))
     if (!validation.ok) throw new Error(formatValidationError(validation))
     audioSyncMapsCache = validation.value
   } catch (error) {
@@ -954,7 +967,7 @@ const handleApi = async (req, res, url) => {
         sendJson(res, 400, { error: `Invalid audio sync payload: ${formatValidationError(validation)}` })
         return true
       }
-      persistJson(path.join(rootDir, 'audio_sync.json'), validation.value)
+      persistJson(seferDataPaths.audioSync, validation.value)
       audioSyncMapsCache = validation.value
       sendJson(res, 200, { success: true })
     } catch (err) {
@@ -982,7 +995,7 @@ const handleApi = async (req, res, url) => {
         return true
       }
       const presentations = normalizePresentations(validation.value)
-      persistJson(path.join(rootDir, 'presentations.json'), presentations)
+      persistJson(seferDataPaths.presentations, presentations)
       presentationsCache = presentations
       publicPresentationsCache = buildPublicPresentations(presentationsCache, getPublicCatalogs())
       sendJson(res, 200, { success: true })
@@ -1027,7 +1040,7 @@ const handleApi = async (req, res, url) => {
   }
 
   if (url.pathname === '/api/audience-cache-assets' && req.method === 'GET') {
-    const filePath = path.join(publicDir, 'audience-cache-assets.txt')
+    const filePath = seferDataPaths.audienceCacheAssets
     if (!fs.existsSync(filePath)) {
       sendJson(res, 200, [])
       return true

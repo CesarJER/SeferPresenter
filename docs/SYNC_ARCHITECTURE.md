@@ -393,7 +393,7 @@ roles leave `playing` together. Audience remains read-only and never sends
 timeline actions.
 
 `server/local-server.mjs` evaluates backend-owned timeline cues against
-`audio_sync.json` and emits canonical `SELECT_PRESENTATION_AND_SLIDE`
+`SEFER_DATA_DIR/audio_sync.json` and emits canonical `SELECT_PRESENTATION_AND_SLIDE`
 reductions with the full presentation object. This keeps music-to-letter
 navigation server-owned even when a Presenter tab is connected. In `bilateral`
 mode, manual Control/Presenter slide or verse selection seeks the backend

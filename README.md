@@ -34,6 +34,34 @@ npm run index:memory # re-indexar grafo AST con codebase-memory-mcp
 
 Los scripts `predev`, `prebuild` y `prebuild:web` regeneran `public/books/*.tsv` y `public/metadata.json` desde los datos biblicos externos.
 
+## Datos de una instalacion self-hosted
+
+El codigo no versiona las presentaciones ni los mapas de audio del operador.
+El backend lee y escribe esos ficheros dentro de `SEFER_DATA_DIR`:
+
+```text
+SeferPresenterData/
+├── presentations.json
+├── audio_sync.json
+├── config/audience-cache-assets.txt
+├── branding/
+├── media/
+└── tmp/
+```
+
+Las rutas relativas se resuelven desde la raiz de SeferPresenter. En desarrollo
+puede configurarse una instalacion privada hermana mediante un `.env.local`
+ignorado por Git:
+
+```dotenv
+SEFER_DATA_DIR=../SeferPresenterData
+```
+
+Si la variable no existe, se usa `./data.local`. En el primer arranque se
+copian los archivos ausentes desde `examples/SeferPresenterData/`; nunca se
+sobrescribe un archivo ya existente. El directorio de ejemplo es neutral y no
+debe utilizarse para guardar cambios del operador.
+
 ## Backend local
 
 El backend local vive en `server/local-server.mjs`. Mantiene inicialmente la misma superficie API que tenia el backend embebido en Vite:
@@ -158,9 +186,18 @@ El service worker `public/audience-sw.js` sirve ambos scopes. Cachea:
 - shell minimo de audiencia/control con estrategia network-first;
 - `metadata.json`;
 - TSV biblicos bajo demanda;
-- assets extra listados manualmente en `public/audience-cache-assets.txt`.
+- assets extra listados por la instancia mediante
+  `SEFER_DATA_DIR/config/audience-cache-assets.txt`.
 
-El archivo `public/audience-cache-assets.txt` acepta una ruta publica por linea y comentarios con `#`. No cachea endpoints vivos (`/api/*`, SSE, `/ws`, `/rtc/*`, LiveKit/tokens), documentos `/legal/*` ni videos/audios pesados. La ruta `/proteccion-datos` y el Markdown legal usan red con `no-store`: si no hay red no se presenta una política obsoleta como vigente. Si hay una actualizacion de service worker esperando, el boton de reinicio de la PWA la activa antes de recargar, sin borrar nick, respuestas de quiz ni estado local persistente.
+El archivo privado acepta una ruta publica por linea y comentarios con `#`.
+El service worker obtiene la lista mediante `/api/audience-cache-assets` con
+`no-store`. `public/audience-cache-assets.txt` es solo un ejemplo neutral. No
+se cachean endpoints vivos (`/api/*`, SSE, `/ws`, `/rtc/*`, LiveKit/tokens),
+documentos `/legal/*` ni videos/audios pesados. La ruta `/proteccion-datos` y el
+Markdown legal usan red con `no-store`: si no hay red no se presenta una
+política obsoleta como vigente. Si hay una actualizacion de service worker
+esperando, el boton de reinicio de la PWA la activa antes de recargar, sin
+borrar nick, respuestas de quiz ni estado local persistente.
 
 ### Diagnostico de permisos de microfono
 
@@ -356,10 +393,11 @@ tokens ni mensajes privados en archivos o base de datos. El snapshot operacional
 vive solo en memoria y contiene exclusivamente estado tecnico y agregados de
 quiz; no contiene texto privado, respuestas individuales ni alias legibles.
 
-Compose conserva copias de recuperación fsync de `presentations.json` y
-`audio_sync.json` en el volumen `sefer_backups`. En un montaje individual de
-archivo, Docker puede impedir el `rename` atómico del primario; el backend lo
-registra y solo usa escritura in-place después de crear esa copia durable.
+Compose monta `SEFER_DATA_DIR` como directorio en `/app/data` y conserva copias
+de recuperación fsync de `presentations.json` y `audio_sync.json` en el volumen
+`sefer_backups`. El montaje de directorio permite mantener el `rename` atomico
+del primario; el fallback in-place solo se usa si el sistema de ficheros lo
+impone y después de crear una copia durable.
 
 ## Legacy
 
