@@ -25,6 +25,8 @@ Fast map for agents. Use real paths only; this repo does not currently have
   projection rendering; route-specific Control/Audience roots live separately.
 - `README.md`: human overview, routes, scripts, backend endpoints, verification.
 - `server/local-server.mjs`: local backend, static serving, SSE, persistence endpoints, auth gate, and WebSocket attachment.
+- `server/branding-assets.mjs`: private branding selection, neutral product
+  fallbacks and content-derived ETags.
 - `server/ws-server.mjs`: WebSocket `/ws` server for backend-owned audio timeline messages.
 - `server/livekit-server.mjs`: optional self-hosted LiveKit token and moderation endpoints with memory-only state.
 - `server/timelineManager.mjs`: isolated audio timeline state and action reducer.
@@ -56,6 +58,8 @@ Fast map for agents. Use real paths only; this repo does not currently have
 - `src/utils/cryptoUtils.ts`: pure Web Crypto helpers for ECDH P-256, AES-GCM 256, base64 encoding, and nonce replay rejection.
 - `server/`: local Node backend and dev launcher.
 - `server/data-directory.mjs`: resolves `SEFER_DATA_DIR`, initializes only missing files from the neutral example, and owns persistent data paths.
+- `src/components/shared/BrandingWelcome.tsx`: runtime loading and safe Markdown
+  rendering for the installation welcome.
 - `scripts/`: generated data and utility scripts.
 - `__tests__/`: Vitest tests for utils and selected hooks.
 - `public/`: static assets, PWA files, generated book TSVs and metadata.
@@ -146,7 +150,7 @@ Start with:
 - `server/privacy-session-manifest.mjs` when changing the local, non-nominative
   recording-session evidence written from accepted broadcast transitions
 - `server/static-cache-policy.mjs` when changing fail-closed, no-store handling
-  for the legal route and Markdown documents
+  for legal resources or immutable caching for Vite-hashed assets
 - `docs/SYNC_ARCHITECTURE.md`
 - `docs/COMPONENT_OWNERSHIP.md`
 

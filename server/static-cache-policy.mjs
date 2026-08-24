@@ -11,5 +11,10 @@ export const getStaticCacheHeaders = (requestPath = '') => {
       Expires: '0',
     }
   }
+  if (pathname.startsWith('/assets/')) {
+    return {
+      'Cache-Control': 'public, max-age=31536000, immutable',
+    }
+  }
   return {}
 }

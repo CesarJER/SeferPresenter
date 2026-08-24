@@ -53,6 +53,9 @@ Shared:
 - `src/components/shared/LegalMarkdown.tsx`: safe, responsive Markdown/GFM
   renderer shared by legal policy and first-layer notices; raw HTML and images
   stay disabled.
+- `src/components/shared/BrandingWelcome.tsx`: loads the instance welcome from
+  the public branding API at runtime and renders normal Markdown without raw
+  HTML.
 - `src/components/shared/PwaRestartButton.tsx`: shared confirmed PWA reload action for installable audience/control shells; it must not clear localStorage or session state.
 - Live Audio shared widgets such as `LiveAudioStatusBadge.tsx` and
 

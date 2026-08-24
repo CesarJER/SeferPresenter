@@ -17,9 +17,13 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
 - `src/main-catalog.tsx` - standalone React root for the public catalog interface.
 - `vite.config.ts` - Vite multi-entry input configuration.
 - `resolveSeferDataDir` / `initializeSeferDataDir` / `getSeferDataPaths` - `server/data-directory.mjs`: external data-root resolution, non-overwriting initialization, and canonical persistent paths.
+- `loadBrandingAsset` / `makeBrandingEtag` - `server/branding-assets.mjs`:
+  private override selection, required neutral fallback and content ETag.
+- `applyNeutralBrandingFallback` - `src/utils/branding.ts`: swaps a failed
+  runtime logo request to the neutral Vite-hashed product asset.
 - `public/audience-sw.js` - shared PWA service worker for `/audience` and `/control`, versioned as `1.3.1`; legal documents and arbitrary runtime media are not cached.
-- `public/manifest.webmanifest` - Audience PWA manifest scoped to `/audience` and using `public/logo.svg`.
-- `public/control-manifest.webmanifest` - Control PWA manifest scoped to `/control` and using `public/logo.svg`.
+- `public/manifest.webmanifest` - Audience PWA manifest scoped to `/audience` and using the runtime branding logo.
+- `public/control-manifest.webmanifest` - Control PWA manifest scoped to `/control` and using the runtime branding logo.
 
 ## Hooks
 
@@ -103,6 +107,9 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
 - `LegalMarkdown` - `src/components/shared/LegalMarkdown.tsx`: shared safe
   Markdown/GFM renderer for legal text and tables; raw HTML and images are
   disabled.
+- `BrandingWelcome` - `src/components/shared/BrandingWelcome.tsx`: revalidated
+  runtime welcome loader and Markdown renderer without raw HTML for the access
+  screen.
 - `configuredPrivacyPolicyPath`, `configuredPrivacySummaryPath`,
   `normalizeLegalMarkdownPath`, `extractLegalDocumentTitle`,
   `extractLegalDocumentVersion`, `prepareLegalMarkdownForDisplay`, `sha256Hex` -
@@ -140,7 +147,8 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
   for accepted `recording` transitions; wired by `server/local-server.mjs` into
   the WebSocket server transition callback.
 - `getStaticCacheHeaders` - `server/static-cache-policy.mjs`: HTTP `no-store`
-  headers for `/proteccion-datos` and `/legal/*`.
+  headers for `/proteccion-datos` and `/legal/*`, plus immutable caching for
+  Vite-hashed `/assets/*`.
 - `VISIBLE_ACTIVE_PARTICIPANTS` - private encrypted payload inside
   `PRIVATE_CONTROL_SIGNAL`, not a public WebSocket message.
 - `isAliasVisibleToActiveParticipants`, `isAliasHiddenByControl`,

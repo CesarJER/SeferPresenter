@@ -9,7 +9,7 @@
   "description": "Audiencia movil sincronizada para SeferPresenter",
   "icons": [
     {
-      "src": "/logo.svg",
+      "src": "/api/branding/logo.svg",
       "sizes": "641x641",
       "type": "image/svg+xml",
       "purpose": "any maskable"

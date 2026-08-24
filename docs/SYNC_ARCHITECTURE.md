@@ -492,6 +492,9 @@ Backend-owned or backend-mirrored pieces:
 - `/api/backgrounds` (lists all available image and video background files)
 - `/api/audio` (lists all available audio tracks)
 - `/api/audience-cache-assets` (returns the list of static assets to be cached by the PWA)
+- public GET `/api/branding/logo.svg`, `/api/branding/favicon.svg`, and
+  `/api/branding/welcome.md` (instance overrides with neutral product fallbacks;
+  responses are same-origin, cacheable, content-versioned by ETag and `nosniff`)
 - `/ws` for backend-owned audio timeline messages only
 - `/api/livekit/status`, `/api/livekit/token`, `/api/livekit/refresh-token`,
   and `/api/livekit/*` moderation endpoints for optional Live Audio state in

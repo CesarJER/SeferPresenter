@@ -45,6 +45,9 @@ SeferPresenterData/
 ├── audio_sync.json
 ├── config/audience-cache-assets.txt
 ├── branding/
+│   ├── logo.svg       # override opcional
+│   ├── favicon.svg    # override opcional
+│   └── welcome.md     # override opcional
 ├── media/
 └── tmp/
 ```
@@ -61,6 +64,18 @@ Si la variable no existe, se usa `./data.local`. En el primer arranque se
 copian los archivos ausentes desde `examples/SeferPresenterData/`; nunca se
 sobrescribe un archivo ya existente. El directorio de ejemplo es neutral y no
 debe utilizarse para guardar cambios del operador.
+
+El navegador solicita el branding mediante `/api/branding/logo.svg`,
+`/api/branding/favicon.svg` y `/api/branding/welcome.md`. Un archivo privado
+tiene prioridad; si falta, se utiliza el recurso neutral de
+`src/assets/branding/`. Los SVG se sirven como imágenes con MIME explícito y
+`nosniff`; nunca se inserta su código dentro del DOM. Logo y favicon admiten
+caché de siete días, mientras que la bienvenida se revalida tras cinco minutos;
+los tres recursos usan ETag basado en su contenido. La bienvenida se carga en
+runtime con HTML crudo deshabilitado y Markdown normal, incluidas imágenes, por
+lo que el branding del operador no entra en `dist/`. El rayo neutral también se
+incluye como asset con hash del build y se usa si el endpoint del logotipo no
+puede cargarse; los assets con hash usan caché anual `immutable`.
 
 ## Backend local
 
@@ -85,6 +100,9 @@ El backend local vive en `server/local-server.mjs`. Mantiene inicialmente la mis
 - `GET /api/audience/state` (snapshot `SYNC_STATE`; exige credencial en modo controlado)
 - `GET /api/audience/events` (SSE equivalente; exige ticket en modo controlado)
 - `GET /api/audience-cache-assets`
+- `GET /api/branding/logo.svg`
+- `GET /api/branding/favicon.svg`
+- `GET /api/branding/welcome.md`
 - `POST /api/quiz-answer`
 - `GET /api/quiz-events` (eventos no sensibles; exige ticket en modo controlado)
 - `GET /api/quiz-control-events` (agregados, requiere autenticación)
@@ -179,7 +197,9 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/rotate-docker-lo
 `/audience` y `/control` pueden instalarse como PWA con manifests separados:
 `public/manifest.webmanifest` mantiene `start_url` y `scope` en `/audience`,
 y `public/control-manifest.webmanifest` mantiene `start_url` y `scope` en
-`/control`. Ambos usan el logo real `public/logo.svg` como icono.
+`/control`. Ambos solicitan `/api/branding/logo.svg`: el override de la
+instalación tiene prioridad y `src/assets/branding/logo.svg` queda como fallback
+neutral. Los activos de branding ya no pertenecen a `public/`.
 
 El service worker `public/audience-sw.js` sirve ambos scopes. Cachea:
 

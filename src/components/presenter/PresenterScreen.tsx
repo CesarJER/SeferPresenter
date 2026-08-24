@@ -8,6 +8,7 @@ import AutoResizeText from '../shared/AutoResizeText';
 import { QuizPresenterView } from '../quiz/QuizPresenterView';
 import { useSmoothVolume } from '../../hooks/useSmoothVolume';
 import { isMediaPlaybackBlockedError } from '../../utils/mediaVolume';
+import { applyNeutralBrandingFallback } from '../../utils/branding';
 
 interface PresenterScreenProps {
   background: string;
@@ -383,7 +384,12 @@ const PresenterScreen: React.FC<PresenterScreenProps> = ({
             className="rounded-full bg-white/12 p-8 shadow-2xl backdrop-blur-md transition-transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-white/70 cursor-pointer"
             title="Abrir Menú"
           >
-            <img src="/logo.svg" alt="Logotipo de la organización" className="h-48 w-auto md:h-64" />
+            <img
+              src="/api/branding/logo.svg"
+              alt="Logotipo de la organización"
+              className="h-48 w-auto md:h-64"
+              onError={applyNeutralBrandingFallback}
+            />
           </button>
         </div>
       ) : (
@@ -492,7 +498,12 @@ const PresenterScreen: React.FC<PresenterScreenProps> = ({
                   className="glass-panel-button flex aspect-square h-full min-w-0 cursor-pointer items-center justify-center p-2 pointer-events-auto"
                   title="Abrir Menú"
                 >
-                  <img src="/logo.svg" alt="Logotipo de la organización" className="object-contain h-full w-full max-h-full max-w-full" />
+                  <img
+                    src="/api/branding/logo.svg"
+                    alt="Logotipo de la organización"
+                    className="object-contain h-full w-full max-h-full max-w-full"
+                    onError={applyNeutralBrandingFallback}
+                  />
                 </button>
               </footer>
             </div>

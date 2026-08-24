@@ -47,6 +47,5 @@ launcher
 *.bak
 
 
-public/logo.svg
 config/*
 !*.example.md

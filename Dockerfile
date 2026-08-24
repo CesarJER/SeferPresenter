@@ -37,7 +37,6 @@ COPY index.html presenter.html audience.html control.html audio-editor.html cata
 COPY src ./src
 COPY server ./server
 COPY public ./public
-COPY config ./config
 COPY examples ./examples
 RUN npx tsc -b && npx vite build
 
@@ -60,6 +59,7 @@ COPY --from=builder --chown=node:node /app/dist ./dist
 COPY --from=builder --chown=node:node /app/server ./server
 COPY --from=builder --chown=node:node /app/public ./public
 COPY --from=builder --chown=node:node /app/examples ./examples
+COPY --from=builder --chown=node:node /app/src/assets/branding ./src/assets/branding
 
 RUN mkdir -p /app/data
 

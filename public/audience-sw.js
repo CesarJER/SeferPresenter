@@ -6,7 +6,6 @@ const CORE_ASSETS = [
   '/audience.html',
   '/control.html',
   '/metadata.json',
-  '/logo.svg',
 ];
 
 const MEDIA_EXTENSIONS = new Set([

@@ -7,6 +7,9 @@ const publicApiGetPaths = new Set([
   '/api/quiz-events',
   '/api/public-catalogs',
   '/api/audience-cache-assets',
+  '/api/branding/logo.svg',
+  '/api/branding/favicon.svg',
+  '/api/branding/welcome.md',
 ])
 
 const firstHeaderValue = (value) => {

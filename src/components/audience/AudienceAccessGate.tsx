@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState } from 'react';
-import ReactMarkdown from 'react-markdown';
 import { Clock3, ShieldAlert, ShieldCheck, MessageSquare, X } from 'lucide-react';
 import type { WebSocketConnectionStatus } from '../../hooks/useWebSocket';
 import { usePrivateControlSignals, type DecryptedPrivateControlSignal } from '../../hooks/usePrivateControlSignals';
@@ -7,7 +6,8 @@ import type { AudienceAccessState } from '../../types/audienceAccess';
 import type { LiveAudioExternalBroadcastState } from '../../types/liveAudio';
 import { AudienceInterventionModal } from '../../features/liveAudio/components/audience/AudienceInterventionModal';
 import { AudiencePrivateControlMessage } from '../../features/liveAudio/components/audience/AudiencePrivateControlMessage';
-import welcomeMarkdown from '../../../config/welcome.md?raw';
+import { BrandingWelcome } from '../shared/BrandingWelcome';
+import { applyNeutralBrandingFallback } from '../../utils/branding';
 
 interface AudienceAccessGateProps {
   accessState: AudienceAccessState;
@@ -119,13 +119,14 @@ export function AudienceAccessGate({
       <div className="min-h-full flex items-center justify-center p-4 py-12">
         <div className="w-full max-w-md flex flex-col gap-4">
           <div className="w-full rounded-2xl border border-slate-800 bg-slate-900/90 p-8 shadow-2xl backdrop-blur-md flex flex-col items-center text-center gap-6">
-            <img src="/logo.svg" alt="Logotipo de la organización" className="h-16 w-auto object-contain" />
+            <img
+              src="/api/branding/logo.svg"
+              alt="Logotipo de la organización"
+              className="h-16 w-auto object-contain"
+              onError={applyNeutralBrandingFallback}
+            />
             
-            {welcomeMarkdown && (
-              <div className="max-w-none text-slate-300 text-sm leading-relaxed border-t border-b border-slate-800/80 py-4 w-full text-left [&_h1]:text-lg [&_h1]:font-bold [&_h1]:text-white [&_h1]:mb-2 [&_p]:text-slate-300 [&_p]:mb-3 [&_p:last-child]:mb-0 [&_blockquote]:border-l-2 [&_blockquote]:border-blue-500/50 [&_blockquote]:pl-4 [&_blockquote]:italic [&_blockquote]:text-slate-400 [&_blockquote]:my-3">
-                <ReactMarkdown>{welcomeMarkdown}</ReactMarkdown>
-              </div>
-            )}
+            <BrandingWelcome />
 
             {!mayRequest && (
               <section className="w-full flex flex-col items-center">

@@ -60,6 +60,9 @@ docs in the same change. Do not leave these files stale.
 - Sync protocol and validation live in `src/types/sync.ts`, `src/hooks/useSyncState.ts`, `src/utils/syncProtocol.ts`, and `src/utils/validation.ts`.
 - Content/data loading belongs in utilities such as `src/utils/metadataCache.ts`, `src/utils/scriptureLookup.ts`, and server endpoints.
 - Operator presentations and audio-sync maps belong under `SEFER_DATA_DIR`; never restore them to the product root.
+- Operator logo, favicon and welcome belong under `SEFER_DATA_DIR/branding/`.
+  Keep `src/assets/branding/` and the example welcome neutral; do not restore
+  operator or fallback branding under `public/`.
 
 ## Do Not Touch Casually
 

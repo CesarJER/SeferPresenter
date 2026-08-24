@@ -219,9 +219,14 @@ Use these checklists before implementing future tasks.
 ## When Editing PWA Or Service Worker
 
 - Keep `/audience` and `/control` manifests scoped to their own routes.
-- Use `public/logo.svg` as the primary PWA icon source. If a browser requires a
-  fallback, use a real asset such as `launcher/logo.ico`; do not generate
-  replacement artwork casually.
+- Use `/api/branding/logo.svg` and `/api/branding/favicon.svg` for runtime
+  branding. Keep `src/assets/branding/` neutral and versioned as the product
+  fallback; operator overrides belong only under `SEFER_DATA_DIR/branding/`.
+- Serve branding as same-origin files with `nosniff` and content-derived ETags.
+  Logo and favicon use a seven-day cache; `welcome.md` uses five minutes.
+- Keep the neutral logo imported through `src/utils/branding.ts` so Vite emits a
+  hashed fallback. Hashed `/assets/*` outputs use a one-year immutable cache.
+- Render normal Markdown, including images, without enabling raw HTML.
 - Never cache live endpoints: `/api/*`, SSE endpoints, `/ws`, `/rtc/*`,
   LiveKit/tokens, or token-bearing URLs.
 - Never cache `/legal/*` or `/proteccion-datos`; legal Markdown and its route

@@ -19,8 +19,6 @@
 !server/**
 !public/
 !public/**
-!config/
-!config/**
 !examples/
 !examples/**
 

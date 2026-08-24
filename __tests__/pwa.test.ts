@@ -91,11 +91,12 @@ describe('PWA service worker policy', () => {
 
     expect(source).toContain("fetch('/api/audience-cache-assets', { cache: 'no-store' })");
     expect(coreAssets).not.toContain('/audience-cache-assets.txt');
+    expect(coreAssets).not.toContain('/api/branding/');
   });
 });
 
 describe('PWA manifests', () => {
-  it('declares the original SVG logo for Audience and Control', () => {
+  it('declares the runtime branding logo for Audience and Control', () => {
     const audienceManifest = JSON.parse(readFileSync('public/manifest.webmanifest', 'utf8'));
     const controlManifest = JSON.parse(readFileSync('public/control-manifest.webmanifest', 'utf8'));
 
@@ -106,10 +107,24 @@ describe('PWA manifests', () => {
 
     for (const manifest of [audienceManifest, controlManifest]) {
       const iconSrcs = manifest.icons.map((icon: { src: string }) => icon.src);
-      expect(iconSrcs).toContain('/logo.svg');
+      expect(iconSrcs).toContain('/api/branding/logo.svg');
+      expect(iconSrcs).not.toContain('/logo.svg');
       expect(iconSrcs).not.toContain('/icons/sefer-icon-192.png');
       expect(iconSrcs).not.toContain('/icons/sefer-icon-512.png');
       expect(iconSrcs).not.toContain('/icons/sefer-maskable-512.png');
+    }
+  });
+
+  it('loads the runtime favicon in every HTML entry point', () => {
+    for (const htmlFile of [
+      'index.html',
+      'presenter.html',
+      'audience.html',
+      'control.html',
+      'audio-editor.html',
+      'catalog.html',
+    ]) {
+      expect(readFileSync(htmlFile, 'utf8')).toContain('href="/api/branding/favicon.svg"');
     }
   });
 });

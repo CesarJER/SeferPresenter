@@ -51,6 +51,7 @@ import { writeJsonSafely } from './json-persistence.mjs'
 import { resolvePathInsideRoot } from './path-containment.mjs'
 import { createPrivacySessionManifestRecorder } from './privacy-session-manifest.mjs'
 import { getStaticCacheHeaders } from './static-cache-policy.mjs'
+import { loadBrandingAsset } from './branding-assets.mjs'
 import {
   getSeferDataPaths,
   initializeSeferDataDir,
@@ -64,6 +65,26 @@ const exampleDataDir = path.join(rootDir, 'examples', 'SeferPresenterData')
 const seferDataDir = resolveSeferDataDir({ rootDir })
 const dataInitialization = initializeSeferDataDir({ dataDir: seferDataDir, exampleDir: exampleDataDir })
 const seferDataPaths = getSeferDataPaths(seferDataDir)
+const brandingAssets = new Map([
+  ['/api/branding/logo.svg', {
+    overridePath: seferDataPaths.branding.logo,
+    fallbackPath: path.join(rootDir, 'src', 'assets', 'branding', 'logo.svg'),
+    cacheControl: 'public, max-age=604800, stale-while-revalidate=2592000',
+    contentType: 'image/svg+xml; charset=utf-8',
+  }],
+  ['/api/branding/favicon.svg', {
+    overridePath: seferDataPaths.branding.favicon,
+    fallbackPath: path.join(rootDir, 'src', 'assets', 'branding', 'favicon.svg'),
+    cacheControl: 'public, max-age=604800, stale-while-revalidate=2592000',
+    contentType: 'image/svg+xml; charset=utf-8',
+  }],
+  ['/api/branding/welcome.md', {
+    overridePath: seferDataPaths.branding.welcome,
+    fallbackPath: path.join(exampleDataDir, 'branding', 'welcome.md'),
+    cacheControl: 'public, max-age=300, must-revalidate',
+    contentType: 'text/markdown; charset=utf-8',
+  }],
+])
 const port = Number(process.env.SEFER_PORT || 8787)
 const staticArgIndex = process.argv.indexOf('--static')
 const staticDir = path.resolve(rootDir, staticArgIndex >= 0 ? process.argv[staticArgIndex + 1] || 'dist' : 'dist')
@@ -147,6 +168,30 @@ const normalizePresentations = (presentations) =>
 const sendJson = (res, status, payload) => {
   res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' })
   res.end(JSON.stringify(payload))
+}
+
+const sendBrandingAsset = (req, res, assetConfig) => {
+  try {
+    const { body, etag } = loadBrandingAsset(assetConfig)
+    const headers = {
+      'Cache-Control': assetConfig.cacheControl,
+      ETag: etag,
+      'X-Content-Type-Options': 'nosniff',
+    }
+    if (req.headers['if-none-match'] === etag) {
+      res.writeHead(304, headers)
+      res.end()
+      return
+    }
+    res.writeHead(200, {
+      ...headers,
+      'Content-Length': body.length,
+      'Content-Type': assetConfig.contentType,
+    })
+    res.end(body)
+  } catch {
+    sendJson(res, 500, { error: 'Branding asset unavailable' })
+  }
 }
 
 const registerSseClient = (clientSet, res) => {
@@ -685,6 +730,12 @@ const invalidateAudienceStreams = () => {
 }
 
 const handleApi = async (req, res, url) => {
+  const brandingAsset = brandingAssets.get(url.pathname)
+  if (brandingAsset && req.method === 'GET') {
+    sendBrandingAsset(req, res, brandingAsset)
+    return true
+  }
+
   if (url.pathname === '/api/audience/access/bootstrap' && req.method === 'POST') {
     try {
       const body = JSON.parse(await readBody(req) || '{}')

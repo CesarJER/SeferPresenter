@@ -32,6 +32,7 @@ const LiveAudioControlContainer = import.meta.env.VITE_SEFER_LIVE_AUDIO_BUILD !=
   : null;
 import { useControllerAnswers } from '../../hooks/useQuizAnswers';
 import { QuizControllerView } from '../quiz/QuizControllerView';
+import { applyNeutralBrandingFallback } from '../../utils/branding';
 import {
   looksLikeQuizBlock,
   makeDefaultQuizData,
@@ -1550,9 +1551,10 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
       <div id="section-menu-header" className={`flex items-center justify-between border-b px-4 py-3 md:px-5 md:py-4 transition-colors ${isMediaMaster ? 'bg-red-950 border-red-800' : 'bg-gray-900 border-gray-700'}`}>
         <h2 className="flex items-center gap-2 text-lg font-bold md:text-xl">
           <img
-            src="/logo.svg"
+            src="/api/branding/logo.svg"
             alt="Logo"
             className="h-7 w-7 cursor-pointer hover:opacity-85 active:scale-95 transition-all"
+            onError={applyNeutralBrandingFallback}
             title="Restablecer estado del presentador"
             onClick={() => setShowResetConfirm(true)}
           />

@@ -8,6 +8,7 @@ import { VerseSidebar } from './VerseSidebar';
 import { useResizablePanel } from '../../hooks/useResizablePanel';
 import { numberToHebrewNumeral, numberToGreekNumeral } from '../../hooks/scriptureNumerals';
 import AutoResizeText from '../shared/AutoResizeText';
+import { applyNeutralBrandingFallback } from '../../utils/branding';
 
 interface SeferReaderScreenProps {
   scriptureState: ScriptureNavState;
@@ -353,7 +354,12 @@ export const SeferReaderScreen: React.FC<SeferReaderScreenProps> = ({
               className="flex h-8 w-8 flex-none items-center justify-center rounded border border-amber-900/20 bg-[#fef3c7] hover:bg-amber-100 pointer-events-auto"
               title="Abrir menú"
             >
-              <img src="/logo.svg" alt="Abrir menú" className="h-6 w-6" />
+              <img
+                src="/api/branding/logo.svg"
+                alt="Abrir menú"
+                className="h-6 w-6"
+                onError={applyNeutralBrandingFallback}
+              />
             </button>
           ) : (
             <div className="w-8" />

@@ -41,6 +41,9 @@ describe('legal document configuration', () => {
         Pragma: 'no-cache',
       });
     }
+    expect(getStaticCacheHeaders('/assets/logo-abc123.svg')).toEqual({
+      'Cache-Control': 'public, max-age=31536000, immutable',
+    });
     expect(getStaticCacheHeaders('/audience')).toEqual({});
   });
 });
