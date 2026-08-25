@@ -1,6 +1,9 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs';
-import { join } from 'path';
+import { createHash } from 'node:crypto';
+import { isAbsolute, join, resolve } from 'path';
+import { loadEnvFile } from 'node:process';
 import Papa from 'papaparse';
+import { resolveSeferDataDir } from '../server/data-directory.mjs';
 
 export const toSafeBookFileName = (bookName) =>
   bookName
@@ -11,26 +14,41 @@ export const toSafeBookFileName = (bookName) =>
     .toLowerCase();
 
 export const generateVerses = () => {
-  const pathsToTry = [
-    join(process.cwd(), '..', 'Sefer-Data', 'data', 'raw', 'protected', 'generated', 'versiculos.tsv'),
-    join(process.cwd(), '..', 'Sefer-Data', 'versiculos.tsv'),
-    join(process.cwd(), 'public', 'versiculos.tsv')
-  ];
+  const localEnvPath = join(process.cwd(), '.env.local');
+  if (existsSync(localEnvPath)) loadEnvFile(localEnvPath);
 
-  let tsvPath = null;
-  for (const p of pathsToTry) {
-    if (existsSync(p)) {
-      tsvPath = p;
-      break;
-    }
+  const configuredSource = process.env.SEFER_VERSES_SOURCE?.trim();
+  if (!configuredSource) {
+    console.warn('SEFER_VERSES_SOURCE no está configurado; no se ha generado ningún archivo.');
+    return;
   }
 
-  if (!tsvPath) {
-    throw new Error(`No se encontró el archivo de versículos de origen 'versiculos.tsv' en ninguna de las rutas:\n${pathsToTry.map(p => `  - ${p}`).join('\n')}`);
+  const tsvPath = isAbsolute(configuredSource)
+    ? resolve(configuredSource)
+    : resolve(process.cwd(), configuredSource);
+  if (!existsSync(tsvPath)) {
+    console.warn(`SEFER_VERSES_SOURCE no existe: ${tsvPath}`);
+    return;
+  }
+
+  const dataDir = resolveSeferDataDir({ rootDir: process.cwd() });
+  const outputDir = join(dataDir, 'public');
+  const booksDir = join(outputDir, 'books');
+  const hashPath = join(dataDir, 'config', 'verses-source.sha256');
+  const source = readFileSync(tsvPath);
+  const sourceHash = createHash('sha256').update(source).digest('hex');
+  if (
+    existsSync(hashPath)
+    && readFileSync(hashPath, 'utf8').trim() === sourceHash
+    && existsSync(join(outputDir, 'metadata.json'))
+    && existsSync(booksDir)
+  ) {
+    console.log('Sin cambios en SEFER_VERSES_SOURCE; se conserva el corpus existente.');
+    return;
   }
 
   console.log(`Cargando datos bíblicos de: ${tsvPath}`);
-  const tsv = readFileSync(tsvPath, 'utf8');
+  const tsv = source.toString('utf8');
 
   const parsed = Papa.parse(tsv, {
     header: true,
@@ -84,7 +102,6 @@ export const generateVerses = () => {
     metadata[bookEs].chapters[chapter].push(verse);
   });
 
-  const booksDir = join(process.cwd(), 'public', 'books');
   if (!existsSync(booksDir)) {
     mkdirSync(booksDir, { recursive: true });
   }
@@ -100,9 +117,11 @@ export const generateVerses = () => {
     writeFileSync(join(booksDir, `${safeName}.tsv`), bookTsv);
   }
 
-  writeFileSync(join(process.cwd(), 'public', 'metadata.json'), JSON.stringify(metadata, null, 2));
+  writeFileSync(join(outputDir, 'metadata.json'), JSON.stringify(metadata, null, 2));
+  mkdirSync(join(dataDir, 'config'), { recursive: true });
+  writeFileSync(hashPath, `${sourceHash}\n`);
 
-  console.log(`✅ Generados ${books.size} archivos TSV por libro y metadata.json en public/ para SeferPresenter.`);
+  console.log(`✅ Generados ${books.size} archivos TSV por libro y metadata.json en ${outputDir}.`);
 };
 
 if (process.argv[1] && process.argv[1].endsWith('generate-verses.js')) {

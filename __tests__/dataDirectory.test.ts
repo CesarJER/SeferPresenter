@@ -44,9 +44,7 @@ describe('Sefer data directory', () => {
       'config/audience-cache-assets.txt',
       'presentations.json',
     ]));
-    expect(fs.statSync(path.join(dataDir, 'media', 'audio')).isDirectory()).toBe(true);
-    expect(fs.statSync(path.join(dataDir, 'media', 'backgrounds')).isDirectory()).toBe(true);
-    expect(fs.statSync(path.join(dataDir, 'media', 'videos')).isDirectory()).toBe(true);
+    expect(fs.statSync(path.join(dataDir, 'public')).isDirectory()).toBe(true);
 
     fs.writeFileSync(path.join(dataDir, 'presentations.json'), '[{"id":"operator"}]\n');
     const secondRun = initializeSeferDataDir({ dataDir, exampleDir });
@@ -63,6 +61,7 @@ describe('Sefer data directory', () => {
     expect(paths.presentations).toBe(path.join(dataDir, 'presentations.json'));
     expect(paths.audioSync).toBe(path.join(dataDir, 'audio_sync.json'));
     expect(paths.audienceCacheAssets).toBe(path.join(dataDir, 'config', 'audience-cache-assets.txt'));
+    expect(paths.public).toBe(path.join(dataDir, 'public'));
     expect(paths.branding.favicon).toBe(path.join(dataDir, 'branding', 'favicon.svg'));
   });
 

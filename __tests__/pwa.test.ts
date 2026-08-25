@@ -4,7 +4,7 @@ import vm from 'node:vm';
 import { restartPwaApp } from '../src/utils/pwaUpdate';
 
 const loadServiceWorkerHelpers = () => {
-  const source = readFileSync('public/audience-sw.js', 'utf8');
+  const source = readFileSync('static/audience-sw.js', 'utf8');
   const selfMock = {
     location: { origin: 'https://example.test' },
     addEventListener: vi.fn(),
@@ -32,10 +32,10 @@ const loadServiceWorkerHelpers = () => {
 };
 
 describe('PWA service worker policy', () => {
-  it('exports version 1.3.1 and explicit cache helper decisions', () => {
+  it('exports version 1.4.0 and explicit cache helper decisions', () => {
     const helpers = loadServiceWorkerHelpers();
 
-    expect(helpers.SW_VERSION).toBe('1.3.1');
+    expect(helpers.SW_VERSION).toBe('1.4.0');
 
     [
       '/api/state',
@@ -78,7 +78,7 @@ describe('PWA service worker policy', () => {
   });
 
   it('uses network-only no-store handling for legal documents', () => {
-    const source = readFileSync('public/audience-sw.js', 'utf8');
+    const source = readFileSync('static/audience-sw.js', 'utf8');
     const coreAssets = source.match(/const CORE_ASSETS = \[([\s\S]*?)\];/)?.[1] || '';
     expect(source).toContain("if (isLegalUrl(url))");
     expect(source).toContain("fetch(request, { cache: 'no-store' })");
@@ -86,19 +86,20 @@ describe('PWA service worker policy', () => {
   });
 
   it('loads the instance cache list through the uncached public API', () => {
-    const source = readFileSync('public/audience-sw.js', 'utf8');
+    const source = readFileSync('static/audience-sw.js', 'utf8');
     const coreAssets = source.match(/const CORE_ASSETS = \[([\s\S]*?)\];/)?.[1] || '';
 
     expect(source).toContain("fetch('/api/audience-cache-assets', { cache: 'no-store' })");
     expect(coreAssets).not.toContain('/audience-cache-assets.txt');
+    expect(coreAssets).not.toContain('/metadata.json');
     expect(coreAssets).not.toContain('/api/branding/');
   });
 });
 
 describe('PWA manifests', () => {
   it('declares the runtime branding logo for Audience and Control', () => {
-    const audienceManifest = JSON.parse(readFileSync('public/manifest.webmanifest', 'utf8'));
-    const controlManifest = JSON.parse(readFileSync('public/control-manifest.webmanifest', 'utf8'));
+    const audienceManifest = JSON.parse(readFileSync('static/manifest.webmanifest', 'utf8'));
+    const controlManifest = JSON.parse(readFileSync('static/control-manifest.webmanifest', 'utf8'));
 
     expect(audienceManifest.start_url).toBe('/audience');
     expect(audienceManifest.scope).toBe('/audience');

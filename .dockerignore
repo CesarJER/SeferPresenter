@@ -17,12 +17,10 @@
 !src/**
 !server/
 !server/**
+!static/
+!static/**
 !public/
-!public/**
+!public/legal/
+!public/legal/**
 !examples/
 !examples/**
-
-# Runtime media is supplied through read-only bind mounts.
-public/audio/
-public/backgrounds/
-public/videos/

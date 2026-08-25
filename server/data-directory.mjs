@@ -3,9 +3,7 @@ import path from 'node:path'
 
 export const DEFAULT_SEFER_DATA_DIR_NAME = 'data.local'
 export const RUNTIME_DATA_DIRECTORIES = Object.freeze([
-  'media/audio',
-  'media/backgrounds',
-  'media/videos',
+  'public',
   'tmp',
 ])
 
@@ -87,6 +85,7 @@ export const getSeferDataPaths = (dataDir) => Object.freeze({
   presentations: path.join(dataDir, 'presentations.json'),
   audioSync: path.join(dataDir, 'audio_sync.json'),
   audienceCacheAssets: path.join(dataDir, 'config', 'audience-cache-assets.txt'),
+  public: path.join(dataDir, 'public'),
   branding: Object.freeze({
     logo: path.join(dataDir, 'branding', 'logo.svg'),
     favicon: path.join(dataDir, 'branding', 'favicon.svg'),

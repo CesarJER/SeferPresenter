@@ -36,7 +36,8 @@ COPY vite.config.ts postcss.config.js tailwind.config.js ./
 COPY index.html presenter.html audience.html control.html audio-editor.html catalog.html ./
 COPY src ./src
 COPY server ./server
-COPY public ./public
+COPY static ./static
+COPY public/legal ./public/legal
 COPY examples ./examples
 RUN npx tsc -b && npx vite build
 
@@ -54,10 +55,10 @@ COPY --from=builder --chown=node:node /app/package.json /app/package-lock.json .
 # Install only production dependencies
 RUN npm ci --omit=dev
 
-# Copy build output, server, and public skeleton
+# Copy build output, server, and the temporary legal skeleton
 COPY --from=builder --chown=node:node /app/dist ./dist
 COPY --from=builder --chown=node:node /app/server ./server
-COPY --from=builder --chown=node:node /app/public ./public
+COPY --from=builder --chown=node:node /app/public/legal ./public/legal
 COPY --from=builder --chown=node:node /app/examples ./examples
 COPY --from=builder --chown=node:node /app/src/assets/branding ./src/assets/branding
 

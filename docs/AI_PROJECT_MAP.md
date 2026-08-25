@@ -18,9 +18,9 @@ Fast map for agents. Use real paths only; this repo does not currently have
 - `src/main-audience.tsx`: standalone Audience root with read-only projection,
   quiz, media/PWA and optional Live Audio wiring.
 - `src/main-control.tsx`: standalone control React root; loads the control panel tree without presenter dependencies.
-- `public/audience-sw.js`: shared PWA service worker for `/audience` and `/control` scopes, with network-first shells and no caching for live endpoints, legal documents or large media.
-- `public/manifest.webmanifest`: Audience PWA manifest scoped to `/audience`.
-- `public/control-manifest.webmanifest`: Control PWA manifest scoped to `/control`.
+- `static/audience-sw.js`: shared PWA service worker for `/audience` and `/control` scopes, with network-first shells and no caching for live endpoints, legal documents or large media.
+- `static/manifest.webmanifest`: Audience PWA manifest scoped to `/audience`.
+- `static/control-manifest.webmanifest`: Control PWA manifest scoped to `/control`.
 - `src/App.tsx`: Presenter/default-root state, synchronization, media and
   projection rendering; route-specific Control/Audience roots live separately.
 - `README.md`: human overview, routes, scripts, backend endpoints, verification.
@@ -57,13 +57,15 @@ Fast map for agents. Use real paths only; this repo does not currently have
 - `src/hooks/useControlAuthorization.ts`: Fase 5.3 Control principal/secondary authorization state derived from WebSocket messages.
 - `src/utils/cryptoUtils.ts`: pure Web Crypto helpers for ECDH P-256, AES-GCM 256, base64 encoding, and nonce replay rejection.
 - `server/`: local Node backend and dev launcher.
-- `server/data-directory.mjs`: resolves `SEFER_DATA_DIR`, initializes only missing files from the neutral example, and owns persistent data paths.
+- `server/data-directory.mjs`: resolves `SEFER_DATA_DIR`, initializes only missing operator files, and owns persistent and public paths.
 - `src/components/shared/BrandingWelcome.tsx`: runtime loading and safe Markdown
   rendering for the installation welcome.
 - `scripts/`: generated data and utility scripts.
 - `__tests__/`: Vitest tests for utils and selected hooks.
-- `public/`: static assets, PWA files, generated book TSVs and metadata.
-- `examples/SeferPresenterData/`: neutral first-run template; runtime writes never target this directory.
+- `static/`: neutral Vite assets, PWA files and technical sounds.
+- `public/legal/`: temporary legal-only location pending the dedicated legal phase.
+- external `SEFER_DATA_DIR/public/`: operator-served audio, backgrounds, videos, reader metadata and book TSVs.
+- `examples/SeferPrivateData/`: neutral first-run template; runtime writes never target this directory.
 
 ## Common Change Paths
 
@@ -215,7 +217,8 @@ Start with:
 - `src/components/control/SeferControlPanel.tsx`
 - `src/components/presenter/SeferReaderScreen.tsx`
 
-Do not edit generated `public/books/*.tsv` or `public/metadata.json` by hand.
+Do not edit generated operator corpus files by hand; they live under
+`SEFER_DATA_DIR/public/` and change only through the explicit generator.
 
 ### Modify Quiz/Question Mode
 

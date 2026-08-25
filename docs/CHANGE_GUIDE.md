@@ -38,6 +38,17 @@ Use these checklists before implementing future tasks.
 - Keep video/audio telemetry behavior symmetric with controller actions.
 - Check audience route if the same rendering is reused there.
 
+## When Editing Runtime Assets Or Scripture Data
+
+- Keep every operator-served asset under `SEFER_DATA_DIR/public/`; its relative
+  path is its public URL.
+- Keep reader metadata and book TSVs under that same public tree.
+- Keep corpus generation out of `dev`. The `build` hook checks the private
+  source hash and regenerates only when `SEFER_VERSES_SOURCE` changed.
+- Put only neutral technical product assets under `static/`.
+- Update `static/audio/sounds/THIRD_PARTY_NOTICES.md` when changing bundled
+  third-party sounds.
+
 ## When Editing Sync Behavior
 
 - Update `src/types/sync.ts` first.
@@ -186,7 +197,7 @@ Use these checklists before implementing future tasks.
 
 - Keep operator-owned JSON under `SEFER_DATA_DIR`; do not add root-level
   `presentations.json` or `audio_sync.json` back to the product repository.
-- First-run templates belong in `examples/SeferPresenterData/` and may only fill
+- First-run templates belong in `examples/SeferPrivateData/` and may only fill
   missing targets. Never overwrite an existing instance file during startup.
 - When adding persistent instance files, expose their paths through
   `server/data-directory.mjs` and add preservation/initialization tests.

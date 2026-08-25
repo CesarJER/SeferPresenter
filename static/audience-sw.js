@@ -1,11 +1,10 @@
-const SW_VERSION = '1.3.1';
+const SW_VERSION = '1.4.0';
 const CACHE_PREFIX = 'sefer-pwa';
 const CACHE_NAME = `${CACHE_PREFIX}-v${SW_VERSION}`;
 
 const CORE_ASSETS = [
   '/audience.html',
   '/control.html',
-  '/metadata.json',
 ];
 
 const MEDIA_EXTENSIONS = new Set([

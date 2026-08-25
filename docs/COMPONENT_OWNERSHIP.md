@@ -181,9 +181,11 @@ Control UI state:
 
 Content data:
 
-- Generated scripture metadata/books under `public/`.
+- Generated scripture metadata/books under `SEFER_DATA_DIR/public/`.
 - Asset lists from backend endpoints.
 - Audio sync maps in `SEFER_DATA_DIR/audio_sync.json`.
+- Operator media under `SEFER_DATA_DIR/public/`; neutral technical sounds remain
+  product assets under `static/audio/sounds/`.
 - `server/data-directory.mjs` owns persistent data-root resolution and first-run initialization; API handlers consume its resolved paths.
 
 Derived state:

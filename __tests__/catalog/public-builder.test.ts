@@ -1,5 +1,16 @@
-import { describe, it, expect } from 'vitest'
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
+import { afterEach, describe, it, expect } from 'vitest'
 import { buildPublicPresentations } from '../../server/public-presentations-builder.mjs'
+
+const temporaryDirectories: string[] = []
+
+afterEach(() => {
+  for (const directory of temporaryDirectories.splice(0)) {
+    fs.rmSync(directory, { recursive: true, force: true })
+  }
+})
 
 describe('Public Presentations Builder', () => {
   const mockCatalogs = [
@@ -63,5 +74,34 @@ describe('Public Presentations Builder', () => {
     expect(buildPublicPresentations(null as unknown as PresentationsInput, mockCatalogs)).toEqual([])
     expect(buildPublicPresentations(undefined as unknown as PresentationsInput, mockCatalogs)).toEqual([])
     expect(buildPublicPresentations([], null as unknown as CatalogsInput)).toEqual([])
+  })
+
+  it('loads scripture enrichment from the configured corpus directory', () => {
+    const publicDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sefer-scripture-test-'))
+    temporaryDirectories.push(publicDataDir)
+    fs.mkdirSync(path.join(publicDataDir, 'books'))
+    fs.writeFileSync(path.join(publicDataDir, 'metadata.json'), JSON.stringify({
+      Genesis: { bookAbbrevEs: 'Gn', bookHeb: 'Bereshit', safeFile: 'genesis', chapters: {} },
+    }))
+    fs.writeFileSync(
+      path.join(publicDataDir, 'books', 'genesis.tsv'),
+      'bookEs\tbookAbbrevEs\tbookHeb\tchapter\tverse\thebrew\ttransliteration\ttranslation\nGenesis\tGn\tBereshit\t1\t1\tHEB\tTRANS\tTEXT\n',
+    )
+
+    const presentations = [{
+      id: 'p1',
+      title: 'P1',
+      tags: ['tema1'],
+      slides: [{
+        id: 's1',
+        type: 'tanaj',
+        scriptureBook: 'Gn',
+        scriptureChapter: '1',
+        scriptureVerseStart: '1',
+      }],
+    }]
+
+    const result = buildPublicPresentations(presentations, mockCatalogs, { publicDataDir })
+    expect(result[0].slides[0].scriptureVerses).toEqual([['HEB', 'TRANS', 'TEXT']])
   })
 })

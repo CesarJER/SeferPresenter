@@ -11,7 +11,6 @@ export const parseSlideHash = (hash: string) => {
     verse: versePart || undefined,
   };
 };
-
 export const formatSlideHash = (slideIndex: number, verse?: string) =>
   verse ? `#${slideIndex}.${verse}` : `#${slideIndex}`;
 
@@ -124,26 +123,3 @@ export const loadStoredPresenterState = (): { presentation: Presentation | null;
     return null;
   }
 };
-
-// ── Default backgrounds ───────────────────────────────────────────
-export const fallbackBackgrounds = [
-  '/backgrounds/Jerusalem/Jerusalem-0.0Midday.png',
-  '/backgrounds/Jerusalem/Jerusalem-0.1AfterMidday.png',
-  '/backgrounds/Jerusalem/Jerusalem-0.2Afternoon.png',
-  '/backgrounds/Jerusalem/Jerusalem-0.3LateAfternoon.png',
-  '/backgrounds/Jerusalem/Jerusalem-0.4Sunset.png',
-  '/backgrounds/Jerusalem/Jerusalem-1NewMoon.png',
-  '/backgrounds/Jerusalem/Jerusalem-2WaxingCrescentMoon.png',
-  '/backgrounds/Jerusalem/Jerusalem-3CrescentQuarterMoon.png',
-  '/backgrounds/Jerusalem/Jerusalem-4WaxingGibbousMoon.png',
-  '/backgrounds/Jerusalem/Jerusalem-5FullMoon.png',
-  '/backgrounds/Jerusalem/Jerusalem-6WaningGibbousMoon.png',
-  '/backgrounds/Jerusalem/Jerusalem-7DecrescentQuarterMoon.png',
-  '/backgrounds/Jerusalem/Jerusalem-8WaningCrescentMoon.png',
-  '/backgrounds/Jerusalem/Jerusalem-9NoMoon.png',
-  '/backgrounds/Jerusalem/Jerusalem-Video-pingpong.mp4',
-  '/backgrounds/Jerusalem/Jerusalem-Video.mp4',
-  '/backgrounds/Zarza/Zarza ardiente-pingpong.mp4',
-  '/backgrounds/Zarza/Zarza ardiente.mp4',
-  '/backgrounds/Zarza/Zarza ardiente.png'
-];

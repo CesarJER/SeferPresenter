@@ -61,7 +61,8 @@ import {
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const rootDir = path.resolve(__dirname, '..')
 const publicDir = path.join(rootDir, 'public')
-const exampleDataDir = path.join(rootDir, 'examples', 'SeferPresenterData')
+const productStaticDir = path.join(rootDir, 'static')
+const exampleDataDir = path.join(rootDir, 'examples', 'SeferPrivateData')
 const seferDataDir = resolveSeferDataDir({ rootDir })
 const dataInitialization = initializeSeferDataDir({ dataDir: seferDataDir, exampleDir: exampleDataDir })
 const seferDataPaths = getSeferDataPaths(seferDataDir)
@@ -307,7 +308,9 @@ const readPresentationsCache = () => {
     console.error(`[PRESENTATIONS] Stored data rejected: ${error.message}`)
     presentationsCache = []
   }
-  publicPresentationsCache = buildPublicPresentations(presentationsCache, getPublicCatalogs())
+  publicPresentationsCache = buildPublicPresentations(presentationsCache, getPublicCatalogs(), {
+    publicDataDir: seferDataPaths.public,
+  })
   return presentationsCache
 }
 
@@ -329,7 +332,7 @@ const getPresentationForSyncMap = (syncMap) => {
   return presentationsCache.find((presentation) => presentation.id === syncMap.presentationId) || null
 }
 
-const walkAssets = (directories, matcher) => {
+const walkAssets = (directory, matcher) => {
   const results = []
   const walk = (dir) => {
     if (!fs.existsSync(dir)) return
@@ -339,12 +342,12 @@ const walkAssets = (directories, matcher) => {
       if (stat.isDirectory()) {
         walk(fullPath)
       } else if (matcher.test(fullPath)) {
-        const relPath = path.relative(publicDir, fullPath).replace(/\\/g, '/')
+        const relPath = path.relative(directory, fullPath).replace(/\\/g, '/')
         results.push(`/${relPath}`)
       }
     }
   }
-  directories.forEach(walk)
+  walk(directory)
   return results
 }
 
@@ -992,7 +995,7 @@ const handleApi = async (req, res, url) => {
 
   if (url.pathname === '/api/backgrounds' && req.method === 'GET') {
     const backgrounds = walkAssets(
-      [path.join(publicDir, 'backgrounds'), path.join(publicDir, 'videos')],
+      seferDataPaths.public,
       /\.(avif|gif|jpe?g|png|svg|webp|mp4|webm)$/i
     )
     sendJson(res, 200, backgrounds)
@@ -1000,7 +1003,10 @@ const handleApi = async (req, res, url) => {
   }
 
   if (url.pathname === '/api/audio' && req.method === 'GET') {
-    const audio = walkAssets([path.join(publicDir, 'audio')], /\.(mp3|wav|ogg|m4a|aac|flac|webm)$/i)
+    const audio = walkAssets(
+      seferDataPaths.public,
+      /\.(mp3|wav|ogg|m4a|aac|flac|webm)$/i,
+    )
     sendJson(res, 200, audio)
     return true
   }
@@ -1048,7 +1054,9 @@ const handleApi = async (req, res, url) => {
       const presentations = normalizePresentations(validation.value)
       persistJson(seferDataPaths.presentations, presentations)
       presentationsCache = presentations
-      publicPresentationsCache = buildPublicPresentations(presentationsCache, getPublicCatalogs())
+      publicPresentationsCache = buildPublicPresentations(presentationsCache, getPublicCatalogs(), {
+        publicDataDir: seferDataPaths.public,
+      })
       sendJson(res, 200, { success: true })
     } catch (err) {
       const status = err instanceof SyntaxError ? 400 : 500
@@ -1170,10 +1178,26 @@ const handleStatic = (req, res, url) => {
     return true
   }
 
-  const publicCandidate = resolvePathInsideRoot(publicDir, cleanPath)
-  if (publicCandidate && fs.existsSync(publicCandidate) && fs.statSync(publicCandidate).isFile()) {
-    serveFile(req, res, publicCandidate)
+  const productCandidate = resolvePathInsideRoot(productStaticDir, cleanPath)
+  if (productCandidate && fs.existsSync(productCandidate) && fs.statSync(productCandidate).isFile()) {
+    serveFile(req, res, productCandidate)
     return true
+  }
+
+  const operatorCandidate = resolvePathInsideRoot(seferDataPaths.public, cleanPath)
+  if (operatorCandidate && fs.existsSync(operatorCandidate) && fs.statSync(operatorCandidate).isFile()) {
+    serveFile(req, res, operatorCandidate)
+    return true
+  }
+
+  // Operator-specific legal files remain in their existing local-only location
+  // until the dedicated legal-repository phase.
+  if (cleanPath.startsWith('/legal/')) {
+    const legalCandidate = resolvePathInsideRoot(publicDir, cleanPath)
+    if (legalCandidate && fs.existsSync(legalCandidate) && fs.statSync(legalCandidate).isFile()) {
+      serveFile(req, res, legalCandidate)
+      return true
+    }
   }
 
   const publicCatalogs = getPublicCatalogs()

@@ -28,11 +28,16 @@ npm run build        # build web
 npm run start:local  # backend local sirviendo dist/
 npm run test         # Vitest
 npm run lint         # ESLint
+npm run generate:scripture # regenerar corpus local de forma explicita
 npx tsc --noEmit     # verificacion estricta de tipos
 npm run index:memory # re-indexar grafo AST con codebase-memory-mcp
 ```
 
-Los scripts `predev`, `prebuild` y `prebuild:web` regeneran `public/books/*.tsv` y `public/metadata.json` desde los datos biblicos externos.
+`dev` no genera ni copia el corpus. Antes de cada `build`,
+`npm run generate:scripture` compara el SHA-256 de `SEFER_VERSES_SOURCE` con
+`SEFER_DATA_DIR/config/verses-source.sha256`: solo regenera los libros y
+metadatos cuando cambia el origen. Si falta, muestra una advertencia y el build
+continúa sin modificar datos.
 
 ## Datos de una instalacion self-hosted
 
@@ -40,7 +45,7 @@ El codigo no versiona las presentaciones ni los mapas de audio del operador.
 El backend lee y escribe esos ficheros dentro de `SEFER_DATA_DIR`:
 
 ```text
-SeferPresenterData/
+SeferPrivateData/
 ├── presentations.json
 ├── audio_sync.json
 ├── config/audience-cache-assets.txt
@@ -48,7 +53,12 @@ SeferPresenterData/
 │   ├── logo.svg       # override opcional
 │   ├── favicon.svg    # override opcional
 │   └── welcome.md     # override opcional
-├── media/
+├── public/             # árbol servido conservando sus rutas relativas
+│   ├── audio/
+│   ├── backgrounds/
+│   ├── videos/
+│   ├── books/
+│   └── metadata.json
 └── tmp/
 ```
 
@@ -57,13 +67,21 @@ puede configurarse una instalacion privada hermana mediante un `.env.local`
 ignorado por Git:
 
 ```dotenv
-SEFER_DATA_DIR=../SeferPresenterData
+SEFER_DATA_DIR=../SeferPrivateData
+SEFER_VERSES_SOURCE=../Sefer-Data/data/raw/protected/generated/versiculos.tsv
 ```
 
 Si la variable no existe, se usa `./data.local`. En el primer arranque se
-copian los archivos ausentes desde `examples/SeferPresenterData/`; nunca se
+copian los archivos ausentes desde `examples/SeferPrivateData/`; nunca se
 sobrescribe un archivo ya existente. El directorio de ejemplo es neutral y no
 debe utilizarse para guardar cambios del operador.
+
+Todo archivo bajo `SEFER_DATA_DIR/public/` se sirve conservando su ruta relativa.
+Los listados de audio y fondos recorren ese árbol completo por extensión, por lo
+que el operador puede reorganizar sus subcarpetas sin añadir montajes ni cambiar
+el backend. El build neutral tiene prioridad si una ruta colisiona con un activo
+del producto. Así cada instalación aporta sus propios medios y corpus mediante
+un único montaje, sin incorporarlos al build ni al repositorio público.
 
 El navegador solicita el branding mediante `/api/branding/logo.svg`,
 `/api/branding/favicon.svg` y `/api/branding/welcome.md`. Un archivo privado
@@ -138,7 +156,11 @@ Antes de construirlo, activa tambien `SEFER_LIVE_AUDIO_ENABLED=true` y
 para desarrollo local del frontend/backend, pero no sustituye el entorno
 contenedorizado cuando quieres validar la ruta completa de voz en vivo.
 
-En desarrollo, `npm run dev` arranca el backend local y Vite juntos. Vite proxya `/api` a `http://localhost:8787`. Si arrancas solo `npm run dev:frontend`, debes tener `npm run dev:backend` abierto en otra terminal. Para pruebas locales estables, ejecuta `npm run build` y despues `npm run start:local`.
+En desarrollo, `npm run dev` arranca el backend local y Vite juntos. Vite proxya
+`/api`, medios y corpus a `http://localhost:8787`. Si arrancas solo
+`npm run dev:frontend`, debes tener `npm run dev:backend` abierto en otra
+terminal. Para pruebas locales estables, ejecuta `npm run build` y despues
+`npm run start:local`.
 
 ## Seguridad
 
@@ -195,29 +217,34 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/rotate-docker-lo
 ## PWA de audiencia y control
 
 `/audience` y `/control` pueden instalarse como PWA con manifests separados:
-`public/manifest.webmanifest` mantiene `start_url` y `scope` en `/audience`,
-y `public/control-manifest.webmanifest` mantiene `start_url` y `scope` en
+`static/manifest.webmanifest` mantiene `start_url` y `scope` en `/audience`,
+y `static/control-manifest.webmanifest` mantiene `start_url` y `scope` en
 `/control`. Ambos solicitan `/api/branding/logo.svg`: el override de la
 instalación tiene prioridad y `src/assets/branding/logo.svg` queda como fallback
 neutral. Los activos de branding ya no pertenecen a `public/`.
 
-El service worker `public/audience-sw.js` sirve ambos scopes. Cachea:
+El service worker `static/audience-sw.js` sirve ambos scopes. Cachea:
 
 - shell minimo de audiencia/control con estrategia network-first;
-- `metadata.json`;
 - TSV biblicos bajo demanda;
 - assets extra listados por la instancia mediante
   `SEFER_DATA_DIR/config/audience-cache-assets.txt`.
 
 El archivo privado acepta una ruta publica por linea y comentarios con `#`.
 El service worker obtiene la lista mediante `/api/audience-cache-assets` con
-`no-store`. `public/audience-cache-assets.txt` es solo un ejemplo neutral. No
+`no-store`. La plantilla neutral de esa lista vive en
+`examples/SeferPrivateData/config/`. No
 se cachean endpoints vivos (`/api/*`, SSE, `/ws`, `/rtc/*`, LiveKit/tokens),
 documentos `/legal/*` ni videos/audios pesados. La ruta `/proteccion-datos` y el
 Markdown legal usan red con `no-store`: si no hay red no se presenta una
 política obsoleta como vigente. Si hay una actualizacion de service worker
 esperando, el boton de reinicio de la PWA la activa antes de recargar, sin
 borrar nick, respuestas de quiz ni estado local persistente.
+
+Los cinco sonidos técnicos neutrales están en `static/audio/sounds/` y admiten
+caché HTTP de siete días. `THIRD_PARTY_NOTICES.md` identifica los tres efectos
+procedentes de Pixabay; `bip.mp3` y `silence.ogg` son archivos generados para el
+proyecto.
 
 ### Diagnostico de permisos de microfono
 
@@ -456,7 +483,8 @@ npm.cmd run build
 
 ## Notas de mantenimiento
 
-- No editar datos generados en `public/books/` a mano; se regeneran desde `scripts/generate-verses.js`.
+- Los datos generados del operador viven en `SEFER_DATA_DIR/public/books/` y
+  solo cambian cuando cambia el origen configurado; el build comprueba su hash.
 - Mantener telemetria de media/display en canales ligeros.
 - Preferir utilidades compartidas en `src/utils/` antes de duplicar parsing o normalizacion.
 - Mantener la pantalla de proyeccion liviana y la audiencia aun mas ligera.

@@ -489,9 +489,11 @@ Backend-owned or backend-mirrored pieces:
 - `/api/audience/state` and `/api/audience/events`, used by Audience instead of
   the protected full-state routes; both carry a valid `SYNC_STATE` reduced to
   the active slide without dropping media, quiz, scripture or display state
-- `/api/backgrounds` (lists all available image and video background files)
-- `/api/audio` (lists all available audio tracks)
+- `/api/backgrounds` (lists images/videos recursively from `SEFER_DATA_DIR/public/`)
+- `/api/audio` (lists audio recursively from `SEFER_DATA_DIR/public/`)
 - `/api/audience-cache-assets` (returns the list of static assets to be cached by the PWA)
+- `/metadata.json`, `/books/*.tsv` and any other non-conflicting operator path
+  (read-only files from `SEFER_DATA_DIR/public/`)
 - public GET `/api/branding/logo.svg`, `/api/branding/favicon.svg`, and
   `/api/branding/welcome.md` (instance overrides with neutral product fallbacks;
   responses are same-origin, cacheable, content-versioned by ETag and `nosniff`)

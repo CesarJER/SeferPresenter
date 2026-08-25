@@ -59,9 +59,6 @@ services:
       - VITE_SEFER_PUBLICABLE_DEFAULT=${VITE_SEFER_PUBLICABLE_DEFAULT:-off}
     volumes:
       - ${SEFER_DATA_DIR:-./data.local}:/app/data
-      - ${DATA_DIR:-.}/public/audio:/app/public/audio:ro
-      - ${DATA_DIR:-.}/public/backgrounds:/app/public/backgrounds:ro
-      - ${DATA_DIR:-.}/public/videos:/app/public/videos:ro
       - ${SEFER_PRIVACY_LOCAL_PATH:-./privacy-audit.local}/session-manifests.local:/app/privacy-manifests
       - sefer_backups:/app/backups
     expose:

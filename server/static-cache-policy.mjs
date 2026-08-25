@@ -16,5 +16,10 @@ export const getStaticCacheHeaders = (requestPath = '') => {
       'Cache-Control': 'public, max-age=31536000, immutable',
     }
   }
+  if (pathname.startsWith('/audio/sounds/')) {
+    return {
+      'Cache-Control': 'public, max-age=604800, stale-while-revalidate=2592000',
+    }
+  }
   return {}
 }

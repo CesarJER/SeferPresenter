@@ -16,14 +16,14 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
 - `src/main-control.tsx` - standalone React root for control mode; orchestrates control state and sync wiring without presenter/media elements.
 - `src/main-catalog.tsx` - standalone React root for the public catalog interface.
 - `vite.config.ts` - Vite multi-entry input configuration.
-- `resolveSeferDataDir` / `initializeSeferDataDir` / `getSeferDataPaths` - `server/data-directory.mjs`: external data-root resolution, non-overwriting initialization, and canonical persistent paths.
+- `resolveSeferDataDir` / `initializeSeferDataDir` / `getSeferDataPaths` - `server/data-directory.mjs`: external operator root, non-overwriting initialization, and canonical persistent/public paths.
 - `loadBrandingAsset` / `makeBrandingEtag` - `server/branding-assets.mjs`:
   private override selection, required neutral fallback and content ETag.
 - `applyNeutralBrandingFallback` - `src/utils/branding.ts`: swaps a failed
   runtime logo request to the neutral Vite-hashed product asset.
-- `public/audience-sw.js` - shared PWA service worker for `/audience` and `/control`, versioned as `1.3.1`; legal documents and arbitrary runtime media are not cached.
-- `public/manifest.webmanifest` - Audience PWA manifest scoped to `/audience` and using the runtime branding logo.
-- `public/control-manifest.webmanifest` - Control PWA manifest scoped to `/control` and using the runtime branding logo.
+- `static/audience-sw.js` - shared PWA service worker for `/audience` and `/control`, versioned as `1.4.0`; legal documents and arbitrary runtime media are not cached.
+- `static/manifest.webmanifest` - Audience PWA manifest scoped to `/audience` and using the runtime branding logo.
+- `static/control-manifest.webmanifest` - Control PWA manifest scoped to `/control` and using the runtime branding logo.
 
 ## Hooks
 
@@ -257,7 +257,9 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
 - `parseVerses` - `src/utils/scriptureParser.ts`: TSV scripture parsing.
 - `getScriptureChapterVerses` / `materializeScriptureSlides` - `src/utils/scriptureLookup.ts`: scripture lookup and slide materialization.
 - `validateScriptureSpec` / `auditQuickScriptureReferences` / `auditSlideScriptureReferences` - `src/utils/scriptureLookup.ts`: checks quiz and Sefer/Tanaj references against generated metadata before editor conversion or persistence.
-- `scripts/generate-verses.js`: generated `public/books/*.tsv` and `public/metadata.json`.
+- `scripts/generate-verses.js`: explicit conversion from `SEFER_VERSES_SOURCE`
+  into `SEFER_DATA_DIR/public/books/*.tsv` and `metadata.json`; build-time
+  regeneration is skipped when `config/verses-source.sha256` still matches.
 - [navigationUtils](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/utils/navigationUtils.ts) - `src/utils/navigationUtils.ts`: sequential linear step generation for presentations.
 
 ## Utilities

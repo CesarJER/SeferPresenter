@@ -21,10 +21,6 @@ public/legal/*.local/
 public
 !public/
 public/*
-!public/audience-cache-assets.txt
-!public/audience-sw.js
-!public/control-manifest.webmanifest
-!public/manifest.webmanifest
 !public/legal/
 public/legal/*
 !public/legal/privacy.md
