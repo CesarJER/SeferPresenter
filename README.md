@@ -61,7 +61,7 @@ SeferPrivateData/
 ```
 
 Las rutas relativas se resuelven desde la raiz de SeferPresenter. En desarrollo
-puede configurarse una instalacion privada hermana mediante un `.env.local`
+puede configurarse una instalacion privada hermana mediante un `.env`
 ignorado por Git:
 
 ```dotenv

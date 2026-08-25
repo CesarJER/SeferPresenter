@@ -14,8 +14,8 @@ export const toSafeBookFileName = (bookName) =>
     .toLowerCase();
 
 export const generateVerses = () => {
-  const localEnvPath = join(process.cwd(), '.env.local');
-  if (existsSync(localEnvPath)) loadEnvFile(localEnvPath);
+  const envPath = join(process.cwd(), '.env');
+  if (existsSync(envPath)) loadEnvFile(envPath);
 
   const configuredSource = process.env.SEFER_VERSES_SOURCE?.trim();
   if (!configuredSource) {
