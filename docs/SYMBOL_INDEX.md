@@ -17,6 +17,8 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
 - `src/main-catalog.tsx` - standalone React root for the public catalog interface.
 - `vite.config.ts` - Vite multi-entry input configuration.
 - `resolveSeferDataDir` / `initializeSeferDataDir` / `getSeferDataPaths` - `server/data-directory.mjs`: external operator root, non-overwriting initialization, and canonical persistent/public paths.
+- `loadLegalRepository` - `server/legal-repository.mjs`: validates chained legal
+  releases and advances the durable anti-rollback anchor.
 - `loadBrandingAsset` / `makeBrandingEtag` - `server/branding-assets.mjs`:
   private override selection, required neutral fallback and content ETag.
 - `applyNeutralBrandingFallback` - `src/utils/branding.ts`: swaps a failed

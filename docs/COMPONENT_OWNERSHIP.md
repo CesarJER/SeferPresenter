@@ -86,7 +86,7 @@ Catalog:
 - `src/features/liveAudio/components/shared/CollapsiblePrivacyNotice.tsx` owns
   loading and displaying the configured first-layer table immediately before
   the policy link. It consumes `LegalMarkdown` and
-  `VITE_PRIVACY_SUMMARY_PATH`, shows policy version/short hash and keeps the
+  stable `/legal/privacy-summary.md` URL, shows policy version/short hash and keeps the
   microphone barrier closed if legal content is unavailable.
 - `src/features/liveAudio/components/shared/LiveAudioAliasInput.tsx` owns only
   the temporary-alias field and its concise technical visibility explanation;
@@ -95,6 +95,8 @@ Catalog:
 - `server/privacy-session-manifest.mjs` owns local recording-transition evidence.
   It may consume only non-nominative deployment/notice metadata and must never
   become a participant, consent, alias or message store.
+- `server/legal-repository.mjs` owns legal release-chain validation, document
+  integrity and anti-rollback activation. It does not determine legal approval.
 
 Hooks:
 

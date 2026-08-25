@@ -58,12 +58,14 @@ Fast map for agents. Use real paths only; this repo does not currently have
 - `src/utils/cryptoUtils.ts`: pure Web Crypto helpers for ECDH P-256, AES-GCM 256, base64 encoding, and nonce replay rejection.
 - `server/`: local Node backend and dev launcher.
 - `server/data-directory.mjs`: resolves `SEFER_DATA_DIR`, initializes only missing operator files, and owns persistent and public paths.
+- `server/legal-repository.mjs`: verifies the nested legal Git release chain,
+  document hashes and the durable anti-rollback activation anchor.
 - `src/components/shared/BrandingWelcome.tsx`: runtime loading and safe Markdown
   rendering for the installation welcome.
 - `scripts/`: generated data and utility scripts.
 - `__tests__/`: Vitest tests for utils and selected hooks.
 - `static/`: neutral Vite assets, PWA files and technical sounds.
-- `public/legal/`: temporary legal-only location pending the dedicated legal phase.
+- external `SEFER_DATA_DIR/legal/`: independent nested Git repository for legal releases.
 - external `SEFER_DATA_DIR/public/`: operator-served audio, backgrounds, videos, reader metadata and book TSVs.
 - `examples/SeferPrivateData/`: neutral first-run template; runtime writes never target this directory.
 
@@ -181,20 +183,16 @@ the server only routes ciphertext. `AudienceLiveAudioPanel.tsx` and
 `ActiveParticipantsPanel.tsx` render the opt-in/list. Authorization state and
 random identifiers remain clear WebSocket state; aliases do not.
 
-`DataProtectionPage.tsx` loads the exact Markdown selected through
-`VITE_PRIVACY_POLICY_PATH`, constrained to `/legal/*.md`, and renders it through
-`LegalMarkdown.tsx` with GFM tables, raw HTML disabled and responsive styles.
-The page exposes the document version and complete SHA-256, but not the internal
-source path.
-The neutral versionable fallback is `public/legal/privacy.md`; operator variants
-must stay under an ignored `public/legal/<operator>.local/` directory.
+`DataProtectionPage.tsx` loads `/legal/privacy.md`, backed by the active verified
+release under `SEFER_DATA_DIR/legal/`, and renders it through `LegalMarkdown.tsx`
+with GFM tables, raw HTML disabled and responsive styles. The page exposes the
+document version and complete SHA-256, but not the internal source path.
 
-`CollapsiblePrivacyNotice.tsx` loads the first-layer table selected by
-`VITE_PRIVACY_SUMMARY_PATH` immediately before the full-policy link. It shows
+`CollapsiblePrivacyNotice.tsx` loads `/legal/privacy-summary.md` immediately
+before the full-policy link. It shows
 the policy version and short SHA-256 and blocks microphone confirmation if the
-summary or policy cannot load. Its neutral fallback is
-`public/legal/privacy-summary.md`; operator-specific tables remain legal
-documents inside `public/legal/<operator>.local/`.
+summary or policy cannot load. Neutral fallbacks live under `static/legal/` and
+are used only when no operator legal repository is configured.
 
 Build/runtime split:
 

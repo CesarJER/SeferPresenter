@@ -28,7 +28,8 @@ SeferPresenter is a React/Vite presentation system with four browser routes:
 - `scripts/`: generation and utility scripts.
 - `__tests__/`: Vitest coverage for utils/hooks.
 - `static/`: neutral Vite/PWA assets and technical sounds.
-- `public/legal/`: temporary legal-only boundary pending its separate phase.
+- `server/legal-repository.mjs`: verified legal releases and anti-rollback anchor.
+- external `SEFER_DATA_DIR/legal/`: independent nested private Git repository.
 
 ## State Categories
 

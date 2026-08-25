@@ -19,8 +19,5 @@
 !server/**
 !static/
 !static/**
-!public/
-!public/legal/
-!public/legal/**
 !examples/
 !examples/**

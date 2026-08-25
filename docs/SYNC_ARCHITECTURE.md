@@ -457,12 +457,12 @@ Keep these local unless another device/mode must observe them.
 
 ### Legal Document Boundary
 
-`DataProtectionPage` does not embed operator facts. It fetches the Markdown
-selected by `VITE_PRIVACY_POLICY_PATH`, which is constrained to `/legal/*.md`,
-and displays the declared version plus a browser-computed SHA-256. The neutral
-fallback is `public/legal/privacy.md`; an operator may build with an ignored
-`.local` legal path. A fetch failure is visible and does not silently substitute
-different legal wording. Audit reports remain outside `public/legal/`.
+`DataProtectionPage` does not embed operator facts. It fetches the stable
+`/legal/privacy.md` URL and displays the declared version plus a browser-computed
+SHA-256. The backend resolves it from the active verified release in the nested
+`SEFER_DATA_DIR/legal/` Git repository. A durable anchor rejects lower or changed
+sequences; a fetch failure remains visible. Neutral product templates are used
+only when no legal repository is configured.
 
 ## Backend-Ready Direction
 

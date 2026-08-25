@@ -9,11 +9,9 @@ SeferPresenter es una aplicacion React/Vite para proyectar presentaciones con so
 - **Editor de audio**: abre `/audio-editor`. Permite asociar pistas de audio a presentaciones y cues de diapositiva.
 - **Audiencia**: abre `/audience`. Muestra la misma proyeccion visual que presenter, en modo solo lectura y sincronizada.
 - **Catálogo Público**: rutas dinámicas configurables vía `SEFER_PUBLIC_CATALOG_TAGS` en `.env` (ej: `/himnos`). Muestra una versión pública, segura y de solo lectura de las presentaciones, omitiendo metadatos privados y bloques de medios.
-- **Proteccion de datos**: `/proteccion-datos` carga el Markdown legal configurado
-  mediante `VITE_PRIVACY_POLICY_PATH`, lo presenta como documento legible con
-  tablas GFM y muestra su version y SHA-256 completo. La ruta interna del
-  fichero no se expone al usuario. La ruta permanece publica para que pueda
-  consultarse antes de participar.
+- **Proteccion de datos**: `/proteccion-datos` carga la política de la publicación
+  legal activa, la presenta con tablas GFM y muestra su versión y SHA-256. La
+  ruta interna no se expone y la consulta permanece pública antes de participar.
 - **Modo sin LiveKit**: la aplicacion conserva el uso solo presentacion. Si LiveKit esta desactivado, mal configurado o no soportado, `/presenter`, `/control`, `/audio-editor`, `/audience` y catálogos deben seguir cargando sin requerir voz en vivo.
 
 ## Scripts
@@ -181,14 +179,15 @@ variable no fue definida; no use ese opt-out para un despliegue expuesto.
 
 ## Privacidad local, documento legal y logs
 
-- `VITE_PRIVACY_POLICY_PATH` solo admite Markdown bajo `/legal/`. Puede apuntar
-  a un fichero ignorado como
-  `/legal/<operator>.local/privacy-policy-es.local.md`.
-- `VITE_PRIVACY_SUMMARY_PATH` selecciona, con la misma contencion bajo
-  `/legal/`, la información básica de primera capa mostrada en el aviso previo a
-  intervenir. El fallback neutral es `/legal/privacy-summary.md`; cada operador
-  puede usar `/legal/<operator>.local/privacy-summary-es.local.md` con su tabla
-  de responsable, finalidad, legitimacion, destinatarios y derechos.
+- El Git privado anidado `SEFER_DATA_DIR/legal/` contiene publicaciones
+  inmutables. `current.json` selecciona una secuencia y cada manifiesto encadena
+  y verifica los SHA-256 de sus documentos y del manifiesto anterior.
+- `SEFER_DATA_DIR/config/legal-activation.json` conserva la mayor secuencia
+  activada. El backend rechaza retroversiones, cadenas rotas y archivos alterados.
+- `/legal/privacy.md` y `/legal/privacy-summary.md` son URL públicas estables;
+  nunca revelan la ruta física. Si no existe repositorio legal se muestran las
+  plantillas neutrales de `static/legal/` y `/api/legal/manifest` responde
+  `LEGAL_NOT_CONFIGURED`.
 - `VITE_SEFER_AUDIENCE_STORAGE_TTL_HOURS` controla la caducidad de sesión,
   respuestas y puntuaciones Audience: 24 horas por defecto, entre 1 y 168.
 - Caddy no reenvia `X-Real-IP` ni `X-Forwarded-For` a Node/LiveKit.
@@ -200,13 +199,13 @@ variable no fue definida; no use ese opt-out para un despliegue expuesto.
   `scripts/rotate-docker-logs.ps1` recrea servicios a las 144 horas y deja
   que Docker elimine los logs con el contenedor antiguo. Los volúmenes y bind
   mounts permanecen intactos.
-- `SEFER_PRIVACY_LOCAL_PATH` señala la raíz local ignorada que recibe los
+- `SEFER_PRIVACY_LOCAL_PATH` señala una raíz privada externa al repositorio que recibe los
   manifiestos de sesión. Al pasar a `recording`, el backend crea un JSON
   `.local` sin asistentes, alias, voz, IP ni identificadores de sesión; al salir
   de grabación lo completa de forma atómica.
 - `SEFER_EXTERNAL_BROADCAST_CHANNELS`, `SEFER_DEPLOYMENT_VERSION` y
   `SEFER_BROADCAST_NOTICE_VERSION` identifican canales y versiones en ese
-  manifiesto. `VITE_PRIVACY_POLICY_PATH` aporta versión y SHA-256 del aviso.
+  manifiesto. La publicación legal activa aporta versión y SHA-256 del aviso.
 
 Ejecute primero la comprobación no mutante:
 
@@ -407,10 +406,8 @@ LIVEKIT_NODE_IP=
 LIVEKIT_NODE_IP_AUTO_DETECT=false
 LIVEKIT_LOGGING_LEVEL=warn
 LIVEKIT_ROOM_NAME=sefer-live-audio
-VITE_PRIVACY_POLICY_PATH=/legal/privacy.md
-VITE_PRIVACY_SUMMARY_PATH=/legal/privacy-summary.md
 VITE_SEFER_AUDIENCE_STORAGE_TTL_HOURS=24
-SEFER_PRIVACY_LOCAL_PATH=./privacy-audit.local
+SEFER_PRIVACY_LOCAL_PATH=../SeferPrivateData/audit
 SEFER_EXTERNAL_BROADCAST_CHANNELS=
 SEFER_DEPLOYMENT_VERSION=unversioned
 SEFER_BROADCAST_NOTICE_VERSION=broadcast-notice-v1

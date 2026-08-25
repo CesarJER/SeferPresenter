@@ -2,8 +2,8 @@
 
 Esta carpeta contiene la documentación general y versionable de privacidad de
 SeferPresenter. Las evidencias e informes específicos de cada despliegue viven
-en una subcarpeta de auditoría `.local`, fuera del repositorio principal.
-`public/legal/` se reserva exclusivamente para ficheros legales.
+fuera del repositorio principal. Los documentos aplicables del operador viven
+en el Git privado anidado `SEFER_DATA_DIR/legal/`.
 
 ## Contenido versionable
 
@@ -29,8 +29,8 @@ Documentación general:
 - `technical-privacy-specification.md`: comportamiento, datos, cifrado,
   almacenamiento y garantías reales del producto.
 - `operator-compliance-guide.md`: decisiones y controles para cada despliegue.
-- `legal-repository-blueprint.md`: estructura y reglas mínimas del futuro
-  repositorio jurídico privado.
+- `legal-repository-blueprint.md`: estructura y reglas del repositorio jurídico
+  privado y su cadena verificable.
 - `templates/operator-privacy-policy-template-es.md`: plantilla neutral que
   requiere adaptación y validación.
 
@@ -69,60 +69,48 @@ Informes disponibles:
 
 ## Auditorías locales
 
-Cada operador debe usar bajo `docs/privacy/audits/` una carpeta privada con
-nombre terminado en `.local` y documentos con marcador `.local.`:
+Cada operador debe mantener las auditorías específicas fuera del repositorio
+de producto, normalmente bajo su `SeferPrivateData` privado:
 
 ```text
-docs/privacy/audits/<operator-slug>.local/
+SeferPrivateData/audit/
 ├── README.local.md
 ├── phase-01-orientation.local.md
 └── ...
 ```
 
-Las reglas `*.local` y `*.local.*` de `.gitignore` mantienen estas auditorías
-fuera del repositorio principal. Antes de añadir datos del operador debe
-comprobarse la exclusión:
+No se debe depender solamente de un sufijo `.local` para separar este material.
+Antes de retirar una copia del checkout se debe verificar el destino privado y
+comparar su inventario SHA-256:
 
 ```powershell
-git check-ignore -v -- docs/privacy/audits/<operator-slug>.local/README.local.md
+git -C ../SeferPrivateData status --short
 ```
 
 No se deben colocar secretos, credenciales ni datos personales reales en los
 informes, aunque sean locales.
 
-## Ficheros legales locales
+## Ficheros legales del operador
 
-`public/legal/` no debe contener auditorías, evidencias, informes de fase ni
-notas de trabajo. Cuando se generen adaptaciones legales de un operador, pueden
-vivir temporalmente en `public/legal/<operator-slug>.local/`, que también está
-ignorado, pero todos sus ficheros deben ser documentos legales destinados a
-revisión o publicación.
+Cada publicación vive en `SEFER_DATA_DIR/legal/releases/NNNNNN/`. Una secuencia
+existente es inmutable: cualquier corrección crea la siguiente. Los informes de
+auditoría, incidentes y expedientes con datos personales no se sirven como
+documentos legales y requieren su propio almacenamiento restringido.
 
 ## Puntero mediante `.env`
 
 Un despliegue puede declarar su raíz documental privada con:
 
 ```dotenv
-SEFER_PRIVACY_LOCAL_PATH=./docs/privacy/audits/<operator-slug>.local
+SEFER_PRIVACY_LOCAL_PATH=../SeferPrivateData/audit
 ```
 
 Compose consume únicamente `session-manifests.local/` bajo
 `SEFER_PRIVACY_LOCAL_PATH` y lo monta en el backend; el resto de la auditoría
-privada no entra en la aplicación. Es distinto de
-`VITE_PRIVACY_POLICY_PATH`, que selecciona exclusivamente un documento Markdown
-legal bajo `/legal/` para `/proteccion-datos`. Nunca apunte esta última variable
-a una auditoría, EIPD, incidente o evidencia interna.
+privada no entra en la aplicación. La política y el resumen se publican mediante
+las URL estables `/legal/privacy.md` y `/legal/privacy-summary.md`; la ruta física
+no es configurable desde el frontend.
 
-La selección legal rechaza escapes de directorio y muestra versión/SHA-256. Los
-documentos de auditoría local no se copian a `public/legal/` ni al `dist`.
-`VITE_PRIVACY_SUMMARY_PATH` selecciona de forma independiente la tabla legal de
-primera capa que aparece en el aviso previo a intervenir, con fallback neutral
-en `/legal/privacy-summary.md`; la adaptación del operador debe mantenerse en
-la misma carpeta legal `.local` que su política.
-
-## Repositorio privado posterior
-
-Cuando los documentos del operador alcancen suficiente madurez, la carpeta
-local podrá convertirse en un repositorio separado con acceso restringido,
-protección de rama, revisiones obligatorias y etiquetas firmadas. Hasta entonces
-el control principal es la exclusión verificable del repositorio de producto.
+El backend valida todos los hashes y la cadena antes de servir documentos. El
+ancla `SEFER_DATA_DIR/config/legal-activation.json` impide activar una secuencia
+inferior o cambiar el manifiesto de una secuencia ya activada.

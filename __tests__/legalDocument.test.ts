@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_PRIVACY_POLICY_PATH,
   DEFAULT_PRIVACY_SUMMARY_PATH,
+  configuredPrivacyPolicyPath,
+  configuredPrivacySummaryPath,
   extractLegalDocumentVersion,
-  normalizePrivacyPolicyPath,
-  normalizeLegalMarkdownPath,
   extractLegalDocumentTitle,
   prepareLegalMarkdownForDisplay,
   sha256Hex,
@@ -12,13 +12,9 @@ import {
 import { getStaticCacheHeaders } from '../server/static-cache-policy.mjs';
 
 describe('legal document configuration', () => {
-  it('allows only Markdown documents contained under /legal/', () => {
-    expect(normalizePrivacyPolicyPath('/legal/operator.local/privacy-policy.local.md'))
-      .toBe('/legal/operator.local/privacy-policy.local.md');
-    expect(normalizePrivacyPolicyPath('/api/state')).toBe(DEFAULT_PRIVACY_POLICY_PATH);
-    expect(normalizePrivacyPolicyPath('/legal/../private.md')).toBe(DEFAULT_PRIVACY_POLICY_PATH);
-    expect(normalizePrivacyPolicyPath('/legal/policy.html')).toBe(DEFAULT_PRIVACY_POLICY_PATH);
-    expect(normalizeLegalMarkdownPath('/api/state', DEFAULT_PRIVACY_SUMMARY_PATH)).toBe(DEFAULT_PRIVACY_SUMMARY_PATH);
+  it('uses stable public URLs backed by the active legal release', () => {
+    expect(configuredPrivacyPolicyPath).toBe(DEFAULT_PRIVACY_POLICY_PATH);
+    expect(configuredPrivacySummaryPath).toBe(DEFAULT_PRIVACY_SUMMARY_PATH);
   });
 
   it('extracts the declared version and computes a stable SHA-256', async () => {

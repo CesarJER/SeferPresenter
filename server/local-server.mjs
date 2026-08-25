@@ -52,6 +52,7 @@ import { resolvePathInsideRoot } from './path-containment.mjs'
 import { createPrivacySessionManifestRecorder } from './privacy-session-manifest.mjs'
 import { getStaticCacheHeaders } from './static-cache-policy.mjs'
 import { loadBrandingAsset } from './branding-assets.mjs'
+import { loadLegalRepository } from './legal-repository.mjs'
 import {
   getSeferDataPaths,
   initializeSeferDataDir,
@@ -60,12 +61,18 @@ import {
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const rootDir = path.resolve(__dirname, '..')
-const publicDir = path.join(rootDir, 'public')
 const productStaticDir = path.join(rootDir, 'static')
 const exampleDataDir = path.join(rootDir, 'examples', 'SeferPrivateData')
 const seferDataDir = resolveSeferDataDir({ rootDir })
 const dataInitialization = initializeSeferDataDir({ dataDir: seferDataDir, exampleDir: exampleDataDir })
 const seferDataPaths = getSeferDataPaths(seferDataDir)
+const legalRepository = loadLegalRepository({ dataDir: seferDataDir })
+const legalDocuments = legalRepository.status === 'ACTIVE'
+  ? new Map([
+      ['/legal/privacy.md', legalRepository.documents.privacyPolicy],
+      ['/legal/privacy-summary.md', legalRepository.documents.privacySummary],
+    ])
+  : new Map()
 const brandingAssets = new Map([
   ['/api/branding/logo.svg', {
     overridePath: seferDataPaths.branding.logo,
@@ -91,7 +98,8 @@ const staticArgIndex = process.argv.indexOf('--static')
 const staticDir = path.resolve(rootDir, staticArgIndex >= 0 ? process.argv[staticArgIndex + 1] || 'dist' : 'dist')
 const sseHeartbeatMs = 30_000
 const privacySessionManifestRecorder = createPrivacySessionManifestRecorder({
-  publicDir,
+  publicDir: productStaticDir,
+  policyEvidence: legalRepository.policyEvidence,
 })
 
 if (dataInitialization.created.length > 0) {
@@ -739,6 +747,16 @@ const handleApi = async (req, res, url) => {
     return true
   }
 
+  if (url.pathname === '/api/legal/manifest' && req.method === 'GET') {
+    res.setHeader('Cache-Control', 'no-store, max-age=0')
+    if (legalRepository.status !== 'ACTIVE') {
+      sendJson(res, 503, { code: 'LEGAL_NOT_CONFIGURED' })
+    } else {
+      sendJson(res, 200, legalRepository.publicManifest)
+    }
+    return true
+  }
+
   if (url.pathname === '/api/audience/access/bootstrap' && req.method === 'POST') {
     try {
       const body = JSON.parse(await readBody(req) || '{}')
@@ -1171,6 +1189,11 @@ const handleStatic = (req, res, url) => {
   if (!staticDir) return false
   const requestedPath = decodeURIComponent(url.pathname)
   const cleanPath = requestedPath === '/' ? '/audience' : requestedPath
+  const legalDocument = legalDocuments.get(cleanPath)
+  if (legalDocument) {
+    serveFile(req, res, legalDocument)
+    return true
+  }
   const candidate = resolvePathInsideRoot(staticDir, cleanPath)
 
   if (candidate && fs.existsSync(candidate) && fs.statSync(candidate).isFile()) {
@@ -1190,15 +1213,7 @@ const handleStatic = (req, res, url) => {
     return true
   }
 
-  // Operator-specific legal files remain in their existing local-only location
-  // until the dedicated legal-repository phase.
-  if (cleanPath.startsWith('/legal/')) {
-    const legalCandidate = resolvePathInsideRoot(publicDir, cleanPath)
-    if (legalCandidate && fs.existsSync(legalCandidate) && fs.statSync(legalCandidate).isFile()) {
-      serveFile(req, res, legalCandidate)
-      return true
-    }
-  }
+  if (cleanPath.startsWith('/legal/')) return false
 
   const publicCatalogs = getPublicCatalogs()
   const isCatalogRoute = publicCatalogs.some((cat) => cleanPath === cat.path || cleanPath.startsWith(cat.path + '/'))

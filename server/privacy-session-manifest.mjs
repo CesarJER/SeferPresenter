@@ -58,7 +58,8 @@ const fileSafeIso = (value) => toIso(value).replace(/[:.]/g, '-')
 export const createPrivacySessionManifestRecorder = ({
   manifestDir = process.env.SEFER_PRIVACY_MANIFEST_DIR,
   publicDir = path.resolve('public'),
-  policyPath = process.env.SEFER_PRIVACY_POLICY_PATH,
+  policyPath = '/legal/privacy.md',
+  policyEvidence,
   channels = process.env.SEFER_EXTERNAL_BROADCAST_CHANNELS,
   softwareVersion = process.env.SEFER_DEPLOYMENT_VERSION || 'unversioned',
   noticeVersion = process.env.SEFER_BROADCAST_NOTICE_VERSION || DEFAULT_NOTICE_VERSION,
@@ -92,7 +93,7 @@ export const createPrivacySessionManifestRecorder = ({
   const start = async (timestamp, nextState) => {
     if (!resolvedManifestDir || active) return
     const manifestId = createId()
-    const policy = await loadPolicyEvidence(publicDir, policyPath)
+    const policy = policyEvidence || await loadPolicyEvidence(publicDir, policyPath)
     const document = {
       schemaVersion: MANIFEST_SCHEMA_VERSION,
       manifestId,

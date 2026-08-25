@@ -11,8 +11,6 @@ ARG VITE_ORGANIZATION_NAME=
 ARG VITE_ORGANIZATION_LEGAL_ID=
 ARG VITE_ORGANIZATION_EMAIL=
 ARG VITE_ORGANIZATION_WEBSITE=
-ARG VITE_PRIVACY_POLICY_PATH=/legal/privacy.md
-ARG VITE_PRIVACY_SUMMARY_PATH=/legal/privacy-summary.md
 ARG VITE_SEFER_AUDIENCE_STORAGE_TTL_HOURS=24
 ARG VITE_SEFER_PUBLICABLE_PERMISSION=RECORDING
 ARG VITE_SEFER_PUBLICABLE_DEFAULT=off
@@ -23,8 +21,6 @@ ENV VITE_SEFER_LIVE_AUDIO_BUILD=$VITE_SEFER_LIVE_AUDIO_BUILD \
     VITE_ORGANIZATION_LEGAL_ID=$VITE_ORGANIZATION_LEGAL_ID \
     VITE_ORGANIZATION_EMAIL=$VITE_ORGANIZATION_EMAIL \
     VITE_ORGANIZATION_WEBSITE=$VITE_ORGANIZATION_WEBSITE \
-    VITE_PRIVACY_POLICY_PATH=$VITE_PRIVACY_POLICY_PATH \
-    VITE_PRIVACY_SUMMARY_PATH=$VITE_PRIVACY_SUMMARY_PATH \
     VITE_SEFER_AUDIENCE_STORAGE_TTL_HOURS=$VITE_SEFER_AUDIENCE_STORAGE_TTL_HOURS \
     VITE_SEFER_PUBLICABLE_PERMISSION=$VITE_SEFER_PUBLICABLE_PERMISSION \
     VITE_SEFER_PUBLICABLE_DEFAULT=$VITE_SEFER_PUBLICABLE_DEFAULT
@@ -37,7 +33,6 @@ COPY index.html presenter.html audience.html control.html audio-editor.html cata
 COPY src ./src
 COPY server ./server
 COPY static ./static
-COPY public/legal ./public/legal
 COPY examples ./examples
 RUN npx tsc -b && npx vite build
 
@@ -55,10 +50,9 @@ COPY --from=builder --chown=node:node /app/package.json /app/package-lock.json .
 # Install only production dependencies
 RUN npm ci --omit=dev
 
-# Copy build output, server, and the temporary legal skeleton
+# Copy build output, server, and neutral product assets
 COPY --from=builder --chown=node:node /app/dist ./dist
 COPY --from=builder --chown=node:node /app/server ./server
-COPY --from=builder --chown=node:node /app/public/legal ./public/legal
 COPY --from=builder --chown=node:node /app/examples ./examples
 COPY --from=builder --chown=node:node /app/src/assets/branding ./src/assets/branding
 

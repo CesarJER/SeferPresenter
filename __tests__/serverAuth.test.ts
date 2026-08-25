@@ -34,6 +34,7 @@ describe('server HTTP security policy', () => {
     ['GET', '/api/branding/logo.svg', false],
     ['GET', '/api/branding/favicon.svg', false],
     ['GET', '/api/branding/welcome.md', false],
+    ['GET', '/api/legal/manifest', false],
     ['POST', '/api/quiz-answer', false],
     ['GET', '/api/livekit/status', false],
     ['POST', '/api/livekit/token', false],

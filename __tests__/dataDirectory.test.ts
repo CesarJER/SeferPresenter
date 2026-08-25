@@ -62,6 +62,8 @@ describe('Sefer data directory', () => {
     expect(paths.audioSync).toBe(path.join(dataDir, 'audio_sync.json'));
     expect(paths.audienceCacheAssets).toBe(path.join(dataDir, 'config', 'audience-cache-assets.txt'));
     expect(paths.public).toBe(path.join(dataDir, 'public'));
+    expect(paths.legal).toBe(path.join(dataDir, 'legal'));
+    expect(paths.legalActivation).toBe(path.join(dataDir, 'config', 'legal-activation.json'));
     expect(paths.branding.favicon).toBe(path.join(dataDir, 'branding', 'favicon.svg'));
   });
 

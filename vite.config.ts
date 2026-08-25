@@ -67,6 +67,7 @@ export default defineConfig(({ mode }) => ({
     proxy: {
       ...getOperatorPublicProxies(mode),
       '/api': backendTarget,
+      '/legal': backendTarget,
       '/ws': {
         target: 'ws://localhost:8787',
         ws: true,

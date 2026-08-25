@@ -257,7 +257,6 @@ Variables relevantes:
 - `LIVEKIT_NODE_IP_AUTO_DETECT`, opt-in para IP dinámica del servidor;
 - `LIVEKIT_LOGGING_LEVEL`;
 - `VITE_SEFER_AUDIENCE_STORAGE_TTL_HOURS`;
-- `VITE_PRIVACY_POLICY_PATH`;
 - `SEFER_LOG_CONTAINER_MAX_AGE_HOURS` para el script del host;
 - `SEFER_PRIVACY_LOCAL_PATH`, raíz local ignorada para manifiestos;
 - `SEFER_EXTERNAL_BROADCAST_CHANNELS`, `SEFER_DEPLOYMENT_VERSION` y
@@ -271,11 +270,10 @@ general salvo mediante un paquete legal local explícito y revisado.
 
 ### 12.5 Presentación de documentos legales
 
-`VITE_PRIVACY_POLICY_PATH` selecciona la política completa y
-`VITE_PRIVACY_SUMMARY_PATH` la tabla de primera capa del aviso previo a
-intervenir. Ambas
-rutas se normalizan bajo `/legal/`, rechazan `..`, barras invertidas y
-extensiones distintas de `.md`, y disponen de fallbacks generales neutros.
+Las URL fijas `/legal/privacy.md` y `/legal/privacy-summary.md` presentan la
+política completa y la tabla de primera capa. El backend las resuelve desde la
+secuencia activa del Git anidado `SEFER_DATA_DIR/legal/`, después de validar la
+cadena de manifiestos y todos los SHA-256. La ruta física no procede del cliente.
 
 `LegalMarkdown` interpreta Markdown con tablas GFM y componentes visuales
 responsivos. El HTML embebido y las imágenes están deshabilitados, por lo que

@@ -180,18 +180,16 @@ Use these checklists before implementing future tasks.
 - Docker size rotation is not temporal retention. Preserve and test the safe
   Compose-recreation script and require host task installation before claiming
   a seven-day maximum.
-- Keep `public/legal/` limited to legal documents. `DataProtectionPage` must
-  render the exact Markdown selected under `/legal/` and show version/SHA-256
+- Never edit an existing `SEFER_DATA_DIR/legal/releases/NNNNNN/` directory.
+  Corrections create the next sequence with a chained manifest and update
+  `current.json`. `DataProtectionPage` must render the active policy and show version/SHA-256
   without exposing its internal file path. Use `LegalMarkdown` for GFM tables
   and keep raw HTML and images disabled.
-- Keep the first-layer table in a separate legal Markdown chosen by
-  `VITE_PRIVACY_SUMMARY_PATH` and render it in the pre-intervention privacy
+- Keep the first-layer table in the active release's separate legal Markdown
+  and render it in the pre-intervention privacy
   notice immediately before the full-policy link, not beside the alias field.
-  The general fallback must remain neutral; entity identity, contact and
-  specific recipients belong in the operator's ignored
-  `/legal/<operator>.local/` document.
-- Operator legal documents and audit records remain in their respective
-  `.local` paths; never put reports or operational evidence in `public/legal/`.
+  The product fallback must remain neutral; operator identity, contact and
+  specific recipients belong only in the private legal repository.
 
 ## When Editing Validation/Import/Export
 

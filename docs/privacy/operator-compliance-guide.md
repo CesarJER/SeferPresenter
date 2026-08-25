@@ -222,17 +222,18 @@ Mantenga separados:
 - evidencias de despliegue;
 - incidentes y solicitudes reales.
 
-`public/legal/` debe contener únicamente documentos legales. Los informes de
-auditoría pertenecen a `docs/privacy/audits/`.
+El Git privado `SEFER_DATA_DIR/legal/` contiene únicamente publicaciones y
+documentos jurídicos sin expedientes personales. Los informes de auditoría
+pertenecen a su área privada separada.
 
-Configure `VITE_PRIVACY_POLICY_PATH` con el Markdown legal del operador. Antes
-de publicar, abra `/proteccion-datos` y compruebe que muestra la versión y el
-SHA-256 del fichero revisado. Un error de carga debe bloquear la intervención,
-no sustituir silenciosamente la política por texto antiguo.
+Active una nueva secuencia solo después de revisar su manifiesto, estado y
+hashes. Abra `/proteccion-datos` y compruebe que muestra la versión y el SHA-256
+esperados. Un error de carga debe bloquear la intervención, no sustituir
+silenciosamente la política por texto antiguo.
 
-Configure también `VITE_PRIVACY_SUMMARY_PATH` con un Markdown legal de primera
-capa que contenga, como mínimo, responsable, finalidad, legitimación,
-destinatarios y derechos. Revise la tabla dentro del aviso previo a intervenir,
+Incluya también un `privacy-summary.md` de primera capa que contenga, como
+mínimo, responsable, finalidad, legitimación, destinatarios y derechos. Revise
+la tabla dentro del aviso previo a intervenir,
 inmediatamente antes del enlace a la segunda capa, en anchura móvil y
 escritorio. La interfaz no debe mostrar al usuario la ruta interna: el aviso
 breve identifica la política mediante versión y hash corto, y la política

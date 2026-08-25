@@ -1,6 +1,7 @@
 # Plano para un repositorio jurídico privado
 
-Estado: plantilla general; no crea ni configura ningún repositorio.
+Estado: arquitectura implementada localmente; la protección del futuro remoto
+privado sigue siendo una operación del propietario.
 
 ## 1. Contenido permitido
 
@@ -14,21 +15,22 @@ no facilita la supresión completa de información ya incluida en su historial.
 ## 2. Estructura propuesta
 
 ```text
-legal-privacy/
+SeferPrivateData/legal/
 ├── README.md
-├── CODEOWNERS
-├── policies/
-├── notices/
-├── accountability/
-├── audits/
-├── manifests/
-├── templates/
+├── current.json
 └── releases/
+    ├── 000001/
+    │   ├── privacy-policy.md
+    │   ├── privacy-summary.md
+    │   └── manifest.json
+    └── 000002/
 ```
 
-Los documentos específicos del operador pueden perder el sufijo `.local` solo
-después de migrarlos al repositorio privado y comprobar que el repositorio de
-producto sigue ignorando su copia de trabajo.
+Cada manifiesto contiene una secuencia monotónica, estado, versión, hashes de
+documentos y el hash del manifiesto anterior. `current.json` activa una secuencia.
+El estado máximo aceptado se conserva fuera del Git anidado para detectar un
+checkout anterior. Esto detecta retroversiones accidentales; no impide que un
+administrador con control total altere ambos almacenamientos.
 
 ## 3. Configuración mínima de GitHub
 

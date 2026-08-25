@@ -10,6 +10,7 @@ const publicApiGetPaths = new Set([
   '/api/branding/logo.svg',
   '/api/branding/favicon.svg',
   '/api/branding/welcome.md',
+  '/api/legal/manifest',
 ])
 
 const firstHeaderValue = (value) => {

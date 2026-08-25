@@ -71,7 +71,8 @@ docs in the same change. Do not leave these files stale.
 ## Do Not Touch Casually
 
 - `data.local/` or external `SEFER_DATA_DIR`: operator data and public assets.
-- `public/legal/`: temporary legal-only boundary until the dedicated legal-repository phase.
+- `SEFER_DATA_DIR/legal/`: independent nested Git repository of immutable legal
+  releases. Never edit an existing release; create a new sequence.
 - `node_modules/`, `dist/`: dependencies/build output.
 - `legacy/`: local historical record, not product code.
 - `data.local/` and external `SEFER_DATA_DIR` repositories: operator data. Edit only when the task explicitly targets them.
