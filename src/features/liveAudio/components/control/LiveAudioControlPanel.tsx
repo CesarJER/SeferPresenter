@@ -7,6 +7,7 @@ import type { LiveAudioParticipant } from './LiveAudioParticipantRow';
 import type { LiveAudioExternalBroadcastState } from '../../../../types/liveAudio';
 
 interface LiveAudioControlPanelProps {
+  voiceScripturePanel?: React.ReactNode;
   totalAudience: number;
   activeUsers: number;
   isModeratorMuted: boolean;
@@ -38,6 +39,7 @@ interface LiveAudioControlPanelProps {
 }
 
 export const LiveAudioControlPanel: React.FC<LiveAudioControlPanelProps> = ({
+  voiceScripturePanel,
   totalAudience,
   activeUsers,
   isModeratorMuted,
@@ -82,6 +84,7 @@ export const LiveAudioControlPanel: React.FC<LiveAudioControlPanelProps> = ({
           ${isExpanded ? 'h-[60vh] max-h-[calc(100vh-80px)] md:h-[450px] opacity-100' : 'h-0 max-h-0 opacity-0 border-none'}`}
       >
         <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
+          {voiceScripturePanel}
           {externalPermission !== 'NONE' && (
             <label className="flex flex-col gap-1 rounded border border-gray-700 bg-gray-950/60 p-2 text-xs text-gray-300">
               <span className="font-semibold">Estado externo declarado</span>

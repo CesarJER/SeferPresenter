@@ -2070,6 +2070,8 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
       {LiveAudioControlContainer && (
         <Suspense fallback={null}>
           <LiveAudioControlContainer
+            scriptureState={scriptureState}
+            onProjectScripture={onProjectScripture}
             isControlAuthorized={controlAuthorization?.role === 'principal' || controlAuthorization?.role === 'delegated'}
             authorizationRequests={controlAuthorization?.pendingControls || []}
             onApproveRequest={onApproveControlRequest}

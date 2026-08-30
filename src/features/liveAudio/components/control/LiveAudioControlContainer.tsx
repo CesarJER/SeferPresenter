@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef, Suspense, lazy } from 'react';
 import { createPortal } from 'react-dom';
 import { Bell } from 'lucide-react';
 import { LiveAudioControlPanel } from './LiveAudioControlPanel';
@@ -25,6 +25,12 @@ import {
   hasVisibleParticipantsChanged,
   serializeVisibleParticipants,
 } from '../../utils/activeParticipants';
+import type { ScriptureNavState } from '../../../../types/presentation';
+import type { SeferReaderState } from '../../../../hooks/useSeferReader';
+
+const VoiceScriptureControl = import.meta.env.VITE_SEFER_VOICE_SCRIPTURE_BUILD === 'true'
+  ? lazy(() => import('../../../voiceScripture/VoiceScriptureControl'))
+  : null;
 
 type ModerationEndpoint =
   | 'grant-speak'
@@ -35,6 +41,8 @@ type ModerationEndpoint =
   | 'rescue-participant';
 
 export interface LiveAudioControlContainerProps {
+  scriptureState?: ScriptureNavState | null;
+  onProjectScripture?: (state: SeferReaderState, command?: 'navigate') => void;
   isControlAuthorized: boolean;
   authorizationRequests?: PendingControlAuthorization[];
   onApproveRequest?: (sessionId: string) => void;
@@ -92,6 +100,8 @@ const snapshotParticipantToStatus = (
 });
 
 export default function LiveAudioControlContainer({
+  scriptureState = null,
+  onProjectScripture = () => { },
   isControlAuthorized,
   authorizationRequests = [],
   onApproveRequest = () => { },
@@ -985,6 +995,21 @@ export default function LiveAudioControlContainer({
       {inboxPortal}
 
       <LiveAudioControlPanel
+        voiceScripturePanel={VoiceScriptureControl ? (
+          <Suspense fallback={null}>
+            <VoiceScriptureControl
+              tracks={remoteTracks.map((remoteTrack) => ({
+                id: remoteTrack.id,
+                track: remoteTrack.track,
+                label: participantAliases[remoteTrack.participantId || '']
+                  || remoteTrack.participantIdentity
+                  || 'Voz sin identificar',
+              }))}
+              scriptureState={scriptureState}
+              onProject={onProjectScripture}
+            />
+          </Suspense>
+        ) : null}
         totalAudience={totalAudience}
         activeUsers={activeUsers}
         isModeratorMuted={isModeratorMuted}
