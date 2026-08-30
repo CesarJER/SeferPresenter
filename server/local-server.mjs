@@ -21,6 +21,7 @@ import {
   isAuthRequired,
   isProtectedRequestPath,
 } from './authUtils.mjs'
+import { createVoiceScriptureService } from './voice-scripture-server.mjs'
 import {
   getDefaultProjectionState,
   makeAudienceSyncStateMessage,
@@ -741,6 +742,10 @@ const invalidateAudienceStreams = () => {
 }
 
 const handleApi = async (req, res, url) => {
+  if (url.pathname === '/api/voice-scripture/status' && req.method === 'GET') {
+    sendJson(res, 200, await voiceScriptureService.getStatus())
+    return true
+  }
   const brandingAsset = brandingAssets.get(url.pathname)
   if (brandingAsset && req.method === 'GET') {
     sendBrandingAsset(req, res, brandingAsset)
@@ -1270,6 +1275,8 @@ const server = http.createServer(async (req, res) => {
   sendJson(res, 404, { error: 'Static file not found' })
 })
 
+const voiceScriptureService = createVoiceScriptureService(server)
+
 const handleWsMessageFromClient = (msg, meta) => {
   if (msg.type === 'SYNC_STATE') {
     if (meta?.role === 'control' && !canReduceRemoteCommand(meta)) return false
@@ -1366,6 +1373,7 @@ server.on('close', () => {
   clearInterval(sseHeartbeat)
   clearInterval(serverCueInterval)
   liveKitApi?.close()
+  voiceScriptureService.close()
 })
 
 liveKitApi = createLiveKitApi({
