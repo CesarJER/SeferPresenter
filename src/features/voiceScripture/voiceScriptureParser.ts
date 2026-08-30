@@ -22,15 +22,7 @@ const fold = (value: string) => value
   .replace(/[^a-z0-9]+/g, ' ')
   .trim();
 
-const EXTRA_BOOK_ALIASES: ReadonlyArray<{ aliases: string[]; targets: string[] }> = [
-  { aliases: ['genesis', 'gn', 'bereshit', 'bereshis'], targets: ['genesis', 'gn'] },
-  { aliases: ['exodo', 'ex', 'shemot'], targets: ['exodo', 'ex'] },
-  { aliases: ['levitico', 'lv', 'vayikra'], targets: ['levitico', 'lv'] },
-  { aliases: ['numeros', 'nm', 'bamidbar'], targets: ['numeros', 'nm'] },
-  { aliases: ['deuteronomio', 'dt', 'devarim', 'de barim', 'devarin'], targets: ['deuteronomio', 'dt'] },
-  { aliases: ['salmos', 'salmo', 'sal', 'tehilim'], targets: ['salmos', 'salmo', 'sal'] },
-  { aliases: ['isaias', 'is', 'yeshayahu'], targets: ['isaias', 'is'] },
-];
+
 
 const SMALL_NUMBERS: Record<string, number> = {
   cero: 0, un: 1, uno: 1, una: 1, dos: 2, tres: 3, cuatro: 4, cinco: 5,
@@ -105,24 +97,17 @@ interface BookMatch {
   length: number;
 }
 
-const resolveAliasTarget = (targets: string[], metadata: AppMetadata): string | null => {
-  for (const [book, details] of Object.entries(metadata)) {
-    const normalized = [fold(book), fold(details.bookAbbrevEs)];
-    if (targets.some((target) => normalized.includes(fold(target)))) return book;
-  }
-  return null;
-};
-
 const findBook = (tokens: string[], metadata: AppMetadata): BookMatch | null => {
   const aliases: Array<{ alias: string[]; book: string }> = [];
   for (const [book, details] of Object.entries(metadata)) {
     aliases.push({ alias: fold(book).split(' '), book });
     aliases.push({ alias: fold(details.bookAbbrevEs).split(' '), book });
-  }
-  for (const definition of EXTRA_BOOK_ALIASES) {
-    const book = resolveAliasTarget(definition.targets, metadata);
-    if (!book) continue;
-    for (const alias of definition.aliases) aliases.push({ alias: fold(alias).split(' '), book });
+    
+    if (details.voiceAliases) {
+      for (const alias of details.voiceAliases) {
+        aliases.push({ alias: fold(alias).split(' '), book });
+      }
+    }
   }
   aliases.sort((a, b) => b.alias.length - a.alias.length || b.alias.join(' ').length - a.alias.join(' ').length);
 

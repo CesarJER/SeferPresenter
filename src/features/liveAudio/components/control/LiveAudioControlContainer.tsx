@@ -144,6 +144,7 @@ export default function LiveAudioControlContainer({
     isMicrophoneActive,
     participantId,
     remoteTracks,
+    localMicrophoneTrack,
     startRemoteAudio,
   } = useLiveAudio({
     role: 'control',
@@ -998,13 +999,20 @@ export default function LiveAudioControlContainer({
         voiceScripturePanel={VoiceScriptureControl ? (
           <Suspense fallback={null}>
             <VoiceScriptureControl
-              tracks={remoteTracks.map((remoteTrack) => ({
-                id: remoteTrack.id,
-                track: remoteTrack.track,
-                label: participantAliases[remoteTrack.participantId || '']
-                  || remoteTrack.participantIdentity
-                  || 'Voz sin identificar',
-              }))}
+              tracks={[
+                ...(localMicrophoneTrack ? [{
+                  id: 'local-mic',
+                  track: localMicrophoneTrack,
+                  label: 'Mi Micrófono (Control)',
+                }] : []),
+                ...remoteTracks.map((remoteTrack) => ({
+                  id: remoteTrack.id,
+                  track: remoteTrack.track,
+                  label: participantAliases[remoteTrack.participantId || '']
+                    || remoteTrack.participantIdentity
+                    || 'Voz sin identificar',
+                }))
+              ]}
               scriptureState={scriptureState}
               onProject={onProjectScripture}
             />

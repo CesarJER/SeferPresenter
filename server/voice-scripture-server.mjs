@@ -1,4 +1,5 @@
 import { WebSocket, WebSocketServer } from 'ws'
+import crypto from 'crypto'
 import { hasAllowedRequestOrigin, hasValidBasicAuth } from './authUtils.mjs'
 
 const MAX_VOICE_FRAME_BYTES = 512 * 1024
@@ -52,6 +53,7 @@ const rejectUpgrade = (socket, status, message) => {
 
 export const createVoiceScriptureService = (httpServer) => {
   const downstreamServer = new WebSocketServer({ noServer: true, maxPayload: MAX_VOICE_FRAME_BYTES })
+  const pendingTokens = new Set()
   let activeSession = null
   let connecting = false
 
@@ -64,7 +66,11 @@ export const createVoiceScriptureService = (httpServer) => {
       rejectUpgrade(socket, '503 Service Unavailable', 'Voice Scripture unavailable')
       return
     }
-    if (!hasAllowedRequestOrigin(request) || !hasValidBasicAuth(request)) {
+    const token = url.searchParams.get('token')
+    const isValidToken = Boolean(token && pendingTokens.has(token))
+    if (isValidToken) pendingTokens.delete(token)
+
+    if (!hasAllowedRequestOrigin(request) || (!isValidToken && !hasValidBasicAuth(request))) {
       rejectUpgrade(socket, '401 Unauthorized', 'Authentication required')
       return
     }
@@ -114,7 +120,16 @@ export const createVoiceScriptureService = (httpServer) => {
   httpServer.on('upgrade', handleUpgrade)
 
   return {
-    getStatus: getVoiceScriptureStatus,
+    getStatus: async ({ fetchImpl = fetch } = {}) => {
+      const status = await getVoiceScriptureStatus({ fetchImpl })
+      if (status.available) {
+        const token = crypto.randomUUID()
+        pendingTokens.add(token)
+        setTimeout(() => pendingTokens.delete(token), 10_000)
+        status.token = token
+      }
+      return status
+    },
     close: () => {
       httpServer.off('upgrade', handleUpgrade)
       activeSession?.client.close()

@@ -15,6 +15,9 @@ Control-only:
 - `src/components/control/MediaControls.tsx`: video playback controls.
 - `src/components/control/SeferControlPanel.tsx` and `SeferControlPanelMini.tsx`: sacred-text controls.
 - `src/components/control/ScriptureRangeEditor.tsx`: control-side scripture reference range selector.
+- `src/features/voiceScripture/VoiceScriptureControl.tsx`: optional Control-only
+  PCM/STT lifecycle and transient candidate UI. It receives a plain
+  `MediaStreamTrack`; it does not own LiveKit or projection state.
 - Proposed Live Audio controls: `LiveAudioControlPanel.tsx`,
   `LiveAudioControlAuthorization.tsx`, `LiveAudioQueue.tsx`,
   `LiveAudioSpeakers.tsx`, `LiveAudioParticipantRow.tsx`, and
@@ -157,6 +160,8 @@ Library/sync/validation:
   canonical `SYNC_STATE`.
 - `src/utils/quizUtils.ts`: quiz parsing/scoring/subslides.
 - `src/utils/scriptureLookup.ts`, `scriptureParser.ts`, `metadataCache.ts`: sacred text data.
+- `src/features/voiceScripture/voiceScriptureParser.ts`: pure V1/V2 spoken
+  reference parsing and metadata validation; no React, STT, or LiveKit imports.
 - `server/timelineManager.mjs`: backend-owned audio timeline state; keep separate from presenter `currentState`.
 - `server/ws-server.mjs`: WebSocket transport for the backend-owned audio timeline.
 - `server/authUtils.mjs`: backend basic authentication helpers.

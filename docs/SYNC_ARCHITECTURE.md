@@ -327,6 +327,16 @@ subscription, exposes remote audio tracks, and opens the microphone only when
 `publishMicrophone()` is called after an explicit user action. `startRemoteAudio()`
 is exposed so UI can keep remote playback behind a browser/user gesture.
 
+Voice Scripture has its own optional boundary. With
+`VITE_SEFER_VOICE_SCRIPTURE_BUILD=false`, its dynamic Control chunk is absent;
+with `SEFER_VOICE_SCRIPTURE_ENABLED=false`, status is disabled and the dedicated
+socket refuses work. A selected Live Audio `MediaStreamTrack` is converted to
+PCM16 in Control and sent through authenticated `/voice-scripture/ws` to local
+STT. Only final text reaches the pure parser. PCM, partials, transcripts, and
+candidates never enter `/ws`, `SYNC_STATE`, `REMOTE_COMMAND`, presentation
+state, Presenter, or Audience. After `Mostrar`, the resulting hydrated verse is
+sent through the existing scripture navigation/sync path.
+
 Fase 5.11 hardens long sessions and mobile networks. `useLiveAudio.ts` refreshes
 tokens through `POST /api/livekit/refresh-token` with a two-minute safety margin
 and a one-use rotating `refreshCredential`,

@@ -5,6 +5,8 @@ import { loadEnvFile } from 'node:process';
 import Papa from 'papaparse';
 import { resolveSeferDataDir } from '../server/data-directory.mjs';
 
+
+
 export const toSafeBookFileName = (bookName) =>
   bookName
     .normalize('NFD')
@@ -35,6 +37,18 @@ export const generateVerses = () => {
   const outputDir = join(dataDir, 'public');
   const booksDir = join(outputDir, 'books');
   const hashPath = join(dataDir, 'config', 'verses-source.sha256');
+  const aliasesPath = join(dataDir, 'config', 'voice_aliases.json');
+  
+  let extraAliases = {};
+  if (existsSync(aliasesPath)) {
+    try {
+      // ponytail: parseo simple sin schema, asume que el usuario escribió bien un Record<string, string[]>
+      extraAliases = JSON.parse(readFileSync(aliasesPath, 'utf8'));
+    } catch (e) {
+      console.warn(`Error leyendo voice_aliases.json:`, e.message);
+    }
+  }
+
   const source = readFileSync(tsvPath);
   const sourceHash = createHash('sha256').update(source).digest('hex');
   if (
@@ -93,7 +107,8 @@ export const generateVerses = () => {
     books.get(bookEs).push(row);
 
     if (!metadata[bookEs]) {
-      metadata[bookEs] = { bookHeb, bookAbbrevEs, safeFile: safeName, chapters: {} };
+      const voiceAliases = extraAliases[bookEs] || [];
+      metadata[bookEs] = { bookHeb, bookAbbrevEs, safeFile: safeName, voiceAliases, chapters: {} };
     }
 
     if (!metadata[bookEs].chapters[chapter]) {

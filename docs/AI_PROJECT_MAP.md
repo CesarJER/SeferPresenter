@@ -215,6 +215,16 @@ Start with:
 - `src/components/control/SeferControlPanel.tsx`
 - `src/components/presenter/SeferReaderScreen.tsx`
 
+For optional spoken-reference detection also read:
+
+- `src/features/voiceScripture/voiceScriptureParser.ts`
+- `src/features/voiceScripture/VoiceScriptureControl.tsx`
+- `server/voice-scripture-server.mjs`
+- `docs/VOICE_SCRIPTURE.md`
+
+Voice candidates stay local to Control and reach projection only through the
+existing `onProjectScripture` path after operator confirmation.
+
 Do not edit generated operator corpus files by hand; they live under
 `SEFER_DATA_DIR/public/` and change only through the explicit generator.
 

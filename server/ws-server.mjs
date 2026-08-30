@@ -458,9 +458,17 @@ const resetWsServerStateForTests = () => {
 
 const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) => {
   const wss = new WebSocketServer({
-    server: httpServer,
-    path: '/ws',
+    noServer: true,
     maxPayload: WS_MAX_PAYLOAD_BYTES,
+  })
+
+  httpServer.on('upgrade', (request, socket, head) => {
+    const url = new URL(request.url || '/', `http://${request.headers.host || 'localhost'}`)
+    if (url.pathname === '/ws') {
+      wss.handleUpgrade(request, socket, head, (ws) => {
+        wss.emit('connection', ws, request)
+      })
+    }
   })
 
   const broadcast = (message, filter) => {

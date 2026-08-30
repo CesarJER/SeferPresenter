@@ -48,6 +48,7 @@ interface UseLiveAudioResult {
   retryAudio: () => Promise<void>;
   disconnect: () => void;
   microphoneDiagnostics: LiveAudioMicrophoneDiagnostics;
+  localMicrophoneTrack: MediaStreamTrack | null;
 }
 
 const TOKEN_REFRESH_MARGIN_MS = 2 * 60_000;
@@ -879,6 +880,7 @@ export const useLiveAudio = ({
     retryAudio,
     disconnect,
     microphoneDiagnostics,
+    localMicrophoneTrack: localAudioTrackRef.current?.mediaStreamTrack || null,
   }), [
     availability,
     disconnect,
@@ -894,5 +896,6 @@ export const useLiveAudio = ({
     state,
     unpublishMicrophone,
     microphoneDiagnostics,
+    localAudioTrackRef.current?.mediaStreamTrack,
   ]);
 };

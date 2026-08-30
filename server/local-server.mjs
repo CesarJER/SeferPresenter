@@ -742,6 +742,16 @@ const invalidateAudienceStreams = () => {
 }
 
 const handleApi = async (req, res, url) => {
+  if (url.pathname === '/api/log-error' && req.method === 'POST') {
+    let body = ''
+    req.on('data', chunk => { body += chunk.toString() })
+    req.on('end', () => {
+      console.log(`[CLIENT ERROR LOG]`, body)
+      sendJson(res, 200, { success: true })
+    })
+    return true
+  }
+
   if (url.pathname === '/api/voice-scripture/status' && req.method === 'GET') {
     sendJson(res, 200, await voiceScriptureService.getStatus())
     return true
@@ -1252,7 +1262,7 @@ const handleStatic = (req, res, url) => {
 }
 
 const server = http.createServer(async (req, res) => {
-  res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' ws: wss: https:; font-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'")
+  res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' blob:; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' ws: wss: https:; font-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'")
   res.setHeader('X-Content-Type-Options', 'nosniff')
   res.setHeader('Referrer-Policy', 'same-origin')
   const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`)
@@ -1275,6 +1285,9 @@ const server = http.createServer(async (req, res) => {
   sendJson(res, 404, { error: 'Static file not found' })
 })
 
+server.on('upgrade', (req, socket) => {
+  console.log(`[GLOBAL UPGRADE] Received upgrade request for URL: ${req.url}`)
+})
 const voiceScriptureService = createVoiceScriptureService(server)
 
 const handleWsMessageFromClient = (msg, meta) => {

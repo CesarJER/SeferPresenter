@@ -69,6 +69,9 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
 - `MediaControls` - `src/components/control/MediaControls.tsx`: video controls.
 - `SeferControlPanel` - `src/components/control/SeferControlPanel.tsx`: full Sefer control panel.
 - `SeferControlPanelMini` - `src/components/control/SeferControlPanelMini.tsx`: compact scripture controls.
+- `VoiceScriptureControl` - `src/features/voiceScripture/VoiceScriptureControl.tsx`:
+  optional Control-only AudioWorklet, STT final-event handling, candidate and
+  explicit `Mostrar` workflow.
 - [ScriptureRangeEditor](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/components/control/ScriptureRangeEditor.tsx) - `src/components/control/ScriptureRangeEditor.tsx`: control-side range editor used for slide reference selection.
 - `PresenterScreen` - `src/components/presenter/PresenterScreen.tsx`: projected slide/video/quiz rendering.
 - `SeferReaderScreen` - `src/components/presenter/SeferReaderScreen.tsx`: projected scripture reader.
@@ -257,6 +260,12 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
 - `loadStoredPresenterState` - `src/utils/normalizePresentation.ts`: validated localStorage state loading.
 - `getMetadata` / `loadBookData` - `src/utils/metadataCache.ts`: scripture metadata/book loading and caching.
 - `parseVerses` - `src/utils/scriptureParser.ts`: TSV scripture parsing.
+- `parseVoiceScriptureCommand` -
+  `src/features/voiceScripture/voiceScriptureParser.ts`: pure V1/V2 spoken
+  reference parser with corpus metadata validation.
+- `createVoiceScriptureService` / `getVoiceScriptureStatus` -
+  `server/voice-scripture-server.mjs`: protected single-session STT readiness
+  and realtime WebSocket proxy without transcript logging.
 - `getScriptureChapterVerses` / `materializeScriptureSlides` - `src/utils/scriptureLookup.ts`: scripture lookup and slide materialization.
 - `validateScriptureSpec` / `auditQuickScriptureReferences` / `auditSlideScriptureReferences` - `src/utils/scriptureLookup.ts`: checks quiz and Sefer/Tanaj references against generated metadata before editor conversion or persistence.
 - `scripts/generate-verses.js`: explicit conversion from `SEFER_VERSES_SOURCE`

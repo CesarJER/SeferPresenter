@@ -4,10 +4,10 @@ import { parseVoiceScriptureCommand } from '../src/features/voiceScripture/voice
 
 const chapter = (count: number) => Array.from({ length: count }, (_, index) => String(index + 1));
 const metadata: AppMetadata = {
-  Génesis: { bookHeb: 'בראשית', bookAbbrevEs: 'Gn', safeFile: 'Genesis', chapters: { '1': chapter(31), '2': chapter(25) } },
-  Deuteronomio: { bookHeb: 'דברים', bookAbbrevEs: 'Dt', safeFile: 'Deuteronomio', chapters: { '6': chapter(25), '7': chapter(26) } },
-  Isaías: { bookHeb: 'ישעיהו', bookAbbrevEs: 'Is', safeFile: 'Isaias', chapters: { '53': chapter(12) } },
-  Salmos: { bookHeb: 'תהלים', bookAbbrevEs: 'Sal', safeFile: 'Salmos', chapters: { '150': chapter(6) } },
+  Génesis: { bookHeb: 'בראשית', bookAbbrevEs: 'Gn', safeFile: 'Genesis', voiceAliases: ['genesis', 'gn', 'bereshit', 'bereshis'], chapters: { '1': chapter(31), '2': chapter(25) } },
+  Deuteronomio: { bookHeb: 'דברים', bookAbbrevEs: 'Dt', safeFile: 'Deuteronomio', voiceAliases: ['deuteronomio', 'dt', 'devarim', 'de barim', 'devarin'], chapters: { '6': chapter(25), '7': chapter(26) } },
+  Isaías: { bookHeb: 'ישעיהו', bookAbbrevEs: 'Is', safeFile: 'Isaias', voiceAliases: ['isaias', 'is', 'yeshayahu'], chapters: { '53': chapter(12) } },
+  Salmos: { bookHeb: 'תהלים', bookAbbrevEs: 'Sal', safeFile: 'Salmos', voiceAliases: ['salmos', 'salmo', 'sal', 'tehilim'], chapters: { '150': chapter(6) } },
 };
 
 const compact = (text: string, context = null) => {

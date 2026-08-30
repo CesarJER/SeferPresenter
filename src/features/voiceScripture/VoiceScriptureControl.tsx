@@ -169,14 +169,35 @@ export default function VoiceScriptureControl({ tracks, scriptureState, onProjec
     setListeningState('connecting');
 
     try {
+      const res = await fetch('/api/voice-scripture/status', { headers: { Accept: 'application/json' } });
+      const data = await res.json() as { available: boolean; token?: string };
+      if (!data.available) throw new Error('STT unavailable');
+
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const socket = new WebSocket(`${protocol}//${window.location.host}/voice-scripture/ws`);
+      const wsUrl = new URL(`${protocol}//${window.location.host}/voice-scripture/ws`);
+      if (data.token) wsUrl.searchParams.set('token', data.token);
+
+      const wsUrlStr = wsUrl.toString();
+      console.log('[VoiceScripture] Attempting WebSocket connection to:', wsUrlStr);
+      const socket = new WebSocket(wsUrlStr);
       socket.binaryType = 'arraybuffer';
       socketRef.current = socket;
 
       await new Promise<void>((resolve, reject) => {
         socket.addEventListener('open', () => resolve(), { once: true });
-        socket.addEventListener('error', () => reject(new Error('STT unavailable')), { once: true });
+        socket.addEventListener('error', (e) => {
+          console.error('[VoiceScripture] WebSocket Error Event', e);
+          fetch('/api/log-error', { 
+            method: 'POST', 
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              context: 'VoiceScripture WebSocket',
+              wsUrl: wsUrlStr,
+              errorMessage: 'WebSocket error event fired'
+            })
+          }).catch(() => {});
+          reject(new Error('STT unavailable'));
+        }, { once: true });
       });
       socket.send(JSON.stringify({
         type: 'session.update',

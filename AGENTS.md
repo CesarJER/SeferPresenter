@@ -19,6 +19,8 @@ only the owner files for the task.
 - `docs/COMPONENT_OWNERSHIP.md`: component and state ownership rules.
 - `docs/CHANGE_GUIDE.md`: implementation checklists.
 - `docs/SYNC_ARCHITECTURE.md`: sync and backend-ready behavior.
+- `docs/VOICE_SCRIPTURE.md`: optional spoken-reference parser, STT boundary,
+  privacy, deployment, and benchmark status.
 - `docs/SYMBOL_INDEX.md`: navigation-critical symbols.
 - `docs/CODEBASE_MEMORY.md`: codebase-memory-mcp knowledge graph integration and query guidelines.
 - `docs/ai-navigation.md`: condensed overview kept for quick reading.
@@ -31,6 +33,9 @@ only the owner files for the task.
 - Audience mode is read-only for projection controls. Audience quiz answers are separate from presenter demo/correction state.
 - Validate and normalize anything loaded from APIs, localStorage, JSON imports, or sync messages.
 - Keep media/display telemetry lightweight. Avoid pushing high-frequency or large payloads through full state sync.
+- Keep Voice Scripture optional and Control-owned. PCM/transcripts use only its
+  protected realtime boundary; candidates enter existing scripture navigation
+  only after operator confirmation.
 - Use neutral wording for public-facing product text; do not add public claims about the private community identity.
 - Keep TypeScript/React explicit. Avoid implicit `any` where practical.
 - Avoid broad rewrites. Make the smallest change that fits the existing ownership boundaries.

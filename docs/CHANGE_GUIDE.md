@@ -133,6 +133,20 @@ Use these checklists before implementing future tasks.
   Live Audio entry points, ownership, routing, or protocol shape changes.
 - **Fase 5 verification checklist:** refer to the manual verification checklist in `README.md` for full operational tests (token refresh, E2E moderation, cryptography, privacy, and modular build requirements). Ensure no `console.log` leaks ciphertext, alias, or keys, and no persistent nominal tracking exists.
 
+## When Editing Voice Scripture
+
+- Preserve separate build/runtime flags and verify both build variants.
+- Keep parser rules pure and conservative; validate endpoints against metadata.
+- Keep transcript/candidate state local to Control and project only through the
+  existing scripture navigation callback after `Mostrar`.
+- Accept a plain `MediaStreamTrack`; keep LiveKit bridging outside the parser and
+  audio processor.
+- Proxy realtime PCM through `/voice-scripture/ws`, never through full sync.
+- Require Control Basic Auth, same-origin upgrade, one active session, and a
+  server-side upstream key. Never log or persist audio/transcripts.
+- Update `docs/VOICE_SCRIPTURE.md` when protocol, aliases, deployment, privacy,
+  or benchmark status changes.
+
 ## When Modifying Active Participant Visibility
 
 - Keep the readable alias list E2E encrypted. The server may store technical
