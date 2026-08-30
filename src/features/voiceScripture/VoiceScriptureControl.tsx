@@ -101,6 +101,7 @@ export default function VoiceScriptureControl({ tracks, scriptureState, onProjec
   const scriptureStateRef = useRef(scriptureState);
   const socketRef = useRef<WebSocket | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
+  const transcriptRef = useRef<string>('');
 
   useEffect(() => {
     scriptureStateRef.current = scriptureState;
@@ -213,15 +214,34 @@ export default function VoiceScriptureControl({ tracks, scriptureState, onProjec
         },
       }));
 
+      transcriptRef.current = '';
       socket.addEventListener('message', (event) => {
         if (typeof event.data !== 'string') return;
         try {
-          const message = JSON.parse(event.data) as { type?: string; transcript?: string };
+          const message = JSON.parse(event.data) as { type?: string; transcript?: string; delta?: string };
           if (
             message.type === 'conversation.item.input_audio_transcription.completed' &&
             typeof message.transcript === 'string'
           ) {
-            handleFinalTranscript(message.transcript);
+            transcriptRef.current = message.transcript;
+            handleFinalTranscript(transcriptRef.current);
+          } else if (
+            message.type === 'conversation.item.input_audio_transcription.delta' &&
+            typeof message.delta === 'string'
+          ) {
+            transcriptRef.current += message.delta;
+            if (transcriptRef.current.length > 200) {
+              transcriptRef.current = transcriptRef.current.slice(-200);
+            }
+            if (message.delta.trim().length > 0) {
+              fetch('/api/log-error', { 
+                method: 'POST', 
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ context: 'Voz a Texto', data: transcriptRef.current })
+              }).catch(() => {});
+            }
+            
+            handleFinalTranscript(transcriptRef.current);
           } else if (message.type === 'error') {
             setListeningState('error');
           }
@@ -266,11 +286,13 @@ export default function VoiceScriptureControl({ tracks, scriptureState, onProjec
   }, [availability, handleFinalTranscript, selectedTrackId, tracks]);
 
   const showCandidate = useCallback(async () => {
-    if (!candidate) return;
-    const state = await hydrateCandidate(candidate);
-    if (state) {
-      onProject(state, 'navigate');
-      setCandidate(null);
+    if (candidate) {
+      const state = await hydrateCandidate(candidate);
+      if (state) {
+        onProject(state, 'navigate');
+        setCandidate(null);
+        transcriptRef.current = '';
+      }
     }
   }, [candidate, onProject]);
 

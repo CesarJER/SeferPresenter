@@ -472,7 +472,13 @@ function ControlApp() {
           setAppMode(mode);
           emitCommand({ command: 'TOGGLE_APP_MODE', mode });
         }}
-        onProjectScripture={(state) => emitCommand({ command: 'SCRIPTURE_PROJECT', state, navCommand: 'navigate' })}
+        onProjectScripture={(state) => {
+          if (appMode !== 'seferManual') {
+            setAppMode('seferManual');
+            emitCommand({ command: 'TOGGLE_APP_MODE', mode: 'seferManual' });
+          }
+          emitCommand({ command: 'SCRIPTURE_PROJECT', state, navCommand: 'navigate' });
+        }}
         onAddScriptureSlide={handleAddScriptureSlide}
         onBoundaryReached={(dir) => emitCommand({ command: 'SCRIPTURE_BOUNDARY', direction: dir })}
         quizSubslides={quizSubslides}
