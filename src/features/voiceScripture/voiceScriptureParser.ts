@@ -142,6 +142,28 @@ const makeCandidate = (
   };
 };
 
+const parseCompactNumericReference = (
+  commandTokens: string[],
+  metadata: AppMetadata,
+  book: string,
+): VoiceScriptureCandidate | null => {
+  if (commandTokens.length !== 1 || !/^\d{2,4}$/.test(commandTokens[0])) return null;
+
+  const compact = commandTokens[0];
+  const candidates = Array.from({ length: compact.length - 1 }, (_, index) => {
+    const splitAt = index + 1;
+    if (compact[0] === '0' || compact[splitAt] === '0') return null;
+    return makeCandidate(
+      metadata,
+      book,
+      Number(compact.slice(0, splitAt)),
+      Number(compact.slice(splitAt)),
+    );
+  }).filter((candidate): candidate is VoiceScriptureCandidate => candidate !== null);
+
+  return candidates.length === 1 ? candidates[0] : null;
+};
+
 const resolveContextBook = (context: VoiceScriptureContext, metadata: AppMetadata): string | null => {
   const wanted = fold(context.book);
   return Object.keys(metadata).find((book) => (
@@ -228,6 +250,8 @@ export const parseVoiceScriptureCommand = (
   const chapter = numbers[0];
   const verseStart = numbers[1] ?? 1;
   const verseEnd = numbers[2] ?? verseStart;
-  return makeCandidate(metadata, bookMatch.book, chapter, verseStart, verseEnd);
+  const candidate = makeCandidate(metadata, bookMatch.book, chapter, verseStart, verseEnd);
+  if (candidate || numbers.length !== 1) return candidate;
+  return parseCompactNumericReference(commandTokens, metadata, bookMatch.book);
 };
 

@@ -262,7 +262,8 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
 - `parseVerses` - `src/utils/scriptureParser.ts`: TSV scripture parsing.
 - `parseVoiceScriptureCommand` -
   `src/features/voiceScripture/voiceScriptureParser.ts`: pure V1/V2 spoken
-  reference parser with corpus metadata validation.
+  reference parser with corpus metadata validation and conservative handling
+  of uniquely resolvable compact chapter/verse digits.
 - `createVoiceScriptureService` / `getVoiceScriptureStatus` -
   `server/voice-scripture-server.mjs`: protected single-session STT readiness
   and realtime WebSocket proxy without transcript logging.
