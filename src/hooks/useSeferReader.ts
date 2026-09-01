@@ -113,12 +113,12 @@ export function useSeferReader(): UseSeferReaderResult {
         setMetadata(meta);
         metadataRef.current = meta;
         const books = Object.keys(meta);
-        if (books.length > 0 && !selectedBook) {
-          setSelectedBookState(books[0]);
+        if (books.length > 0) {
+          setSelectedBookState(prev => prev || books[0]);
         }
       })
       .catch((e) => console.error('SeferReader: error loading metadata', e));
-  }, [selectedBook]);
+  }, []);
 
   // ------------------------------------------------------------------
   // Load book data when selectedBook changes
