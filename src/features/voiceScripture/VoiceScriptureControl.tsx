@@ -18,6 +18,7 @@ interface VoiceScriptureControlProps {
   tracks: VoiceTrack[];
   scriptureState: ScriptureNavState | null;
   onProject: (state: SeferReaderState, command?: 'navigate') => void;
+  onStateChange?: (state: 'idle' | 'listening-own' | 'listening-other') => void;
 }
 
 type Availability = 'checking' | 'disabled' | 'unavailable' | 'ready';
@@ -92,15 +93,25 @@ const candidateLabel = (candidate: VoiceScriptureCandidate) => {
   return `${candidate.bookAbbrev} ${candidate.chapter}:${range}`;
 };
 
+const CONTEXTUAL_PHRASES = [
+  'capítulo', 'versículo', 'siguiente versículo', 'versículo anterior',
+  'siguiente capítulo', 'capítulo anterior', 'ahora el', 'volvamos al', 'continúa hasta',
+  'uno', 'dos', 'tres', 'cuatro', 'cinco', 'seis', 'siete', 'ocho', 'nueve', 'diez',
+  'once', 'doce', 'trece', 'catorce', 'quince', 'dieciséis', 'diecisiete', 'dieciocho', 'diecinueve', 'veinte',
+  'veintiuno', 'veintidós', 'veintitrés', 'veinticuatro', 'veinticinco', 'veintiséis', 'veintisiete', 'veintiocho', 'veintinueve',
+  'treinta', 'cuarenta', 'cincuenta', 'sesenta', 'setenta', 'ochenta', 'noventa', 'cien', 'ciento'
+];
+
 const makeSpeechContextPhrases = (metadata: AppMetadata) => {
   const entries = Object.entries(metadata);
   return [...new Set([
+    ...CONTEXTUAL_PHRASES,
     ...entries.flatMap(([, details]) => details.voiceAliases ?? []),
-    ...entries.flatMap(([book, details]) => [book, details.bookAbbrevEs]),
+    ...entries.flatMap(([book]) => [book]),
   ].map((phrase) => phrase.trim()).filter((phrase) => phrase.length > 0 && phrase.length <= 80))].slice(0, 256);
 };
 
-export default function VoiceScriptureControl({ tracks, scriptureState, onProject }: VoiceScriptureControlProps) {
+export default function VoiceScriptureControl({ tracks, scriptureState, onProject, onStateChange }: VoiceScriptureControlProps) {
   const [availability, setAvailability] = useState<Availability>('checking');
   const [listeningState, setListeningState] = useState<ListeningState>('idle');
   const [selectedTrackId, setSelectedTrackId] = useState('');
@@ -130,6 +141,16 @@ export default function VoiceScriptureControl({ tracks, scriptureState, onProjec
     });
     return () => { cancelled = true; };
   }, []);
+
+  useEffect(() => {
+    if (onStateChange) {
+      if (listeningState === 'listening' || listeningState === 'connecting') {
+        onStateChange(selectedTrackId === 'local-mic' ? 'listening-own' : 'listening-other');
+      } else {
+        onStateChange('idle');
+      }
+    }
+  }, [listeningState, selectedTrackId, onStateChange]);
 
   useEffect(() => {
     if (tracks.length === 1) setSelectedTrackId(tracks[0].id);
@@ -186,7 +207,10 @@ export default function VoiceScriptureControl({ tracks, scriptureState, onProjec
 
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       const wsUrl = new URL(`${protocol}//${window.location.host}/voice-scripture/ws`);
-      const socket = new WebSocket(wsUrl, ['voice-scripture', data.token]);
+      if (data.token) wsUrl.searchParams.set('token', data.token);
+      
+      const wsUrlStr = wsUrl.toString();
+      const socket = new WebSocket(wsUrlStr);
       socket.binaryType = 'arraybuffer';
       socketRef.current = socket;
 
@@ -284,40 +308,86 @@ export default function VoiceScriptureControl({ tracks, scriptureState, onProjec
 
   if (availability === 'disabled') return null;
 
+  const isListening = listeningState === 'listening' || listeningState === 'connecting';
+  const isOwnMic = selectedTrackId === 'local-mic';
+
   return (
-    <section className="rounded border border-cyan-900/70 bg-cyan-950/20 p-2 text-xs text-gray-200" aria-label="Navegación de referencias por voz">
-      <div className="flex items-center justify-between gap-2">
-        <span className="font-semibold">Referencias por voz</span>
-        <span className="text-[11px] text-gray-400">{statusText}</span>
-      </div>
-      <div className="mt-2 flex gap-2">
-        <select
-          value={selectedTrackId}
-          onChange={(event) => setSelectedTrackId(event.target.value)}
-          disabled={listeningState === 'listening'}
-          className="min-w-0 flex-1 rounded border border-gray-700 bg-gray-900 px-2 py-1"
-          aria-label="Fuente de voz"
-        >
-          <option value="">Selecciona una voz</option>
-          {tracks.map((track) => <option key={track.id} value={track.id}>{track.label}</option>)}
-        </select>
-        <button
-          type="button"
-          onClick={listeningState === 'listening' || listeningState === 'connecting' ? stop : start}
-          disabled={availability !== 'ready' || (!selectedTrackId && listeningState === 'idle')}
-          className="rounded bg-cyan-800 px-3 py-1 font-semibold text-white disabled:opacity-40"
-        >
-          {listeningState === 'listening' || listeningState === 'connecting' ? 'Detener' : 'Activar'}
-        </button>
-      </div>
-      {candidate && (
-        <div className="mt-2 flex items-center justify-between gap-2 rounded border border-cyan-700 bg-gray-950 p-2">
-          <span aria-live="polite">🎙 {candidateLabel(candidate)}</span>
-          <button type="button" onClick={() => void showCandidate()} className="rounded bg-emerald-700 px-3 py-1 font-semibold text-white">
-            Mostrar
+    <>
+      <button
+        type="button"
+        popoverTarget="voice-scripture-menu"
+        className={`flex items-center justify-center p-1.5 text-xs font-semibold rounded border transition-all cursor-pointer ${
+          isListening 
+            ? isOwnMic
+              ? 'bg-blue-600 border-blue-500 text-white'
+              : 'bg-gray-800 border-blue-500 text-blue-400'
+            : 'bg-gray-800 border-gray-700 hover:bg-gray-700 text-gray-300 hover:text-white'
+        }`}
+        title="Navegación de referencias por voz"
+        aria-label="Abrir menú de referencias por voz"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
+      </button>
+
+      <div 
+        id="voice-scripture-menu" 
+        popover="auto" 
+        className="rounded-lg border border-cyan-900/70 bg-cyan-950/90 p-3 text-xs text-gray-200 shadow-xl m-2 ml-auto"
+        style={{ top: '60px', right: '10px', position: 'absolute' }}
+      >
+        <div className="flex flex-col gap-3 min-w-[250px]">
+          <div className="flex items-center justify-between gap-4 border-b border-cyan-800 pb-2">
+            <span className="font-bold flex items-center gap-1.5">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
+              Referencias por Voz
+            </span>
+            <span className="text-[10px] text-gray-400 font-medium bg-gray-900 px-1.5 py-0.5 rounded">{statusText}</span>
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <label className="text-[10px] uppercase text-gray-400 font-bold tracking-wider">Fuente de audio</label>
+            <select
+              value={selectedTrackId}
+              onChange={(event) => setSelectedTrackId(event.target.value)}
+              disabled={isListening}
+              className="min-w-0 w-full rounded border border-gray-700 bg-gray-900 px-2 py-1.5 focus:border-cyan-600 focus:ring-1 focus:ring-cyan-600 outline-none transition-all"
+              aria-label="Fuente de voz"
+            >
+              <option value="">-- Selecciona una voz --</option>
+              {tracks.map((track) => <option key={track.id} value={track.id}>{track.label}</option>)}
+            </select>
+          </div>
+
+          <button
+            type="button"
+            onClick={isListening ? stop : start}
+            disabled={availability !== 'ready' || (!selectedTrackId && !isListening)}
+            className={`w-full rounded py-2 font-bold transition-all ${
+              isListening
+                ? 'bg-red-900 hover:bg-red-800 text-red-100 border border-red-700'
+                : 'bg-cyan-800 hover:bg-cyan-700 text-white border border-cyan-600'
+            } disabled:opacity-40 disabled:cursor-not-allowed`}
+          >
+            {isListening ? 'Detener STT' : 'Iniciar STT'}
           </button>
+
+          {candidate && (
+            <div className="mt-1 flex items-center justify-between gap-2 rounded border border-cyan-700 bg-gray-900 p-2 animate-in slide-in-from-top-2 fade-in">
+              <span aria-live="polite" className="font-semibold text-cyan-300 flex items-center gap-1.5">
+                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/></svg>
+                {candidateLabel(candidate)}
+              </span>
+              <button 
+                type="button" 
+                onClick={() => void showCandidate()} 
+                className="rounded bg-emerald-700 hover:bg-emerald-600 px-2.5 py-1 text-[11px] font-bold text-white transition-colors"
+              >
+                Cargar
+              </button>
+            </div>
+          )}
         </div>
-      )}
-    </section>
+      </div>
+    </>
   );
 }

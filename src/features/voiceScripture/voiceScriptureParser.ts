@@ -217,8 +217,9 @@ const parseContextual = (
   if (/^capitulo anterior$/.test(normalized)) return moveRelative(-1, 'chapter', context, metadata);
 
   const numbers = extractNumbers(tokens);
-  if (/^(ahora )?capitulo /.test(normalized) && numbers.length === 1) {
-    return makeCandidate(metadata, book, numbers[0], 1);
+  if (/^(ahora )?capitulo /.test(normalized)) {
+    if (numbers.length === 2) return makeCandidate(metadata, book, numbers[0], numbers[1]);
+    return null;
   }
   if (/^(versiculo|ahora el|volvamos al) /.test(normalized) && numbers.length === 1) {
     return makeCandidate(metadata, book, context.chapter, numbers[0]);
@@ -246,9 +247,9 @@ export const parseVoiceScriptureCommand = (
 
   const commandTokens = tokens.slice(bookMatch.start + bookMatch.length);
   const numbers = extractNumbers(commandTokens);
-  if (numbers.length < 1 || numbers.length > 3) return null;
+  if (numbers.length < 2 || numbers.length > 3) return null;
   const chapter = numbers[0];
-  const verseStart = numbers[1] ?? 1;
+  const verseStart = numbers[1];
   const verseEnd = numbers[2] ?? verseStart;
   const candidate = makeCandidate(metadata, bookMatch.book, chapter, verseStart, verseEnd);
   if (candidate || numbers.length !== 1) return candidate;
