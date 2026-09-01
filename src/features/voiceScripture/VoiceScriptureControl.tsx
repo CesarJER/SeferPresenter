@@ -92,6 +92,14 @@ const candidateLabel = (candidate: VoiceScriptureCandidate) => {
   return `${candidate.bookAbbrev} ${candidate.chapter}:${range}`;
 };
 
+const makeSpeechContextPhrases = (metadata: AppMetadata) => {
+  const entries = Object.entries(metadata);
+  return [...new Set([
+    ...entries.flatMap(([, details]) => details.voiceAliases ?? []),
+    ...entries.flatMap(([book, details]) => [book, details.bookAbbrevEs]),
+  ].map((phrase) => phrase.trim()).filter((phrase) => phrase.length > 0 && phrase.length <= 80))].slice(0, 256);
+};
+
 export default function VoiceScriptureControl({ tracks, scriptureState, onProject }: VoiceScriptureControlProps) {
   const [availability, setAvailability] = useState<Availability>('checking');
   const [listeningState, setListeningState] = useState<ListeningState>('idle');
@@ -101,7 +109,6 @@ export default function VoiceScriptureControl({ tracks, scriptureState, onProjec
   const scriptureStateRef = useRef(scriptureState);
   const socketRef = useRef<WebSocket | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
-  const transcriptRef = useRef<string>('');
 
   useEffect(() => {
     scriptureStateRef.current = scriptureState;
@@ -170,33 +177,22 @@ export default function VoiceScriptureControl({ tracks, scriptureState, onProjec
     setListeningState('connecting');
 
     try {
-      const res = await fetch('/api/voice-scripture/status', { headers: { Accept: 'application/json' } });
+      const res = await fetch('/api/voice-scripture/token', {
+        method: 'POST',
+        headers: { Accept: 'application/json' },
+      });
       const data = await res.json() as { available: boolean; token?: string };
-      if (!data.available) throw new Error('STT unavailable');
+      if (!res.ok || !data.available || !data.token) throw new Error('STT unavailable');
 
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       const wsUrl = new URL(`${protocol}//${window.location.host}/voice-scripture/ws`);
-      if (data.token) wsUrl.searchParams.set('token', data.token);
-
-      const wsUrlStr = wsUrl.toString();
-      console.log('[VoiceScripture] Attempting WebSocket connection to:', wsUrlStr);
-      const socket = new WebSocket(wsUrlStr);
+      const socket = new WebSocket(wsUrl, ['voice-scripture', data.token]);
       socket.binaryType = 'arraybuffer';
       socketRef.current = socket;
 
       await new Promise<void>((resolve, reject) => {
         socket.addEventListener('open', () => resolve(), { once: true });
-        socket.addEventListener('error', (e) => {
-          console.error('[VoiceScripture] WebSocket Error Event', e);
-          fetch('/api/log-error', { 
-            method: 'POST', 
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              context: 'VoiceScripture WebSocket',
-              wsUrl: wsUrlStr,
-              errorMessage: 'WebSocket error event fired'
-            })
-          }).catch(() => {});
+        socket.addEventListener('error', () => {
           reject(new Error('STT unavailable'));
         }, { once: true });
       });
@@ -208,13 +204,12 @@ export default function VoiceScriptureControl({ tracks, scriptureState, onProjec
           automatic_punctuation: true,
           endpointing_ms: 800,
           speech_contexts: [{
-            phrases: ['Bereshit', 'Shemot', 'Vayikra', 'Bamidbar', 'Devarim', 'Yeshayahu'],
+            phrases: makeSpeechContextPhrases(metadataRef.current),
             boost: 2.5,
           }],
         },
       }));
 
-      transcriptRef.current = '';
       socket.addEventListener('message', (event) => {
         if (typeof event.data !== 'string') return;
         try {
@@ -223,25 +218,7 @@ export default function VoiceScriptureControl({ tracks, scriptureState, onProjec
             message.type === 'conversation.item.input_audio_transcription.completed' &&
             typeof message.transcript === 'string'
           ) {
-            transcriptRef.current = message.transcript;
-            handleFinalTranscript(transcriptRef.current);
-          } else if (
-            message.type === 'conversation.item.input_audio_transcription.delta' &&
-            typeof message.delta === 'string'
-          ) {
-            transcriptRef.current += message.delta;
-            if (transcriptRef.current.length > 200) {
-              transcriptRef.current = transcriptRef.current.slice(-200);
-            }
-            if (message.delta.trim().length > 0) {
-              fetch('/api/log-error', { 
-                method: 'POST', 
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ context: 'Voz a Texto', data: transcriptRef.current })
-              }).catch(() => {});
-            }
-            
-            handleFinalTranscript(transcriptRef.current);
+            handleFinalTranscript(message.transcript);
           } else if (message.type === 'error') {
             setListeningState('error');
           }
@@ -291,7 +268,6 @@ export default function VoiceScriptureControl({ tracks, scriptureState, onProjec
       if (state) {
         onProject(state, 'navigate');
         setCandidate(null);
-        transcriptRef.current = '';
       }
     }
   }, [candidate, onProject]);
@@ -309,9 +285,9 @@ export default function VoiceScriptureControl({ tracks, scriptureState, onProjec
   if (availability === 'disabled') return null;
 
   return (
-    <section className="rounded border border-cyan-900/70 bg-cyan-950/20 p-2 text-xs text-gray-200" aria-label="Navegación bíblica por voz">
+    <section className="rounded border border-cyan-900/70 bg-cyan-950/20 p-2 text-xs text-gray-200" aria-label="Navegación de referencias por voz">
       <div className="flex items-center justify-between gap-2">
-        <span className="font-semibold">Navegación bíblica por voz</span>
+        <span className="font-semibold">Referencias por voz</span>
         <span className="text-[11px] text-gray-400">{statusText}</span>
       </div>
       <div className="mt-2 flex gap-2">

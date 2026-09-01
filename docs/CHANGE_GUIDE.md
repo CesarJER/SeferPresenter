@@ -142,8 +142,10 @@ Use these checklists before implementing future tasks.
 - Accept a plain `MediaStreamTrack`; keep LiveKit bridging outside the parser and
   audio processor.
 - Proxy realtime PCM through `/voice-scripture/ws`, never through full sync.
-- Require Control Basic Auth, same-origin upgrade, one active session, and a
-  server-side upstream key. Never log or persist audio/transcripts.
+- Require Control Basic Auth before issuing the one-use capability, pass it as
+  a WebSocket subprotocol rather than a URL parameter, require same-origin
+  upgrade, allow one active session, and keep the upstream key server-side.
+  Never log or persist audio/transcripts.
 - Update `docs/VOICE_SCRIPTURE.md` when protocol, aliases, deployment, privacy,
   or benchmark status changes.
 

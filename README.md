@@ -441,7 +441,7 @@ quiz; no contiene texto privado, respuestas individuales ni alias legibles.
 
 ## Voice Scripture opcional
 
-Voice Scripture detecta referencias bíblicas explícitas desde una única pista
+Voice Scripture detecta referencias explícitas del corpus instalado desde una única pista
 remota de Live Audio, las valida contra la metadata instalada y muestra en
 Control una sugerencia que el operador debe confirmar. Presenter y Audience no
 ejecutan STT. No hay LLM, fallback cloud, diarización, grabación ni historial.
@@ -450,14 +450,14 @@ ejecutan STT. No hay LLM, fallback cloud, diarización, grabación ni historial.
   build base.
 - Runtime: `SEFER_VOICE_SCRIPTURE_ENABLED=false` evita conexión y procesamiento.
 - Estado: `GET /api/voice-scripture/status` devuelve solo `{ enabled, available }`.
-- Realtime: `/voice-scripture/ws` exige Basic Auth de Control, origen válido,
-  una sola sesión y mantiene la clave del STT exclusivamente en backend.
+- Realtime: Control obtiene por Basic Auth una capacidad efímera de un solo uso;
+  `/voice-scripture/ws` la recibe como subprotocolo, exige origen válido, limita
+  a una sesión y mantiene la clave del STT exclusivamente en backend.
 
 La instalación nativa, el overlay opcional, el protocolo, privacidad, patrones
-V1/V2, decisión sobre Go y benchmark pendiente se documentan en
-[`docs/VOICE_SCRIPTURE.md`](docs/VOICE_SCRIPTURE.md). En esta implementación no
-se ejecutaron comandos ni pruebas Docker por la restricción de estabilidad de
-la sesión.
+V1/V2, decisión sobre Go y resultados del piloto Nemotron/Docker se documentan
+en [`docs/VOICE_SCRIPTURE.md`](docs/VOICE_SCRIPTURE.md). El benchmark comparativo
+con Whisper y la prueba térmica sostenida siguen pendientes.
 
 Compose monta `SEFER_DATA_DIR` como directorio en `/app/data` y conserva copias
 de recuperación fsync de `presentations.json` y `audio_sync.json` en el volumen

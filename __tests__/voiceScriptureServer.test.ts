@@ -42,7 +42,29 @@ describe('Voice Scripture server boundary', () => {
     expect(result).not.toHaveProperty('sttUrl');
   });
 
-  it('proxies text and PCM only for authenticated same-origin Control', async () => {
+  it('issues a short-lived token separately from status', async () => {
+    process.env.SEFER_VOICE_SCRIPTURE_ENABLED = 'true';
+    process.env.SEFER_VOICE_SCRIPTURE_STT_URL = 'ws://127.0.0.1:8080/v1/realtime';
+    process.env.SEFER_VOICE_SCRIPTURE_READY_URL = 'http://127.0.0.1:8080/ready';
+    process.env.SEFER_VOICE_SCRIPTURE_STT_API_KEY = 'local-secret';
+    process.env.SEFER_CONTROL_PASSWORD = 'control-secret';
+
+    const appHttp = http.createServer();
+    const service = createVoiceScriptureService(appHttp);
+    const fetchImpl = async () => new Response(JSON.stringify({ ready: true }), { status: 200 });
+
+    await expect(service.getStatus({ fetchImpl })).resolves.toEqual({ enabled: true, available: true });
+    await expect(service.issueToken({ fetchImpl })).resolves.toMatchObject({
+      enabled: true,
+      available: true,
+      token: expect.any(String),
+      expiresInMs: 10_000,
+    });
+
+    service.close();
+  });
+
+  it('proxies text and PCM with a one-use same-origin Control capability', async () => {
     const upstreamHttp = http.createServer();
     const upstreamWss = new WebSocketServer({ server: upstreamHttp, path: '/v1/realtime' });
     upstreamWss.on('connection', (socket, request) => {
@@ -60,10 +82,14 @@ describe('Voice Scripture server boundary', () => {
     const appHttp = http.createServer();
     const service = createVoiceScriptureService(appHttp);
     const appPort = await listen(appHttp);
-    const authorization = `Basic ${Buffer.from('control:control-secret').toString('base64')}`;
-    const client = new WebSocket(`ws://127.0.0.1:${appPort}/voice-scripture/ws`, {
-      headers: { Authorization: authorization, Origin: `http://127.0.0.1:${appPort}` },
+    const capability = await service.issueToken({
+      fetchImpl: async () => new Response(JSON.stringify({ ready: true }), { status: 200 }),
     });
+    const client = new WebSocket(
+      `ws://127.0.0.1:${appPort}/voice-scripture/ws`,
+      ['voice-scripture', capability.token as string],
+      { headers: { Origin: `http://127.0.0.1:${appPort}` } },
+    );
 
     await new Promise<void>((resolve, reject) => {
       client.once('open', resolve);

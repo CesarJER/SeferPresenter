@@ -742,18 +742,12 @@ const invalidateAudienceStreams = () => {
 }
 
 const handleApi = async (req, res, url) => {
-  if (url.pathname === '/api/log-error' && req.method === 'POST') {
-    let body = ''
-    req.on('data', chunk => { body += chunk.toString() })
-    req.on('end', () => {
-      console.log(`[CLIENT ERROR LOG]`, body)
-      sendJson(res, 200, { success: true })
-    })
-    return true
-  }
-
   if (url.pathname === '/api/voice-scripture/status' && req.method === 'GET') {
     sendJson(res, 200, await voiceScriptureService.getStatus())
+    return true
+  }
+  if (url.pathname === '/api/voice-scripture/token' && req.method === 'POST') {
+    sendJson(res, 200, await voiceScriptureService.issueToken())
     return true
   }
   const brandingAsset = brandingAssets.get(url.pathname)
@@ -1285,9 +1279,6 @@ const server = http.createServer(async (req, res) => {
   sendJson(res, 404, { error: 'Static file not found' })
 })
 
-server.on('upgrade', (req, socket) => {
-  console.log(`[GLOBAL UPGRADE] Received upgrade request for URL: ${req.url}`)
-})
 const voiceScriptureService = createVoiceScriptureService(server)
 
 const handleWsMessageFromClient = (msg, meta) => {

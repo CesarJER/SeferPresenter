@@ -896,6 +896,5 @@ export const useLiveAudio = ({
     state,
     unpublishMicrophone,
     microphoneDiagnostics,
-    localAudioTrackRef.current?.mediaStreamTrack,
   ]);
 };

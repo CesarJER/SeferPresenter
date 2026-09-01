@@ -3,6 +3,7 @@ import crypto from 'crypto'
 import { hasAllowedRequestOrigin, hasValidBasicAuth } from './authUtils.mjs'
 
 const MAX_VOICE_FRAME_BYTES = 512 * 1024
+const TOKEN_TTL_MS = 10_000
 
 const parseEnabled = (value) => String(value || '').trim().toLowerCase() === 'true'
 
@@ -66,7 +67,10 @@ export const createVoiceScriptureService = (httpServer) => {
       rejectUpgrade(socket, '503 Service Unavailable', 'Voice Scripture unavailable')
       return
     }
-    const token = url.searchParams.get('token')
+    const protocols = String(request.headers['sec-websocket-protocol'] || '')
+      .split(',')
+      .map((value) => value.trim())
+    const token = protocols.find((value) => pendingTokens.has(value))
     const isValidToken = Boolean(token && pendingTokens.has(token))
     if (isValidToken) pendingTokens.delete(token)
 
@@ -120,15 +124,14 @@ export const createVoiceScriptureService = (httpServer) => {
   httpServer.on('upgrade', handleUpgrade)
 
   return {
-    getStatus: async ({ fetchImpl = fetch } = {}) => {
+    getStatus: (options) => getVoiceScriptureStatus(options),
+    issueToken: async ({ fetchImpl = fetch } = {}) => {
       const status = await getVoiceScriptureStatus({ fetchImpl })
-      if (status.available) {
-        const token = crypto.randomUUID()
-        pendingTokens.add(token)
-        setTimeout(() => pendingTokens.delete(token), 10_000)
-        status.token = token
-      }
-      return status
+      if (!status.available) return status
+      const token = crypto.randomUUID()
+      pendingTokens.add(token)
+      setTimeout(() => pendingTokens.delete(token), TOKEN_TTL_MS)
+      return { enabled: true, available: true, token, expiresInMs: TOKEN_TTL_MS }
     },
     close: () => {
       httpServer.off('upgrade', handleUpgrade)
