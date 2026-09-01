@@ -220,6 +220,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
 
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isMusicPanelOpen, setIsMusicPanelOpen] = useState(false);
+  const [showSeferControl, setShowSeferControl] = useState(false);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [resolvedScriptureState, setResolvedScriptureState] = useState<any>(null);
 
@@ -1607,12 +1608,18 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
           {/* Toggle app mode button */}
           <button
             type="button"
-            onClick={() => onToggleAppMode && onToggleAppMode(appMode === 'seferManual' ? 'slides' : 'seferManual')}
+            onClick={() => {
+              const nextShow = !showSeferControl;
+              setShowSeferControl(nextShow);
+              if (onToggleAppMode) {
+                onToggleAppMode(nextShow ? 'seferManual' : 'slides');
+              }
+            }}
             className={`flex items-center justify-center p-2 text-xs font-semibold rounded border transition-all cursor-pointer ${appMode === 'seferManual'
               ? 'bg-yellow-600 border-yellow-500 text-white font-bold'
               : 'bg-gray-800 border-gray-700 hover:bg-gray-700 text-gray-300 hover:text-white'
               }`}
-            title={appMode === 'seferManual' ? "Volver a la diapositiva" : "Activar Sefer manual"}
+            title={showSeferControl ? "Cerrar Sefer manual" : "Abrir Sefer manual"}
           >
             <span className="text-sm leading-none">📜</span>
           </button>
@@ -1648,7 +1655,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
           />
         )}
 
-        {appMode === 'seferManual' && (
+        {showSeferControl && (
           <div className="shrink-0 border-b border-gray-700 bg-gray-950/70">
             <div>
               <SeferControlPanel
@@ -1656,6 +1663,9 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                   if (onProjectScripture) {
                     onProjectScripture(state, cmd);
                   }
+                }}
+                onDeactivate={() => {
+                  if (onToggleAppMode) onToggleAppMode('slides');
                 }}
                 onAddSlide={onAddScriptureSlide}
                 restoredState={scriptureState ? { ...scriptureState, verseEnd: undefined } : null}

@@ -8,6 +8,8 @@ import { sanitizeSlideHtml } from '../../utils/hebrewText';
 interface SeferControlPanelProps {
   /** Called whenever a verse should be projected (activate ▶️ or arrow nav while active) */
   onProject: (state: SeferReaderState, command?: 'navigate' | 'next' | 'previous') => void;
+  /** Called when projection is stopped */
+  onDeactivate?: () => void;
   /** Called when ➕ is pressed — project + add as slide */
   onAddSlide: (state: SeferReaderState, kind?: 'sefer' | 'tanaj') => void;
   /** Restore a previously projected state (when returning to scripture mode) */
@@ -20,6 +22,7 @@ interface SeferControlPanelProps {
 
 const SeferControlPanel: React.FC<SeferControlPanelProps> = ({
   onProject,
+  onDeactivate,
   onAddSlide,
   restoredState,
   onUpdateFontSizes,
@@ -54,6 +57,7 @@ const SeferControlPanel: React.FC<SeferControlPanelProps> = ({
   } = useSeferControlLogic({
     variant: 'full',
     onProject,
+    onDeactivate,
     onAddSlide,
     restoredState,
     onUpdateFontSizes,
