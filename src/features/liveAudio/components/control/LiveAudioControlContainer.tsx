@@ -114,6 +114,7 @@ export default function LiveAudioControlContainer({
   verificationCode,
 }: LiveAudioControlContainerProps) {
   const [isInboxOpen, setIsInboxOpen] = useState(false);
+  const [voiceScriptureState, setVoiceScriptureState] = useState<'idle' | 'listening-own' | 'listening-other'>('idle');
   const [isModeratorMuted, setIsModeratorMuted] = useState(true);
   const [listenVolume, setListenVolume] = useState(100);
   const [microphoneVolume, setMicrophoneVolume] = useState(100);
@@ -947,11 +948,24 @@ export default function LiveAudioControlContainer({
       <div className="relative">
         <button
           onClick={() => setIsInboxOpen(!isInboxOpen)}
-          className={`flex items-center justify-center p-2 text-xs font-semibold rounded border transition-all cursor-pointer ${hasUnread
-            ? 'bg-red-600 border-red-500 text-white animate-pulse'
-            : isInboxOpen
-              ? 'bg-blue-600 border-blue-500 text-white'
-              : 'bg-gray-800 border-gray-700 hover:bg-gray-700 text-gray-300 hover:text-white'
+          className={`flex items-center justify-center p-2 text-xs font-semibold rounded border transition-all cursor-pointer ${
+            hasUnread
+              ? voiceScriptureState === 'listening-own' 
+                ? 'bg-red-600 border-blue-500 text-white animate-pulse'
+                : voiceScriptureState === 'listening-other'
+                  ? 'bg-red-600 border-white text-white animate-pulse'
+                  : 'bg-red-600 border-red-500 text-white animate-pulse'
+              : isInboxOpen
+                ? voiceScriptureState === 'listening-own'
+                  ? 'bg-blue-600 border-blue-400 text-white'
+                  : voiceScriptureState === 'listening-other'
+                    ? 'bg-blue-600 border-white text-white'
+                    : 'bg-blue-600 border-blue-500 text-white'
+                : voiceScriptureState === 'listening-own'
+                  ? 'bg-gray-800 border-blue-500 text-blue-400 hover:bg-gray-700'
+                  : voiceScriptureState === 'listening-other'
+                    ? 'bg-gray-800 border-white text-gray-200 hover:bg-gray-700'
+                    : 'bg-gray-800 border-gray-700 hover:bg-gray-700 text-gray-300 hover:text-white'
             }`}
           title="Bandeja Privada"
           aria-label={`Bandeja Privada: ${unreadCount} solicitudes pendientes`}
@@ -976,6 +990,31 @@ export default function LiveAudioControlContainer({
         onAudienceAccessDecision={handleAudienceAccessDecision}
         onReplyToParticipant={handleReplyToParticipant}
         onSendInterControlMessage={handleSendInterControlMessage}
+        voiceScripturePanel={
+          VoiceScriptureControl ? (
+            <Suspense fallback={null}>
+              <VoiceScriptureControl
+                tracks={[
+                  ...(localMicrophoneTrack ? [{
+                    id: 'local-mic',
+                    track: localMicrophoneTrack,
+                    label: 'Mi Micrófono (Control)',
+                  }] : []),
+                  ...remoteTracks.map((remoteTrack) => ({
+                    id: remoteTrack.id,
+                    track: remoteTrack.track,
+                    label: participantAliases[remoteTrack.participantId || '']
+                      || remoteTrack.participantIdentity
+                      || 'Voz sin identificar',
+                  }))
+                ]}
+                scriptureState={scriptureState}
+                onProject={onProjectScripture}
+                onStateChange={setVoiceScriptureState}
+              />
+            </Suspense>
+          ) : null
+        }
       />
     </div>,
     portalTarget,
@@ -996,28 +1035,7 @@ export default function LiveAudioControlContainer({
       {inboxPortal}
 
       <LiveAudioControlPanel
-        voiceScripturePanel={VoiceScriptureControl ? (
-          <Suspense fallback={null}>
-            <VoiceScriptureControl
-              tracks={[
-                ...(localMicrophoneTrack ? [{
-                  id: 'local-mic',
-                  track: localMicrophoneTrack,
-                  label: 'Mi Micrófono (Control)',
-                }] : []),
-                ...remoteTracks.map((remoteTrack) => ({
-                  id: remoteTrack.id,
-                  track: remoteTrack.track,
-                  label: participantAliases[remoteTrack.participantId || '']
-                    || remoteTrack.participantIdentity
-                    || 'Voz sin identificar',
-                }))
-              ]}
-              scriptureState={scriptureState}
-              onProject={onProjectScripture}
-            />
-          </Suspense>
-        ) : null}
+        voiceScripturePanel={null}
         totalAudience={totalAudience}
         activeUsers={activeUsers}
         isModeratorMuted={isModeratorMuted}
