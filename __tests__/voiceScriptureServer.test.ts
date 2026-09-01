@@ -1,5 +1,5 @@
 import http from 'node:http';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { WebSocket, WebSocketServer } from 'ws';
 import {
   createVoiceScriptureService,
@@ -16,19 +16,20 @@ const close = (server: http.Server) => new Promise<void>((resolve) => server.clo
 
 afterEach(() => {
   process.env = { ...originalEnv };
+  vi.restoreAllMocks();
 });
 
 describe('Voice Scripture server boundary', () => {
   it('fails closed when disabled or incomplete', async () => {
     process.env.SEFER_VOICE_SCRIPTURE_ENABLED = 'false';
-    expect(await getVoiceScriptureStatus()).toEqual({ enabled: false, available: false });
+    expect(await getVoiceScriptureStatus()).toEqual({ enabled: false, available: false, debug: false });
 
     process.env.SEFER_VOICE_SCRIPTURE_ENABLED = 'true';
     delete process.env.SEFER_VOICE_SCRIPTURE_STT_API_KEY;
-    expect(await getVoiceScriptureStatus()).toEqual({ enabled: true, available: false });
+    expect(await getVoiceScriptureStatus()).toEqual({ enabled: true, available: false, debug: false });
   });
 
-  it('reports only enabled and available from readiness', async () => {
+  it('reports a minimal readiness status', async () => {
     process.env.SEFER_VOICE_SCRIPTURE_ENABLED = 'true';
     process.env.SEFER_VOICE_SCRIPTURE_STT_URL = 'ws://127.0.0.1:8080/v1/realtime';
     process.env.SEFER_VOICE_SCRIPTURE_READY_URL = 'http://127.0.0.1:8080/ready';
@@ -38,7 +39,7 @@ describe('Voice Scripture server boundary', () => {
     const result = await getVoiceScriptureStatus({
       fetchImpl: async () => new Response(JSON.stringify({ ready: true }), { status: 200 }),
     });
-    expect(result).toEqual({ enabled: true, available: true });
+    expect(result).toEqual({ enabled: true, available: true, debug: false });
     expect(result).not.toHaveProperty('sttUrl');
   });
 
@@ -53,15 +54,34 @@ describe('Voice Scripture server boundary', () => {
     const service = createVoiceScriptureService(appHttp);
     const fetchImpl = async () => new Response(JSON.stringify({ ready: true }), { status: 200 });
 
-    await expect(service.getStatus({ fetchImpl })).resolves.toEqual({ enabled: true, available: true });
+    await expect(service.getStatus({ fetchImpl })).resolves.toEqual({ enabled: true, available: true, debug: false });
     await expect(service.issueToken({ fetchImpl })).resolves.toMatchObject({
       enabled: true,
       available: true,
+      debug: false,
       token: expect.any(String),
       expiresInMs: 10_000,
     });
 
     service.close();
+  });
+
+  it('emits opt-in diagnostics without exposing server configuration', async () => {
+    process.env.SEFER_VOICE_SCRIPTURE_ENABLED = 'true';
+    process.env.SEFER_VOICE_SCRIPTURE_DEBUG = 'true';
+    process.env.SEFER_VOICE_SCRIPTURE_STT_URL = 'ws://127.0.0.1:8080/v1/realtime';
+    process.env.SEFER_VOICE_SCRIPTURE_READY_URL = 'http://127.0.0.1:8080/ready';
+    process.env.SEFER_VOICE_SCRIPTURE_STT_API_KEY = 'local-secret';
+    process.env.SEFER_CONTROL_PASSWORD = 'control-secret';
+    const consoleLog = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+
+    const result = await getVoiceScriptureStatus({
+      fetchImpl: async () => new Response(JSON.stringify({ ready: true }), { status: 200 }),
+    });
+
+    expect(result).toEqual({ enabled: true, available: true, debug: true });
+    expect(result).not.toHaveProperty('sttUrl');
+    expect(consoleLog).toHaveBeenCalledWith(expect.stringContaining('"event":"status.ready"'));
   });
 
   it('proxies text and PCM with a one-use same-origin Control capability', async () => {

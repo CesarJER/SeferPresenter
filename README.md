@@ -449,7 +449,11 @@ ejecutan STT. No hay LLM, fallback cloud, diarización, grabación ni historial.
 - Build: `VITE_SEFER_VOICE_SCRIPTURE_BUILD=false` excluye el chunk Voice del
   build base.
 - Runtime: `SEFER_VOICE_SCRIPTURE_ENABLED=false` evita conexión y procesamiento.
-- Estado: `GET /api/voice-scripture/status` devuelve solo `{ enabled, available }`.
+- Estado: `GET /api/voice-scripture/status` devuelve solo
+  `{ enabled, available, debug }`.
+- Diagnóstico: `SEFER_VOICE_SCRIPTURE_DEBUG=true` activa temporalmente la traza
+  de consola descrita en la documentación; puede incluir transcripciones y
+  aliases privados, por lo que debe permanecer apagada fuera de una investigación.
 - Realtime: Control obtiene por Basic Auth una capacidad efímera de un solo uso;
   `/voice-scripture/ws` la recibe como subprotocolo, exige origen válido, limita
   a una sesión y mantiene la clave del STT exclusivamente en backend.

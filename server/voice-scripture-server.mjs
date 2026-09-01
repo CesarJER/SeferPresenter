@@ -9,11 +9,17 @@ const parseEnabled = (value) => String(value || '').trim().toLowerCase() === 'tr
 
 export const getVoiceScriptureConfig = () => ({
   enabled: parseEnabled(process.env.SEFER_VOICE_SCRIPTURE_ENABLED),
+  debug: parseEnabled(process.env.SEFER_VOICE_SCRIPTURE_DEBUG),
   sttUrl: String(process.env.SEFER_VOICE_SCRIPTURE_STT_URL || '').trim(),
   readyUrl: String(process.env.SEFER_VOICE_SCRIPTURE_READY_URL || '').trim(),
   apiKey: String(process.env.SEFER_VOICE_SCRIPTURE_STT_API_KEY || '').trim(),
   controlPasswordConfigured: Boolean(String(process.env.SEFER_CONTROL_PASSWORD || '').trim()),
 })
+
+const debugLog = (config, event, details = {}) => {
+  if (!config.debug) return
+  console.log(`[VOICE_SCRIPTURE_DEBUG] ${JSON.stringify({ event, ...details })}`)
+}
 
 const isConfigured = (config) => (
   config.enabled &&
@@ -25,19 +31,33 @@ const isConfigured = (config) => (
 
 export const getVoiceScriptureStatus = async ({ fetchImpl = fetch } = {}) => {
   const config = getVoiceScriptureConfig()
-  if (!config.enabled) return { enabled: false, available: false }
-  if (!isConfigured(config)) return { enabled: true, available: false }
+  if (!config.enabled) return { enabled: false, available: false, debug: config.debug }
+  if (!isConfigured(config)) {
+    debugLog(config, 'status.misconfigured', {
+      hasSttUrl: Boolean(config.sttUrl),
+      hasReadyUrl: Boolean(config.readyUrl),
+      hasApiKey: Boolean(config.apiKey),
+      hasControlPassword: config.controlPasswordConfigured,
+    })
+    return { enabled: true, available: false, debug: config.debug }
+  }
 
   try {
     const response = await fetchImpl(config.readyUrl, {
       headers: { Authorization: `Bearer ${config.apiKey}` },
       signal: AbortSignal.timeout(2_000),
     })
-    if (!response.ok) return { enabled: true, available: false }
+    if (!response.ok) {
+      debugLog(config, 'status.not-ready', { status: response.status })
+      return { enabled: true, available: false, debug: config.debug }
+    }
     const payload = await response.json()
-    return { enabled: true, available: payload?.ready === true || payload?.status === 'ok' }
-  } catch {
-    return { enabled: true, available: false }
+    const available = payload?.ready === true || payload?.status === 'ok'
+    debugLog(config, 'status.ready', { available, payload })
+    return { enabled: true, available, debug: config.debug }
+  } catch (error) {
+    debugLog(config, 'status.error', { message: error instanceof Error ? error.message : String(error) })
+    return { enabled: true, available: false, debug: config.debug }
   }
 }
 
@@ -73,12 +93,23 @@ export const createVoiceScriptureService = (httpServer) => {
     const token = protocols.find((value) => pendingTokens.has(value))
     const isValidToken = Boolean(token && pendingTokens.has(token))
     if (isValidToken) pendingTokens.delete(token)
+    const sameOrigin = hasAllowedRequestOrigin(request)
+    const basicAuthValid = hasValidBasicAuth(request)
 
-    if (!hasAllowedRequestOrigin(request) || (!isValidToken && !hasValidBasicAuth(request))) {
+    debugLog(config, 'upgrade.received', {
+      sameOrigin,
+      capabilityValid: isValidToken,
+      basicAuthValid,
+      active: Boolean(activeSession || connecting),
+    })
+
+    if (!sameOrigin || (!isValidToken && !basicAuthValid)) {
+      debugLog(config, 'upgrade.rejected', { reason: 'authentication' })
       rejectUpgrade(socket, '401 Unauthorized', 'Authentication required')
       return
     }
     if (activeSession || connecting) {
+      debugLog(config, 'upgrade.rejected', { reason: 'already-in-use' })
       rejectUpgrade(socket, '409 Conflict', 'Voice Scripture already in use')
       return
     }
@@ -92,6 +123,7 @@ export const createVoiceScriptureService = (httpServer) => {
 
     const failBeforeUpgrade = () => {
       connecting = false
+      debugLog(config, 'upstream.error-before-open')
       rejectUpgrade(socket, '503 Service Unavailable', 'STT unavailable')
     }
     upstream.once('error', failBeforeUpgrade)
@@ -99,18 +131,36 @@ export const createVoiceScriptureService = (httpServer) => {
       upstream.off('error', failBeforeUpgrade)
       downstreamServer.handleUpgrade(request, socket, head, (client) => {
         connecting = false
-        activeSession = { client, upstream }
+        activeSession = { client, upstream, frames: 0, bytes: 0 }
+        debugLog(config, 'session.open')
 
         const closeBoth = () => {
+          if (activeSession?.client === client) {
+            debugLog(config, 'session.close', { frames: activeSession.frames, bytes: activeSession.bytes })
+          }
           if (client.readyState === WebSocket.OPEN || client.readyState === WebSocket.CONNECTING) client.close()
           if (upstream.readyState === WebSocket.OPEN || upstream.readyState === WebSocket.CONNECTING) upstream.close()
           if (activeSession?.client === client) activeSession = null
         }
 
         client.on('message', (data, isBinary) => {
+          if (config.debug && activeSession?.client === client) {
+            if (isBinary) {
+              activeSession.frames += 1
+              activeSession.bytes += data.length
+              if (activeSession.frames === 1 || activeSession.frames % 16 === 0) {
+                debugLog(config, 'audio.forwarded', { frames: activeSession.frames, bytes: activeSession.bytes })
+              }
+            } else {
+              debugLog(config, 'client.event', { payload: data.toString().slice(0, 8_000) })
+            }
+          }
           if (upstream.readyState === WebSocket.OPEN) upstream.send(data, { binary: isBinary })
         })
         upstream.on('message', (data, isBinary) => {
+          if (config.debug && !isBinary) {
+            debugLog(config, 'stt.event', { payload: data.toString().slice(0, 8_000) })
+          }
           if (client.readyState === WebSocket.OPEN) client.send(data, { binary: isBinary })
         })
         client.once('close', closeBoth)
@@ -131,7 +181,9 @@ export const createVoiceScriptureService = (httpServer) => {
       const token = crypto.randomUUID()
       pendingTokens.add(token)
       setTimeout(() => pendingTokens.delete(token), TOKEN_TTL_MS)
-      return { enabled: true, available: true, token, expiresInMs: TOKEN_TTL_MS }
+      const config = getVoiceScriptureConfig()
+      debugLog(config, 'capability.issued', { expiresInMs: TOKEN_TTL_MS })
+      return { ...status, token, expiresInMs: TOKEN_TTL_MS }
     },
     close: () => {
       httpServer.off('upgrade', handleUpgrade)

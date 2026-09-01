@@ -2,7 +2,7 @@
 
 Voice Scripture is an optional, Control-owned detector of spoken references
 from the operator-installed corpus. It is not a general transcription feature and it never navigates
-without an operator pressing **Mostrar**.
+without an operator confirming the candidate.
 
 ## Implemented boundary
 
@@ -14,7 +14,7 @@ one selected LiveKit MediaStreamTrack
   -> final transcript held only on the JS call stack
   -> deterministic parser + metadata validation
   -> transient Control candidate
-  -> Mostrar
+  -> operator confirmation
   -> existing onProjectScripture navigation
 ```
 
@@ -44,8 +44,8 @@ browser or the inference engine.
 Status is deliberately small:
 
 ```text
-GET /api/voice-scripture/status -> { enabled, available }
-POST /api/voice-scripture/token -> { enabled, available, token, expiresInMs }
+GET /api/voice-scripture/status -> { enabled, available, debug }
+POST /api/voice-scripture/token -> { enabled, available, debug, token, expiresInMs }
 ```
 
 The browser connects only to same-origin `/voice-scripture/ws`. The backend
@@ -53,7 +53,27 @@ requires valid Control Basic Auth to issue a short-lived one-use capability,
 passes that capability as a WebSocket subprotocol rather than in the URL,
 requires a same-origin upgrade, permits one active session, injects the upstream bearer credential server-side, and
 proxies only the dedicated realtime stream. PCM and transcripts never enter
-`/ws`, `SYNC_STATE`, `REMOTE_COMMAND`, logs, files, or databases.
+`/ws`, `SYNC_STATE`, `REMOTE_COMMAND`, files, or databases. Normal operation does
+not log their contents; the explicit diagnostic mode below is the sole exception.
+
+## Temporary diagnostics
+
+Set `SEFER_VOICE_SCRIPTURE_DEBUG=true` only while troubleshooting, then restart
+the Sefer backend. The same runtime value reaches Control through the status
+endpoint and enables correlated `[VOICE_SCRIPTURE_DEBUG]` entries in the server
+process and browser console. The trace covers readiness, capability and upgrade,
+socket lifecycle, aggregate PCM frame/byte counts, STT events, transcript/parser
+result, candidate hydration, and confirmed projection.
+
+Diagnostic mode deliberately logs final transcripts, STT payloads, current
+scripture context, and the session update that contains private pronunciation
+aliases. It writes no diagnostic files and adds no database or log endpoint, but
+the container/runtime console may retain output according to deployment policy.
+Do not enable it in normal operation, and remove or rotate the captured console
+output after the investigation under the operator's local retention rules.
+With Compose, follow the server side of the trace with
+`docker compose logs --follow app`; parser and projection entries remain in the
+Control browser console.
 
 ## STT runtime
 
@@ -80,6 +100,7 @@ VITE_SEFER_LIVE_AUDIO_BUILD=true
 SEFER_LIVE_AUDIO_ENABLED=true
 VITE_SEFER_VOICE_SCRIPTURE_BUILD=true
 SEFER_VOICE_SCRIPTURE_ENABLED=true
+SEFER_VOICE_SCRIPTURE_DEBUG=false
 SEFER_VOICE_SCRIPTURE_STT_URL=ws://127.0.0.1:9090/v1/realtime
 SEFER_VOICE_SCRIPTURE_READY_URL=http://127.0.0.1:9090/ready
 SEFER_VOICE_SCRIPTURE_STT_API_KEY=<same-local-random-secret>
@@ -132,9 +153,12 @@ V2 accepts the bounded forms `versículo N`, `ahora el N`, `del N al N`,
   immediately after parsing. Only a structured candidate remains until shown,
   replaced, disabled, or the component unmounts.
 - External transfer: none by design after explicit model installation.
-- Persistence: none. No audio, transcript, alias, history, or model is stored by
-  Sefer. The existing scripture projection selected by the operator remains
-  subject to normal application state behavior.
+- Persistence: none in the feature itself. With diagnostics off, no audio,
+  transcript, alias, history, or model is stored by Sefer. When diagnostics are
+  explicitly enabled, the surrounding browser/container console retention can
+  retain transcripts and private aliases until its logs are cleared or rotated.
+  The existing scripture projection selected by the operator remains subject to
+  normal application state behavior.
 
 ## Verification and pilot benchmark
 

@@ -23,6 +23,15 @@ interface VoiceScriptureControlProps {
 
 type Availability = 'checking' | 'disabled' | 'unavailable' | 'ready';
 type ListeningState = 'idle' | 'connecting' | 'listening' | 'error';
+interface VoiceScriptureStatus {
+  enabled?: boolean;
+  available?: boolean;
+  debug?: boolean;
+}
+
+const debugLog = (enabled: boolean, event: string, details: Record<string, unknown> = {}) => {
+  if (enabled) console.debug('[VOICE_SCRIPTURE_DEBUG]', { event, ...details });
+};
 
 const WORKLET_SOURCE = `
 class SeferPcm16Processor extends AudioWorkletProcessor {
@@ -120,6 +129,8 @@ export default function VoiceScriptureControl({ tracks, scriptureState, onProjec
   const scriptureStateRef = useRef(scriptureState);
   const socketRef = useRef<WebSocket | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
+  const debugRef = useRef(false);
+  const audioStatsRef = useRef({ frames: 0, bytes: 0 });
 
   useEffect(() => {
     scriptureStateRef.current = scriptureState;
@@ -129,14 +140,23 @@ export default function VoiceScriptureControl({ tracks, scriptureState, onProjec
     let cancelled = false;
     Promise.all([
       fetch('/api/voice-scripture/status', { headers: { Accept: 'application/json' } }).then((response) => (
-        response.ok ? response.json() as Promise<{ enabled?: boolean; available?: boolean }> : null
+        response.ok ? response.json() as Promise<VoiceScriptureStatus> : null
       )),
       getMetadata(),
     ]).then(([status, metadata]) => {
       if (cancelled) return;
+      debugRef.current = status?.debug === true;
       metadataRef.current = metadata;
+      debugLog(debugRef.current, 'client.status', {
+        enabled: status?.enabled === true,
+        available: status?.available === true,
+        metadataBooks: Object.keys(metadata).length,
+      });
       setAvailability(!status?.enabled ? 'disabled' : status.available ? 'ready' : 'unavailable');
-    }).catch(() => {
+    }).catch((error: unknown) => {
+      debugLog(debugRef.current, 'client.status-error', {
+        message: error instanceof Error ? error.message : String(error),
+      });
       if (!cancelled) setAvailability('unavailable');
     });
     return () => { cancelled = true; };
@@ -158,6 +178,7 @@ export default function VoiceScriptureControl({ tracks, scriptureState, onProjec
   }, [selectedTrackId, tracks]);
 
   const stop = useCallback(() => {
+    debugLog(debugRef.current, 'client.stop', audioStatsRef.current);
     const socket = socketRef.current;
     if (socket?.readyState === WebSocket.OPEN) {
       socket.send(JSON.stringify({ type: 'input_audio_buffer.commit' }));
@@ -183,11 +204,13 @@ export default function VoiceScriptureControl({ tracks, scriptureState, onProjec
   useEffect(() => stop, [stop]);
 
   const handleFinalTranscript = useCallback((transcript: string) => {
+    const context = makeContext(scriptureStateRef.current);
     const parsed = parseVoiceScriptureCommand(
       transcript,
-      makeContext(scriptureStateRef.current),
+      context,
       metadataRef.current,
     );
+    debugLog(debugRef.current, 'parser.result', { transcript, context, candidate: parsed });
     if (parsed) setCandidate(parsed);
   }, []);
 
@@ -196,6 +219,13 @@ export default function VoiceScriptureControl({ tracks, scriptureState, onProjec
     if (!selected || availability !== 'ready') return;
     setCandidate(null);
     setListeningState('connecting');
+    audioStatsRef.current = { frames: 0, bytes: 0 };
+    debugLog(debugRef.current, 'client.start', {
+      trackId: selected.id,
+      trackLabel: selected.label,
+      trackReadyState: selected.track.readyState,
+      trackMuted: selected.track.muted,
+    });
 
     try {
       const res = await fetch('/api/voice-scripture/token', {
@@ -203,6 +233,11 @@ export default function VoiceScriptureControl({ tracks, scriptureState, onProjec
         headers: { Accept: 'application/json' },
       });
       const data = await res.json() as { available: boolean; token?: string };
+      debugLog(debugRef.current, 'client.capability', {
+        httpStatus: res.status,
+        available: data.available,
+        tokenIssued: Boolean(data.token),
+      });
       if (!res.ok || !data.available || !data.token) throw new Error('STT unavailable');
 
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -212,11 +247,15 @@ export default function VoiceScriptureControl({ tracks, scriptureState, onProjec
       socketRef.current = socket;
 
       await new Promise<void>((resolve, reject) => {
-        socket.addEventListener('open', () => resolve(), { once: true });
+        socket.addEventListener('open', () => {
+          debugLog(debugRef.current, 'client.socket-open', { protocol: socket.protocol });
+          resolve();
+        }, { once: true });
         socket.addEventListener('error', () => {
           reject(new Error('STT unavailable'));
         }, { once: true });
       });
+      const speechContextPhrases = makeSpeechContextPhrases(metadataRef.current);
       socket.send(JSON.stringify({
         type: 'session.update',
         session: {
@@ -225,16 +264,20 @@ export default function VoiceScriptureControl({ tracks, scriptureState, onProjec
           automatic_punctuation: true,
           endpointing_ms: 800,
           speech_contexts: [{
-            phrases: makeSpeechContextPhrases(metadataRef.current),
+            phrases: speechContextPhrases,
             boost: 2.5,
           }],
         },
       }));
+      debugLog(debugRef.current, 'client.session-update', {
+        phraseCount: speechContextPhrases.length,
+      });
 
       socket.addEventListener('message', (event) => {
         if (typeof event.data !== 'string') return;
         try {
           const message = JSON.parse(event.data) as { type?: string; transcript?: string; delta?: string };
+          debugLog(debugRef.current, 'client.stt-event', { ...message });
           if (
             message.type === 'conversation.item.input_audio_transcription.completed' &&
             typeof message.transcript === 'string'
@@ -243,11 +286,23 @@ export default function VoiceScriptureControl({ tracks, scriptureState, onProjec
           } else if (message.type === 'error') {
             setListeningState('error');
           }
-        } catch {
+        } catch (error) {
+          debugLog(debugRef.current, 'client.stt-invalid-json', {
+            message: error instanceof Error ? error.message : String(error),
+            payload: event.data.slice(0, 8_000),
+          });
           setListeningState('error');
         }
       });
-      socket.addEventListener('close', () => {
+      socket.addEventListener('error', () => {
+        debugLog(debugRef.current, 'client.socket-error');
+      });
+      socket.addEventListener('close', (event) => {
+        debugLog(debugRef.current, 'client.socket-close', {
+          code: event.code,
+          reason: event.reason,
+          ...audioStatsRef.current,
+        });
         if (socketRef.current === socket) {
           socketRef.current = null;
           void audioContextRef.current?.close();
@@ -269,12 +324,23 @@ export default function VoiceScriptureControl({ tracks, scriptureState, onProjec
       const silentOutput = context.createGain();
       silentOutput.gain.value = 0;
       processor.port.onmessage = (event: MessageEvent<ArrayBuffer>) => {
-        if (socket.readyState === WebSocket.OPEN) socket.send(event.data);
+        if (socket.readyState === WebSocket.OPEN) {
+          socket.send(event.data);
+          audioStatsRef.current.frames += 1;
+          audioStatsRef.current.bytes += event.data.byteLength;
+          if (audioStatsRef.current.frames === 1 || audioStatsRef.current.frames % 16 === 0) {
+            debugLog(debugRef.current, 'client.audio-sent', audioStatsRef.current);
+          }
+        }
       };
       source.connect(processor).connect(silentOutput).connect(context.destination);
       await context.resume();
+      debugLog(debugRef.current, 'client.audio-ready', { audioContextState: context.state });
       setListeningState('listening');
-    } catch {
+    } catch (error) {
+      debugLog(debugRef.current, 'client.start-error', {
+        message: error instanceof Error ? error.message : String(error),
+      });
       socketRef.current?.close();
       socketRef.current = null;
       void audioContextRef.current?.close();
@@ -286,8 +352,13 @@ export default function VoiceScriptureControl({ tracks, scriptureState, onProjec
   const showCandidate = useCallback(async () => {
     if (candidate) {
       const state = await hydrateCandidate(candidate);
+      debugLog(debugRef.current, 'candidate.hydrated', {
+        candidate,
+        found: Boolean(state),
+      });
       if (state) {
         onProject(state, 'navigate');
+        debugLog(debugRef.current, 'candidate.projected', { candidate });
         setCandidate(null);
       }
     }
