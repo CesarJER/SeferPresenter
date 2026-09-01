@@ -22,7 +22,7 @@ interface VoiceScriptureControlProps {
 }
 
 type Availability = 'checking' | 'disabled' | 'unavailable' | 'ready';
-type ListeningState = 'idle' | 'connecting' | 'listening' | 'error';
+type ListeningState = 'idle' | 'connecting' | 'listening' | 'finalizing' | 'error';
 interface VoiceScriptureStatus {
   enabled?: boolean;
   available?: boolean;
@@ -32,6 +32,9 @@ interface VoiceScriptureStatus {
 const debugLog = (enabled: boolean, event: string, details: Record<string, unknown> = {}) => {
   if (enabled) console.debug('[VOICE_SCRIPTURE_DEBUG]', { event, ...details });
 };
+
+const ROTATE_SESSION_AFTER_BYTES = 256 * 1024 * 1024;
+const FORCE_SESSION_ROTATION_BYTES = 448 * 1024 * 1024;
 
 const WORKLET_SOURCE = `
 class SeferPcm16Processor extends AudioWorkletProcessor {
@@ -131,6 +134,12 @@ export default function VoiceScriptureControl({ tracks, scriptureState, onProjec
   const audioContextRef = useRef<AudioContext | null>(null);
   const debugRef = useRef(false);
   const audioStatsRef = useRef({ frames: 0, bytes: 0 });
+  const finalizingRef = useRef(false);
+  const finalizationTimerRef = useRef<number | null>(null);
+  const sendingAudioRef = useRef(false);
+  const rotationPendingRef = useRef(false);
+  const restartAfterFinalizationRef = useRef(false);
+  const startRef = useRef<(preserveCandidate?: boolean) => Promise<void>>(async () => undefined);
 
   useEffect(() => {
     scriptureStateRef.current = scriptureState;
@@ -164,7 +173,7 @@ export default function VoiceScriptureControl({ tracks, scriptureState, onProjec
 
   useEffect(() => {
     if (onStateChange) {
-      if (listeningState === 'listening' || listeningState === 'connecting') {
+      if (listeningState === 'listening' || listeningState === 'connecting' || listeningState === 'finalizing') {
         onStateChange(selectedTrackId === 'local-mic' ? 'listening-own' : 'listening-other');
       } else {
         onStateChange('idle');
@@ -177,19 +186,29 @@ export default function VoiceScriptureControl({ tracks, scriptureState, onProjec
     if (selectedTrackId && !tracks.some((track) => track.id === selectedTrackId)) setSelectedTrackId('');
   }, [selectedTrackId, tracks]);
 
-  const stop = useCallback(() => {
-    debugLog(debugRef.current, 'client.stop', audioStatsRef.current);
-    const socket = socketRef.current;
-    if (socket?.readyState === WebSocket.OPEN) {
-      socket.send(JSON.stringify({ type: 'input_audio_buffer.commit' }));
-      socket.close(1000, 'Voice Scripture stopped');
-    } else {
-      socket?.close();
-    }
-    socketRef.current = null;
+  const stop = useCallback((restart = false) => {
+    if (finalizingRef.current) return;
+    rotationPendingRef.current = false;
+    restartAfterFinalizationRef.current = restart;
+    sendingAudioRef.current = false;
+    debugLog(debugRef.current, restart ? 'client.rotate' : 'client.stop', audioStatsRef.current);
     void audioContextRef.current?.close();
     audioContextRef.current = null;
-    setListeningState('idle');
+    const socket = socketRef.current;
+    if (socket?.readyState === WebSocket.OPEN) {
+      finalizingRef.current = true;
+      socket.send(JSON.stringify({ type: 'input_audio_buffer.commit' }));
+      setListeningState('finalizing');
+      if (finalizationTimerRef.current !== null) window.clearTimeout(finalizationTimerRef.current);
+      finalizationTimerRef.current = window.setTimeout(() => {
+        debugLog(debugRef.current, 'client.finalization-timeout');
+        if (socketRef.current === socket) socket.close(1000, 'Voice Scripture finalization timeout');
+      }, 3_000);
+    } else {
+      socket?.close();
+      socketRef.current = null;
+      setListeningState('idle');
+    }
   }, []);
 
   useEffect(() => {
@@ -197,11 +216,20 @@ export default function VoiceScriptureControl({ tracks, scriptureState, onProjec
       (listeningState === 'connecting' || listeningState === 'listening') &&
       !tracks.some((track) => track.id === selectedTrackId)
     ) {
-      stop();
+      stop(false);
     }
   }, [listeningState, selectedTrackId, stop, tracks]);
 
-  useEffect(() => stop, [stop]);
+  useEffect(() => () => {
+    if (finalizationTimerRef.current !== null) window.clearTimeout(finalizationTimerRef.current);
+    socketRef.current?.close();
+    socketRef.current = null;
+    sendingAudioRef.current = false;
+    rotationPendingRef.current = false;
+    restartAfterFinalizationRef.current = false;
+    void audioContextRef.current?.close();
+    audioContextRef.current = null;
+  }, []);
 
   const handleFinalTranscript = useCallback((transcript: string) => {
     const context = makeContext(scriptureStateRef.current);
@@ -214,11 +242,14 @@ export default function VoiceScriptureControl({ tracks, scriptureState, onProjec
     if (parsed) setCandidate(parsed);
   }, []);
 
-  const start = useCallback(async () => {
+  const start = useCallback(async (preserveCandidate = false) => {
     const selected = tracks.find((track) => track.id === selectedTrackId);
     if (!selected || availability !== 'ready') return;
-    setCandidate(null);
+    if (!preserveCandidate) setCandidate(null);
     setListeningState('connecting');
+    finalizingRef.current = false;
+    rotationPendingRef.current = false;
+    restartAfterFinalizationRef.current = false;
     audioStatsRef.current = { frames: 0, bytes: 0 };
     debugLog(debugRef.current, 'client.start', {
       trackId: selected.id,
@@ -262,7 +293,7 @@ export default function VoiceScriptureControl({ tracks, scriptureState, onProjec
           sample_rate: 16000,
           language: 'es-ES',
           automatic_punctuation: true,
-          endpointing_ms: 800,
+          endpointing_ms: 1500,
           speech_contexts: [{
             phrases: speechContextPhrases,
             boost: 2.5,
@@ -283,6 +314,19 @@ export default function VoiceScriptureControl({ tracks, scriptureState, onProjec
             typeof message.transcript === 'string'
           ) {
             handleFinalTranscript(message.transcript);
+            if (finalizingRef.current && socketRef.current === socket) {
+              if (finalizationTimerRef.current !== null) window.clearTimeout(finalizationTimerRef.current);
+              finalizationTimerRef.current = null;
+              socket.close(1000, 'Voice Scripture finalized');
+            } else if (rotationPendingRef.current && socketRef.current === socket) {
+              debugLog(debugRef.current, 'client.rotate-at-utterance-boundary', audioStatsRef.current);
+              rotationPendingRef.current = false;
+              restartAfterFinalizationRef.current = true;
+              sendingAudioRef.current = false;
+              void audioContextRef.current?.close();
+              audioContextRef.current = null;
+              socket.close(1000, 'Voice Scripture session rotation');
+            }
           } else if (message.type === 'error') {
             setListeningState('error');
           }
@@ -304,10 +348,20 @@ export default function VoiceScriptureControl({ tracks, scriptureState, onProjec
           ...audioStatsRef.current,
         });
         if (socketRef.current === socket) {
+          const shouldRestart = restartAfterFinalizationRef.current;
+          if (finalizationTimerRef.current !== null) window.clearTimeout(finalizationTimerRef.current);
+          finalizationTimerRef.current = null;
+          finalizingRef.current = false;
+          rotationPendingRef.current = false;
+          restartAfterFinalizationRef.current = false;
+          sendingAudioRef.current = false;
           socketRef.current = null;
           void audioContextRef.current?.close();
           audioContextRef.current = null;
           setListeningState('idle');
+          if (shouldRestart) {
+            window.setTimeout(() => void startRef.current(true), 0);
+          }
         }
       });
 
@@ -324,17 +378,29 @@ export default function VoiceScriptureControl({ tracks, scriptureState, onProjec
       const silentOutput = context.createGain();
       silentOutput.gain.value = 0;
       processor.port.onmessage = (event: MessageEvent<ArrayBuffer>) => {
-        if (socket.readyState === WebSocket.OPEN) {
+        if (sendingAudioRef.current && socket.readyState === WebSocket.OPEN) {
           socket.send(event.data);
           audioStatsRef.current.frames += 1;
           audioStatsRef.current.bytes += event.data.byteLength;
           if (audioStatsRef.current.frames === 1 || audioStatsRef.current.frames % 16 === 0) {
             debugLog(debugRef.current, 'client.audio-sent', audioStatsRef.current);
           }
+          if (
+            audioStatsRef.current.bytes >= ROTATE_SESSION_AFTER_BYTES &&
+            !rotationPendingRef.current
+          ) {
+            rotationPendingRef.current = true;
+            debugLog(debugRef.current, 'client.rotation-pending', audioStatsRef.current);
+          }
+          if (audioStatsRef.current.bytes >= FORCE_SESSION_ROTATION_BYTES) {
+            debugLog(debugRef.current, 'client.rotation-forced', audioStatsRef.current);
+            stop(true);
+          }
         }
       };
       source.connect(processor).connect(silentOutput).connect(context.destination);
       await context.resume();
+      sendingAudioRef.current = true;
       debugLog(debugRef.current, 'client.audio-ready', { audioContextState: context.state });
       setListeningState('listening');
     } catch (error) {
@@ -343,11 +409,16 @@ export default function VoiceScriptureControl({ tracks, scriptureState, onProjec
       });
       socketRef.current?.close();
       socketRef.current = null;
+      sendingAudioRef.current = false;
+      rotationPendingRef.current = false;
+      restartAfterFinalizationRef.current = false;
       void audioContextRef.current?.close();
       audioContextRef.current = null;
       setListeningState('error');
     }
-  }, [availability, handleFinalTranscript, selectedTrackId, tracks]);
+  }, [availability, handleFinalTranscript, selectedTrackId, stop, tracks]);
+
+  startRef.current = start;
 
   const showCandidate = useCallback(async () => {
     if (candidate) {
@@ -370,13 +441,14 @@ export default function VoiceScriptureControl({ tracks, scriptureState, onProjec
     if (availability === 'unavailable') return 'STT local no disponible';
     if (listeningState === 'connecting') return 'Conectando…';
     if (listeningState === 'listening') return 'Escuchando';
+    if (listeningState === 'finalizing') return 'Finalizando…';
     if (listeningState === 'error') return 'Error; puedes reintentar';
     return 'Listo';
   }, [availability, listeningState]);
 
   if (availability === 'disabled') return null;
 
-  const isListening = listeningState === 'listening' || listeningState === 'connecting';
+  const isListening = listeningState === 'listening' || listeningState === 'connecting' || listeningState === 'finalizing';
   const isOwnMic = selectedTrackId === 'local-mic';
 
   return (
@@ -428,15 +500,15 @@ export default function VoiceScriptureControl({ tracks, scriptureState, onProjec
 
           <button
             type="button"
-            onClick={isListening ? stop : start}
-            disabled={availability !== 'ready' || (!selectedTrackId && !isListening)}
+            onClick={isListening ? () => stop(false) : () => void start(false)}
+            disabled={availability !== 'ready' || listeningState === 'finalizing' || (!selectedTrackId && !isListening)}
             className={`w-full rounded py-2 font-bold transition-all ${
               isListening
                 ? 'bg-red-900 hover:bg-red-800 text-red-100 border border-red-700'
                 : 'bg-cyan-800 hover:bg-cyan-700 text-white border border-cyan-600'
             } disabled:opacity-40 disabled:cursor-not-allowed`}
           >
-            {isListening ? 'Detener STT' : 'Iniciar STT'}
+            {listeningState === 'finalizing' ? 'Finalizando…' : isListening ? 'Detener STT' : 'Iniciar STT'}
           </button>
 
           {candidate && (

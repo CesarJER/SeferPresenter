@@ -90,8 +90,24 @@ directory:
 $sttRoot = Resolve-Path '..\STT_Engine'
 & "$sttRoot\bin\nemo-speech.exe" serve `
   --asr-model "$sttRoot\nemotron-3.5-asr-streaming-0.6b.q8_0.gguf" `
+  --endpointing --stop-history-eou-ms 1500 `
   --host 127.0.0.1 --port 9090 --api-key '<local-random-secret>' --no-ui
 ```
+
+`--endpointing` is required for continuous microphone use. NeMo-Speech.cpp
+keeps mid-stream end-of-utterance detection off by default; the request-level
+`endpointing_ms` value changes its threshold but does not enable it. Without the
+startup flag, partial deltas can appear indefinitely and a final is produced
+only after `input_audio_buffer.commit`. Control also waits up to three seconds
+for that final after a manual stop before closing the socket.
+
+The upstream server caps cumulative realtime audio at 512 MiB per WebSocket.
+Mono PCM16 at 16 kHz reaches that in about 4.55 hours. At 256 MiB (about 2 hours
+16 minutes), Control marks rotation as pending and waits for the next completed
+utterance after 1.5 seconds of silence before reconnecting with the same live
+track. It forces finalization only at 448 MiB if a misconfigured engine produces
+no utterance boundary at all. This keeps six-hour use inside the per-session
+limit without cutting a normal sentence or adding audio persistence.
 
 For a non-Docker Sefer backend:
 
