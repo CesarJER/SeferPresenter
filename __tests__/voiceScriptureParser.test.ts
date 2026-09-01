@@ -19,7 +19,6 @@ describe('parseVoiceScriptureCommand V1', () => {
   it.each([
     ['Alfa uno uno', ['A', 1, 1, 1]],
     ['Colección Alfa capítulo uno versículo uno', ['A', 1, 1, 1]],
-    ['Gamma cincuenta y tres', ['G', 53, 1, 1]],
     ['Gimel capítulo cincuenta y tres versículo cinco', ['G', 53, 5, 5]],
     ['Beta seis cuatro', ['B', 6, 4, 4]],
     ['Beta 64', ['B', 6, 4, 4]],
@@ -45,6 +44,10 @@ describe('parseVoiceScriptureCommand V1', () => {
     expect(compact('Beta capítulo 64')).toBeNull();
   });
 
+  it('does not navigate when a book and chapter omit the verse', () => {
+    expect(compact('Gamma cincuenta y tres')).toBeNull();
+  });
+
   it.each([
     'Alfa setenta y dos cuatro',
     'Delta ciento cincuenta ocho',
@@ -65,7 +68,6 @@ describe('parseVoiceScriptureCommand V2', () => {
     ['siguiente versículo', ['B', 6, 5, 5]],
     ['versículo anterior', ['B', 6, 3, 3]],
     ['siguiente capítulo', ['B', 7, 1, 1]],
-    ['ahora capítulo siete', ['B', 7, 1, 1]],
     ['continúa hasta el diez', ['B', 6, 4, 10]],
     ['volvamos al cuatro', ['B', 6, 4, 4]],
   ])('uses current scripture context for %s', (text, expected) => {
@@ -74,5 +76,9 @@ describe('parseVoiceScriptureCommand V2', () => {
 
   it('does not treat a bare number as a contextual command', () => {
     expect(compact('el ocho', context)).toBeNull();
+  });
+
+  it('does not navigate from a contextual chapter without a verse', () => {
+    expect(compact('ahora capítulo siete', context)).toBeNull();
   });
 });

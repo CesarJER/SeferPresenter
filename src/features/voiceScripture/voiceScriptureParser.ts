@@ -247,12 +247,14 @@ export const parseVoiceScriptureCommand = (
 
   const commandTokens = tokens.slice(bookMatch.start + bookMatch.length);
   const numbers = extractNumbers(commandTokens);
+  if (numbers.length === 1) {
+    return parseCompactNumericReference(commandTokens, metadata, bookMatch.book);
+  }
   if (numbers.length < 2 || numbers.length > 3) return null;
   const chapter = numbers[0];
   const verseStart = numbers[1];
   const verseEnd = numbers[2] ?? verseStart;
   const candidate = makeCandidate(metadata, bookMatch.book, chapter, verseStart, verseEnd);
-  if (candidate || numbers.length !== 1) return candidate;
-  return parseCompactNumericReference(commandTokens, metadata, bookMatch.book);
+  return candidate;
 };
 

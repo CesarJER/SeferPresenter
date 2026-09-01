@@ -129,19 +129,19 @@ passthrough to a Docker STT container was not exercised.
 
 ## Parser coverage
 
-V1 accepts explicit book + chapter + optional verse/range, Spanish number words
+V1 accepts explicit book + chapter + required verse or range, Spanish number words
 through 150, and canonical metadata names/abbreviations. Operator-specific
 pronunciation variants live only in `SEFER_DATA_DIR/config/voice_aliases.json`;
 the scripture generator validates them and embeds them into the generated
 `SEFER_DATA_DIR/public/metadata.json`. Changing only that private file also
-invalidates the generation hash. A chapter-only command resolves to verse 1.
-Every book, chapter, endpoint, and range is checked against loaded metadata.
+invalidates the generation hash. A chapter-only command is rejected rather than
+assuming verse 1. Every book, chapter, endpoint, and range is checked against loaded metadata.
 When an STT final compacts chapter and verse into one digit token, the parser
 accepts it only if the direct reading is invalid and exactly one corpus-valid
 split exists; ambiguous splits are rejected.
 
 V2 accepts the bounded forms `versículo N`, `ahora el N`, `del N al N`,
-`versículos N al N`, next/previous verse or chapter, `ahora capítulo N`,
+`versículos N al N`, next/previous verse or chapter, `ahora capítulo N V`,
 `continúa hasta N`, and `volvamos al N`. It uses the current projected
 `ScriptureNavState`; it creates no parallel context. Bare numbers are rejected.
 
