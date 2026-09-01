@@ -227,6 +227,9 @@ existing `onProjectScripture` path after operator confirmation.
 
 Do not edit generated operator corpus files by hand; they live under
 `SEFER_DATA_DIR/public/` and change only through the explicit generator.
+Voice pronunciation variants belong only in
+`SEFER_DATA_DIR/config/voice_aliases.json`; the generator validates them and
+includes them in `public/metadata.json`.
 
 ### Modify Quiz/Question Mode
 
