@@ -1,7 +1,7 @@
 # Voice Scripture
 
-Voice Scripture is an optional, Control-owned detector of spoken Bible
-references. It is not a general transcription feature and it never navigates
+Voice Scripture is an optional, Control-owned detector of spoken references
+from the operator-installed corpus. It is not a general transcription feature and it never navigates
 without an operator pressing **Mostrar**.
 
 ## Implemented boundary
@@ -9,7 +9,7 @@ without an operator pressing **Mostrar**.
 ```text
 one selected LiveKit MediaStreamTrack
   -> browser AudioWorklet (mono PCM16, 16 kHz, 320 ms chunks)
-  -> authenticated /voice-scripture/ws
+  -> same-origin /voice-scripture/ws with a short-lived Control capability
   -> self-hosted NeMo-Speech.cpp realtime STT
   -> final transcript held only on the JS call stack
   -> deterministic parser + metadata validation
@@ -45,11 +45,13 @@ Status is deliberately small:
 
 ```text
 GET /api/voice-scripture/status -> { enabled, available }
+POST /api/voice-scripture/token -> { enabled, available, token, expiresInMs }
 ```
 
 The browser connects only to same-origin `/voice-scripture/ws`. The backend
-requires valid Control Basic Auth and a same-origin WebSocket upgrade, permits
-one active session, injects the upstream bearer credential server-side, and
+requires valid Control Basic Auth to issue a short-lived one-use capability,
+passes that capability as a WebSocket subprotocol rather than in the URL,
+requires a same-origin upgrade, permits one active session, injects the upstream bearer credential server-side, and
 proxies only the dedicated realtime stream. PCM and transcripts never enter
 `/ws`, `SYNC_STATE`, `REMOTE_COMMAND`, logs, files, or databases.
 
@@ -60,15 +62,15 @@ The implemented protocol target is NVIDIA NeMo-Speech.cpp with
 and a small request-time phrase bias. The runtime code is Apache-2.0; the model
 card currently declares OpenMDW 1.1. Review both again before redistribution.
 
-Install/download is explicit and independent from Sefer. Check the exact model
-alias exposed by the installed CLI, download it once, then start from local
-weights:
+Install/download is explicit and independent from Sefer. The verified Windows
+pilot uses the native runtime and local weights under the sibling `STT_Engine`
+directory:
 
 ```powershell
-nemo-speech model list
-nemo-speech pull nemotron-3.5
-$env:NEMO_SPEECH_HTTP_API_KEY = '<local-random-secret>'
-nemo-speech serve --asr-model nemotron-3.5 --host 127.0.0.1 --port 9090 --no-ui --asr.endpointing.enable=true --asr.endpointing.stop_history_eou_ms=800
+$sttRoot = Resolve-Path '..\STT_Engine'
+& "$sttRoot\bin\nemo-speech.exe" serve `
+  --asr-model "$sttRoot\nemotron-3.5-asr-streaming-0.6b.q8_0.gguf" `
+  --host 127.0.0.1 --port 9090 --api-key '<local-random-secret>' --no-ui
 ```
 
 For a non-Docker Sefer backend:
@@ -83,8 +85,8 @@ SEFER_VOICE_SCRIPTURE_READY_URL=http://127.0.0.1:9090/ready
 SEFER_VOICE_SCRIPTURE_STT_API_KEY=<same-local-random-secret>
 ```
 
-For Docker-hosted Sefer with the native Windows STT pilot, bind the STT to a
-host address reachable as `host.docker.internal`, keep the API key enabled, and
+For Docker-hosted Sefer with the native Windows STT pilot, use `--host 0.0.0.0`
+so the engine is reachable through `host.docker.internal`. Keep the API key enabled, and
 restrict port 9090 to the private Docker/host boundary with Windows Firewall.
 Then start the overlay:
 
@@ -99,18 +101,23 @@ docker compose up --build
 ```
 
 The overlay contains no model and no STT image. This intentionally supports an
-independently installed native pilot while the Docker/CUDA path remains
-unverified. Do not treat the overlay as Docker-validated until the deferred
-checks below pass.
+independently installed native pilot. The merged Compose configuration, feature
+image build, and container-to-host realtime proxy were validated on 2026-09-01.
+CUDA therefore belongs to the native Windows runtime in this pilot; GPU
+passthrough to a Docker STT container was not exercised.
 
 ## Parser coverage
 
 V1 accepts explicit book + chapter + optional verse/range, Spanish number words
-through 150, canonical metadata names/abbreviations, numbered Corinthians, and
-the selected observed aliases `Bereshit`, `Shemot`, `Vayikra`, `Bamidbar`,
-`Devarim`/`de barim`, `Yeshayahu`, and `Tehilim`. A chapter-only command resolves
-to verse 1. Every book, chapter, endpoint, and range is checked against loaded
-metadata.
+through 150, and canonical metadata names/abbreviations. Operator-specific
+pronunciation variants live only in `SEFER_DATA_DIR/config/voice_aliases.json`;
+the scripture generator validates them and embeds them into the generated
+`SEFER_DATA_DIR/public/metadata.json`. Changing only that private file also
+invalidates the generation hash. A chapter-only command resolves to verse 1.
+Every book, chapter, endpoint, and range is checked against loaded metadata.
+When an STT final compacts chapter and verse into one digit token, the parser
+accepts it only if the direct reading is invalid and exactly one corpus-valid
+split exists; ambiguous splits are rejected.
 
 V2 accepts the bounded forms `versículo N`, `ahora el N`, `del N al N`,
 `versículos N al N`, next/previous verse or chapter, `ahora capítulo N`,
@@ -129,34 +136,44 @@ V2 accepts the bounded forms `versículo N`, `ahora el N`, `del N al N`,
   Sefer. The existing scripture projection selected by the operator remains
   subject to normal application state behavior.
 
-## Verification and deferred benchmark
+## Verification and pilot benchmark
 
-Completed without Docker:
+Completed on 2026-09-01:
 
-- parser: 27 focused V1/V2/invalid/negative cases;
+- focused parser/generator/server tests, including ambiguous compact digits;
 - server boundary: disabled/misconfigured status, minimal readiness output,
-  same-origin Basic Auth, bearer injection, and binary PCM proxy;
-- TypeScript;
-- base build with no `VoiceScriptureControl-*` artifact;
-- feature build with a separate `VoiceScriptureControl-*` chunk.
+  one-use same-origin Control capability, bearer injection, and binary PCM proxy;
+- private alias regeneration: 66 metadata books, 66 alias entries, zero mismatches,
+  and an idempotent second run;
+- Docker Compose base/overlay validation and feature image build;
+- realtime direct and Docker-proxied transcription with
+  `scripts/smoke-voice-scripture.mjs`.
 
-The requested real comparison could not be executed in this implementation
-session because Docker testing was explicitly excluded and no controlled spoken
-WAV corpus was available. Results must therefore remain `not measured`; no
-accuracy, latency, VRAM, GPU, temperature, power, or cost number is inferred.
+The available WAV is 1.944 seconds, mono PCM16 at 22.05 kHz; the smoke script
+converts it in memory to mono PCM16 at 16 kHz and sends 320 ms realtime chunks.
+Nemotron returned `de Barim 64.`. After the conservative compact-digit rule,
+that final resolved to the expected installed-corpus reference. Direct native
+realtime completed 125 ms after the final audio chunk; the Docker proxy completed
+in 126 ms. These are single-sample smoke results, not P50/P95 or an accuracy corpus.
 
 | Motor | Ref accuracy | Hebrew names | False positives | P95 | VRAM | GPU | Temp | RAM |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| Nemotron 3.5 Q8 / NeMo-Speech.cpp | not measured | not measured | not measured | not measured | not measured | not measured | not measured | not measured |
+| Nemotron 3.5 Q8 / NeMo-Speech.cpp 0.1.0 | 1/1 smoke only | not measured | not measured | not measured; 125-126 ms final delay in one sample | 1769 MiB whole-GPU reading after load | 0% idle snapshot | 48 C idle snapshot | 236 MiB working set |
 | WhisperLive large-v3-turbo | not measured | not measured | not measured | not measured | not measured | not measured | not measured | not measured |
 | WhisperLive distil-large-v3 | not measured | not measured | not measured | not measured | not measured | not measured | not measured | not measured |
+
+The Q8 model file is 741,548,352 bytes (about 707 MiB). The Docker application
+image measured 350 MB and contains neither model nor STT runtime. The GPU and
+RAM readings above are point-in-time observations after inference, not isolated
+model deltas or sustained thermal measurements. Nemotron is therefore the
+implemented pilot, not yet a final winner over unmeasured Whisper baselines.
 
 Before calling the engine selection final, run all three against the same clean,
 Hebrew-name, range, contextual, negative, distance, and noise WAV corpus on the
 RTX 2080 Super Max-Q. Record final reference accuracy (primary), false positives,
 end-of-phrase-to-candidate P50/P95, VRAM/RAM, sustained GPU utilization,
 temperature, power where available, and a 30-60 minute thermal pilot. Also run
-Docker Compose config/build, STT missing/model missing/GPU missing, socket cut,
+STT missing/model missing/GPU missing, socket cut,
 track removal, Control reload, and 4-6 hour memory-growth checks. If WhisperLive
 wins materially, adapt only the protected STT boundary; do not change the parser
 or navigation path.
