@@ -207,10 +207,7 @@ export default function VoiceScriptureControl({ tracks, scriptureState, onProjec
 
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       const wsUrl = new URL(`${protocol}//${window.location.host}/voice-scripture/ws`);
-      if (data.token) wsUrl.searchParams.set('token', data.token);
-      
-      const wsUrlStr = wsUrl.toString();
-      const socket = new WebSocket(wsUrlStr);
+      const socket = new WebSocket(wsUrl, ['voice-scripture', data.token]);
       socket.binaryType = 'arraybuffer';
       socketRef.current = socket;
 
