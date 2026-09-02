@@ -1158,6 +1158,14 @@ const serveFile = (req, res, filePath) => {
   const stat = fs.statSync(filePath)
   const totalSize = stat.size
   const range = req.headers.range
+  const etag = `W/"${totalSize.toString(16)}-${stat.mtime.getTime().toString(16)}"`
+  cacheHeaders['ETag'] = etag
+  
+  if (req.headers['if-none-match'] === etag) {
+    res.writeHead(304, cacheHeaders)
+    res.end()
+    return
+  }
 
   if (range) {
     const parts = range.replace(/bytes=/, "").split("-")

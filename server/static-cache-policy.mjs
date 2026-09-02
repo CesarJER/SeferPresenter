@@ -21,5 +21,7 @@ export const getStaticCacheHeaders = (requestPath = '') => {
       'Cache-Control': 'public, max-age=604800, stale-while-revalidate=2592000',
     }
   }
-  return {}
+  return {
+    'Cache-Control': 'no-cache',
+  }
 }
