@@ -107,10 +107,19 @@ function ControlApp() {
   }, [currentPresentation, currentSlideIndex, backgroundLock, lockedBackgroundValue, userSelectedBackground, videoState, audioState, appMode, scriptureState, quizState, autoduckState]);
 
   useEffect(() => {
-    fetch('/api/backgrounds')
-      .then(res => res.json())
-      .then(data => setBackgrounds(data))
-      .catch(err => console.error("Error loading backgrounds", err));
+    const fetchMedia = () => {
+      fetch('/api/backgrounds')
+        .then(res => res.json())
+        .then(data => setBackgrounds(data))
+        .catch(err => console.error("Error loading backgrounds", err));
+      fetch('/api/audio')
+        .then(res => res.json())
+        .then(data => setAvailableAudioFiles(data))
+        .catch(err => console.error("Error loading audio files", err));
+    };
+
+    fetchMedia();
+
     fetch('/api/presentations')
       .then(res => res.json())
       .then(data => {
@@ -126,10 +135,7 @@ function ControlApp() {
         console.error("Error loading presentations", err);
         setPresentations([]);
       });
-    fetch('/api/audio')
-      .then(res => res.json())
-      .then(data => setAvailableAudioFiles(data))
-      .catch(err => console.error("Error loading audio files", err));
+      
     fetch('/api/audio-sync')
       .then(res => res.json())
       .then(data => {
@@ -141,6 +147,9 @@ function ControlApp() {
         }
       })
       .catch(err => console.error("Error loading audio sync maps", err));
+
+    window.addEventListener('focus', fetchMedia);
+    return () => window.removeEventListener('focus', fetchMedia);
   }, []);
 
   const { emitCommand, channel, wsStatus, wsSend, subscribeToWsMessage, isMediaMaster, emitVideoTelemetry, emitAudioTelemetry } = useSyncState({

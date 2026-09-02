@@ -367,7 +367,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
     const loadVideoDuration = (src: string): Promise<number> => {
       return new Promise((resolve) => {
         const video = document.createElement('video');
-        video.preload = 'metadata';
+        video.preload = 'none';
         video.src = src;
         video.onloadedmetadata = () => {
           resolve(video.duration);

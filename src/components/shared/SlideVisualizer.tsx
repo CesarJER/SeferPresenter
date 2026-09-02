@@ -285,7 +285,7 @@ const SlideVisualizer: React.FC<SlideVisualizerProps> = ({
               src={slide.mediaSrc} 
               muted={!isMediaMaster} 
               playsInline 
-              preload="metadata"
+              preload="none"
               className={`absolute inset-0 w-full h-full object-contain z-0`} 
               onLoadedMetadata={() => {
                 if (isMediaMaster && videoRef.current) {
