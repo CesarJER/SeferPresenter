@@ -1147,7 +1147,6 @@ const serveFile = (req, res, filePath) => {
   const ext = path.extname(filePath).toLowerCase()
   const contentType = contentTypes[ext] || 'application/octet-stream'
   const requestPath = new URL(req.url || '/', 'http://localhost').pathname
-  const cacheHeaders = getStaticCacheHeaders(requestPath)
 
   if (!fs.existsSync(filePath)) {
     res.writeHead(404, { 'Content-Type': 'application/json' })
@@ -1156,6 +1155,8 @@ const serveFile = (req, res, filePath) => {
   }
 
   const stat = fs.statSync(filePath)
+  const cacheHeaders = getStaticCacheHeaders(requestPath, stat, ext)
+  
   const totalSize = stat.size
   const range = req.headers.range
   const etag = `W/"${totalSize.toString(16)}-${stat.mtime.getTime().toString(16)}"`
