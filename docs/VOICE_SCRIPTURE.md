@@ -1,227 +1,217 @@
 # Voice Scripture
 
-Voice Scripture is an optional, Control-owned detector of spoken references
-from the operator-installed corpus. It is not a general transcription feature and it never navigates
-without an operator confirming the candidate.
+Optional, local spoken-reference navigation. Control selects one existing local
+or remote Live Audio track and explicitly starts automatic listening. Presenter
+and Audience perform no speech recognition. Names and aliases come exclusively
+from the installed corpus; public examples below use synthetic collections.
 
-## Implemented boundary
+## Behavior and ownership
 
 ```text
-one selected LiveKit MediaStreamTrack
-  -> browser AudioWorklet (mono PCM16, 16 kHz, 320 ms chunks)
-  -> same-origin /voice-scripture/ws with a short-lived Control capability
-  -> self-hosted NeMo-Speech.cpp realtime STT
-  -> final transcript held only on the JS call stack
-  -> deterministic parser + metadata validation
-  -> transient Control candidate
-  -> operator confirmation
-  -> existing onProjectScripture navigation
+selected MediaStreamTrack
+  -> filtered mono PCM16, 16 kHz, 320 ms frames
+  -> protected same-origin /voice-scripture/ws
+  -> native local NeMo 0.1.0, finalization by silence
+  -> bounded final utterance, ordered corpus-validated references
+  -> last unambiguous reference automatically hydrated
+  -> existing SCRIPTURE_PROJECT -> backend SYNC_STATE -> displays
 ```
 
-The parser and Voice Scripture module know only `MediaStreamTrack`; the small
-bridge in `LiveAudioControlContainer` supplies that track. The first version
-does not capture a second microphone, mix speakers, diarize, transcribe partial
-results, or add Voice state to `SYNC_STATE`.
+- `VoiceScriptureControl.tsx` coordinates UI, hydration cancellation, serial
+  projection work and acknowledgement against the backend scripture snapshot.
+- `voiceScriptureSession.ts` owns capability acquisition, socket, track lifecycle,
+  worklet, final-event deduplication (512 recent IDs), health checks and rotation.
+- `voicePcmWorklet.ts` mixes channels, applies a normalized 63-tap low-pass FIR,
+  resamples to 16 kHz and flushes partial frames before manual-stop commit.
+- `voiceScriptureParser.ts` is pure; `voiceScriptureProjection.ts` handles corpus
+  hydration and context phrase construction. LiveKit bridging stays outside them.
 
-Go was evaluated for an STT gateway and deliberately not added. The upstream
-runtime is already native C++, while this repository already has Node, `ws`,
-Basic Auth, origin validation, and the HTTP listener that owns Control access.
-A Go proxy would duplicate those boundaries without removing work from the
-browser or the inference engine.
+The newest valid intervention replaces manual alternatives. With multiple valid
+references, the last is projected and all are offered as buttons. An invalid or
+ambiguous mention prevents automatic selection for that intervention; valid
+alternatives can still be selected manually. Non-reference speech leaves the
+previous options intact. Stop clears options and cancels pending hydration;
+finals received during stopping must never project.
 
-## Optionality
+A range such as `Alfa 1:3-5` starts at verse 3, preserves both endpoints and uses
+the existing range label and navigation. No new sync fields or remote commands
+are introduced. Relative commands use the last confirmed backend state, never
+an unconfirmed voice candidate. While a projection awaits acknowledgement,
+relative commands abstain. A missing acknowledgement stops automation after
+three seconds. Hydration is discarded if canonical context changes meanwhile.
 
-- `VITE_SEFER_VOICE_SCRIPTURE_BUILD=false` removes the dynamically imported
-  Voice component and parser from the base build. The STT runtime and model are
-  never frontend dependencies.
-- `SEFER_VOICE_SCRIPTURE_ENABLED=false` keeps the backend status disabled and
-  refuses the realtime socket.
-- A true runtime flag is still fail-closed unless STT URL, readiness URL, local
-  API key, and `SEFER_CONTROL_PASSWORD` are configured.
-- V1 obtains its one audio track from optional Live Audio, so Live Audio must
-  also be built and enabled. Presenter and Audience do no STT work.
+## Parsing boundaries
 
-Status is deliberately small:
+Explicit book/chapter/verse and ranges may appear inside discourse. Numeric
+words, corpus aliases and uniquely resolvable compact digits are supported.
+Roman numbers are accepted only in the numeric suffix of an explicit book.
+Chapter-only references and bare numbers do not navigate.
+
+Examples with synthetic metadata:
+
+- `Vamos a leer Alfa dos V`: select 2:5 if the installed metadata validates it.
+- `Alfa uno tres al cinco`: preserve 1:3-5, display the first verse.
+- `Alfa dos cinco, perdón, dos seis`: replace with 2:6.
+- `No vayamos a Alfa dos cinco`: abstain.
+- `Alfa uno tres y Beta seis cuatro`: project the latter; retain both options.
+
+Simple corrections use `perdón`, `corrijo` or `rectifico`; unsupported or
+incomplete corrections abstain. Negation handling is deliberately conservative,
+not general natural-language understanding. Contextual forms include next/previous
+verse or chapter, `ahora el N`, `versículo N`, `del N al N`, `continúa hasta N`,
+`volvamos al N`, and `ahora capítulo N V` with a valid confirmed context.
+Finals exceeding 100 tokens or 1600 characters are rejected. No partial hypothesis
+can trigger navigation. Aliases shared by multiple books are ambiguous.
+
+## Optionality, API and privacy
+
+Both `VITE_SEFER_LIVE_AUDIO_BUILD` and `VITE_SEFER_VOICE_SCRIPTURE_BUILD` must
+be true for the feature build. Runtime additionally needs
+`SEFER_LIVE_AUDIO_ENABLED=true`, `SEFER_VOICE_SCRIPTURE_ENABLED=true`, a Control
+password, STT URL, readiness URL and local API key. The base feature flags remain
+false by default. No model installation/download occurs during an app build.
 
 ```text
 GET /api/voice-scripture/status -> { enabled, available, debug }
 POST /api/voice-scripture/token -> { enabled, available, debug, token, expiresInMs }
 ```
 
-The browser connects only to same-origin `/voice-scripture/ws`. The backend
-requires valid Control Basic Auth to issue a short-lived one-use capability,
-passes that capability as a WebSocket subprotocol rather than in the URL,
-requires a same-origin upgrade, permits one active session, injects the upstream bearer credential server-side, and
-proxies only the dedicated realtime stream. PCM and transcripts never enter
-`/ws`, `SYNC_STATE`, `REMOTE_COMMAND`, files, or databases. Normal operation does
-not log their contents; the explicit diagnostic mode below is the sole exception.
+The existing authenticated backend issues a short-lived capability. The browser
+passes it as a WebSocket subprotocol, never a URL parameter. The gateway enforces
+origin/authentication, one active session, and injects the upstream key. Vite
+also proxies the dedicated voice path during development.
 
-## Temporary diagnostics
+Audio and transcripts stay in memory and never enter the main sync socket,
+presentation state or a database. Alternative references are transient Control
+state. No cloud fallback, LLM, diarization or recording is introduced. The
+gateway's explicit `SEFER_VOICE_SCRIPTURE_DEBUG=true` mode can log upstream text
+and private phrase aliases to its console; keep it off during normal operation.
+The surrounding runtime can retain console output independently of this feature.
+The new client UI exposes stages and failures without logging transcripts.
 
-Set `SEFER_VOICE_SCRIPTURE_DEBUG=true` only while troubleshooting, then restart
-the Sefer backend. The same runtime value reaches Control through the status
-endpoint and enables correlated `[VOICE_SCRIPTURE_DEBUG]` entries in the server
-process and browser console. The trace covers readiness, capability and upgrade,
-socket lifecycle, aggregate PCM frame/byte counts, STT events, transcript/parser
-result, candidate hydration, and confirmed projection.
+## Reproducible native runtime
 
-Diagnostic mode deliberately logs final transcripts, STT payloads, current
-scripture context, and the session update that contains private pronunciation
-aliases. It writes no diagnostic files and adds no database or log endpoint, but
-the container/runtime console may retain output according to deployment policy.
-Do not enable it in normal operation, and remove or rotate the captured console
-output after the investigation under the operator's local retention rules.
-With Compose, follow the server side of the trace with
-`docker compose logs --follow app`; parser and projection entries remain in the
-Control browser console.
+The verified installed engine is **NeMo-Speech.cpp 0.1.0**, with the existing
+operator-installed Q8 streaming model. Its transcription endpoint is
+`/v1/realtime`. Do not silently upgrade the engine: newer upstream documentation
+distinguishes `/v1/audio/transcriptions/realtime` from VoiceChat routes. Verify
+the target protocol when upgrading.
 
-## STT runtime
-
-The implemented protocol target is NVIDIA NeMo-Speech.cpp with
-`nemotron-3.5-asr-streaming-0.6b.q8_0.gguf`: realtime PCM16, `es-ES`, endpointing,
-and a small request-time phrase bias. The runtime code is Apache-2.0; the model
-card currently declares OpenMDW 1.1. Review both again before redistribution.
-
-Install/download is explicit and independent from Sefer. The verified Windows
-pilot uses the native runtime and local weights under the sibling `STT_Engine`
-directory:
-
-```powershell
-$sttRoot = Resolve-Path '..\STT_Engine'
-& "$sttRoot\bin\nemo-speech.exe" serve `
-  --asr-model "$sttRoot\nemotron-3.5-asr-streaming-0.6b.q8_0.gguf" `
-  --endpointing --stop-history-eou-ms 1500 `
-  --host 127.0.0.1 --port 9090 --api-key '<local-random-secret>' --no-ui
-```
-
-`--endpointing` is required for continuous microphone use. NeMo-Speech.cpp
-keeps mid-stream end-of-utterance detection off by default; the request-level
-`endpointing_ms` value changes its threshold but does not enable it. Without the
-startup flag, partial deltas can appear indefinitely and a final is produced
-only after `input_audio_buffer.commit`. Control also waits up to three seconds
-for that final after a manual stop before closing the socket.
-
-The upstream server caps cumulative realtime audio at 512 MiB per WebSocket.
-Mono PCM16 at 16 kHz reaches that in about 4.55 hours. At 256 MiB (about 2 hours
-16 minutes), Control marks rotation as pending and waits for the next completed
-utterance after 1.5 seconds of silence before reconnecting with the same live
-track. It forces finalization only at 448 MiB if a misconfigured engine produces
-no utterance boundary at all. This keeps six-hour use inside the per-session
-limit without cutting a normal sentence or adding audio persistence.
-
-For a non-Docker Sefer backend:
+Set the local secret in `.env` (the launcher reads it without printing it):
 
 ```dotenv
-VITE_SEFER_LIVE_AUDIO_BUILD=true
-SEFER_LIVE_AUDIO_ENABLED=true
-VITE_SEFER_VOICE_SCRIPTURE_BUILD=true
-SEFER_VOICE_SCRIPTURE_ENABLED=true
-SEFER_VOICE_SCRIPTURE_DEBUG=false
 SEFER_VOICE_SCRIPTURE_STT_URL=ws://127.0.0.1:9090/v1/realtime
 SEFER_VOICE_SCRIPTURE_READY_URL=http://127.0.0.1:9090/ready
-SEFER_VOICE_SCRIPTURE_STT_API_KEY=<same-local-random-secret>
+SEFER_VOICE_SCRIPTURE_STT_API_KEY=<local-secret>
 ```
-
-For Docker-hosted Sefer with the native Windows STT pilot, use `--host 0.0.0.0`
-so the engine is reachable through `host.docker.internal`. Keep the API key enabled, and
-restrict port 9090 to the private Docker/host boundary with Windows Firewall.
-Then start the overlay:
 
 ```powershell
-docker compose -f docker-compose.yml -f docker-compose.voice-scripture.yml --profile live-audio up --build
+node scripts/start-voice-scripture.mjs
+# Docker-to-native-host pilot:
+node scripts/start-voice-scripture.mjs --host 0.0.0.0
 ```
 
-Return to core mode with the ordinary base command and false/default flags:
+The launcher defaults to the sibling `STT_Engine` installation; `--engine` and
+`--model` override those paths. It validates the version, refuses an occupied
+port and starts with `--endpointing --stop-history-eou-ms 1000`. It does not kill
+another process. The runtime key remains an engine process argument as required
+by this installed CLI; never print the complete process command line.
+
+For Docker, retain `docker-compose.voice-scripture.yml` and
+`host.docker.internal` URLs. Restart only the selected STT service after verifying
+its ownership; do not interrupt unrelated services. The model remains outside
+the app image. Keep port 9090 restricted to the intended host/container boundary.
+
+## Failure handling and limits
+
+- Capability/connect attempts are bounded and cancelled on stop/unmount.
+- Audio startup has a 15-second watchdog. Hydration consumers can be cancelled
+  independently of the shared book cache and time out after three seconds.
+- Track removal/replacement stops listening. Four seconds without PCM fails.
+- Ten seconds without STT events fails. After the first nonempty partial, four
+  seconds without further text or a final, or a 20-second unfinalized utterance,
+  stops the session with an endpointing diagnostic. These are fail-closed guards,
+  not an alternative transcription segmenter.
+- Browser and gateway queues are capped at 256 KiB. Exceeding the cap stops the
+  session rather than silently dropping speech or accumulating unbounded audio.
+- At 256 MiB cumulative PCM, rotate at the next completed utterance; at 448 MiB
+  without a boundary, stop rather than reaching the upstream 512 MiB cap.
+- Availability can be checked again without reloading Control. Failures require
+  an explicit restart; no automatic retry may unexpectedly resume a microphone.
+
+## Neutral technical record — 2026-09-09
+
+**Observed problem:** an operator-supplied trace contained 213 partial events and
+one final after manual stop, accumulating 70.4 seconds. Several references and
+ordinary speech reached the single-reference parser together. The old UI also
+required manual confirmation and therefore did not implement automatic navigation.
+
+**Live diagnosis:** the installed executable reports 0.1.0. Two verified STT
+processes were listening on port 9090 without endpointing. A no-commit WAV pilot
+produced zero finals before correction. After replacing those listeners with the
+reproducible endpointing startup, three consecutive utterances produced three
+finals without commit, delayed 416/492/445 ms after the supplied audio ended.
+These are repeated measurements of one existing WAV, not accuracy statistics,
+P95 across speakers, or end-to-end browser latency.
+
+**Changes:** separated capture/session from UI, filtered resampling and flush,
+bounded queues, cancellation/watchdogs, multiple-reference extraction, automatic
+projection and manual alternatives, backend acknowledgement, development proxy,
+synthetic regression cases and neutral documentation.
+
+**Validation boundaries:** automated tests cover parsing, exact worklet source,
+transport with simulated browser primitives, Control hydration/cancellation and
+the real backend reducer/Audience snapshot without a Presenter. The live WAV
+pilot verifies native segmentation. A real microphone/browser/display pilot,
+accuracy corpus, P50/P95 and a 4–6 hour thermal/memory run remain separate checks;
+simulated rotation tests do not establish those results.
+
+The transport test additionally advances six simulated hours, delivering 7200
+final events across three sessions. It checks rotation and cancellation logic,
+not real six-hour memory or thermal behavior. Both feature-disabled and
+feature-enabled builds pass using `npm.cmd --ignore-scripts run build` to avoid
+the private-data prebuild generator. TypeScript and repository lint pass.
+The full-suite run also exposes two unrelated existing failures in legal cache
+headers and Audience alias retention; their implementation/test files are
+unchanged, and each failure reproduces when run separately.
 
 ```powershell
-docker compose up --build
+npx.cmd vitest run __tests__/voiceScriptureParser.test.ts __tests__/voiceScriptureSession.test.ts __tests__/voicePcmWorklet.test.ts __tests__/voiceScriptureControl.test.tsx __tests__/voiceScriptureServer.test.ts
+node scripts/verify-voice-segmentation.mjs <operator-supplied.wav>
 ```
 
-The overlay contains no model and no STT image. This intentionally supports an
-independently installed native pilot. The merged Compose configuration, feature
-image build, and container-to-host realtime proxy were validated on 2026-09-01.
-CUDA therefore belongs to the native Windows runtime in this pilot; GPU
-passthrough to a Docker STT container was not exercised.
+The pilot repeats a supplied WAV three times with silence, never sends commit,
+and reports only counts/timing/text lengths. It creates no audio/transcript files.
+Target: P95 at most two seconds from end of an intervention to confirmed
+projection, to be measured on a representative corpus. It is not guaranteed
+from a reference mentioned mid-sentence while the speaker continues talking.
 
-## Parser coverage
+### Final verification record
 
-V1 accepts explicit book + chapter + required verse or range, Spanish number words
-through 150, and canonical metadata names/abbreviations. Operator-specific
-pronunciation variants live only in `SEFER_DATA_DIR/config/voice_aliases.json`;
-the scripture generator validates them and embeds them into the generated
-`SEFER_DATA_DIR/public/metadata.json`. Changing only that private file also
-invalidates the generation hash. A chapter-only command is rejected rather than
-assuming verse 1. Every book, chapter, endpoint, and range is checked against loaded metadata.
-When an STT final compacts chapter and verse into one digit token, the parser
-accepts it only if the direct reading is invalid and exactly one corpus-valid
-split exists; ambiguous splits are rejected.
+- 75 focused voice tests pass. The Audience integration test renders the real
+  Audience component in jsdom and checks both the initial verse text and full
+  range label from the backend snapshot. Transport primitives are simulated;
+  this is not a physical-browser microphone test.
+- The optional `--with-parser` pilot uses the actual pure parser and reads the
+  installed metadata without changing it. All three live STT finals resolved
+  to corpus-valid references, at 417/509/439 ms after the supplied audio ended.
+  This validates recognition of that sample, not an independent accuracy corpus.
+- The Docker app was rebuilt with the existing base/voice Compose files and
+  recreated using `--no-deps --no-build`. It is healthy, serves the updated voice
+  chunk and returns authenticated STT status `enabled=true, available=true`.
+  The preceding image is retained locally as `seferpresenter-app:before-voice-20260909`.
+  Reload Control to obtain the new client module; no browser microphone session
+  was started as part of the deployment check.
 
-V2 accepts the bounded forms `versículo N`, `ahora el N`, `del N al N`,
-`versículos N al N`, next/previous verse or chapter, `ahora capítulo N V`,
-`continúa hasta N`, and `volvamos al N`. It uses the current projected
-`ScriptureNavState`; it creates no parallel context. Bare numbers are rejected.
+## TODO — proposals for a later turn
 
-## Privacy delta
+- Slide navigation: next, previous, selected position.
+- Playback: pause/resume the active medium.
+- Display: hide/restore projection.
+- Voice control: suspend automation and undo the most recent action.
+- Compare local engines on the same clean/noisy/distant-speech and negative corpus
+  if recognition accuracy remains insufficient; do not change the navigation API.
+- Measure sustained hardware use, memory growth, false projections and P50/P95
+  with multiple speakers before declaring performance/accuracy targets achieved.
 
-- New data: one selected participant's remote audio and short final STT text.
-- Processing: browser memory, same-host Sefer proxy, and self-hosted STT memory.
-- Lifetime: bounded audio/worklet/WebSocket buffers; transcript is discarded
-  immediately after parsing. Only a structured candidate remains until shown,
-  replaced, disabled, or the component unmounts.
-- External transfer: none by design after explicit model installation.
-- Persistence: none in the feature itself. With diagnostics off, no audio,
-  transcript, alias, history, or model is stored by Sefer. When diagnostics are
-  explicitly enabled, the surrounding browser/container console retention can
-  retain transcripts and private aliases until its logs are cleared or rotated.
-  The existing scripture projection selected by the operator remains subject to
-  normal application state behavior.
-
-## Verification and pilot benchmark
-
-Completed on 2026-09-01:
-
-- focused parser/generator/server tests, including ambiguous compact digits;
-- server boundary: disabled/misconfigured status, minimal readiness output,
-  one-use same-origin Control capability, bearer injection, and binary PCM proxy;
-- private alias regeneration: 66 metadata books, 66 alias entries, zero mismatches,
-  and an idempotent second run;
-- Docker Compose base/overlay validation and feature image build;
-- realtime direct and Docker-proxied transcription with
-  `scripts/smoke-voice-scripture.mjs`.
-
-The available WAV is 1.944 seconds, mono PCM16 at 22.05 kHz; the smoke script
-converts it in memory to mono PCM16 at 16 kHz and sends 320 ms realtime chunks.
-Nemotron returned `de Barim 64.`. After the conservative compact-digit rule,
-that final resolved to the expected installed-corpus reference. Direct native
-realtime completed 125 ms after the final audio chunk; the Docker proxy completed
-in 126 ms. These are single-sample smoke results, not P50/P95 or an accuracy corpus.
-
-| Motor | Ref accuracy | Hebrew names | False positives | P95 | VRAM | GPU | Temp | RAM |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|
-| Nemotron 3.5 Q8 / NeMo-Speech.cpp 0.1.0 | 1/1 smoke only | not measured | not measured | not measured; 125-126 ms final delay in one sample | 1769 MiB whole-GPU reading after load | 0% idle snapshot | 48 C idle snapshot | 236 MiB working set |
-| WhisperLive large-v3-turbo | not measured | not measured | not measured | not measured | not measured | not measured | not measured | not measured |
-| WhisperLive distil-large-v3 | not measured | not measured | not measured | not measured | not measured | not measured | not measured | not measured |
-
-The Q8 model file is 741,548,352 bytes (about 707 MiB). The Docker application
-image measured 350 MB and contains neither model nor STT runtime. The GPU and
-RAM readings above are point-in-time observations after inference, not isolated
-model deltas or sustained thermal measurements. Nemotron is therefore the
-implemented pilot, not yet a final winner over unmeasured Whisper baselines.
-
-Before calling the engine selection final, run all three against the same clean,
-Hebrew-name, range, contextual, negative, distance, and noise WAV corpus on the
-RTX 2080 Super Max-Q. Record final reference accuracy (primary), false positives,
-end-of-phrase-to-candidate P50/P95, VRAM/RAM, sustained GPU utilization,
-temperature, power where available, and a 30-60 minute thermal pilot. Also run
-STT missing/model missing/GPU missing, socket cut,
-track removal, Control reload, and 4-6 hour memory-growth checks. If WhisperLive
-wins materially, adapt only the protected STT boundary; do not change the parser
-or navigation path.
-
-Primary upstream references reviewed for this implementation:
-
-- [NeMo-Speech.cpp server and realtime API](https://github.com/NVIDIA/NeMo-Speech.cpp/blob/main/docs/api.md)
-- [NeMo-Speech.cpp runtime](https://github.com/NVIDIA/NeMo-Speech.cpp)
-- [Nemotron 3.5 model card](https://huggingface.co/nvidia/nemotron-3.5-asr-streaming-0.6b)
-- [WhisperLive](https://github.com/collabora/WhisperLive)
-
+These proposals are intentionally not enabled or parsed in this release.

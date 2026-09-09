@@ -335,8 +335,14 @@ PCM16 in Control and sent through same-origin `/voice-scripture/ws` using a
 short-lived, one-use Control capability issued by the authenticated backend.
 The upstream STT key remains server-side. Only final text reaches the pure parser. PCM, partials, transcripts, and
 candidates never enter `/ws`, `SYNC_STATE`, `REMOTE_COMMAND`, presentation
-state, Presenter, or Audience. After `Mostrar`, the resulting hydrated verse is
-sent through the existing scripture navigation/sync path.
+state, Presenter, or Audience. While the operator enables listening, the last
+unambiguous final reference is hydrated and sent automatically through the
+existing `SCRIPTURE_PROJECT` path. Manual alternatives use that same path.
+Control waits for a matching backend scripture snapshot; relative commands
+abstain while confirmation is pending. Missing confirmation stops automation
+after three seconds. No new projection command or wire field is introduced.
+The browser and gateway cap queued voice traffic at 256 KiB; Vite proxies the
+dedicated voice socket to the backend in development as well.
 
 Fase 5.11 hardens long sessions and mobile networks. `useLiveAudio.ts` refreshes
 tokens through `POST /api/livekit/refresh-token` with a two-minute safety margin

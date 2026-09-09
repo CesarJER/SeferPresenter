@@ -442,8 +442,9 @@ quiz; no contiene texto privado, respuestas individuales ni alias legibles.
 ## Voice Scripture opcional
 
 Voice Scripture detecta referencias explícitas del corpus instalado desde una única pista
-remota de Live Audio, las valida contra la metadata instalada y muestra en
-Control una sugerencia que el operador debe confirmar. Presenter y Audience no
+local o remota de Live Audio, las valida contra la metadata instalada y proyecta
+automáticamente la última referencia inequívoca al finalizar una intervención.
+Control conserva las alternativas manuales. El operador inicia y detiene la escucha. Presenter y Audience no
 ejecutan STT. No hay LLM, fallback cloud, diarización, grabación ni historial.
 
 - Build: `VITE_SEFER_VOICE_SCRIPTURE_BUILD=false` excluye el chunk Voice del
@@ -502,7 +503,8 @@ npm.cmd run build
 - Probar video: play/pause, loop, velocidad, volumen y seek.
 - Probar Sefer/Tanaj: proyectar, navegar versos, anadir slide.
 - Con build/runtime Voice habilitados: seleccionar una sola fuente, activar,
-  comprobar una sugerencia válida y confirmar `Mostrar`; repetir con STT apagado.
+  comprobar un final y su proyección automática confirmada por el servidor;
+  probar alternativas manuales y repetir con STT apagado.
 - Abrir `/audio-editor` y guardar mapas de audio.
 - Abrir `/audience` en movil o viewport movil y verificar que no hay controles.
 

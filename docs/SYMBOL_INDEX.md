@@ -71,7 +71,7 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
 - `SeferControlPanelMini` - `src/components/control/SeferControlPanelMini.tsx`: compact scripture controls.
 - `VoiceScriptureControl` - `src/features/voiceScripture/VoiceScriptureControl.tsx`:
   optional Control-only AudioWorklet, STT final-event handling, candidate and
-  explicit `Mostrar` workflow.
+  automatic final-reference projection, backend acknowledgement and manual alternatives.
 - [ScriptureRangeEditor](file:///c:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/src/components/control/ScriptureRangeEditor.tsx) - `src/components/control/ScriptureRangeEditor.tsx`: control-side range editor used for slide reference selection.
 - `PresenterScreen` - `src/components/presenter/PresenterScreen.tsx`: projected slide/video/quiz rendering.
 - `SeferReaderScreen` - `src/components/presenter/SeferReaderScreen.tsx`: projected scripture reader.
@@ -260,10 +260,17 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
 - `loadStoredPresenterState` - `src/utils/normalizePresentation.ts`: validated localStorage state loading.
 - `getMetadata` / `loadBookData` - `src/utils/metadataCache.ts`: scripture metadata/book loading and caching.
 - `parseVerses` - `src/utils/scriptureParser.ts`: TSV scripture parsing.
-- `parseVoiceScriptureCommand` -
-  `src/features/voiceScripture/voiceScriptureParser.ts`: pure V1/V2 spoken
-  reference parser with corpus metadata validation and conservative handling
-  of uniquely resolvable compact chapter/verse digits.
+- `parseVoiceScriptureUtterance` / `parseVoiceScriptureCommand` -
+  `src/features/voiceScripture/voiceScriptureParser.ts`: ordered references,
+  automatic selection and abstention reasons; compatibility single-result API.
+- `VoiceScriptureSession` - `src/features/voiceScripture/voiceScriptureSession.ts`:
+  cancellable transport, final-event deduplication, watchdogs and rotation.
+- `VOICE_PCM_WORKLET` - `src/features/voiceScripture/voicePcmWorklet.ts`:
+  filtered mono PCM16 resampling and partial-frame flush.
+- `hydrateCandidate` / `makeSpeechContextPhrases` -
+  `src/features/voiceScripture/voiceScriptureProjection.ts`: corpus hydration and bounded phrase bias.
+- `scripts/start-voice-scripture.mjs`: duplicate-safe NeMo 0.1.0 launcher with endpointing.
+- `scripts/verify-voice-segmentation.mjs`: three-utterance WAV pilot without commit or transcript output.
 - `createVoiceScriptureService` / `getVoiceScriptureStatus` -
   `server/voice-scripture-server.mjs`: protected single-session STT readiness
   and realtime WebSocket proxy without transcript logging.

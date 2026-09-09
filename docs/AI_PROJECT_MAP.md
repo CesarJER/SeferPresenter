@@ -223,7 +223,10 @@ For optional spoken-reference detection also read:
 - `docs/VOICE_SCRIPTURE.md`
 
 Voice candidates stay local to Control and reach projection only through the
-existing `onProjectScripture` path after operator confirmation.
+existing `onProjectScripture` path automatically after a validated final while
+listening is enabled. `voiceScriptureSession.ts` owns transport/capture;
+`voicePcmWorklet.ts` owns filtered PCM and flush; `voiceScriptureProjection.ts`
+owns hydration, labels and speech context phrases. Ambiguous results abstain.
 
 Do not edit generated operator corpus files by hand; they live under
 `SEFER_DATA_DIR/public/` and change only through the explicit generator.

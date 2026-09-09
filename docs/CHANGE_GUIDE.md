@@ -138,7 +138,10 @@ Use these checklists before implementing future tasks.
 - Preserve separate build/runtime flags and verify both build variants.
 - Keep parser rules pure and conservative; validate endpoints against metadata.
 - Keep transcript/candidate state local to Control and project only through the
-  existing scripture navigation callback after `Mostrar`.
+  existing scripture navigation callback automatically after a validated final.
+  Manual alternatives remain available; stopping cancels pending projections.
+  Test missing finals, cancellation, duplicate events, track replacement, and
+  backend confirmation before using relative commands.
 - Accept a plain `MediaStreamTrack`; keep LiveKit bridging outside the parser and
   audio processor.
 - Proxy realtime PCM through `/voice-scripture/ws`, never through full sync.
