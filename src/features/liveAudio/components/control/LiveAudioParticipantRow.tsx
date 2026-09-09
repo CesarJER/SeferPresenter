@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Eye, EyeOff, Hand, MessageSquare, MicOff, RotateCcw, Trash2, UserCheck, UserX, Volume2, X, XCircle } from 'lucide-react';
+import { Eye, EyeOff, Hand, MessageSquare, Mic, MicOff, RotateCcw, Trash2, UserCheck, UserX, Volume2, X, XCircle } from 'lucide-react';
 import type { SpeakerState } from '../../../../types/liveAudio';
 import { LiveAudioStatusBadge, type ParticipantStatus } from '../shared/LiveAudioStatusBadge';
 
@@ -20,6 +20,9 @@ export interface LiveAudioParticipant {
 
 interface LiveAudioParticipantRowProps {
   participant: LiveAudioParticipant;
+  voiceSelected?: boolean;
+  voiceSelectable?: boolean;
+  onSelectVoice?: (id: string) => void;
   isControlAuthorized: boolean;
   onGrant?: (id: string) => void;
   onRevoke?: (id: string) => void;
@@ -38,6 +41,9 @@ interface LiveAudioParticipantRowProps {
 
 export const LiveAudioParticipantRow: React.FC<LiveAudioParticipantRowProps> = ({
   participant,
+  voiceSelected,
+  voiceSelectable,
+  onSelectVoice,
   isControlAuthorized,
   onGrant,
   onRevoke,
@@ -79,7 +85,12 @@ export const LiveAudioParticipantRow: React.FC<LiveAudioParticipantRowProps> = (
   return (
     <div className="flex items-center justify-between p-2 hover:bg-gray-800 border-b border-gray-800 last:border-0 transition-colors group">
       <div className="flex min-w-0 items-center gap-3">
-        <LiveAudioStatusBadge status={badgeStatus} isMuted={participant.isMuted} />
+        {onSelectVoice ? <button type="button" aria-label={`Comandos de voz: ${displayName}`}
+          aria-pressed={!!voiceSelected} disabled={!voiceSelectable && !voiceSelected}
+          onClick={() => onSelectVoice(participant.participantId)}
+          className={`rounded-full p-1.5 disabled:opacity-40 ${hasOpenMicrophone ? 'bg-blue-500/20 text-blue-400' : 'text-gray-400'} ${voiceSelected ? 'ring-2 ring-yellow-400 text-yellow-300' : ''}`}>
+          {hasOpenMicrophone ? <Mic size={16} /> : <MicOff size={16} />}
+        </button> : <LiveAudioStatusBadge status={badgeStatus} isMuted={participant.isMuted} />}
 
         <span
           className={`truncate font-medium ${isControlAuthorized ? 'text-gray-200' : 'text-gray-500 italic'
@@ -220,10 +231,10 @@ export const LiveAudioParticipantRow: React.FC<LiveAudioParticipantRowProps> = (
             }}
             disabled={!participant.isAliasVisibleToActiveParticipants}
             className={`p-1 rounded transition-colors ${!participant.isAliasVisibleToActiveParticipants
-                ? 'text-gray-600 cursor-not-allowed'
-                : participant.isAliasHiddenByControl
-                  ? 'text-gray-400 hover:text-white hover:bg-gray-700'
-                  : 'text-green-400 hover:text-white hover:bg-gray-700'
+              ? 'text-gray-600 cursor-not-allowed'
+              : participant.isAliasHiddenByControl
+                ? 'text-gray-400 hover:text-white hover:bg-gray-700'
+                : 'text-green-400 hover:text-white hover:bg-gray-700'
               }`}
             title={
               !participant.isAliasVisibleToActiveParticipants
@@ -246,8 +257,8 @@ export const LiveAudioParticipantRow: React.FC<LiveAudioParticipantRowProps> = (
               )
             }
             className={`p-1 rounded transition-colors ${participant.canViewActiveParticipants
-                ? 'text-blue-400 hover:text-white hover:bg-gray-700'
-                : 'text-gray-500 hover:text-white hover:bg-gray-700'
+              ? 'text-blue-400 hover:text-white hover:bg-gray-700'
+              : 'text-gray-500 hover:text-white hover:bg-gray-700'
               }`}
             title={
               participant.canViewActiveParticipants

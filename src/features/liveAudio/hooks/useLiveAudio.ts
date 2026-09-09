@@ -38,6 +38,7 @@ interface UseLiveAudioResult {
   connectionQuality: LiveAudioConnectionQuality;
   availability: LiveAudioAvailability;
   remoteTracks: LiveAudioRemoteTrack[];
+  controlParticipants: { participantId: string; isMicrophoneActive: boolean }[];
   participantId: string | null;
   participantIdentity: string | null;
   isMicrophoneActive: boolean;
@@ -48,6 +49,7 @@ interface UseLiveAudioResult {
   retryAudio: () => Promise<void>;
   disconnect: () => void;
   microphoneDiagnostics: LiveAudioMicrophoneDiagnostics;
+  localMicrophoneTrack: MediaStreamTrack | null;
 }
 
 const TOKEN_REFRESH_MARGIN_MS = 2 * 60_000;
@@ -236,6 +238,7 @@ export const useLiveAudio = ({
   const [state, setState] = useState<LiveAudioConnectionState>('disconnected');
   const [connectionQuality, setConnectionQuality] = useState<LiveAudioConnectionQuality>('unknown');
   const [remoteTracks, setRemoteTracks] = useState<LiveAudioRemoteTrack[]>([]);
+  const [controlParticipants, setControlParticipants] = useState<UseLiveAudioResult['controlParticipants']>([]);
   const [participantId, setParticipantId] = useState<string | null>(null);
   const [participantIdentity, setParticipantIdentity] = useState<string | null>(null);
   const [isMicrophoneActive, setIsMicrophoneActive] = useState(false);
@@ -258,6 +261,23 @@ export const useLiveAudio = ({
   const microphoneAudioContextRef = useRef<AudioContext | null>(null);
   const microphoneProcessorRef = useRef<TrackProcessor<Track.Kind.Audio, AudioProcessorOptions> | null>(null);
   const isPublishingMicrophoneRef = useRef(false);
+
+  const observeControls = useCallback((room: Room) => {
+    const update = () => {
+      if (roomRef.current !== room) return;
+      setControlParticipants(Array.from(room.remoteParticipants.values())
+        .filter(participant => participant.identity.startsWith('control-'))
+        .flatMap(participant => {
+          const id = getRemoteParticipantId(participant);
+          return id ? [{ participantId: id, isMicrophoneActive: participant.isMicrophoneEnabled }] : [];
+        }));
+    };
+    room.on(RoomEvent.Connected, update).on(RoomEvent.Reconnected, update)
+      .on(RoomEvent.ParticipantConnected, update).on(RoomEvent.ParticipantDisconnected, update)
+      .on(RoomEvent.TrackMuted, update).on(RoomEvent.TrackUnmuted, update)
+      .on(RoomEvent.TrackPublished, update).on(RoomEvent.TrackUnpublished, update)
+      .on(RoomEvent.Disconnected, () => { if (roomRef.current === room) setControlParticipants([]); });
+  }, []);
 
   useEffect(() => {
     participantIdRef.current = participantId;
@@ -438,6 +458,7 @@ export const useLiveAudio = ({
     tokenRef.current = null;
     participantIdRef.current = null;
     setRemoteTracks([]);
+    setControlParticipants([]);
     setParticipantId(null);
     setParticipantIdentity(null);
     setIsDuckingActive(false);
@@ -575,6 +596,7 @@ export const useLiveAudio = ({
       stopLocalTrackOnUnpublish: true,
     });
     roomRef.current = room;
+    observeControls(room);
 
     const handleConnectionStateChanged = (nextState: ConnectionState) => {
       if (connectionRunRef.current !== runId) return;
@@ -699,6 +721,7 @@ export const useLiveAudio = ({
       localAudioTrackRef.current = null;
       void room.disconnect(true);
       setRemoteTracks([]);
+      setControlParticipants([]);
     };
   }, [
     addRemoteTrack,
@@ -717,6 +740,7 @@ export const useLiveAudio = ({
     unpublishMicrophone,
     clearLifecycleTimers,
     controlSessionId,
+    observeControls,
   ]);
 
   const retryAudio = useCallback(async () => {
@@ -739,7 +763,9 @@ export const useLiveAudio = ({
       stopLocalTrackOnUnpublish: true,
     });
     roomRef.current = room;
+    observeControls(room);
     setRemoteTracks([]);
+    setControlParticipants([]);
     setState('connecting');
 
     room
@@ -820,6 +846,7 @@ export const useLiveAudio = ({
     subscribeExistingAudio,
     subscribePublication,
     unpublishMicrophone,
+    observeControls,
   ]);
 
   useEffect(() => {
@@ -869,6 +896,7 @@ export const useLiveAudio = ({
     connectionQuality,
     availability,
     remoteTracks,
+    controlParticipants,
     participantId,
     participantIdentity,
     isMicrophoneActive,
@@ -879,6 +907,7 @@ export const useLiveAudio = ({
     retryAudio,
     disconnect,
     microphoneDiagnostics,
+    localMicrophoneTrack: localAudioTrackRef.current?.mediaStreamTrack || null,
   }), [
     availability,
     disconnect,
@@ -890,6 +919,7 @@ export const useLiveAudio = ({
     publishMicrophone,
     retryAudio,
     remoteTracks,
+    controlParticipants,
     startRemoteAudio,
     state,
     unpublishMicrophone,

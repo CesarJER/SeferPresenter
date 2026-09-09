@@ -18,6 +18,7 @@ dist-ssr
 *.local
 *.local.*
 launcher
+AGENTS.md
 
 # Editor directories and files
 .vscode/*
@@ -33,3 +34,4 @@ launcher
 .env*
 *.bak[0-9]
 *.bak
+

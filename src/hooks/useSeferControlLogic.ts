@@ -8,6 +8,7 @@ type SeferPanelVariant = 'full' | 'mini';
 interface UseSeferControlLogicProps {
   variant: SeferPanelVariant;
   onProject: (state: SeferReaderState, command?: SeferCommand) => void;
+  onDeactivate?: () => void;
   onAddSlide?: (state: SeferReaderState, kind?: 'sefer' | 'tanaj') => void;
   onBoundaryReached?: (direction: 'next' | 'previous') => void;
   restoredState?: ScriptureNavState | null;
@@ -23,6 +24,7 @@ const clampNumber = (value: number, min: number, max: number) =>
 export function useSeferControlLogic({
   variant,
   onProject,
+  onDeactivate,
   onAddSlide,
   onBoundaryReached,
   restoredState,
@@ -51,6 +53,7 @@ export function useSeferControlLogic({
     goPrev,
     restoreState,
     rangeVerses,
+    deactivate,
   } = reader;
 
   useEffect(() => {
@@ -106,11 +109,16 @@ export function useSeferControlLogic({
   }, [onProject]);
 
   const handleActivate = useCallback(() => {
+    if (isActive) {
+      deactivate();
+      onDeactivate?.();
+      return;
+    }
     const state = activate();
     if (state) {
       markAndProject(state, 'navigate');
     }
-  }, [activate, markAndProject]);
+  }, [activate, deactivate, isActive, markAndProject, onDeactivate]);
 
   const handleVerseSelect = useCallback((verse: string, command: SeferCommand = 'navigate') => {
     const state = goToVerse(verse);

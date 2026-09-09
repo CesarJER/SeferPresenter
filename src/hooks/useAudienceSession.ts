@@ -11,19 +11,15 @@ interface UseAudienceSessionProps {
 }
 
 export function useAudienceSession({ subscribeToWsMessage }: UseAudienceSessionProps = {}) {
-  const [nick, setNick] = useState<string>('');
-  const [aliasVisible, setAliasVisible] = useState<boolean>(false);
+  const [nick, setNick] = useState<string>(() => localStorage.getItem(AUDIENCE_NICK_KEY) || '');
+  const [aliasVisible, setAliasVisible] = useState<boolean>(() => {
+    const stored = localStorage.getItem(ALIAS_VISIBLE_KEY);
+    if (stored !== null) return stored === 'true';
+    return String(import.meta.env.VITE_SEFER_ACTIVE_ALIAS_VISIBLE_BY_DEFAULT ?? 'false').toLowerCase() === 'true';
+  });
   const [presentationSessionId, setPresentationSessionId] = useState<string | null>(null);
 
-  // Aliases and participant IDs are page-scoped. Remove values persisted by older versions.
   useEffect(() => {
-    localStorage.removeItem(AUDIENCE_NICK_KEY);
-    localStorage.removeItem(ALIAS_VISIBLE_KEY);
-
-    const defaultAliasVisible =
-      String(import.meta.env.VITE_SEFER_ACTIVE_ALIAS_VISIBLE_BY_DEFAULT ?? 'false').toLowerCase() === 'true';
-    setAliasVisible(defaultAliasVisible);
-
     const savedSessionId = readExpiringStorage<string>(localStorage, AUDIENCE_SESSION_ID_KEY);
     if (savedSessionId) {
       setPresentationSessionId(savedSessionId);
@@ -74,13 +70,16 @@ export function useAudienceSession({ subscribeToWsMessage }: UseAudienceSessionP
   }, [subscribeToWsMessage, clearLocalSession]);
 
   const login = useCallback((newNick: string) => {
-    setNick(newNick.trim().slice(0, 50));
+    const cleanNick = newNick.trim().slice(0, 50);
+    setNick(cleanNick);
+    localStorage.setItem(AUDIENCE_NICK_KEY, cleanNick);
   }, []);
 
   const logout = clearLocalSession;
 
   const setAliasVisibleCallback = useCallback((value: boolean) => {
     setAliasVisible(value);
+    localStorage.setItem(ALIAS_VISIBLE_KEY, String(value));
   }, []);
 
   return {

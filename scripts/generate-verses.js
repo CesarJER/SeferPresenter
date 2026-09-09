@@ -5,6 +5,8 @@ import { loadEnvFile } from 'node:process';
 import Papa from 'papaparse';
 import { resolveSeferDataDir } from '../server/data-directory.mjs';
 
+
+
 export const toSafeBookFileName = (bookName) =>
   bookName
     .normalize('NFD')
@@ -12,6 +14,29 @@ export const toSafeBookFileName = (bookName) =>
     .replace(/[^a-z0-9]+/gi, '_')
     .replace(/^_+|_+$/g, '')
     .toLowerCase();
+
+export const readVoiceAliases = (aliasesPath) => {
+  if (!existsSync(aliasesPath)) return {};
+
+  const parsed = JSON.parse(readFileSync(aliasesPath, 'utf8'));
+  if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') {
+    throw new Error('voice_aliases.json debe ser un objeto de libro a lista de aliases');
+  }
+
+  return Object.fromEntries(Object.entries(parsed).map(([book, aliases]) => {
+    if (!Array.isArray(aliases) || aliases.some((alias) => typeof alias !== 'string' || !alias.trim())) {
+      throw new Error(`Aliases de voz inválidos para ${book}`);
+    }
+    return [book, [...new Set(aliases.map((alias) => alias.trim()))]];
+  }));
+};
+
+export const createGenerationHash = (source, aliasesSource = Buffer.alloc(0)) => createHash('sha256')
+  .update('sefer-scripture-inputs-v2\0')
+  .update(source)
+  .update('\0voice-aliases\0')
+  .update(aliasesSource)
+  .digest('hex');
 
 export const generateVerses = () => {
   const envPath = join(process.cwd(), '.env');
@@ -35,19 +60,23 @@ export const generateVerses = () => {
   const outputDir = join(dataDir, 'public');
   const booksDir = join(outputDir, 'books');
   const hashPath = join(dataDir, 'config', 'verses-source.sha256');
+  const aliasesPath = join(dataDir, 'config', 'voice_aliases.json');
+  
   const source = readFileSync(tsvPath);
-  const sourceHash = createHash('sha256').update(source).digest('hex');
+  const aliasesSource = existsSync(aliasesPath) ? readFileSync(aliasesPath) : Buffer.alloc(0);
+  const extraAliases = readVoiceAliases(aliasesPath);
+  const sourceHash = createGenerationHash(source, aliasesSource);
   if (
     existsSync(hashPath)
     && readFileSync(hashPath, 'utf8').trim() === sourceHash
     && existsSync(join(outputDir, 'metadata.json'))
     && existsSync(booksDir)
   ) {
-    console.log('Sin cambios en SEFER_VERSES_SOURCE; se conserva el corpus existente.');
+    console.log('Sin cambios en el corpus ni en sus aliases privados; se conserva la generación existente.');
     return;
   }
 
-  console.log(`Cargando datos bíblicos de: ${tsvPath}`);
+  console.log(`Cargando corpus de textos desde: ${tsvPath}`);
   const tsv = source.toString('utf8');
 
   const parsed = Papa.parse(tsv, {
@@ -93,7 +122,8 @@ export const generateVerses = () => {
     books.get(bookEs).push(row);
 
     if (!metadata[bookEs]) {
-      metadata[bookEs] = { bookHeb, bookAbbrevEs, safeFile: safeName, chapters: {} };
+      const voiceAliases = extraAliases[bookEs] || [];
+      metadata[bookEs] = { bookHeb, bookAbbrevEs, safeFile: safeName, voiceAliases, chapters: {} };
     }
 
     if (!metadata[bookEs].chapters[chapter]) {

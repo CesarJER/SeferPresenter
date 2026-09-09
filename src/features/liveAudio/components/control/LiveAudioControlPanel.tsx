@@ -3,10 +3,16 @@ import { Users, UserCheck, Mic, MicOff, Volume2, VolumeX, ChevronUp, ChevronDown
 import { LiveAudioQueue } from './LiveAudioQueue';
 import { LiveAudioSpeakers } from './LiveAudioSpeakers';
 import { LiveAudioListeners } from './LiveAudioListeners';
-import type { LiveAudioParticipant } from './LiveAudioParticipantRow';
+import { LiveAudioParticipantRow, type LiveAudioParticipant } from './LiveAudioParticipantRow';
 import type { LiveAudioExternalBroadcastState } from '../../../../types/liveAudio';
 
 interface LiveAudioControlPanelProps {
+  controllers?: LiveAudioParticipant[];
+  selectedVoiceParticipantId?: string;
+  voiceSelectableIds?: string[];
+  onSelectVoice?: (id: string) => void;
+  ownVoiceSelected?: boolean;
+  onControllerMicrophoneConfigChange?: (id: string, config: { volume?: number; musicMode?: boolean }) => void;
   totalAudience: number;
   activeUsers: number;
   isModeratorMuted: boolean;
@@ -38,6 +44,12 @@ interface LiveAudioControlPanelProps {
 }
 
 export const LiveAudioControlPanel: React.FC<LiveAudioControlPanelProps> = ({
+  controllers = [],
+  selectedVoiceParticipantId,
+  voiceSelectableIds,
+  onSelectVoice,
+  ownVoiceSelected,
+  onControllerMicrophoneConfigChange,
   totalAudience,
   activeUsers,
   isModeratorMuted,
@@ -141,7 +153,17 @@ export const LiveAudioControlPanel: React.FC<LiveAudioControlPanelProps> = ({
               onRemove={onRemove}
               onMicrophoneConfigChange={onMicrophoneConfigChange}
             />
-            <LiveAudioSpeakers 
+            {controllers.length > 0 && <details open className="mb-3 rounded border border-gray-800">
+              <summary className="cursor-pointer px-2 py-1 text-xs text-gray-400">Controles ({controllers.length})</summary>
+              {controllers.map(p => <LiveAudioParticipantRow key={p.participantId} participant={p}
+                isControlAuthorized={isControlAuthorized} onMicrophoneConfigChange={onControllerMicrophoneConfigChange}
+                voiceSelected={selectedVoiceParticipantId === p.participantId}
+                voiceSelectable={voiceSelectableIds?.includes(p.participantId)} onSelectVoice={onSelectVoice} />)}
+            </details>}
+            <LiveAudioSpeakers
+              selectedVoiceParticipantId={selectedVoiceParticipantId}
+              voiceSelectableIds={voiceSelectableIds}
+              onSelectVoice={onSelectVoice}
               participants={participants} 
               isControlAuthorized={isControlAuthorized}
               onRevoke={onRevoke}
@@ -229,7 +251,7 @@ export const LiveAudioControlPanel: React.FC<LiveAudioControlPanelProps> = ({
           <button
             onClick={onToggleModeratorMic}
             className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors shadow-lg
-              ${isModeratorMuted ? 'bg-gray-600 text-gray-300' : 'bg-blue-600 text-white'}`}
+              ${ownVoiceSelected ? 'ring-2 ring-yellow-400 ring-offset-2 ring-offset-gray-800' : ''} ${isModeratorMuted ? 'bg-gray-600 text-gray-300' : 'bg-blue-600 text-white'}`}
             title={isModeratorMuted ? "Abrir tu micrófono" : "Silenciar tu micrófono"}
           >
             {isModeratorMuted ? <MicOff size={20} /> : <Mic size={20} />}

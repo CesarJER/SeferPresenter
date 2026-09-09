@@ -21,6 +21,7 @@ import {
   isAuthRequired,
   isProtectedRequestPath,
 } from './authUtils.mjs'
+import { createVoiceScriptureService } from './voice-scripture-server.mjs'
 import {
   getDefaultProjectionState,
   makeAudienceSyncStateMessage,
@@ -741,6 +742,14 @@ const invalidateAudienceStreams = () => {
 }
 
 const handleApi = async (req, res, url) => {
+  if (url.pathname === '/api/voice-scripture/status' && req.method === 'GET') {
+    sendJson(res, 200, await voiceScriptureService.getStatus())
+    return true
+  }
+  if (url.pathname === '/api/voice-scripture/token' && req.method === 'POST') {
+    sendJson(res, 200, await voiceScriptureService.issueToken())
+    return true
+  }
   const brandingAsset = brandingAssets.get(url.pathname)
   if (brandingAsset && req.method === 'GET') {
     sendBrandingAsset(req, res, brandingAsset)
@@ -1138,7 +1147,6 @@ const serveFile = (req, res, filePath) => {
   const ext = path.extname(filePath).toLowerCase()
   const contentType = contentTypes[ext] || 'application/octet-stream'
   const requestPath = new URL(req.url || '/', 'http://localhost').pathname
-  const cacheHeaders = getStaticCacheHeaders(requestPath)
 
   if (!fs.existsSync(filePath)) {
     res.writeHead(404, { 'Content-Type': 'application/json' })
@@ -1147,8 +1155,18 @@ const serveFile = (req, res, filePath) => {
   }
 
   const stat = fs.statSync(filePath)
+  const cacheHeaders = getStaticCacheHeaders(requestPath, stat, ext)
+  
   const totalSize = stat.size
   const range = req.headers.range
+  const etag = `W/"${totalSize.toString(16)}-${stat.mtime.getTime().toString(16)}"`
+  cacheHeaders['ETag'] = etag
+  
+  if (req.headers['if-none-match'] === etag) {
+    res.writeHead(304, cacheHeaders)
+    res.end()
+    return
+  }
 
   if (range) {
     const parts = range.replace(/bytes=/, "").split("-")
@@ -1247,7 +1265,7 @@ const handleStatic = (req, res, url) => {
 }
 
 const server = http.createServer(async (req, res) => {
-  res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' ws: wss: https:; font-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'")
+  res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' blob:; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' ws: wss: https:; font-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'")
   res.setHeader('X-Content-Type-Options', 'nosniff')
   res.setHeader('Referrer-Policy', 'same-origin')
   const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`)
@@ -1269,6 +1287,8 @@ const server = http.createServer(async (req, res) => {
 
   sendJson(res, 404, { error: 'Static file not found' })
 })
+
+const voiceScriptureService = createVoiceScriptureService(server)
 
 const handleWsMessageFromClient = (msg, meta) => {
   if (msg.type === 'SYNC_STATE') {
@@ -1366,6 +1386,7 @@ server.on('close', () => {
   clearInterval(sseHeartbeat)
   clearInterval(serverCueInterval)
   liveKitApi?.close()
+  voiceScriptureService.close()
 })
 
 liveKitApi = createLiveKitApi({

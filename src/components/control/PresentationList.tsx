@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from 'react';
-import { ArrowDown, ArrowUp, ChevronDown, ChevronUp, Pencil, Play, Plus, Trash2 } from 'lucide-react';
+import React, { useMemo, useRef, useState } from 'react';
+import { ArrowDown, ArrowUp, ChevronDown, ChevronUp, Pencil, Play, Plus, Trash2, X } from 'lucide-react';
 import type { Presentation } from '../../types/presentation';
 import { ImportExportPanel } from './ImportExportPanel';
 
@@ -43,6 +43,7 @@ export const PresentationList: React.FC<PresentationListProps> = ({
 }) => {
   const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
   const [searchQuery, setSearchQuery] = useState('');
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   const cleanQuery = normalizeSearch(searchQuery);
   const hasSearch = searchQuery.trim() !== '';
@@ -221,14 +222,30 @@ export const PresentationList: React.FC<PresentationListProps> = ({
   return (
     <div id="section-presentation-manager" className="flex-1 flex flex-col gap-3">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between rounded-md bg-gray-900 border border-gray-700 p-3">
-        <div className="flex-1 min-w-0">
+        <div className="relative flex-1 min-w-0 w-full lg:max-w-md">
           <input
+            ref={searchInputRef}
             type="text"
-            placeholder="Buscar canción en el repertorio..."
+            placeholder="Buscar presentación en el repertorio..."
             value={searchQuery}
             onChange={(event) => setSearchQuery(event.target.value)}
-            className="w-full lg:max-w-md bg-white border border-gray-300 rounded-md px-3 py-1.5 text-xs text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
+            onKeyDown={(event) => event.key === 'Escape' && setSearchQuery('')}
+            className="w-full bg-white border border-gray-300 rounded-md pl-3 pr-8 py-1.5 text-xs text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
           />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => {
+                setSearchQuery('');
+                searchInputRef.current?.focus();
+              }}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700 focus:outline-none p-0.5 rounded cursor-pointer transition-colors"
+              title="Limpiar búsqueda"
+              aria-label="Limpiar búsqueda"
+            >
+              <X size={14} />
+            </button>
+          )}
         </div>
 
         <div className="flex flex-wrap gap-2 justify-end items-center sm:flex-nowrap">
@@ -288,7 +305,7 @@ export const PresentationList: React.FC<PresentationListProps> = ({
             {titleMatches.length === 0 && contentMatches.length === 0 && (
               <tr>
                 <td colSpan={5} className="p-8 text-center text-xs text-gray-500 italic">
-                  No se encontraron canciones que coincidan con la búsqueda
+                  No se encontraron presentaciones que coincidan con la búsqueda
                 </td>
               </tr>
             )}

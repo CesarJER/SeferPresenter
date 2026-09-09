@@ -13,6 +13,8 @@ SeferPresenter es una aplicacion React/Vite para proyectar presentaciones con so
   legal activa, la presenta con tablas GFM y muestra su versión y SHA-256. La
   ruta interna no se expone y la consulta permanece pública antes de participar.
 - **Modo sin LiveKit**: la aplicacion conserva el uso solo presentacion. Si LiveKit esta desactivado, mal configurado o no soportado, `/presenter`, `/control`, `/audio-editor`, `/audience` y catálogos deben seguir cargando sin requerir voz en vivo.
+- **Modo sin Voice Scripture**: es el modo normal. La navegación por voz, el STT,
+  el modelo y la GPU son opcionales y no forman parte del bundle base.
 
 ## Scripts
 
@@ -437,6 +439,33 @@ tokens ni mensajes privados en archivos o base de datos. El snapshot operacional
 vive solo en memoria y contiene exclusivamente estado tecnico y agregados de
 quiz; no contiene texto privado, respuestas individuales ni alias legibles.
 
+## Voice Scripture opcional
+
+Voice Scripture detecta referencias explícitas del corpus instalado desde una única pista
+local o remota de Live Audio, las valida contra la metadata instalada y proyecta
+automáticamente la última referencia inequívoca al finalizar una intervención.
+Control conserva las alternativas manuales. El operador selecciona o deselecciona el icono de micrófono delante del nick;
+el aro amarillo indica la fuente. La escucha permanece activa al cerrar los paneles.
+Presenter y Audience no
+ejecutan STT. No hay LLM, fallback cloud, diarización, grabación ni historial.
+
+- Build: `VITE_SEFER_VOICE_SCRIPTURE_BUILD=false` excluye el chunk Voice del
+  build base.
+- Runtime: `SEFER_VOICE_SCRIPTURE_ENABLED=false` evita conexión y procesamiento.
+- Estado: `GET /api/voice-scripture/status` devuelve solo
+  `{ enabled, available, debug }`.
+- Diagnóstico: `SEFER_VOICE_SCRIPTURE_DEBUG=true` activa temporalmente la traza
+  de consola descrita en la documentación; puede incluir transcripciones y
+  aliases privados, por lo que debe permanecer apagada fuera de una investigación.
+- Realtime: Control obtiene por Basic Auth una capacidad efímera de un solo uso;
+  `/voice-scripture/ws` la recibe como subprotocolo, exige origen válido, limita
+  a una sesión y mantiene la clave del STT exclusivamente en backend.
+
+La instalación nativa, el overlay opcional, el protocolo, privacidad, patrones
+V1/V2, decisión sobre Go y resultados del piloto Nemotron/Docker se documentan
+en [`docs/VOICE_SCRIPTURE.md`](docs/VOICE_SCRIPTURE.md). El benchmark comparativo
+con Whisper y la prueba térmica sostenida siguen pendientes.
+
 Compose monta `SEFER_DATA_DIR` como directorio en `/app/data` y conserva copias
 de recuperación fsync de `presentations.json` y `audio_sync.json` en el volumen
 `sefer_backups`. El montaje de directorio permite mantener el `rename` atomico
@@ -475,6 +504,9 @@ npm.cmd run build
 - Probar audio: pista, play/pause, volumen, seek y modos de sync.
 - Probar video: play/pause, loop, velocidad, volumen y seek.
 - Probar Sefer/Tanaj: proyectar, navegar versos, anadir slide.
+- Con build/runtime Voice habilitados: seleccionar una sola fuente, activar,
+  comprobar un final y su proyección automática confirmada por el servidor;
+  probar alternativas manuales y repetir con STT apagado.
 - Abrir `/audio-editor` y guardar mapas de audio.
 - Abrir `/audience` en movil o viewport movil y verificar que no hay controles.
 

@@ -220,6 +220,8 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
 
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isMusicPanelOpen, setIsMusicPanelOpen] = useState(false);
+  const [showSeferControl, setShowSeferControl] = useState(false);
+  const [voiceSuggestionsTarget, setVoiceSuggestionsTarget] = useState<HTMLDivElement | null>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [resolvedScriptureState, setResolvedScriptureState] = useState<any>(null);
 
@@ -366,7 +368,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
     const loadVideoDuration = (src: string): Promise<number> => {
       return new Promise((resolve) => {
         const video = document.createElement('video');
-        video.preload = 'metadata';
+        video.preload = 'none';
         video.src = src;
         video.onloadedmetadata = () => {
           resolve(video.duration);
@@ -1607,12 +1609,18 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
           {/* Toggle app mode button */}
           <button
             type="button"
-            onClick={() => onToggleAppMode && onToggleAppMode(appMode === 'seferManual' ? 'slides' : 'seferManual')}
+            onClick={() => {
+              const nextShow = !showSeferControl;
+              setShowSeferControl(nextShow);
+              if (onToggleAppMode) {
+                onToggleAppMode(nextShow ? 'seferManual' : 'slides');
+              }
+            }}
             className={`flex items-center justify-center p-2 text-xs font-semibold rounded border transition-all cursor-pointer ${appMode === 'seferManual'
               ? 'bg-yellow-600 border-yellow-500 text-white font-bold'
               : 'bg-gray-800 border-gray-700 hover:bg-gray-700 text-gray-300 hover:text-white'
               }`}
-            title={appMode === 'seferManual' ? "Volver a la diapositiva" : "Activar Sefer manual"}
+            title={showSeferControl ? "Cerrar Sefer manual" : "Abrir Sefer manual"}
           >
             <span className="text-sm leading-none">📜</span>
           </button>
@@ -1648,23 +1656,27 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
           />
         )}
 
-        {appMode === 'seferManual' && (
-          <div className="shrink-0 border-b border-gray-700 bg-gray-950/70">
-            <div>
+        <div className="shrink-0 border-b border-gray-700 bg-gray-950/70 flex flex-col landscape:flex-row">
+          {showSeferControl && (
+            <div className="min-w-0 flex-1">
               <SeferControlPanel
                 onProject={(state, cmd) => {
                   if (onProjectScripture) {
                     onProjectScripture(state, cmd);
                   }
                 }}
+                onDeactivate={() => {
+                  if (onToggleAppMode) onToggleAppMode('slides');
+                }}
                 onAddSlide={onAddScriptureSlide}
-                restoredState={scriptureState ? { ...scriptureState, verseEnd: undefined } : null}
+                restoredState={scriptureState}
                 onUpdateFontSizes={onUpdateScriptureFontSizes}
                 onVerseResolved={(state) => setResolvedScriptureState(state)}
               />
             </div>
-          </div>
-        )}
+          )}
+          <div ref={setVoiceSuggestionsTarget} className="empty:hidden landscape:w-64 landscape:shrink-0" />
+        </div>
         <div className="flex-1">
           {/* ── Visor Superior Panel ───────────────────────────────── */}
           <div id="section-viewer-top-panel" className="border-b border-gray-700 bg-gray-900/50 p-3 md:p-4">
@@ -2070,6 +2082,13 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
       {LiveAudioControlContainer && (
         <Suspense fallback={null}>
           <LiveAudioControlContainer
+            scriptureState={scriptureState}
+            voiceSuggestionsTarget={voiceSuggestionsTarget}
+            onProjectScripture={(state, command) => {
+              setShowSeferControl(true);
+              onToggleAppMode('seferManual');
+              onProjectScripture?.(state, command);
+            }}
             isControlAuthorized={controlAuthorization?.role === 'principal' || controlAuthorization?.role === 'delegated'}
             authorizationRequests={controlAuthorization?.pendingControls || []}
             onApproveRequest={onApproveControlRequest}

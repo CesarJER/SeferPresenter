@@ -215,8 +215,24 @@ Start with:
 - `src/components/control/SeferControlPanel.tsx`
 - `src/components/presenter/SeferReaderScreen.tsx`
 
+For optional spoken-reference detection also read:
+
+- `src/features/voiceScripture/voiceScriptureParser.ts`
+- `src/features/voiceScripture/VoiceScriptureControl.tsx`
+- `server/voice-scripture-server.mjs`
+- `docs/VOICE_SCRIPTURE.md`
+
+Voice candidates stay local to Control and reach projection only through the
+existing `onProjectScripture` path automatically after a validated final while
+listening is enabled. `voiceScriptureSession.ts` owns transport/capture;
+`voicePcmWorklet.ts` owns filtered PCM and flush; `voiceScriptureProjection.ts`
+owns hydration, labels and speech context phrases. Ambiguous results abstain.
+
 Do not edit generated operator corpus files by hand; they live under
 `SEFER_DATA_DIR/public/` and change only through the explicit generator.
+Voice pronunciation variants belong only in
+`SEFER_DATA_DIR/config/voice_aliases.json`; the generator validates them and
+includes them in `public/metadata.json`.
 
 ### Modify Quiz/Question Mode
 

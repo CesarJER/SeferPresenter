@@ -1,0 +1,14 @@
+services:
+  app:
+    build:
+      args:
+        VITE_SEFER_LIVE_AUDIO_BUILD: "true"
+        VITE_SEFER_VOICE_SCRIPTURE_BUILD: "true"
+    environment:
+      SEFER_LIVE_AUDIO_ENABLED: "true"
+      SEFER_VOICE_SCRIPTURE_ENABLED: "true"
+      SEFER_VOICE_SCRIPTURE_STT_URL: ${SEFER_VOICE_SCRIPTURE_STT_URL:-ws://host.docker.internal:9090/v1/realtime}
+      SEFER_VOICE_SCRIPTURE_READY_URL: ${SEFER_VOICE_SCRIPTURE_READY_URL:-http://host.docker.internal:9090/ready}
+      SEFER_VOICE_SCRIPTURE_STT_API_KEY: ${SEFER_VOICE_SCRIPTURE_STT_API_KEY:?SEFER_VOICE_SCRIPTURE_STT_API_KEY is required}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

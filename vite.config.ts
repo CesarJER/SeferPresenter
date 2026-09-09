@@ -45,6 +45,8 @@ const getOperatorPublicProxies = (mode: string) => {
 }
 
 // https://vitejs.dev/config/
+
+// https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
   publicDir: 'static',
   test: {
@@ -53,6 +55,7 @@ export default defineConfig(({ mode }) => ({
   },
   plugins: [react()],
   build: {
+    modulePreload: false,
     rollupOptions: {
       input: {
         presenter: resolve(__dirname, 'presenter.html'),
@@ -67,6 +70,7 @@ export default defineConfig(({ mode }) => ({
     proxy: {
       ...getOperatorPublicProxies(mode),
       '/api': backendTarget,
+      '/voice-scripture/ws': { target: 'ws://localhost:8787', ws: true },
       '/legal': backendTarget,
       '/ws': {
         target: 'ws://localhost:8787',

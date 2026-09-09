@@ -2,6 +2,7 @@ export interface BookMetadata {
   bookHeb: string;
   bookAbbrevEs: string;
   safeFile: string;
+  voiceAliases?: string[];
   chapters: Record<string, string[]>;
 }
 
