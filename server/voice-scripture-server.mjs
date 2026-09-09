@@ -3,6 +3,7 @@ import crypto from 'crypto'
 import { hasAllowedRequestOrigin, hasValidBasicAuth } from './authUtils.mjs'
 
 const MAX_VOICE_FRAME_BYTES = 512 * 1024
+const MAX_VOICE_QUEUE_BYTES = 256 * 1024
 const TOKEN_TTL_MS = 10_000
 
 const parseEnabled = (value) => String(value || '').trim().toLowerCase() === 'true'
@@ -155,11 +156,21 @@ export const createVoiceScriptureService = (httpServer) => {
               debugLog(config, 'client.event', { payload: data.toString().slice(0, 8_000) })
             }
           }
+          if (upstream.bufferedAmount + data.length > MAX_VOICE_QUEUE_BYTES) {
+            client.close(1013, 'Voice audio queue exceeded')
+            closeBoth()
+            return
+          }
           if (upstream.readyState === WebSocket.OPEN) upstream.send(data, { binary: isBinary })
         })
         upstream.on('message', (data, isBinary) => {
           if (config.debug && !isBinary) {
             debugLog(config, 'stt.event', { payload: data.toString().slice(0, 8_000) })
+          }
+          if (client.bufferedAmount + data.length > MAX_VOICE_QUEUE_BYTES) {
+            client.close(1013, 'Voice result queue exceeded')
+            closeBoth()
+            return
           }
           if (client.readyState === WebSocket.OPEN) client.send(data, { binary: isBinary })
         })

@@ -70,6 +70,7 @@ export default defineConfig(({ mode }) => ({
     proxy: {
       ...getOperatorPublicProxies(mode),
       '/api': backendTarget,
+      '/voice-scripture/ws': { target: 'ws://localhost:8787', ws: true },
       '/legal': backendTarget,
       '/ws': {
         target: 'ws://localhost:8787',
