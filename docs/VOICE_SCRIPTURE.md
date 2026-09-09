@@ -1,7 +1,7 @@
 # Voice Scripture
 
 Optional, local spoken-reference navigation. Control selects one existing local
-or remote Live Audio track and explicitly starts automatic listening. Presenter
+or remote Live Audio track by clicking its microphone icon; selection starts automatic listening. Presenter
 and Audience perform no speech recognition. Names and aliases come exclusively
 from the installed corpus; public examples below use synthetic collections.
 
@@ -17,8 +17,11 @@ selected MediaStreamTrack
   -> existing SCRIPTURE_PROJECT -> backend SYNC_STATE -> displays
 ```
 
-- `VoiceScriptureControl.tsx` coordinates UI, hydration cancellation, serial
+- `VoiceScriptureControl.tsx` stays mounted outside the inbox and drawers and coordinates hydration cancellation, serial
   projection work and acknowledgement against the backend scripture snapshot.
+- `VoiceScriptureSuggestions.tsx` is a small presentation-only view rendered next to
+  the manual reader (right in landscape, below in portrait). Moving or hiding its
+  portal does not recreate the audio session.
 - `voiceScriptureSession.ts` owns capability acquisition, socket, track lifecycle,
   worklet, final-event deduplication (512 recent IDs), health checks and rotation.
 - `voicePcmWorklet.ts` mixes channels, applies a normalized 63-tap low-pass FIR,
@@ -127,17 +130,22 @@ the app image. Keep port 9090 restricted to the intended host/container boundary
 - Capability/connect attempts are bounded and cancelled on stop/unmount.
 - Audio startup has a 15-second watchdog. Hydration consumers can be cancelled
   independently of the shared book cache and time out after three seconds.
-- Track removal/replacement stops listening. Four seconds without PCM fails.
-- Ten seconds without STT events fails. After the first nonempty partial, four
-  seconds without further text or a final, or a 20-second unfinalized utterance,
-  stops the session with an endpointing diagnostic. These are fail-closed guards,
-  not an alternative transcription segmenter.
+- Deselecting, muting or losing a source cancels pending projection. Replacement
+  of a track under the same selected identity cancels old results and starts a new
+  session. Four seconds without PCM fails; a selected live track retries after
+  five seconds. Deselecting cancels that retry. No retry opens a microphone.
+- Silence alone does not require transcription events. After the first nonempty
+  partial, four seconds without further text/final, or 20 seconds without a final,
+  suspends automatic interpretation. The accumulated final is discarded; a clean
+  boundary restores interpretation without closing the session. These guards
+  do not attempt to segment or project unfinished speech.
 - Browser and gateway queues are capped at 256 KiB. Exceeding the cap stops the
   session rather than silently dropping speech or accumulating unbounded audio.
 - At 256 MiB cumulative PCM, rotate at the next completed utterance; at 448 MiB
   without a boundary, stop rather than reaching the upstream 512 MiB cap.
-- Availability can be checked again without reloading Control. Failures require
-  an explicit restart; no automatic retry may unexpectedly resume a microphone.
+- Unavailable status is checked again every ten seconds without reloading Control.
+  Missing server projection acknowledgement still clears selection after three
+  seconds; it is not retried as an unconfirmed command.
 
 ## Neutral technical record — 2026-09-09
 
@@ -215,3 +223,51 @@ from a reference mentioned mid-sentence while the speaker continues talking.
   with multiple speakers before declaring performance/accuracy targets achieved.
 
 These proposals are intentionally not enabled or parsed in this release.
+
+## Persistent assistant and source selection — 2026-09-09
+
+The voice component was a child of `PrivateControlInbox`, whose closed state
+returns null. Closing the inbox therefore disposed the STT session. The separate
+10-second no-STT watchdog could also treat ordinary silence as a connection failure.
+Both lifecycle causes have been removed.
+
+Controllers now appear in their own collapsible group above active speakers.
+Presence and microphone state come from LiveKit, including connection, publication,
+mute and reconnect events; the application audience snapshot does not contain this
+roster. Nicknames use the notification operator-nick preference and the existing
+encrypted control channel. Profiles are sent on changes/new peers and refreshed
+periodically; they do not enter public projection snapshots. Remote microphone
+volume/music settings also use that channel and accept only current controllers.
+Controller rows expose audio settings, without grant/revoke/kick/moderation actions.
+
+Click an active microphone before a nickname to select it, another to switch, or
+the selected microphone to disable recognition. A yellow ring identifies selection;
+selecting the local microphone also marks the bottom microphone button. Selection
+starts empty and is never restored from storage. An unavailable engine disables
+source activation. Normal microphone publishing/muting remains a separate action.
+
+Voice projection opens the manual reader and switches to `seferManual`, retaining
+range endpoints. Recommendations and status remain transient and movable; there
+is no voice popover, source dropdown or separate start button.
+
+Validation for this revision includes source selection/switch/deselection, yellow
+rings, inbox/drawer closure, private controller settings, moving the recommendations
+portal, silence, stalled-final rejection/recovery and cancellation of reconnects.
+Physical microphone accuracy and a multi-device LiveKit session remain operator
+acceptance checks; synthetic tests do not establish those outcomes.
+
+Delivery checks: 86 focused voice/accessibility cases passed; after the final
+source-identity/ordered-close adjustment, all 22 affected interaction/session
+cases passed again. The wider run passed 395/397 tests, retaining the two known
+unrelated failures in legal-route caching and legacy Audience alias expectations.
+Lint and TypeScript passed, and both optional-off and optional-on builds were
+checked without running the private corpus generator. The final Docker build also
+ran TypeScript and the enabled production build.
+
+The existing app container was updated and reported healthy; authenticated voice
+readiness returned HTTP 200 with enabled/available true. In the live Control UI,
+a selected local microphone displayed its yellow ring and a reference reached
+server-confirmed projection with the drawers closed. The portrait recommendation
+block was visually checked below the manual reader. This observation is not a
+measured recognition-accuracy or long-duration multi-device test. The prior image
+is retained locally as `seferpresenter-app:before-copilot-20260909`.

@@ -444,7 +444,9 @@ quiz; no contiene texto privado, respuestas individuales ni alias legibles.
 Voice Scripture detecta referencias explícitas del corpus instalado desde una única pista
 local o remota de Live Audio, las valida contra la metadata instalada y proyecta
 automáticamente la última referencia inequívoca al finalizar una intervención.
-Control conserva las alternativas manuales. El operador inicia y detiene la escucha. Presenter y Audience no
+Control conserva las alternativas manuales. El operador selecciona o deselecciona el icono de micrófono delante del nick;
+el aro amarillo indica la fuente. La escucha permanece activa al cerrar los paneles.
+Presenter y Audience no
 ejecutan STT. No hay LLM, fallback cloud, diarización, grabación ni historial.
 
 - Build: `VITE_SEFER_VOICE_SCRIPTURE_BUILD=false` excluye el chunk Voice del
