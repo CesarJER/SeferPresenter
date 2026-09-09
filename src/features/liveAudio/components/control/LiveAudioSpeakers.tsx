@@ -4,6 +4,9 @@ import { Mic2 } from 'lucide-react';
 
 interface LiveAudioSpeakersProps {
   participants: LiveAudioParticipant[];
+  selectedVoiceParticipantId?: string;
+  voiceSelectableIds?: string[];
+  onSelectVoice?: (id: string) => void;
   isControlAuthorized: boolean;
   onRevoke: (id: string) => void;
   onMute: (id: string) => void;
@@ -18,6 +21,9 @@ interface LiveAudioSpeakersProps {
 
 export const LiveAudioSpeakers: React.FC<LiveAudioSpeakersProps> = ({
   participants,
+  selectedVoiceParticipantId,
+  voiceSelectableIds,
+  onSelectVoice,
   isControlAuthorized,
   onRevoke,
   onMute,
@@ -49,6 +55,9 @@ export const LiveAudioSpeakers: React.FC<LiveAudioSpeakersProps> = ({
           <LiveAudioParticipantRow
             key={p.participantId}
             participant={p}
+            voiceSelected={selectedVoiceParticipantId === p.participantId}
+            voiceSelectable={voiceSelectableIds?.includes(p.participantId)}
+            onSelectVoice={onSelectVoice}
             isControlAuthorized={isControlAuthorized}
             onRevoke={onRevoke}
             onMute={onMute}

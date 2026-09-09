@@ -53,7 +53,7 @@ interface PrivateControlInboxProps {
   onAudienceAccessDecision?: (participantId: string, decision: 'ADMIT' | 'REJECT' | 'BLOCK' | 'UNBLOCK') => void;
   onReplyToParticipant?: (messageId: string, participantId: string, text: string) => void;
   onSendInterControlMessage?: (text: string) => void;
-  voiceScripturePanel?: React.ReactNode;
+  onOperatorNickChange?: (nick: string) => void;
 }
 
 const formatTime = (timestamp: number): string => {
@@ -76,7 +76,7 @@ export const PrivateControlInbox: React.FC<PrivateControlInboxProps> = ({
   onAudienceAccessDecision = () => {},
   onReplyToParticipant,
   onSendInterControlMessage,
-  voiceScripturePanel,
+  onOperatorNickChange,
 }) => {
   const { availability } = useLiveAudioAvailability();
 
@@ -123,6 +123,7 @@ export const PrivateControlInbox: React.FC<PrivateControlInboxProps> = ({
     const value = e.target.value;
     setOperatorNick(value);
     localStorage.setItem('sefer_control_operator_nick', value);
+    onOperatorNickChange?.(value);
   };
 
   const handleToggleNickPublic = () => {
@@ -204,7 +205,6 @@ export const PrivateControlInbox: React.FC<PrivateControlInboxProps> = ({
         <h3 className="font-bold text-gray-200 text-sm flex items-center gap-1.5 shrink-0">
           <MessageSquare size={16} className="text-blue-400" />
           <span>Notificaciones</span>
-          {voiceScripturePanel}
         </h3>
 
         {/* Operator Nick & Visibility selector */}

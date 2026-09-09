@@ -776,6 +776,7 @@ function App() {
       if (manualState) {
         setScriptureState(manualState);
       }
+      appModeRef.current = 'seferManual';
       setAppMode('seferManual');
       syncState({
         presentation: currentPresentationRef.current, slideIndex: currentSlideIndexRef.current,

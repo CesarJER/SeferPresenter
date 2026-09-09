@@ -42,6 +42,7 @@ type ModerationEndpoint =
 
 export interface LiveAudioControlContainerProps {
   scriptureState?: ScriptureNavState | null;
+  voiceSuggestionsTarget?: HTMLElement | null;
   onProjectScripture?: (state: SeferReaderState, command?: 'navigate') => void;
   isControlAuthorized: boolean;
   authorizationRequests?: PendingControlAuthorization[];
@@ -101,6 +102,7 @@ const snapshotParticipantToStatus = (
 
 export default function LiveAudioControlContainer({
   scriptureState = null,
+  voiceSuggestionsTarget,
   onProjectScripture = () => { },
   isControlAuthorized,
   authorizationRequests = [],
@@ -114,7 +116,9 @@ export default function LiveAudioControlContainer({
   verificationCode,
 }: LiveAudioControlContainerProps) {
   const [isInboxOpen, setIsInboxOpen] = useState(false);
-  const [voiceScriptureState, setVoiceScriptureState] = useState<'idle' | 'listening-own' | 'listening-other'>('idle');
+  const [selectedVoiceId, setSelectedVoiceId] = useState('');
+  const [voiceReady, setVoiceReady] = useState(false);
+  const [operatorNick, setOperatorNick] = useState(() => localStorage.getItem('sefer_control_operator_nick') || '');
   const [isModeratorMuted, setIsModeratorMuted] = useState(true);
   const [listenVolume, setListenVolume] = useState(100);
   const [microphoneVolume, setMicrophoneVolume] = useState(100);
@@ -134,6 +138,7 @@ export default function LiveAudioControlContainer({
   const lastSentListRef = useRef('');
   const requestedAuthRef = useRef<string | null>(null);
   const moderatorConsentRevisionRef = useRef(0);
+  const applyControllerConfig = useRef<(data: Record<string, unknown>) => void>(() => undefined);
 
   const { availability } = useLiveAudioAvailability();
 
@@ -145,6 +150,7 @@ export default function LiveAudioControlContainer({
     isMicrophoneActive,
     participantId,
     remoteTracks,
+    controlParticipants,
     localMicrophoneTrack,
     startRemoteAudio,
   } = useLiveAudio({
@@ -297,7 +303,7 @@ export default function LiveAudioControlContainer({
         if (msg.activeListPublicKey) {
           setParticipantEphemeralKeys(prev => ({ ...prev, [msg.participantId]: msg.activeListPublicKey! }));
         }
-        if (msg.isActiveAudience === false && msg.isKicked !== true) {
+        if (msg.role === 'audience' && msg.isActiveAudience === false && msg.isKicked !== true) {
           setParticipantAliases(prev => {
             const next = { ...prev };
             delete next[msg.participantId];
@@ -391,6 +397,16 @@ export default function LiveAudioControlContainer({
       return;
     }
 
+    if ((data.type === 'CONTROL_PROFILE' || data.type === 'CONTROL_MICROPHONE_CONFIG')
+      && signal.fromParticipantId !== participantId
+      && !controlParticipants.some(control => control.participantId === signal.fromParticipantId)) return;
+    if (data.type === 'CONTROL_MICROPHONE_CONFIG') { applyControllerConfig.current(data); return; }
+    if (data.type === 'CONTROL_PROFILE') {
+      setParticipantAliases(prev => ({ ...prev, [signal.fromParticipantId]: sanitizeAlias(data.alias) || 'Sin nick' }));
+      const volume = data.volume;
+      if (typeof volume === 'number' && Number.isFinite(volume)) setParticipantMicrophoneConfigs(prev => ({ ...prev, [signal.fromParticipantId]: { volume: clampVolume(volume), musicMode: data.musicMode === true } }));
+      return;
+    }
     const alias = sanitizeAlias(data.alias);
     if (alias) {
       setParticipantAliases(prev => {
@@ -494,7 +510,7 @@ export default function LiveAudioControlContainer({
         isWaitingRoom,
       }]);
     }
-  }, [audienceAccessRequests, wsSend]);
+  }, [audienceAccessRequests, wsSend, controlParticipants, participantId]);
 
   const {
     sendPrivateSignalToParticipant,
@@ -513,6 +529,16 @@ export default function LiveAudioControlContainer({
     transportReady: wsStatus === 'open',
     onPrivateSignal: handlePrivateSignal,
   });
+
+  const controlRosterKey = controlParticipants.map(control => control.participantId).join(',');
+  // Control nicknames travel only through the existing encrypted control channel.
+  useEffect(() => {
+    if (!privateSignalsReady || !participantId) return;
+    const publish = () => void sendPrivateSignalToControls({ type: 'CONTROL_PROFILE', alias: operatorNick.trim().slice(0, 80), volume: microphoneVolume, musicMode: isModeratorMusicMode }).catch(() => undefined);
+    publish();
+    const timer = setInterval(publish, 15_000);
+    return () => clearInterval(timer);
+  }, [operatorNick, participantId, privateSignalsReady, sendPrivateSignalToControls, microphoneVolume, isModeratorMusicMode, controlRosterKey]);
 
   useEffect(() => {
     if (controlState === 'PENDING' && verificationCode && requestedAuthRef.current !== verificationCode) {
@@ -755,6 +781,12 @@ export default function LiveAudioControlContainer({
       });
   }, [isMicrophoneActive, isModeratorMusicMode, publishMicrophone, unpublishMicrophone]);
 
+  applyControllerConfig.current = (data) => {
+    if (data.targetParticipantId !== participantId) return;
+    if (typeof data.volume === 'number' && Number.isFinite(data.volume)) setMicrophoneVolume(clampVolume(data.volume));
+    if (typeof data.musicMode === 'boolean') handleModeratorMusicModeChange(data.musicMode);
+  };
+
   const sendModerationMessage = useCallback((endpoint: ModerationEndpoint, pid?: string) => {
     if (!wsSend) return false;
 
@@ -924,6 +956,36 @@ export default function LiveAudioControlContainer({
     });
   }, [wsSend]);
 
+  const voiceTracks = [
+    ...(localMicrophoneTrack && !isModeratorMuted ? [{ id: 'local-mic', track: localMicrophoneTrack, label: operatorNick || 'Mi micrófono' }] : []),
+    ...remoteTracks.filter(remote => {
+      const participant = participantsMap[remote.participantId || ''];
+      const control = controlParticipants.find(p => p.participantId === remote.participantId);
+      return control ? control.isMicrophoneActive : participant?.role === 'audience' && participant.isMuted !== true && participant.connected !== false;
+    }).map(remote => ({ id: remote.participantId || remote.id, track: remote.track, label: participantAliases[remote.participantId || ''] || 'Sin nick' })),
+  ];
+  const voiceParticipantId = selectedVoiceId === 'local-mic' ? participantId : selectedVoiceId;
+  const selectVoice = (id: string) => {
+    const trackId = id === participantId ? 'local-mic' : id;
+    if (trackId && trackId === selectedVoiceId) { setSelectedVoiceId(''); return; }
+    if (!trackId || !voiceReady || !voiceTracks.some(track => track.id === trackId)) return;
+    setSelectedVoiceId(trackId);
+  };
+  const controllers: LiveAudioParticipant[] = controlParticipants
+    .map(p => ({ participantId: p.participantId, alias: participantAliases[p.participantId] || 'Sin nick',
+      speakerState: 'GRANTED', isMuted: !p.isMicrophoneActive, isMicrophoneActive: p.isMicrophoneActive,
+      isActiveAudience: false, isKicked: false,
+      microphoneVolume: participantMicrophoneConfigs[p.participantId]?.volume,
+      isMusicMode: participantMicrophoneConfigs[p.participantId]?.musicMode }));
+  if (participantId) controllers.unshift({ participantId, alias: operatorNick.trim() || 'Sin nick', speakerState: 'GRANTED',
+    isMuted: isModeratorMuted, isMicrophoneActive, isActiveAudience: false, isKicked: false,
+    microphoneVolume, isMusicMode: isModeratorMusicMode });
+  const voiceRuntime = VoiceScriptureControl && isControlAuthorized && availability === 'enabled' ? <Suspense fallback={null}>
+    <VoiceScriptureControl tracks={voiceTracks} selectedId={selectedVoiceId} onSelectionChange={setSelectedVoiceId}
+      onAvailabilityChange={setVoiceReady} suggestionsTarget={voiceSuggestionsTarget}
+      scriptureState={scriptureState} onProject={onProjectScripture} />
+  </Suspense> : null;
+
   const portalTarget = document.getElementById('live-audio-inbox-portal-target');
   const accessRequestItems = Object.entries(audienceAccessRequests).map(([id, request]) => ({
     participantId: id,
@@ -949,24 +1011,10 @@ export default function LiveAudioControlContainer({
         <button
           onClick={() => setIsInboxOpen(!isInboxOpen)}
           className={`flex items-center justify-center p-2 text-xs font-semibold rounded border transition-all cursor-pointer ${
-            hasUnread
-              ? voiceScriptureState === 'listening-own' 
-                ? 'bg-red-600 border-blue-500 text-white animate-pulse'
-                : voiceScriptureState === 'listening-other'
-                  ? 'bg-red-600 border-white text-white animate-pulse'
-                  : 'bg-red-600 border-red-500 text-white animate-pulse'
-              : isInboxOpen
-                ? voiceScriptureState === 'listening-own'
-                  ? 'bg-blue-600 border-blue-400 text-white'
-                  : voiceScriptureState === 'listening-other'
-                    ? 'bg-blue-600 border-white text-white'
-                    : 'bg-blue-600 border-blue-500 text-white'
-                : voiceScriptureState === 'listening-own'
-                  ? 'bg-gray-800 border-blue-500 text-blue-400 hover:bg-gray-700'
-                  : voiceScriptureState === 'listening-other'
-                    ? 'bg-gray-800 border-white text-gray-200 hover:bg-gray-700'
-                    : 'bg-gray-800 border-gray-700 hover:bg-gray-700 text-gray-300 hover:text-white'
-            }`}
+            hasUnread ? 'bg-red-600 border-red-500 text-white animate-pulse'
+              : isInboxOpen ? 'bg-blue-600 border-blue-500 text-white'
+                : 'bg-gray-800 border-gray-700 hover:bg-gray-700 text-gray-300 hover:text-white'
+          }`}
           title="Bandeja Privada"
           aria-label={`Bandeja Privada: ${unreadCount} solicitudes pendientes`}
         >
@@ -990,31 +1038,7 @@ export default function LiveAudioControlContainer({
         onAudienceAccessDecision={handleAudienceAccessDecision}
         onReplyToParticipant={handleReplyToParticipant}
         onSendInterControlMessage={handleSendInterControlMessage}
-        voiceScripturePanel={
-          VoiceScriptureControl ? (
-            <Suspense fallback={null}>
-              <VoiceScriptureControl
-                tracks={[
-                  ...(localMicrophoneTrack ? [{
-                    id: 'local-mic',
-                    track: localMicrophoneTrack,
-                    label: 'Mi Micrófono (Control)',
-                  }] : []),
-                  ...remoteTracks.map((remoteTrack) => ({
-                    id: remoteTrack.id,
-                    track: remoteTrack.track,
-                    label: participantAliases[remoteTrack.participantId || '']
-                      || remoteTrack.participantIdentity
-                      || 'Voz sin identificar',
-                  }))
-                ]}
-                scriptureState={scriptureState}
-                onProject={onProjectScripture}
-                onStateChange={setVoiceScriptureState}
-              />
-            </Suspense>
-          ) : null
-        }
+        onOperatorNickChange={setOperatorNick}
       />
     </div>,
     portalTarget,
@@ -1033,9 +1057,22 @@ export default function LiveAudioControlContainer({
       ))}
 
       {inboxPortal}
+      {voiceRuntime}
 
       <LiveAudioControlPanel
-        voiceScripturePanel={null}
+        controllers={controllers}
+        selectedVoiceParticipantId={voiceParticipantId || ''}
+        voiceSelectableIds={voiceReady ? voiceTracks.map(track => track.id === 'local-mic' ? participantId || '' : track.id) : []}
+        onSelectVoice={selectVoice}
+        ownVoiceSelected={selectedVoiceId === 'local-mic'}
+        onControllerMicrophoneConfigChange={(id, config) => {
+          if (id !== participantId) {
+            void sendPrivateSignalToControls({ type: 'CONTROL_MICROPHONE_CONFIG', targetParticipantId: id, ...config }).catch(() => undefined);
+            return;
+          }
+          if (config.volume !== undefined) setMicrophoneVolume(clampVolume(config.volume));
+          if (config.musicMode !== undefined) void handleModeratorMusicModeChange(config.musicMode);
+        }}
         totalAudience={totalAudience}
         activeUsers={activeUsers}
         isModeratorMuted={isModeratorMuted}

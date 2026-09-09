@@ -221,6 +221,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isMusicPanelOpen, setIsMusicPanelOpen] = useState(false);
   const [showSeferControl, setShowSeferControl] = useState(false);
+  const [voiceSuggestionsTarget, setVoiceSuggestionsTarget] = useState<HTMLDivElement | null>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [resolvedScriptureState, setResolvedScriptureState] = useState<any>(null);
 
@@ -1655,9 +1656,9 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
           />
         )}
 
-        {showSeferControl && (
-          <div className="shrink-0 border-b border-gray-700 bg-gray-950/70">
-            <div>
+        <div className="shrink-0 border-b border-gray-700 bg-gray-950/70 flex flex-col landscape:flex-row">
+          {showSeferControl && (
+            <div className="min-w-0 flex-1">
               <SeferControlPanel
                 onProject={(state, cmd) => {
                   if (onProjectScripture) {
@@ -1668,13 +1669,14 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                   if (onToggleAppMode) onToggleAppMode('slides');
                 }}
                 onAddSlide={onAddScriptureSlide}
-                restoredState={scriptureState ? { ...scriptureState, verseEnd: undefined } : null}
+                restoredState={scriptureState}
                 onUpdateFontSizes={onUpdateScriptureFontSizes}
                 onVerseResolved={(state) => setResolvedScriptureState(state)}
               />
             </div>
-          </div>
-        )}
+          )}
+          <div ref={setVoiceSuggestionsTarget} className="empty:hidden landscape:w-64 landscape:shrink-0" />
+        </div>
         <div className="flex-1">
           {/* ── Visor Superior Panel ───────────────────────────────── */}
           <div id="section-viewer-top-panel" className="border-b border-gray-700 bg-gray-900/50 p-3 md:p-4">
@@ -2081,7 +2083,12 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
         <Suspense fallback={null}>
           <LiveAudioControlContainer
             scriptureState={scriptureState}
-            onProjectScripture={onProjectScripture}
+            voiceSuggestionsTarget={voiceSuggestionsTarget}
+            onProjectScripture={(state, command) => {
+              setShowSeferControl(true);
+              onToggleAppMode('seferManual');
+              onProjectScripture?.(state, command);
+            }}
             isControlAuthorized={controlAuthorization?.role === 'principal' || controlAuthorization?.role === 'delegated'}
             authorizationRequests={controlAuthorization?.pendingControls || []}
             onApproveRequest={onApproveControlRequest}
