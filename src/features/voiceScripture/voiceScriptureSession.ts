@@ -27,7 +27,7 @@ export class VoiceScriptureSession {
   private firstPartialAt = 0;
   private lastPartialAt = 0;
   private lastAudioAt = 0;
-  private lastSttAt = 0;
+  private discardUtterance = false;
   private seen = new Set<string>();
   private flushResolve: (() => void) | null = null;
   private track: MediaStreamTrack;
@@ -108,7 +108,6 @@ export class VoiceScriptureSession {
       if (this.startupTimer) clearTimeout(this.startupTimer);
       this.startupTimer = null;
       this.lastAudioAt = Date.now();
-      this.lastSttAt = Date.now();
       this.timer = setInterval(this.checkHealth, 500);
       this.callbacks.phase('listening');
     } catch (error) {
@@ -121,9 +120,9 @@ export class VoiceScriptureSession {
   private checkHealth = () => {
     const now = Date.now();
     if (now - this.lastAudioAt > 4_000) { this.fail('No llega audio de la fuente seleccionada'); return; }
-    if (now - this.lastSttAt > 10_000) { this.fail('El motor no confirma procesamiento de audio'); return; }
     if (this.firstPartialAt && (now - this.lastPartialAt > VOICE_LIMITS.stalledMs || now - this.firstPartialAt > VOICE_LIMITS.utteranceMs)) {
-      this.fail('No llegan finales STT: revisa endpointing y vuelve a iniciar');
+      this.discardUtterance = true;
+      this.callbacks.phase('partial', 'Intervención sin final: automatización suspendida hasta la próxima pausa');
     }
   };
 
@@ -132,12 +131,11 @@ export class VoiceScriptureSession {
     try {
       const message = JSON.parse(event.data) as Record<string, unknown>;
       if (!message || typeof message !== 'object' || Array.isArray(message)) throw new Error('Invalid STT event');
-      this.lastSttAt = Date.now();
       if (message.type === 'error') { this.fail('El motor STT rechazó la sesión'); return; }
       if (message.type === 'conversation.item.input_audio_transcription.delta' && typeof message.delta === 'string' && message.delta.trim()) {
         this.firstPartialAt ||= Date.now();
         this.lastPartialAt = Date.now();
-        this.callbacks.phase('partial');
+        if (!this.discardUtterance) this.callbacks.phase('partial');
       }
       if (message.type !== 'conversation.item.input_audio_transcription.completed') return;
       if (typeof message.transcript !== 'string' || typeof message.event_id !== 'string') {
@@ -146,13 +144,13 @@ export class VoiceScriptureSession {
       if (this.seen.has(message.event_id)) return;
       this.seen.add(message.event_id);
       if (this.seen.size > 512) this.seen.delete(this.seen.values().next().value!);
-      if (this.firstPartialAt && Date.now() - this.firstPartialAt > VOICE_LIMITS.utteranceMs) {
-        this.fail('Intervención demasiado larga; revisa la segmentación'); return;
-      }
+      const discard = this.discardUtterance || (this.firstPartialAt > 0 && Date.now() - this.firstPartialAt > VOICE_LIMITS.utteranceMs);
+      this.discardUtterance = false;
       this.firstPartialAt = 0;
       this.lastPartialAt = 0;
       this.callbacks.phase('final');
-      this.callbacks.final(message.transcript, message.event_id);
+      if (!discard) this.callbacks.final(message.transcript, message.event_id);
+      else this.callbacks.phase('listening', 'Intervención acumulada descartada; escucha preparada');
       if (this.bytes >= VOICE_LIMITS.rotateBytes) {
         // The owner restarts on a clean utterance boundary with the same track.
         this.dispose();

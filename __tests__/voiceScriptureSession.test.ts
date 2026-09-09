@@ -64,12 +64,24 @@ describe('voice session lifecycle', () => {
     await start;
     expect(phase).not.toHaveBeenCalledWith('listening');
   });
-  it('fails closed when partials never finalize', async () => {
+  it('discards stalled utterances and resumes at a clean final boundary', async () => {
     await session.start();
     Socket.latest.message({ type: 'conversation.item.input_audio_transcription.delta', delta: 'Alfa' });
     for (let i = 0; i < 10; i++) { Processor.latest.port.onmessage?.({ data: new ArrayBuffer(10240) }); await vi.advanceTimersByTimeAsync(500); }
-    expect(phase).toHaveBeenCalledWith('error', expect.stringContaining('finales'));
+    expect(phase).toHaveBeenCalledWith('partial', expect.stringContaining('suspendida'));
     completed(); expect(final).not.toHaveBeenCalled();
+    completed('next'); expect(final).toHaveBeenCalledTimes(1);
+    expect(Socket.latest.readyState).toBe(1);
+  });
+  it('keeps listening during silence without transcription events', async () => {
+    await session.start();
+    for (let i = 0; i < 120; i++) {
+      Processor.latest.port.onmessage?.({ data: new ArrayBuffer(10240) });
+      await vi.advanceTimersByTimeAsync(500);
+    }
+    expect(Socket.latest.readyState).toBe(1);
+    expect(phase.mock.calls.some(([value]) => value === 'error')).toBe(false);
+    completed(); expect(final).toHaveBeenCalledTimes(1);
   });
   it('releases the session when the track ends', async () => {
     await session.start(); track.dispatchEvent(new Event('ended'));
