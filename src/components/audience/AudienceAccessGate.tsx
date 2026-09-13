@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Clock3, ShieldAlert, ShieldCheck, MessageSquare, X } from 'lucide-react';
 import type { WebSocketConnectionStatus } from '../../hooks/useWebSocket';
 import { usePrivateControlSignals, type DecryptedPrivateControlSignal } from '../../hooks/usePrivateControlSignals';
@@ -17,6 +17,7 @@ interface AudienceAccessGateProps {
   wsSend: (type: string, payload?: unknown) => boolean;
   subscribeToWsMessage: (handler: (type: string, payload: Record<string, unknown>) => void) => () => void;
   onAliasAccepted: (alias: string, visible: boolean) => void;
+  autoAlias?: string;
 }
 
 export function AudienceAccessGate({
@@ -27,6 +28,7 @@ export function AudienceAccessGate({
   wsSend,
   subscribeToWsMessage,
   onAliasAccepted,
+  autoAlias,
 }: AudienceAccessGateProps) {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -37,6 +39,7 @@ export function AudienceAccessGate({
   const [receivedControlMessages, setReceivedControlMessages] = useState<
     Array<{ id: string; senderNick: string; text: string; timestamp: number }>
   >([]);
+  const autoRequestedParticipantRef = useRef<string | null>(null);
 
   const handlePrivateSignal = useCallback((signal: DecryptedPrivateControlSignal) => {
     const payload = signal.value as Record<string, unknown>;
@@ -102,6 +105,13 @@ export function AudienceAccessGate({
     }
   }, [onAliasAccepted, participantId, privateSignals, sending, wsSend]);
 
+  useEffect(() => {
+    if (!autoAlias || accessState !== 'REQUEST_REQUIRED' || !participantId || !privateSignals.ready) return;
+    if (autoRequestedParticipantRef.current === participantId) return;
+    autoRequestedParticipantRef.current = participantId;
+    void requestAccess(autoAlias, false);
+  }, [accessState, autoAlias, participantId, privateSignals.ready, requestAccess]);
+
   const handleSendPrivateMessage = useCallback(async (messageText: string): Promise<boolean> => {
     if (!participantId || !privateSignals.ready) return false;
     return privateSignals.sendPrivateSignal({
@@ -113,6 +123,7 @@ export function AudienceAccessGate({
 
   const retrySeconds = retryAt ? Math.max(0, Math.ceil((retryAt - now) / 1000)) : 0;
   const mayRequest = accessState === 'REQUEST_REQUIRED' || (accessState === 'REJECTED' && retrySeconds === 0);
+  const showManualRequest = mayRequest && !autoAlias;
 
   return (
     <main className="fixed inset-0 z-[100] bg-slate-950 text-slate-100 overflow-y-auto">
@@ -128,7 +139,7 @@ export function AudienceAccessGate({
             
             <BrandingWelcome />
 
-            {!mayRequest && (
+            {!showManualRequest && (
               <section className="w-full flex flex-col items-center">
                 {accessState === 'WAITING' ? (
                   <div role="status" className="flex flex-col items-center gap-2 text-amber-300 w-full">
@@ -201,7 +212,7 @@ export function AudienceAccessGate({
             )}
           </div>
 
-          {mayRequest && (
+          {showManualRequest && (
             <AudienceInterventionModal
               dismissible={false}
               inline={true}

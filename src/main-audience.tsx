@@ -32,6 +32,7 @@ const LiveAudioContainer = import.meta.env.VITE_SEFER_LIVE_AUDIO_BUILD !== 'fals
   : null;
 
 function AudienceApp() {
+  const isTvMode = new URLSearchParams(window.location.search).get('tv') === '1';
   const audienceAccess = useAudienceAccess();
   const [currentPresentation, setCurrentPresentation] = useState<Presentation | null>(null);
   const [currentSlideIndex, setCurrentSlideIndex] = useState<number>(-1);
@@ -316,6 +317,7 @@ function AudienceApp() {
         wsStatus={wsStatus}
         wsSend={wsSend}
         subscribeToWsMessage={subscribeToWsMessage}
+        autoAlias={isTvMode ? 'TV' : undefined}
         onAliasAccepted={(alias, visible) => {
           audienceSession.login(alias);
           audienceSession.setAliasVisible(visible);

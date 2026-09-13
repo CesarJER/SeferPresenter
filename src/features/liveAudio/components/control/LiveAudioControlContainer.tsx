@@ -4,6 +4,7 @@ import { Bell } from 'lucide-react';
 import { LiveAudioControlPanel } from './LiveAudioControlPanel';
 import { PrivateControlInbox, type PrivateMessage } from './PrivateControlInbox';
 import type { LiveAudioParticipant } from './LiveAudioParticipantRow';
+import { assignStableAliasOrdinal, formatAliasForControl, type AliasOrdinalState } from '../../utils/aliasOrdinals';
 import { PwaRestartButton } from '../../../../components/shared/PwaRestartButton';
 import type {
   LiveAudioConnectionCountsMessage,
@@ -125,6 +126,8 @@ export default function LiveAudioControlContainer({
   const [isModeratorMusicMode, setIsModeratorMusicMode] = useState(false);
   const [participantsMap, setParticipantsMap] = useState<Record<string, LiveAudioParticipantStatusMessage>>({});
   const [participantAliases, setParticipantAliases] = useState<Record<string, string>>({});
+  const [participantAliasOrdinals, setParticipantAliasOrdinals] = useState<Record<string, number>>({});
+  const aliasOrdinalStateRef = useRef<AliasOrdinalState>({ assignments: {}, nextByNormalizedAlias: {} });
   const [participantEphemeralKeys, setParticipantEphemeralKeys] = useState<Record<string, string>>({});
   const [participantMicrophoneConfigs, setParticipantMicrophoneConfigs] = useState<Record<string, { volume: number; musicMode: boolean }>>({});
   const [connectionCounts, setConnectionCounts] = useState<LiveAudioConnectionCountsMessage | null>(null);
@@ -200,6 +203,8 @@ export default function LiveAudioControlContainer({
       if (type === 'PRESENTATION_SESSION_ROTATED') {
         setParticipantsMap({});
         setParticipantAliases({});
+        setParticipantAliasOrdinals({});
+        aliasOrdinalStateRef.current = { assignments: {}, nextByNormalizedAlias: {} };
         setParticipantEphemeralKeys({});
         setMessages([]);
         setJoinRequests({});
@@ -393,7 +398,12 @@ export default function LiveAudioControlContainer({
     const data = getSignalRecord(signal);
 
     if (data.type === 'ALIASES_SYNC' && data.aliases && typeof data.aliases === 'object') {
-      setParticipantAliases(prev => ({ ...prev, ...(data.aliases as Record<string, string>) }));
+      const aliases = data.aliases as Record<string, string>;
+      for (const [id, alias] of Object.entries(aliases)) {
+        aliasOrdinalStateRef.current = assignStableAliasOrdinal(aliasOrdinalStateRef.current, id, alias);
+      }
+      setParticipantAliasOrdinals({ ...aliasOrdinalStateRef.current.assignments });
+      setParticipantAliases(prev => ({ ...prev, ...aliases }));
       return;
     }
 
@@ -409,6 +419,8 @@ export default function LiveAudioControlContainer({
     }
     const alias = sanitizeAlias(data.alias);
     if (alias) {
+      aliasOrdinalStateRef.current = assignStableAliasOrdinal(aliasOrdinalStateRef.current, signal.fromParticipantId, alias);
+      setParticipantAliasOrdinals({ ...aliasOrdinalStateRef.current.assignments });
       setParticipantAliases(prev => {
         if (prev[signal.fromParticipantId] === alias) return prev;
         return { ...prev, [signal.fromParticipantId]: alias };
@@ -717,7 +729,7 @@ export default function LiveAudioControlContainer({
         const isMicrophoneActive = p.isMicrophoneActive ?? (p.speakerState === 'GRANTED' && p.isMuted === false);
         return {
           participantId: p.participantId,
-          alias: alias || 'Sin nick',
+          alias: alias ? formatAliasForControl(alias, participantAliasOrdinals[p.participantId]) : 'Sin nick',
           speakerState: p.speakerState,
           isMuted: p.isMuted ?? !isMicrophoneActive,
           isMicrophoneActive,
@@ -730,7 +742,7 @@ export default function LiveAudioControlContainer({
           isMusicMode: participantMicrophoneConfigs[p.participantId]?.musicMode ?? false,
         };
       })
-  ), [participantAliases, participantMicrophoneConfigs, participantsMap]);
+  ), [participantAliasOrdinals, participantAliases, participantMicrophoneConfigs, participantsMap]);
 
   const activeUsers = participants.filter(p => p.isActiveAudience && !p.isKicked).length;
   const pendingWordCount = participants.filter(p => p.speakerState === 'REQUESTED' && !p.isKicked).length;
@@ -989,7 +1001,9 @@ export default function LiveAudioControlContainer({
   const portalTarget = document.getElementById('live-audio-inbox-portal-target');
   const accessRequestItems = Object.entries(audienceAccessRequests).map(([id, request]) => ({
     participantId: id,
-    alias: participantAliases[id] || 'Sincronizando alias…',
+    alias: participantAliases[id]
+      ? formatAliasForControl(participantAliases[id], participantAliasOrdinals[id])
+      : 'Sincronizando alias…',
     ...request,
   }));
   const pendingAccessCount = Object.values(audienceAccessRequests).filter((r) => r.accessState === 'WAITING').length;
