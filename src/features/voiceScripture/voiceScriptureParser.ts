@@ -115,7 +115,7 @@ const findBooks = (tokens: string[], metadata: AppMetadata): BookMatch[] => {
   const matches: BookMatch[] = [];
   for (let start = 0; start < tokens.length; start += 1) {
     const matching = aliases.filter(({ alias }) => alias[0] && alias.every((token, offset) => tokens[start + offset] === token)
-      && (alias.length !== 1 || alias[0].length > 1 || parseNumberAt(tokens, start + 1) || tokens[start + 1] === 'capitulo'));
+      && (alias.length !== 1 || alias[0].length > 1 || parseNumberAt(tokens, start + 1) || tokens[start + 1] === 'capitulo' || tokens[start - 1] === 'de'));
     if (!matching.length) continue;
     const longest = matching.filter((entry) => entry.alias.length === matching[0].alias.length);
     const books = new Set(longest.map((entry) => entry.book));
@@ -284,6 +284,14 @@ const explicitReference = (tokens: string[], book: string, metadata: AppMetadata
   return makeCandidate(metadata, book, numbers[0], numbers[1], numbers[2] ?? numbers[1]);
 };
 
+const precedingReference = (tokens: string[], book: string, metadata: AppMetadata) => {
+  let start = tokens.length;
+  while (start > 0 && (/^(capitulo|versiculo|versiculos|del|al|hasta|el|y)$/.test(tokens[start - 1])
+    || parseNumberAt(tokens, start - 1) || romanNumber(tokens[start - 1]) !== null)) start -= 1;
+  const span = tokens.slice(start);
+  return span.length > 0 && numericSuffix(span).index === span.length ? explicitReference(span, book, metadata) : null;
+};
+
 /** One bounded final utterance; no partial hypotheses or transcript history. */
 export const parseVoiceScriptureUtterance = (
   transcript: string,
@@ -307,10 +315,11 @@ export const parseVoiceScriptureUtterance = (
     if (prefix.some((token) => /^(no|nunca|tampoco)$/.test(token))) { negated = true; continue; }
     if (!match.book) { ambiguous = true; continue; }
     let candidate = explicitReference(suffix, match.book, metadata);
+    if (!candidate && prefix.at(-1) === 'de') candidate = precedingReference(prefix.slice(0, -1), match.book, metadata);
     const correction = suffix.findIndex((token) => /^(perdon|corrijo|rectifico)$/.test(token));
     if (correction >= 0) {
       const corrected = suffix.slice(correction + 1);
-      if (!corrected.length && matches[i + 1]) continue;
+      if (matches[i + 1] && (!corrected.length || tokens[matches[i + 1].start - 1] === 'de')) continue;
       candidate = explicitReference(corrected, match.book, metadata);
       if (!candidate) ambiguous = true;
     }

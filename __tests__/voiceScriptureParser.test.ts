@@ -4,7 +4,7 @@ import { parseVoiceScriptureCommand, parseVoiceScriptureUtterance } from '../src
 
 const chapter = (count: number) => Array.from({ length: count }, (_, index) => String(index + 1));
 const metadata: AppMetadata = {
-  'Colección Alfa': { bookHeb: 'א', bookAbbrevEs: 'A', safeFile: 'alfa', voiceAliases: ['alfa', 'aleph'], chapters: { '1': chapter(31), '2': chapter(25) } },
+  'Colección Alfa': { bookHeb: 'א', bookAbbrevEs: 'A', safeFile: 'alfa', voiceAliases: ['alfa', 'aleph'], chapters: { '1': chapter(31), '2': chapter(25), '4': chapter(25) } },
   'Colección Beta': { bookHeb: 'ב', bookAbbrevEs: 'B', safeFile: 'beta', voiceAliases: ['beta', 'bet', 'be ta'], chapters: { '6': chapter(25), '7': chapter(26) } },
   'Colección Gamma': { bookHeb: 'ג', bookAbbrevEs: 'G', safeFile: 'gamma', voiceAliases: ['gamma', 'gimel'], chapters: { '53': chapter(12) } },
   'Colección Delta': { bookHeb: 'ד', bookAbbrevEs: 'D', safeFile: 'delta', voiceAliases: ['delta', 'dalet'], chapters: { '150': chapter(6) } },
@@ -49,6 +49,65 @@ describe('continuous utterance extraction', () => {
     expect(compact('Leamos ahora el ocho para continuar', { book: 'B', chapter: 6, verse: 4 })).toEqual(['B', 6, 8, 8]);
     expect(compact('siguiente versículo', { book: 'B', chapter: 99, verse: 1 })).toBeNull();
     expect(compact('siguiente versículo')).toBeNull();
+  });
+});
+
+describe('book-last references', () => {
+  it.each([
+    ['cuatro cuatro de Alfa', ['A', 4, 4, 4]],
+    ['4 4 de Alfa', ['A', 4, 4, 4]],
+    ['capítulo seis versículo cuatro de Beta', ['B', 6, 4, 4]],
+    ['capítulo 6 versículo 4 de Beta', ['B', 6, 4, 4]],
+    ['capítulo seis versículos cuatro al siete de Beta', ['B', 6, 4, 7]],
+    ['capítulo 6 versículos 4 al 7 de Beta', ['B', 6, 4, 7]],
+    ['6:4-7 de Beta', ['B', 6, 4, 7]],
+    ['esto está escrito en seis cuatro de Beta', ['B', 6, 4, 4]],
+    ['vamos a leer capítulo seis versículo cuatro de Beta', ['B', 6, 4, 4]],
+    ['hoy somos cuatro y leeremos capítulo seis versículo cuatro de Beta', ['B', 6, 4, 4]],
+    ['seis cuatro de Be Ta', ['B', 6, 4, 4]],
+    ['uno cuatro de Aleph', ['A', 1, 4, 4]],
+    ['6 4 de B', ['B', 6, 4, 4]],
+    ['64 de Beta', ['B', 6, 4, 4]],
+  ])('extracts %s', (text, expected) => expect(compact(text)).toEqual(expected));
+
+  it.each([
+    'capítulo seis de Beta', 'versículo cuatro de Beta', 'capítulo seis versículo de Beta',
+    'capítulo seis versículos cuatro al de Beta', 'seis de Beta',
+    'ocho personas estaban leyendo de Beta', 'hoy hablamos de Beta',
+    'capítulo 999 versículo 4 de Beta', 'capítulo 6 versículo 999 de Beta',
+    'capítulo 6 versículos 4 al 999 de Beta', 'seis cuatro de Bet no',
+    'no seis cuatro de Beta', 'nunca leeremos seis cuatro de Beta',
+  ])('abstains on %s', (text) => expect(compact(text)).toBeNull());
+
+  it.each([
+    ['seis cuatro de Beta, perdón, seis cinco de Beta', ['B', 6, 5, 5]],
+    ['Beta seis cuatro, perdón, capítulo seis versículo cinco de Beta', ['B', 6, 5, 5]],
+  ])('keeps the correction in %s', (text, expected) => expect(compact(text)).toEqual(expected));
+
+  it.each([
+    ['Alfa uno tres y después seis cuatro de Beta', ['A', 'B']],
+    ['uno tres de Alfa y después Beta seis cuatro', ['A', 'B']],
+    ['uno tres de Alfa y después seis cuatro de Beta', ['A', 'B']],
+  ])('retains ordered references in %s', (text, books) => {
+    const result = parseVoiceScriptureUtterance(text, null, metadata);
+    expect(result.references.map((reference) => reference.bookAbbrev)).toEqual(books);
+    expect(result.automatic).toEqual(result.references[1]);
+  });
+
+  it('keeps an earlier valid choice but abstains when the later book-last mention is invalid', () => {
+    const result = parseVoiceScriptureUtterance('Alfa uno tres y después capítulo seis de Beta', null, metadata);
+    expect(result.references.map((reference) => reference.bookAbbrev)).toEqual(['A']);
+    expect(result.automatic).toBeNull();
+  });
+
+  it('rejects colliding book-last aliases', () => {
+    const books = { ...metadata, Other: { ...metadata['Colección Alfa'], voiceAliases: ['alfa'] } };
+    expect(parseVoiceScriptureUtterance('uno tres de alfa', null, books).automatic).toBeNull();
+  });
+
+  it('rejects ambiguous compact splits with the same corpus validation', () => {
+    const books: AppMetadata = { Ambiguous: { ...metadata['Colección Alfa'], voiceAliases: ['ambigua'], chapters: { '1': chapter(11), '11': chapter(1) } } };
+    expect(parseVoiceScriptureCommand('111 de ambigua', null, books)).toBeNull();
   });
 });
 
