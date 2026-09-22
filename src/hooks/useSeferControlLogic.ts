@@ -47,7 +47,6 @@ export function useSeferControlLogic({
     currentVerse,
     isActive,
     selectedVerse,
-    activate,
     goToVerse,
     goNext,
     goPrev,
