@@ -884,6 +884,7 @@ function App() {
             quizPresenterDemoSelection={quizPresenterDemoSelection}
             quizMaxBaseCentipunts={effectiveMaxBaseCentipunts}
             autoduckState={autoduckState}
+            serverNow={serverNow}
           />
         </div>
       )}

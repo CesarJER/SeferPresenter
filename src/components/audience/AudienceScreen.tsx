@@ -28,6 +28,7 @@ interface AudienceScreenProps {
   quizScoreRequestId?: number;
   autoduckState?: AutoduckState;
   onPlaybackBlocked?: (blocked: boolean) => void;
+  serverNow?: () => number;
 }
 
 const AudienceScreen = ({
@@ -47,6 +48,7 @@ const AudienceScreen = ({
   quizScoreRequestId,
   autoduckState,
   onPlaybackBlocked,
+  serverNow,
 }: AudienceScreenProps) => {
   const audienceAnswers = useAudienceAnswers(presentationId);
   const activeSubslide = quizSubslides[quizCurrentSubslideIndex];
@@ -185,6 +187,7 @@ const AudienceScreen = ({
           autoduckState={autoduckState}
           onPlaybackBlocked={onPlaybackBlocked}
           enableDriftCorrection={true}
+          serverNow={serverNow}
         />
       </div>
       <div className="fixed bottom-2 left-2 z-50 pointer-events-auto opacity-60 hover:opacity-100 transition-opacity">

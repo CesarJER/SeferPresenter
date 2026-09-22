@@ -294,6 +294,7 @@ function AudienceApp() {
       quizScoreRequestId={quizState?.scoreRequestId}
       autoduckState={autoduckState}
       onPlaybackBlocked={handlePlaybackBlocked}
+      serverNow={serverNow}
     />
   );
 

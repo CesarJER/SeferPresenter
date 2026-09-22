@@ -9,6 +9,7 @@ import { QuizPresenterView } from '../quiz/QuizPresenterView';
 import { useSmoothVolume } from '../../hooks/useSmoothVolume';
 import { isMediaPlaybackBlockedError } from '../../utils/mediaVolume';
 import { applyNeutralBrandingFallback } from '../../utils/branding';
+import { calcExpectedVideoTime } from '../../utils/videoTimeline';
 
 interface PresenterScreenProps {
   background: string;
@@ -28,6 +29,7 @@ interface PresenterScreenProps {
   autoduckState?: AutoduckState;
   onPlaybackBlocked?: (blocked: boolean) => void;
   enableDriftCorrection?: boolean;
+  serverNow?: () => number;
 }
 
 const PresenterScreen: React.FC<PresenterScreenProps> = ({
@@ -47,6 +49,7 @@ const PresenterScreen: React.FC<PresenterScreenProps> = ({
   autoduckState,
   onPlaybackBlocked,
   enableDriftCorrection,
+  serverNow,
 }) => {
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
@@ -65,6 +68,11 @@ const PresenterScreen: React.FC<PresenterScreenProps> = ({
   useEffect(() => {
     onVideoStateChangeRef.current = onVideoStateChange;
   }, [onVideoStateChange]);
+
+  const videoStateRef = useRef(videoState);
+  useEffect(() => {
+    videoStateRef.current = videoState;
+  }, [videoState]);
 
   const lastSeekIdRef = useRef<number | undefined>(undefined);
 
@@ -125,10 +133,14 @@ const PresenterScreen: React.FC<PresenterScreenProps> = ({
       if (videoElement.paused) {
         videoElement.play().catch(e => console.error('Audience auto-resume blocked:', e));
       }
+      
+      const nowMs = serverNow ? serverNow() : Date.now();
+      const expectedPosition = calcExpectedVideoTime({ videoState, nowMs });
+      
       // Correct drift
-      const drift = Math.abs(videoElement.currentTime - videoState.currentTime);
+      const drift = Math.abs(videoElement.currentTime - expectedPosition);
       if (drift > 2.0) {
-        videoElement.currentTime = videoState.currentTime;
+        videoElement.currentTime = expectedPosition;
       }
     } else {
       // Force pause if it was manually played locally
@@ -136,7 +148,7 @@ const PresenterScreen: React.FC<PresenterScreenProps> = ({
         videoElement.pause();
       }
     }
-  }, [videoState, videoElement, slide?.type, enableDriftCorrection]);
+  }, [videoState, videoElement, slide?.type, enableDriftCorrection, serverNow]);
 
   // 2. Slide change listener: Setup dedicated slide video when slide transitions
   const mediaSrc = slide?.type === 'media' ? slide.mediaSrc : null;
@@ -170,7 +182,7 @@ const PresenterScreen: React.FC<PresenterScreenProps> = ({
         startTime: slide.mediaStart,
         endTime: slide.mediaEnd,
         lastUpdatedBy: 'projection',
-        timestamp: Date.now()
+        timestamp: serverNow ? serverNow() : Date.now()
       });
     }
   }, [
@@ -219,7 +231,7 @@ const PresenterScreen: React.FC<PresenterScreenProps> = ({
           startTime: slide.mediaStart,
           endTime: slide.mediaEnd,
           lastUpdatedBy: 'projection',
-          timestamp: Date.now()
+          timestamp: serverNow ? serverNow() : Date.now()
         });
       }
     };
@@ -266,6 +278,14 @@ const PresenterScreen: React.FC<PresenterScreenProps> = ({
     };
 
     const handleLoadedMetadata = () => {
+      const currentVideoState = videoStateRef.current;
+      if (enableDriftCorrection && currentVideoState && currentVideoState.isPlaying) {
+        const nowMs = serverNow ? serverNow() : Date.now();
+        const expectedPosition = calcExpectedVideoTime({ videoState: currentVideoState, nowMs });
+        if (Math.abs(videoElement.currentTime - expectedPosition) > 0.5) {
+           videoElement.currentTime = expectedPosition;
+        }
+      }
       emitTelemetry();
     };
 
