@@ -10,6 +10,7 @@ export function useIosAudioBufferPlayer(
   baseVolume: number,
   autoduckState?: AutoduckState,
   enabled: boolean = true,
+  outputEnabled: boolean = true,
 ): { isIos: boolean; player: IosAudioBufferPlayer | null } {
   const [isIos] = useState(() => enabled && isIphoneDevice());
   const [isDucking, setIsDucking] = useState(false);
@@ -49,8 +50,8 @@ export function useIosAudioBufferPlayer(
     const safeVolume = Number.isFinite(baseVolume) ? clamp01(baseVolume) : 1;
     const rawFactor = autoduckState?.factor ?? 0.2;
     const factor = Number.isFinite(rawFactor) ? clamp01(rawFactor) : 0.2;
-    player.setVolume(autoduckState?.enabled && isDucking ? safeVolume * factor : safeVolume, 300);
-  }, [baseVolume, autoduckState?.enabled, autoduckState?.factor, isDucking, player]);
+    player.setVolume(outputEnabled ? (autoduckState?.enabled && isDucking ? safeVolume * factor : safeVolume) : 0, outputEnabled ? 300 : 0);
+  }, [baseVolume, autoduckState?.enabled, autoduckState?.factor, isDucking, player, outputEnabled]);
 
   return { isIos, player };
 }

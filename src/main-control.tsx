@@ -27,6 +27,7 @@ import { useBackgroundResolver } from './hooks/useBackgroundResolver';
 import { useServerClock } from './hooks/useServerClock';
 import { useAudioTimeline } from './hooks/useAudioTimeline';
 import { useAudioTimelineApplicator } from './hooks/useAudioTimelineApplicator';
+import { useProgramAudioPreference } from './hooks/useProgramAudioPreference';
 import { validateAudioSyncMaps, validatePresentationList } from './utils/validation';
 import { generateQuizSubslides } from './utils/quizUtils';
 import { generatePresentationSteps } from './utils/navigationUtils';
@@ -183,6 +184,7 @@ function ControlApp() {
     setAutoduckState,
     onAudioTimelineState: setAudioTimeline,
   });
+  const [programAudioEnabled, setProgramAudioEnabled] = useProgramAudioPreference(isMediaMaster);
 
   const { serverNow } = useServerClock(wsSend, wsStatus, subscribeToWsMessage);
   const audioTimelineControls = useAudioTimeline(audioTimeline, serverNow, wsSend);
@@ -196,7 +198,7 @@ function ControlApp() {
       dispatchAudioTimelineAction({ type: 'END', positionSec });
     },
   }), [dispatchAudioTimelineAction]);
-  useAudioTimelineApplicator(audioTimelineRef, audioTimeline, serverNow, autoduckState, audioTimelineApplicatorOptions);
+  useAudioTimelineApplicator(audioTimelineRef, audioTimeline, serverNow, autoduckState, audioTimelineApplicatorOptions, programAudioEnabled);
 
   useEffect(() => {
     const audio = audioTimelineRef.current;
@@ -237,6 +239,9 @@ function ControlApp() {
 
   useAudioPlayback({
     isControlMode: !isMediaMaster,
+    allowControlPlayback: true,
+    playbackEnabled: isMediaMaster || !audioTimeline?.audioSrc,
+    outputEnabled: programAudioEnabled,
     audioState,
     audioStateRef,
     audioSyncMaps,
@@ -276,15 +281,6 @@ function ControlApp() {
     setBackgroundLock, setLockedBackgroundValue, setUserSelectedBackground,
     emitDisplayTelemetry: () => {},
   });
-
-  useEffect(() => {
-    if (audioRef.current) {
-      audioRef.current.muted = !isMediaMaster;
-    }
-    if (audioTimelineRef.current) {
-      audioTimelineRef.current.muted = !isMediaMaster;
-    }
-  }, [isMediaMaster]);
 
   const activeBackground = getActiveBackground();
 
@@ -401,6 +397,8 @@ function ControlApp() {
     <div id="section-app-control-mode" className="w-full h-dvh bg-gray-900 overflow-hidden relative">
       <MenuPopup
         isMediaMaster={isMediaMaster}
+        programAudioEnabled={programAudioEnabled}
+        onProgramAudioEnabledChange={setProgramAudioEnabled}
         presentations={presentations}
         backgrounds={backgrounds}
         currentPresentation={currentPresentation}

@@ -7,6 +7,9 @@ import { useIosAudioBufferPlayer } from './useIosAudioBufferPlayer';
 
 interface UseAudioPlaybackProps {
   isControlMode: boolean;
+  allowControlPlayback?: boolean;
+  playbackEnabled?: boolean;
+  outputEnabled?: boolean;
   audioState: AudioState;
   audioStateRef: React.MutableRefObject<AudioState>;
   audioSyncMaps: AudioSyncMap[];
@@ -26,6 +29,9 @@ interface UseAudioPlaybackProps {
 export function useAudioPlayback(props: UseAudioPlaybackProps) {
   const {
     isControlMode,
+    allowControlPlayback = false,
+    playbackEnabled = true,
+    outputEnabled = true,
     audioState,
     audioStateRef,
     audioSyncMaps,
@@ -48,8 +54,15 @@ export function useAudioPlayback(props: UseAudioPlaybackProps) {
     audioRef,
     audioState.volume,
     autoduckState,
-    !isControlMode,
+    !isControlMode || allowControlPlayback,
+    outputEnabled,
   );
+
+  useEffect(() => {
+    if (props.outputEnabled !== undefined && audioRef.current) {
+      audioRef.current.muted = !outputEnabled;
+    }
+  }, [audioRef, outputEnabled, props.outputEnabled]);
 
   useEffect(() => {
     currentSlideIndexRef.current = currentSlideIndex;
@@ -60,10 +73,17 @@ export function useAudioPlayback(props: UseAudioPlaybackProps) {
 
   // 1. Load/change source
   useEffect(() => {
-    if (isControlMode) return;
+    if (isControlMode && !allowControlPlayback) return;
     if (isIos && !iosPlayer) return;
     const audio = iosPlayer ?? audioRef.current;
     if (!audio) return;
+
+    if (!playbackEnabled) {
+      audio.pause();
+      audio.removeAttribute('src');
+      audio.setAttribute('data-src', '');
+      return;
+    }
 
     if (audioState.audioSrc) {
       const encodedSrc = encodeURI(audioState.audioSrc);
@@ -83,14 +103,20 @@ export function useAudioPlayback(props: UseAudioPlaybackProps) {
       audio.removeAttribute('src');
       audio.setAttribute('data-src', '');
     }
-  }, [audioState.audioSrc, isControlMode, audioRef, isIos, iosPlayer]);
+  }, [audioState.audioSrc, isControlMode, allowControlPlayback, playbackEnabled, audioRef, isIos, iosPlayer]);
 
   // 2. Sync playback settings from controller (play/pause/volume/currentTime)
   useEffect(() => {
-    if (isControlMode) return;
+    if (isControlMode && !allowControlPlayback) return;
     if (isIos && !iosPlayer) return;
     const audio = iosPlayer ?? audioRef.current;
-    if (!audio || !audioState.audioSrc) return;
+    if (!audio || !audioState.audioSrc || !playbackEnabled) return;
+    if (isControlMode && audioState.lastUpdatedBy !== 'controller') {
+      if (Math.abs(audio.currentTime - audioState.currentTime) > 0.8) audio.currentTime = audioState.currentTime;
+      if (audioState.isPlaying && audio.paused) audio.play().catch(() => {});
+      else if (!audioState.isPlaying && !audio.paused) audio.pause();
+      return;
+    }
     if (audioState.lastUpdatedBy !== 'controller') return;
 
     if (audioState.changeType === 'volume') {
@@ -123,7 +149,7 @@ export function useAudioPlayback(props: UseAudioPlaybackProps) {
         audio.pause();
       }
     }
-  }, [audioState, isControlMode, audioRef, isIos, iosPlayer, setAutoplayBlocked]);
+  }, [audioState, isControlMode, allowControlPlayback, playbackEnabled, audioRef, isIos, iosPlayer, setAutoplayBlocked]);
 
   // 3. Telemetry emission back to the controller
   useEffect(() => {

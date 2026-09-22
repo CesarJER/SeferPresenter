@@ -42,6 +42,8 @@ export interface AudienceAccessRequestItem {
 }
 
 interface PrivateControlInboxProps {
+  programAudioEnabled?: boolean;
+  onProgramAudioEnabledChange?: (enabled: boolean) => void;
   isOpen: boolean;
   isControlAuthorized: boolean;
   messages: PrivateMessage[];
@@ -65,6 +67,8 @@ const formatTime = (timestamp: number): string => {
 };
 
 export const PrivateControlInbox: React.FC<PrivateControlInboxProps> = ({
+  programAudioEnabled,
+  onProgramAudioEnabledChange,
   isOpen,
   isControlAuthorized,
   messages,
@@ -201,7 +205,7 @@ export const PrivateControlInbox: React.FC<PrivateControlInboxProps> = ({
   return (
     <div className="fixed top-16 right-0 md:right-4 w-full md:w-[420px] max-h-[75vh] bg-gray-900 border border-gray-700 md:rounded-lg shadow-2xl z-50 flex flex-col">
       {/* Header */}
-      <div className="p-2.5 bg-gray-800 border-b border-gray-700 flex items-center justify-between shrink-0 gap-2">
+      <div className="p-2.5 bg-gray-800 border-b border-gray-700 flex flex-wrap items-center justify-between shrink-0 gap-2">
         <h3 className="font-bold text-gray-200 text-sm flex items-center gap-1.5 shrink-0">
           <MessageSquare size={16} className="text-blue-400" />
           <span>Notificaciones</span>
@@ -237,6 +241,12 @@ export const PrivateControlInbox: React.FC<PrivateControlInboxProps> = ({
             )}
           </button>
         </div>
+        {onProgramAudioEnabledChange && (
+          <label className="flex items-center gap-1 text-xs text-gray-200 cursor-pointer" title="Audio de la presentación que escucha este Control">
+            <input type="checkbox" checked={Boolean(programAudioEnabled)} onChange={e => onProgramAudioEnabledChange(e.target.checked)} />
+            <span>🔊 Audio de programa</span>
+          </label>
+        )}
       </div>
 
       {/* Main Content List */}

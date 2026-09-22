@@ -43,6 +43,8 @@ type ModerationEndpoint =
   | 'rescue-participant';
 
 export interface LiveAudioControlContainerProps {
+  programAudioEnabled?: boolean;
+  onProgramAudioEnabledChange?: (enabled: boolean) => void;
   scriptureState?: ScriptureNavState | null;
   voiceSuggestionsTarget?: HTMLElement | null;
   onProjectScripture?: (state: SeferReaderState, command?: 'navigate') => void;
@@ -118,6 +120,8 @@ const snapshotParticipantToStatus = (
 });
 
 export default function LiveAudioControlContainer({
+  programAudioEnabled,
+  onProgramAudioEnabledChange,
   scriptureState = null,
   voiceSuggestionsTarget,
   onProjectScripture = () => { },
@@ -1141,6 +1145,8 @@ export default function LiveAudioControlContainer({
         </button>
       </div>
       <PrivateControlInbox
+        programAudioEnabled={programAudioEnabled}
+        onProgramAudioEnabledChange={onProgramAudioEnabledChange}
         isOpen={isInboxOpen}
         isControlAuthorized={isControlAuthorized}
         messages={messages}

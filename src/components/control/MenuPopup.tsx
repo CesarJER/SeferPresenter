@@ -57,6 +57,8 @@ interface MenuPopupProps {
   onSelectSlide: (idx: number) => void;
   onImport: (imported: Presentation[]) => void;
   isMediaMaster?: boolean;
+  programAudioEnabled?: boolean;
+  onProgramAudioEnabledChange?: (enabled: boolean) => void;
   videoState?: VideoState | null;
   onVideoStateChange?: (state: VideoState | null) => void;
   emitVideoTelemetry?: (state: VideoState) => void;
@@ -143,6 +145,8 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
   onSelectSlide,
   onImport,
   isMediaMaster,
+  programAudioEnabled,
+  onProgramAudioEnabledChange,
   videoState = null,
   onVideoStateChange = () => { },
   emitVideoTelemetry,
@@ -1893,6 +1897,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
             quizSubslide={activeSlide?.type === 'quiz' ? quizSubslides[quizCurrentSubslideIndex] : undefined}
             videoState={videoState}
             isMediaMaster={isMediaMaster}
+            programAudioEnabled={programAudioEnabled}
             emitVideoTelemetry={emitVideoTelemetry}
             emitCommand={emitCommand}
           >
@@ -2086,6 +2091,8 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
               onProjectScripture?.(state, command);
             }}
             isControlAuthorized={controlAuthorization?.role === 'principal' || controlAuthorization?.role === 'delegated'}
+            programAudioEnabled={programAudioEnabled}
+            onProgramAudioEnabledChange={onProgramAudioEnabledChange}
             authorizationRequests={controlAuthorization?.pendingControls || []}
             onApproveRequest={onApproveControlRequest}
             onRejectRequest={onRejectControlRequest}

@@ -63,9 +63,16 @@ export function useAudioTimelineApplicator(
   serverNow: () => number,
   autoduckState?: AutoduckState,
   options: AudioTimelineApplicatorOptions = defaultAudioTimelineApplicatorOptions,
+  outputEnabled?: boolean,
 ): void {
-  const { isIos, player: iosPlayer } = useIosAudioBufferPlayer(audioRef, timeline?.volume ?? 1, autoduckState);
+  const { isIos, player: iosPlayer } = useIosAudioBufferPlayer(audioRef, timeline?.volume ?? 1, autoduckState, true, outputEnabled);
   useSmoothVolume(audioRef, timeline?.volume ?? 1, autoduckState, 300, !isIos);
+
+  useEffect(() => {
+    if (outputEnabled !== undefined && audioRef.current) {
+      audioRef.current.muted = !outputEnabled;
+    }
+  }, [audioRef, outputEnabled]);
 
   useEffect(() => {
     if (isIos && !iosPlayer) return;

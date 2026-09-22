@@ -17,6 +17,7 @@ interface SlideVisualizerProps {
   videoState?: VideoState | null;
   onVideoStateChange?: (state: VideoState | null) => void;
   isMediaMaster?: boolean;
+  programAudioEnabled?: boolean;
   emitVideoTelemetry?: (state: VideoState) => void;
   emitCommand?: (payload: RemoteCommandPayload) => void;
   autoduckState?: AutoduckState;
@@ -34,6 +35,7 @@ const SlideVisualizer: React.FC<SlideVisualizerProps> = ({
   children,
   videoState,
   isMediaMaster,
+  programAudioEnabled = isMediaMaster,
   emitVideoTelemetry,
   autoduckState,
 }) => {
@@ -46,9 +48,9 @@ const SlideVisualizer: React.FC<SlideVisualizerProps> = ({
 
   useEffect(() => {
     if (videoRef.current) {
-      videoRef.current.muted = !isMediaMaster;
+      videoRef.current.muted = !programAudioEnabled;
     }
-  }, [isMediaMaster]);
+  }, [programAudioEnabled]);
 
   // 1. Listen to incoming videoState (from controller or projection)
   useEffect(() => {
@@ -283,7 +285,7 @@ const SlideVisualizer: React.FC<SlideVisualizerProps> = ({
             <video 
               ref={videoRef} 
               src={slide.mediaSrc} 
-              muted={!isMediaMaster} 
+              muted={!programAudioEnabled}
               playsInline 
               preload="none"
               className={`absolute inset-0 w-full h-full object-contain z-0`} 
