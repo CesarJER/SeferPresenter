@@ -31,7 +31,7 @@ const uuidV4Pattern = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[
 const base64Pattern = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/
 const speakerStates = new Set(['LISTENER', 'REQUESTED', 'GRANTED', 'MUTED', 'REVOKED'])
 const microphonePermissionStates = new Set(['unknown', 'prompt', 'denied', 'granted', 'unavailable'])
-const microphoneTrackStates = new Set(['notRequested', 'off', 'publishing', 'mutedByUser', 'mutedByControl', 'error'])
+const microphoneTrackStates = new Set(['notRequested', 'off', 'publishing', 'published', 'mutedByUser', 'mutedByControl', 'error'])
 const liveAudioModerationTypes = new Set([
   'LIVE_AUDIO_GRANT_SPEAK',
   'LIVE_AUDIO_REVOKE_SPEAK',
@@ -298,7 +298,7 @@ const inferOperationalRole = (participant) => {
 const inferMicrophoneTrackState = (participant) => {
   if (participant.microphoneTrackState) return participant.microphoneTrackState
   if (participant.isKicked || participant.speakerState === 'REVOKED') return 'off'
-  if (participant.isMicrophoneActive) return 'publishing'
+  if (participant.isMicrophoneActive) return 'published'
   if (participant.speakerState === 'GRANTED' && participant.isMuted) return 'mutedByControl'
   if (participant.canPublishAudio) return 'off'
   return 'notRequested'
@@ -1182,6 +1182,7 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
           isActiveAudience: true,
           isMicrophoneActive: false,
           isKicked: false,
+          microphoneTrackState: 'off',
         })
         break
       case 'LIVE_AUDIO_REVOKE_SPEAK':
@@ -1192,6 +1193,7 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
           isActiveAudience: true,
           isMicrophoneActive: false,
           isKicked: false,
+          microphoneTrackState: 'off',
         })
         break
       case 'LIVE_AUDIO_MUTE_PARTICIPANT':
@@ -1202,6 +1204,7 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
           isActiveAudience: true,
           isMicrophoneActive: false,
           isKicked: false,
+          microphoneTrackState: 'mutedByControl',
         })
         break
       case 'LIVE_AUDIO_KICK_PARTICIPANT':
@@ -1212,6 +1215,7 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
           isActiveAudience: false,
           isMicrophoneActive: false,
           isKicked: true,
+          microphoneTrackState: 'off',
         })
         break
       case 'LIVE_AUDIO_RESCUE_PARTICIPANT':
@@ -1237,6 +1241,7 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
             isActiveAudience: true,
             isMicrophoneActive: false,
             isKicked: false,
+            microphoneTrackState: 'mutedByControl',
           })
         }
         break
@@ -1753,6 +1758,20 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
           if (!isControlAuthorized(controlMeta)) {
             sendError(ws, 'CONTROL_PENDING_FORBIDDEN', 'Pending controls cannot send moderation actions')
             break
+          }
+          const expectedCanPublish = msg.type === 'LIVE_AUDIO_GRANT_SPEAK'
+            ? true
+            : ['LIVE_AUDIO_REVOKE_SPEAK', 'LIVE_AUDIO_KICK_PARTICIPANT', 'LIVE_AUDIO_RESCUE_PARTICIPANT'].includes(msg.type)
+              ? false
+              : null
+          if (expectedCanPublish !== null) {
+            const registered = snapshotProviders.getLiveKitState?.()?.participants?.find(
+              (participant) => participant.participantId === msg.participantId,
+            )
+            if (registered?.canPublish !== expectedCanPublish) {
+              sendError(ws, 'LIVEKIT_PERMISSION_NOT_CONFIRMED', 'LiveKit permission update is not confirmed')
+              break
+            }
           }
           applyModerationState(msg)
           broadcast(msg, (targetMeta) => canReceiveModerationMessage(targetMeta, msg))

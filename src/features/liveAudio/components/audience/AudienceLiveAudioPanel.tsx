@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Mic, MicOff, Hand, MessageSquare, LogOut, Volume2, VolumeX, Play, RotateCcw, CheckCircle2, Loader2, Users } from 'lucide-react';
-import type { LiveAudioConnectionState, LiveAudioExternalBroadcastState, LiveAudioMicrophoneDiagnostics } from '../../../../types/liveAudio';
+import type { LiveAudioConnectionState, LiveAudioExternalBroadcastState, LiveAudioMicrophoneDiagnostics, MicrophoneTrackState } from '../../../../types/liveAudio';
 import { ActiveParticipantsPanel } from './ActiveParticipantsPanel';
 
 interface AudienceLiveAudioPanelProps {
   state: LiveAudioConnectionState;
   isActive: boolean;
   isMicrophoneActive: boolean;
+  microphoneTrackState: MicrophoneTrackState;
   hasAudioStarted: boolean;
   isPendingWord: boolean;
   isWordGranted: boolean;
@@ -38,6 +39,7 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
   state,
   isActive,
   isMicrophoneActive,
+  microphoneTrackState,
   hasAudioStarted,
   isPendingWord,
   isWordGranted,
@@ -348,16 +350,34 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
         {reconnectStatus}
 
         {isWordGranted ? (
-          <button
-            onClick={onToggleMicrophone}
-            className={`flex items-center justify-center p-3 rounded-xl transition-colors ${isMicrophoneActive
-              ? 'bg-blue-600 hover:bg-blue-500 text-white shadow-[0_0_15px_rgba(37,99,235,0.5)]'
-              : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
-              }`}
-            title={isMicrophoneActive ? "Desactivar Micrófono" : "Activar Micrófono"}
-          >
-            {isMicrophoneActive ? <Mic className="w-6 h-6" /> : <MicOff className="w-6 h-6" />}
-          </button>
+          <div className="relative">
+            {microphoneTrackState === 'error' && (
+              <div role="alert" className="absolute bottom-full left-1/2 mb-2 w-64 -translate-x-1/2 rounded bg-red-950 px-3 py-2 text-xs text-red-100 shadow-lg">
+                No se pudo activar el micrófono. Pulsa de nuevo para reintentar.
+              </div>
+            )}
+            <button
+              onClick={onToggleMicrophone}
+              disabled={microphoneTrackState === 'publishing'}
+              className={`flex items-center justify-center p-3 rounded-xl transition-colors ${microphoneTrackState === 'publishing'
+                ? 'bg-orange-600 text-white shadow-[0_0_15px_rgba(234,88,12,0.5)]'
+                : microphoneTrackState === 'error'
+                  ? 'bg-red-700 hover:bg-red-600 text-white'
+                  : isMicrophoneActive
+                    ? 'bg-blue-600 hover:bg-blue-500 text-white shadow-[0_0_15px_rgba(37,99,235,0.5)]'
+                    : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
+                }`}
+              title={microphoneTrackState === 'publishing'
+                ? 'Activando micrófono'
+                : microphoneTrackState === 'error'
+                  ? 'Error de micrófono; pulsar para reintentar'
+                  : isMicrophoneActive ? 'Desactivar Micrófono' : 'Activar Micrófono'}
+            >
+              {microphoneTrackState === 'publishing'
+                ? <Loader2 className="w-6 h-6 animate-spin" />
+                : isMicrophoneActive ? <Mic className="w-6 h-6" /> : <MicOff className="w-6 h-6" />}
+            </button>
+          </div>
         ) : (
           <button
             onClick={isPendingWord ? onCancelRequest : onRequestWord}

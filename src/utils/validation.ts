@@ -55,7 +55,7 @@ const liveAudioSpeakerStates = new Set(['LISTENER', 'REQUESTED', 'GRANTED', 'MUT
 const liveAudioControlStates = new Set(['PRINCIPAL', 'PENDING', 'AUTHORIZED']);
 const liveAudioOperationalRoles = new Set(['pasivo', 'activo', 'cola', 'orador', 'control', 'presenter']);
 const liveAudioMicrophonePermissionStates = new Set(['unknown', 'prompt', 'denied', 'granted', 'unavailable']);
-const liveAudioMicrophoneTrackStates = new Set(['notRequested', 'off', 'publishing', 'mutedByUser', 'mutedByControl', 'error']);
+const liveAudioMicrophoneTrackStates = new Set(['notRequested', 'off', 'publishing', 'published', 'mutedByUser', 'mutedByControl', 'error']);
 const liveAudioMessageTypes = new Set([
   'LIVE_AUDIO_PARTICIPANT_STATUS',
   'LIVE_AUDIO_CONNECTION_COUNTS',

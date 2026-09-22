@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Eye, EyeOff, Hand, MessageSquare, Mic, MicOff, RotateCcw, Trash2, UserCheck, UserX, Volume2, X, XCircle } from 'lucide-react';
-import type { SpeakerState } from '../../../../types/liveAudio';
+import type { MicrophoneTrackState, SpeakerState } from '../../../../types/liveAudio';
 import { LiveAudioStatusBadge, type ParticipantStatus } from '../shared/LiveAudioStatusBadge';
 
 export interface LiveAudioParticipant {
@@ -9,6 +9,7 @@ export interface LiveAudioParticipant {
   speakerState: SpeakerState;
   isMuted: boolean;
   isMicrophoneActive: boolean;
+  microphoneTrackState?: MicrophoneTrackState;
   isActiveAudience: boolean;
   isKicked: boolean;
   isAliasVisibleToActiveParticipants?: boolean;
@@ -66,7 +67,7 @@ export const LiveAudioParticipantRow: React.FC<LiveAudioParticipantRowProps> = (
     !participant.isKicked;
 
   const hasOpenMicrophone =
-    isGranted && participant.isMicrophoneActive && !participant.isMuted;
+    isGranted && participant.isMicrophoneActive && participant.microphoneTrackState === 'published' && !participant.isMuted;
 
   const volume = participant.microphoneVolume ?? 100;
   const displayAlias = participant.alias.trim() || 'Sin nick';
@@ -74,8 +75,12 @@ export const LiveAudioParticipantRow: React.FC<LiveAudioParticipantRowProps> = (
 
   const badgeStatus: ParticipantStatus = participant.isKicked
     ? 'kicked'
-    : hasOpenMicrophone
-      ? 'talking'
+    : participant.microphoneTrackState === 'publishing'
+      ? 'publishing'
+      : participant.microphoneTrackState === 'error'
+        ? 'microphone-error'
+        : hasOpenMicrophone && participant.microphoneTrackState === 'published'
+          ? 'microphone-published'
       : isRequested
         ? 'permission-requested'
         : isGranted
@@ -88,7 +93,7 @@ export const LiveAudioParticipantRow: React.FC<LiveAudioParticipantRowProps> = (
         {onSelectVoice ? <button type="button" aria-label={`Comandos de voz: ${displayName}`}
           aria-pressed={!!voiceSelected} disabled={!voiceSelectable && !voiceSelected}
           onClick={() => onSelectVoice(participant.participantId)}
-          className={`rounded-full p-1.5 disabled:opacity-40 ${hasOpenMicrophone ? 'bg-blue-500/20 text-blue-400' : 'text-gray-400'} ${voiceSelected ? 'ring-2 ring-yellow-400 text-yellow-300' : ''}`}>
+          className={`rounded-full p-1.5 disabled:opacity-40 ${hasOpenMicrophone && participant.microphoneTrackState === 'published' ? 'bg-blue-500/20 text-blue-400' : 'text-gray-400'} ${voiceSelected ? 'ring-2 ring-yellow-400 text-yellow-300' : ''}`}>
           {hasOpenMicrophone ? <Mic size={16} /> : <MicOff size={16} />}
         </button> : <LiveAudioStatusBadge status={badgeStatus} isMuted={participant.isMuted} />}
 

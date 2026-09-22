@@ -14,6 +14,7 @@ export type MicrophoneTrackState =
   | 'notRequested'
   | 'off'
   | 'publishing'
+  | 'published'
   | 'mutedByUser'
   | 'mutedByControl'
   | 'error';

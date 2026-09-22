@@ -45,7 +45,7 @@ describe('LiveKit token endpoint security', () => {
   });
 
   const call = async (
-    pathname: '/api/livekit/token' | '/api/livekit/refresh-token',
+    pathname: '/api/livekit/token' | '/api/livekit/refresh-token' | '/api/livekit/grant-speak' | '/api/livekit/revoke-speak',
     body: Record<string, unknown>,
     authorization?: string,
   ): Promise<ApiResponse> => {
@@ -161,5 +161,83 @@ describe('LiveKit token endpoint security', () => {
       refreshCredential: token.refreshCredential,
     });
     expect(expired.status).toBe(401);
+  });
+
+  it('updates LiveKit before committing a speak grant', async () => {
+    api.close();
+    const updateParticipant = vi.fn(async () => {
+      const current = api.getState().participants.at(-1);
+      expect(current).toMatchObject({ speakerState: 'LISTENER', canPublish: false });
+      return {};
+    });
+    api = createLiveKitApi({
+      isLiveAudioControlAuthorized: (controlSessionId: string) => authorizedControls.has(controlSessionId),
+      getLiveAudioParticipantState: () => null,
+    }, { roomServiceClient: { updateParticipant } });
+    const audience = await issueAudience();
+
+    const granted = await call('/api/livekit/grant-speak', {
+      role: 'control',
+      controlSessionId: 'authorized-control',
+      participantId: audience.participantId,
+    });
+
+    expect(granted.status).toBe(200);
+    expect(updateParticipant).toHaveBeenCalledWith(
+      'sefer-live-audio',
+      audience.participantIdentity,
+      expect.objectContaining({ permission: expect.objectContaining({ canPublish: true }) }),
+    );
+    expect(api.getState().participants.find((participant) => participant.participantId === audience.participantId))
+      .toMatchObject({ speakerState: 'GRANTED', canPublish: true });
+  });
+
+  it('does not commit a grant when LiveKit rejects the permission update', async () => {
+    api.close();
+    api = createLiveKitApi({
+      isLiveAudioControlAuthorized: (controlSessionId: string) => authorizedControls.has(controlSessionId),
+      getLiveAudioParticipantState: () => null,
+    }, { roomServiceClient: { updateParticipant: vi.fn().mockRejectedValue(new Error('unavailable')) } });
+    const audience = await issueAudience();
+
+    const rejected = await call('/api/livekit/grant-speak', {
+      role: 'control',
+      controlSessionId: 'authorized-control',
+      participantId: audience.participantId,
+    });
+
+    expect(rejected).toMatchObject({
+      status: 502,
+      body: { error: 'LiveKit rejected the participant permission update' },
+    });
+    expect(api.getState().participants.find((participant) => participant.participantId === audience.participantId))
+      .toMatchObject({ speakerState: 'LISTENER', canPublish: false });
+  });
+
+  it('disables LiveKit publishing before committing a revocation', async () => {
+    api.close();
+    const updateParticipant = vi.fn().mockResolvedValue({});
+    api = createLiveKitApi({
+      isLiveAudioControlAuthorized: (controlSessionId: string) => authorizedControls.has(controlSessionId),
+      getLiveAudioParticipantState: () => null,
+    }, { roomServiceClient: { updateParticipant } });
+    const audience = await issueAudience();
+    const moderationBody = {
+      role: 'control',
+      controlSessionId: 'authorized-control',
+      participantId: audience.participantId,
+    };
+    await call('/api/livekit/grant-speak', moderationBody);
+
+    const revoked = await call('/api/livekit/revoke-speak', moderationBody);
+
+    expect(revoked.status).toBe(200);
+    expect(updateParticipant).toHaveBeenLastCalledWith(
+      'sefer-live-audio',
+      audience.participantIdentity,
+      expect.objectContaining({ permission: expect.objectContaining({ canPublish: false }) }),
+    );
+    expect(api.getState().participants.find((participant) => participant.participantId === audience.participantId))
+      .toMatchObject({ speakerState: 'LISTENER', canPublish: false });
   });
 });

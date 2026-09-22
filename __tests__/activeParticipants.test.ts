@@ -119,7 +119,15 @@ describe('visible active participants', () => {
     recordExternalBroadcastTransition.mockReset();
 
     httpServer = createServer();
-    wss = createWsServer(httpServer, undefined, { recordExternalBroadcastTransition });
+    wss = createWsServer(httpServer, undefined, {
+      recordExternalBroadcastTransition,
+      getLiveKitState: () => ({
+        participants: getLiveAudioParticipantSnapshot().participants.map((participant) => ({
+          participantId: participant.participantId,
+          canPublish: false,
+        })),
+      }),
+    });
     await new Promise<void>((resolve) => httpServer.listen(0, resolve));
     const address = httpServer.address();
     if (!address || typeof address === 'string') throw new Error('Expected HTTP server address');

@@ -21,6 +21,7 @@ let httpServer: Server;
 let wss: WebSocketServer;
 let baseUrl: string;
 let clients: WsClient[] = [];
+let liveKitPermissions: Map<string, boolean>;
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -116,9 +117,14 @@ describe('Live Audio WebSocket routing', () => {
     process.env.SEFER_REQUIRE_AUTH = 'false';
     process.env.SEFER_LIVE_AUDIO_REJOIN_GRACE_SECONDS = '1';
     resetWsServerStateForTests();
+    liveKitPermissions = new Map();
 
     httpServer = createServer();
-    wss = createWsServer(httpServer);
+    wss = createWsServer(httpServer, undefined, {
+      getLiveKitState: () => ({
+        participants: Array.from(liveKitPermissions, ([participantId, canPublish]) => ({ participantId, canPublish })),
+      }),
+    });
     await new Promise<void>((resolve) => httpServer.listen(0, resolve));
     const address = httpServer.address();
     if (!address || typeof address === 'string') throw new Error('Expected HTTP server address');
@@ -177,6 +183,7 @@ describe('Live Audio WebSocket routing', () => {
       message.participantId === liveAudioParticipantId
     ));
 
+    liveKitPermissions.set(liveAudioParticipantId, true);
     principal.send({
       type: 'LIVE_AUDIO_GRANT_SPEAK',
       participantId: liveAudioParticipantId,
@@ -449,6 +456,22 @@ describe('Live Audio WebSocket routing', () => {
     expect(control.messages.some((message) => message.type === 'LIVE_AUDIO_REMOVE_ACTIVE_PARTICIPANT')).toBe(false);
   });
 
+  it('does not broadcast a grant before the LiveKit permission update is confirmed', async () => {
+    const control = await connectWs('control');
+    const audience = await connectWs('audience');
+    const participantId = randomUUID();
+    audience.send(makeParticipantStatus(participantId));
+    await waitFor(control, (message) => message.type === 'LIVE_AUDIO_PARTICIPANT_STATUS' && message.participantId === participantId);
+
+    liveKitPermissions.set(participantId, false);
+    control.send({ type: 'LIVE_AUDIO_GRANT_SPEAK', participantId, createdAt: Date.now() });
+    const error = await waitFor(control, (message) => message.type === 'ERROR' && message.code === 'LIVEKIT_PERMISSION_NOT_CONFIRMED');
+
+    expect(error.code).toBe('LIVEKIT_PERMISSION_NOT_CONFIRMED');
+    expect(audience.messages.some((message) => message.type === 'LIVE_AUDIO_GRANT_SPEAK')).toBe(false);
+    expect(getLiveAudioParticipantSnapshot().participants.find((participant) => participant.participantId === participantId)?.speakerState).not.toBe('GRANTED');
+  });
+
   it('broadcasts total live audio websocket connection counts to control and presenter', async () => {
     const presenter = await connectWs('presenter');
     const control = await connectWs('control');
@@ -485,6 +508,7 @@ describe('Live Audio WebSocket routing', () => {
       (message) => message.type === 'LIVE_AUDIO_PARTICIPANT_STATUS' && message.participantId === participantId,
     );
 
+    liveKitPermissions.set(participantId, true);
     control.send({
       type: 'LIVE_AUDIO_GRANT_SPEAK',
       participantId,
@@ -516,6 +540,7 @@ describe('Live Audio WebSocket routing', () => {
       (message) => message.type === 'LIVE_AUDIO_PARTICIPANT_STATUS' && message.participantId === participantId,
     );
 
+    liveKitPermissions.set(participantId, false);
     control.send({
       type: 'LIVE_AUDIO_KICK_PARTICIPANT',
       participantId,
@@ -638,6 +663,7 @@ describe('Live Audio WebSocket routing', () => {
       (message) => message.type === 'LIVE_AUDIO_PARTICIPANT_STATUS' && message.participantId === participantId,
     );
 
+    liveKitPermissions.set(participantId, false);
     control.send({
       type: 'LIVE_AUDIO_KICK_PARTICIPANT',
       participantId,

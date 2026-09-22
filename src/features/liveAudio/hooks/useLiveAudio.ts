@@ -22,6 +22,7 @@ import type {
   LiveAudioParticipantRole,
   LiveAudioRemoteTrack,
   LiveAudioTokenResponse,
+  MicrophoneTrackState,
 } from '../../../types/liveAudio';
 import { useLiveAudioAvailability } from './useLiveAudioAvailability';
 
@@ -42,6 +43,7 @@ interface UseLiveAudioResult {
   participantId: string | null;
   participantIdentity: string | null;
   isMicrophoneActive: boolean;
+  microphoneTrackState: MicrophoneTrackState;
   isDuckingActive: boolean;
   startRemoteAudio: () => Promise<void>;
   publishMicrophone: (options?: { musicMode?: boolean }) => Promise<void>;
@@ -242,6 +244,7 @@ export const useLiveAudio = ({
   const [participantId, setParticipantId] = useState<string | null>(null);
   const [participantIdentity, setParticipantIdentity] = useState<string | null>(null);
   const [isMicrophoneActive, setIsMicrophoneActive] = useState(false);
+  const [microphoneTrackState, setMicrophoneTrackState] = useState<MicrophoneTrackState>('notRequested');
   const [isDuckingActive, setIsDuckingActive] = useState(false);
   const [microphoneDiagnostics, setMicrophoneDiagnostics] = useState<LiveAudioMicrophoneDiagnostics>(makeInitialMicrophoneDiagnostics);
 
@@ -254,7 +257,6 @@ export const useLiveAudio = ({
   const reconnectedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const tokenRef = useRef<LiveAudioTokenResponse | null>(null);
   const participantIdRef = useRef<string | null>(null);
-  const retryAudioRef = useRef<() => Promise<void>>(async () => {});
   const userDisconnectedRef = useRef(false);
   const microphoneVolumePercentRef = useRef(clampVolumePercent(microphoneVolumePercent));
   const microphoneGainNodeRef = useRef<GainNode | null>(null);
@@ -430,6 +432,7 @@ export const useLiveAudio = ({
     const localTrack = localAudioTrackRef.current;
     if (!localTrack) {
       setIsMicrophoneActive(false);
+      setMicrophoneTrackState('off');
       return;
     }
 
@@ -442,6 +445,7 @@ export const useLiveAudio = ({
       stopAllLocalTracks(room, localTrack);
       clearMicrophoneProcessor();
       setIsMicrophoneActive(false);
+      setMicrophoneTrackState('off');
     }
   }, [clearMicrophoneProcessor]);
 
@@ -508,22 +512,26 @@ export const useLiveAudio = ({
     if (isPublishingMicrophoneRef.current) return;
 
     isPublishingMicrophoneRef.current = true;
+    setIsMicrophoneActive(false);
+    setMicrophoneTrackState('publishing');
+    const startedAt = performance.now();
+    let stage = 'permission';
+    console.log('[LIVEKIT] livekit:microphone:capture-start');
     let pendingLocalTrack: LocalAudioTrack | null = null;
     try {
       const activeParticipantId = participantIdRef.current;
       if (role === 'audience' && activeParticipantId && room.localParticipant.permissions?.canPublish !== true) {
-        await retryAudioRef.current();
-        room = roomRef.current;
-        if (!room || room.state !== ConnectionState.Connected) {
-          throw new Error('Live Audio room is not connected after permission refresh');
-        }
+        throw new Error('LiveKit todavía no ha confirmado el permiso para publicar. Reintenta el micrófono.');
       }
+      stage = 'capture';
       const localTrack = await createLocalAudioTrack({
         echoCancellation: true,
         noiseSuppression: !options?.musicMode,
         autoGainControl: !options?.musicMode,
       });
+      console.log(`[LIVEKIT] livekit:microphone:track-created durationMs=${Math.round(performance.now() - startedAt)}`);
       pendingLocalTrack = localTrack;
+      stage = 'processing';
       const audioContext = createBrowserAudioContext();
       if (audioContext) {
         try {
@@ -532,6 +540,7 @@ export const useLiveAudio = ({
           await localTrack.setProcessor(processor);
           microphoneAudioContextRef.current = audioContext;
           microphoneProcessorRef.current = processor;
+          console.log(`[LIVEKIT] livekit:microphone:processor-ready durationMs=${Math.round(performance.now() - startedAt)}`);
         } catch {
           if (audioContext.state !== 'closed') void audioContext.close().catch(() => undefined);
           microphoneGainNodeRef.current = null;
@@ -539,6 +548,7 @@ export const useLiveAudio = ({
           microphoneProcessorRef.current = null;
         }
       }
+      stage = 'publication';
       await room.localParticipant.publishTrack(localTrack, {
         source: Track.Source.Microphone,
         name: 'microphone',
@@ -548,12 +558,17 @@ export const useLiveAudio = ({
       localAudioTrackRef.current = localTrack;
       pendingLocalTrack = null;
       setIsMicrophoneActive(true);
+      setMicrophoneTrackState('published');
+      console.log(`[LIVEKIT] livekit:microphone:published durationMs=${Math.round(performance.now() - startedAt)}`);
       setMicrophoneDiagnostics((current) => ({
         ...current,
         lastErrorName: null,
         lastErrorMessage: null,
       }));
     } catch (error) {
+      setIsMicrophoneActive(false);
+      setMicrophoneTrackState('error');
+      console.warn(`[LIVEKIT] livekit:microphone:failed stage=${stage} error=${getErrorName(error)} durationMs=${Math.round(performance.now() - startedAt)}`);
       setMicrophoneDiagnostics((current) => ({
         ...current,
         permissionState: isPermissionDeniedError(error) ? 'denied' : current.permissionState,
@@ -850,10 +865,6 @@ export const useLiveAudio = ({
   ]);
 
   useEffect(() => {
-    retryAudioRef.current = retryAudio;
-  }, [retryAudio]);
-
-  useEffect(() => {
     type WakeLockSentinelLike = { release: () => Promise<void> };
     type NavigatorWithWakeLock = Navigator & {
       wakeLock?: { request: (type: 'screen') => Promise<WakeLockSentinelLike> };
@@ -900,6 +911,7 @@ export const useLiveAudio = ({
     participantId,
     participantIdentity,
     isMicrophoneActive,
+    microphoneTrackState,
     isDuckingActive,
     startRemoteAudio,
     publishMicrophone,
@@ -912,6 +924,7 @@ export const useLiveAudio = ({
     availability,
     disconnect,
     isMicrophoneActive,
+    microphoneTrackState,
     isDuckingActive,
     connectionQuality,
     participantId,

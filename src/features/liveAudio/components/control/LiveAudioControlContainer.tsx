@@ -130,6 +130,7 @@ export default function LiveAudioControlContainer({
   const aliasOrdinalStateRef = useRef<AliasOrdinalState>({ assignments: {}, nextByNormalizedAlias: {} });
   const [participantEphemeralKeys, setParticipantEphemeralKeys] = useState<Record<string, string>>({});
   const [participantMicrophoneConfigs, setParticipantMicrophoneConfigs] = useState<Record<string, { volume: number; musicMode: boolean }>>({});
+  const [moderationError, setModerationError] = useState<string | null>(null);
   const [connectionCounts, setConnectionCounts] = useState<LiveAudioConnectionCountsMessage | null>(null);
   const [messages, setMessages] = useState<PrivateMessage[]>([]);
   const [externalBroadcastState, setExternalBroadcastState] = useState<LiveAudioExternalBroadcastState>('off');
@@ -733,6 +734,7 @@ export default function LiveAudioControlContainer({
           speakerState: p.speakerState,
           isMuted: p.isMuted ?? !isMicrophoneActive,
           isMicrophoneActive,
+          microphoneTrackState: p.microphoneTrackState,
           isActiveAudience,
           isKicked,
           isAliasVisibleToActiveParticipants: p.isAliasVisibleToActiveParticipants,
@@ -855,6 +857,7 @@ export default function LiveAudioControlContainer({
 
   const doModerationAction = useCallback(async (endpoint: ModerationEndpoint, pid?: string) => {
     if (!controlSessionId) return;
+    setModerationError(null);
     try {
       const response = await fetch(`/api/livekit/${endpoint}`, {
         method: 'POST',
@@ -865,10 +868,14 @@ export default function LiveAudioControlContainer({
           participantId: pid,
         }),
       });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      if (!response.ok) {
+        const body = await response.json().catch(() => null) as { error?: unknown } | null;
+        throw new Error(typeof body?.error === 'string' ? body.error : `HTTP ${response.status}`);
+      }
       sendModerationMessage(endpoint, pid);
     } catch (err) {
       console.error(`Error in moderation action ${endpoint}`, err);
+      setModerationError(err instanceof Error ? err.message : 'No se pudo aplicar la acción de moderación');
     }
   }, [controlSessionId, sendModerationMessage]);
 
@@ -1115,6 +1122,7 @@ export default function LiveAudioControlContainer({
         pendingWordCount={pendingWordCount}
         externalBroadcastState={externalBroadcastState}
         onExternalBroadcastStateChange={handleExternalBroadcastStateChange}
+        moderationError={moderationError}
       />
     </>
   );

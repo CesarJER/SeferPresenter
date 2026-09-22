@@ -58,6 +58,7 @@ export default function LiveAudioAudienceContainer({
   const [externalBroadcastRevision, setExternalBroadcastRevision] = useState(0);
   const lastPrivateProfileSignatureRef = useRef('');
   const microphoneConsentRevisionRef = useRef(0);
+  const isActivatingMicrophoneRef = useRef(false);
 
   const [showInterventionModal, setShowInterventionModal] = useState(false);
   const [showPrivateMessageModal, setShowPrivateMessageModal] = useState(false);
@@ -91,6 +92,7 @@ export default function LiveAudioAudienceContainer({
     remoteTracks,
     participantId,
     isMicrophoneActive,
+    microphoneTrackState,
     startRemoteAudio,
     publishMicrophone,
     unpublishMicrophone,
@@ -152,7 +154,7 @@ export default function LiveAudioAudienceContainer({
       microphonePermissionState: options.microphonePermissionState ?? 'unknown',
       microphoneTrackState: options.microphoneTrackState ?? (
         options.isMicrophoneActive
-          ? 'publishing'
+          ? 'published'
           : options.canPublishAudio && options.isMuted
             ? 'mutedByControl'
             : 'off'
@@ -380,6 +382,7 @@ export default function LiveAudioAudienceContainer({
         isMuted: true,
         isActiveAudience: true,
         isMicrophoneActive: false,
+        microphoneTrackState: 'off',
         isKicked: false,
       });
       void publishActiveProfile(audienceSession.nick, audienceSession.aliasVisible);
@@ -402,6 +405,7 @@ export default function LiveAudioAudienceContainer({
         isMuted: !isMicrophoneActive,
         isActiveAudience: true,
         isMicrophoneActive,
+        microphoneTrackState,
       });
     } else if (isPendingWord) {
       sendParticipantStatus('REQUESTED', {
@@ -418,7 +422,7 @@ export default function LiveAudioAudienceContainer({
         isMicrophoneActive: false,
       });
     }
-  }, [isActive, isKicked, isMicrophoneActive, isPendingWord, isWordGranted, participantId, sendParticipantStatus]);
+  }, [isActive, isKicked, isMicrophoneActive, isPendingWord, isWordGranted, microphoneTrackState, participantId, sendParticipantStatus]);
 
   useEffect(() => {
     if (liveKitState !== 'reconnectFailed') return;
@@ -540,6 +544,7 @@ export default function LiveAudioAudienceContainer({
   }, [audienceSession.nick, isKicked, sendParticipantStatus, sendPrivateSignal]);
 
   const handleToggleMicrophone = useCallback(() => {
+    if (isActivatingMicrophoneRef.current) return;
     if (isMicrophoneActive) {
       void unpublishMicrophone();
       sendParticipantStatus('GRANTED', {
@@ -547,6 +552,7 @@ export default function LiveAudioAudienceContainer({
         isMuted: true,
         isActiveAudience: true,
         isMicrophoneActive: false,
+        microphoneTrackState: 'off',
       });
     } else {
       if (
@@ -561,16 +567,33 @@ export default function LiveAudioAudienceContainer({
         if (!accepted) return;
         microphoneConsentRevisionRef.current = externalBroadcastRevision;
       }
+      isActivatingMicrophoneRef.current = true;
+      sendParticipantStatus('GRANTED', {
+        canPublishAudio: true,
+        isMuted: true,
+        isActiveAudience: true,
+        isMicrophoneActive: false,
+        microphoneTrackState: 'publishing',
+      });
       void publishMicrophone({ musicMode: isMusicMode })
         .then(() => sendParticipantStatus('GRANTED', {
           canPublishAudio: true,
           isMuted: false,
           isActiveAudience: true,
           isMicrophoneActive: true,
+          microphoneTrackState: 'published',
         }))
         .catch((err) => {
           console.error("Failed to publish mic:", err);
-        });
+          sendParticipantStatus('GRANTED', {
+            canPublishAudio: true,
+            isMuted: true,
+            isActiveAudience: true,
+            isMicrophoneActive: false,
+            microphoneTrackState: 'error',
+          });
+        })
+        .finally(() => { isActivatingMicrophoneRef.current = false; });
     }
   }, [externalBroadcastRevision, externalBroadcastState, isMicrophoneActive, publishMicrophone, isMusicMode, sendParticipantStatus, unpublishMicrophone]);
 
@@ -617,6 +640,7 @@ export default function LiveAudioAudienceContainer({
     connectionQuality,
     isActive,
     isMicrophoneActive,
+    microphoneTrackState,
     hasAudioStarted,
     isPendingWord,
     isWordGranted,
@@ -664,8 +688,13 @@ export default function LiveAudioAudienceContainer({
         playsInline
       />
 
-      {isMicrophoneActive && (
-        <div className="fixed inset-0 z-40 pointer-events-none border-[6px] md:border-[10px] border-blue-500/80 rounded-xl transition-all shadow-[inset_0_0_30px_rgba(59,130,246,0.6)]"></div>
+      {(isMicrophoneActive || microphoneTrackState === 'publishing' || microphoneTrackState === 'error') && (
+        <div className={`fixed inset-0 z-40 pointer-events-none border-[6px] md:border-[10px] rounded-xl transition-all ${microphoneTrackState === 'publishing'
+          ? 'border-orange-500/80 shadow-[inset_0_0_30px_rgba(249,115,22,0.6)]'
+          : microphoneTrackState === 'error'
+            ? 'border-red-500/80 shadow-[inset_0_0_30px_rgba(239,68,68,0.6)]'
+            : 'border-blue-500/80 shadow-[inset_0_0_30px_rgba(59,130,246,0.6)]'
+          }`}></div>
       )}
 
       {showInterventionModal && (

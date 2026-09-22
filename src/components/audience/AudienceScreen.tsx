@@ -76,6 +76,7 @@ const AudienceScreen = ({
       state={liveAudio.state}
       isActive={liveAudio.isActive}
       isMicrophoneActive={liveAudio.isMicrophoneActive}
+      microphoneTrackState={liveAudio.microphoneTrackState}
       hasAudioStarted={liveAudio.hasAudioStarted}
       isPendingWord={liveAudio.isPendingWord}
       isWordGranted={liveAudio.isWordGranted}

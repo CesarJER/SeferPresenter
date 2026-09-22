@@ -1,4 +1,5 @@
 import { createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'
+import { RoomServiceClient, TrackSource } from 'livekit-server-sdk'
 import { hasValidBasicAuth } from './authUtils.mjs'
 
 const roles = new Set(['audience', 'control', 'presenter'])
@@ -14,22 +15,10 @@ const uuidV4Pattern = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[
 
 const participants = new Map()
 const issuedTokens = new Map()
-let liveKitSdkAvailability = null
 const roomState = {
   speakers: new Set(),
   muted: new Set(),
   kicked: new Set(),
-}
-
-const checkOptionalLiveKitSdk = async () => {
-  if (liveKitSdkAvailability !== null) return liveKitSdkAvailability
-  try {
-    await import('livekit-server-sdk')
-    liveKitSdkAvailability = true
-  } catch {
-    liveKitSdkAvailability = false
-  }
-  return liveKitSdkAvailability
 }
 
 const parseBoolean = (value, fallback = false) => {
@@ -45,6 +34,7 @@ const parsePositiveInt = (value, fallback) => {
 const getConfig = () => {
   const liveAudioEnabled = parseBoolean(process.env.SEFER_LIVE_AUDIO_ENABLED, false)
   const livekitUrl = process.env.LIVEKIT_URL
+  const livekitApiUrl = process.env.LIVEKIT_API_URL || livekitUrl
   const apiKey = process.env.LIVEKIT_API_KEY
   const apiSecret = process.env.LIVEKIT_API_SECRET
   const roomName = process.env.LIVEKIT_ROOM_NAME || 'sefer-live-audio'
@@ -61,6 +51,7 @@ const getConfig = () => {
     enabled: true,
     available: true,
     livekitUrl,
+    livekitApiUrl,
     apiKey,
     apiSecret,
     roomName,
@@ -378,7 +369,7 @@ const handleRefreshToken = async ({ req, res, readBody, sendJson, controlApi }) 
   return true
 }
 
-const handleModeration = async ({ req, res, url, readBody, sendJson, controlApi }) => {
+const handleModeration = async ({ req, res, url, readBody, sendJson, controlApi, getRoomServiceClient }) => {
   if (!requireConfigured(res, sendJson)) return true
   const body = await readJson(req, readBody)
   const auth = requireAuthorizedControl(body, controlApi)
@@ -403,17 +394,53 @@ const handleModeration = async ({ req, res, url, readBody, sendJson, controlApi 
   }
 
   const participantId = body.participantId
+  if (!isValidParticipantId(participantId)) {
+    sendJson(res, 404, { error: 'Participant not found' })
+    return true
+  }
+
+  const participant = participants.get(participantId)
+  const publishPermission = url.pathname === '/api/livekit/grant-speak'
+    ? true
+    : ['/api/livekit/revoke-speak', '/api/livekit/kick-participant', '/api/livekit/rescue-participant'].includes(url.pathname)
+      ? false
+      : null
+
+  if (publishPermission !== null) {
+    const action = url.pathname.replace('/api/livekit/', '')
+    const startedAt = Date.now()
+    console.log(`[LIVEKIT] livekit:moderation:request action=${action}`)
+    try {
+      await getRoomServiceClient().updateParticipant(participant.room, participant.participantIdentity, {
+        permission: {
+          canPublish: publishPermission,
+          canSubscribe: participant.canSubscribe,
+          canPublishData: false,
+          canPublishSources: publishPermission ? [TrackSource.MICROPHONE] : [],
+        },
+      })
+      console.log(`[LIVEKIT] livekit:moderation:permission-updated action=${action} durationMs=${Date.now() - startedAt}`)
+    } catch (error) {
+      const errorName = error instanceof Error ? error.name : 'Error'
+      console.warn(`[LIVEKIT] livekit:moderation:permission-failed action=${action} error=${errorName}`)
+      sendJson(res, 502, { error: 'LiveKit rejected the participant permission update' })
+      return true
+    }
+  }
+
   const actions = {
     '/api/livekit/grant-speak': (participant) => {
       roomState.kicked.delete(participant.participantId)
       roomState.speakers.add(participant.participantId)
       roomState.muted.add(participant.participantId)
       participant.speakerState = 'GRANTED'
+      participant.canPublish = true
     },
     '/api/livekit/revoke-speak': (participant) => {
       roomState.speakers.delete(participant.participantId)
       roomState.muted.delete(participant.participantId)
       participant.speakerState = 'LISTENER'
+      participant.canPublish = false
     },
     '/api/livekit/mute-participant': (participant) => {
       roomState.speakers.add(participant.participantId)
@@ -425,6 +452,7 @@ const handleModeration = async ({ req, res, url, readBody, sendJson, controlApi 
       roomState.speakers.delete(participant.participantId)
       roomState.muted.delete(participant.participantId)
       participant.speakerState = 'REVOKED'
+      participant.canPublish = false
     },
     '/api/livekit/rescue-participant': (participant) => {
       roomState.kicked.delete(participant.participantId)
@@ -450,9 +478,17 @@ const handleModeration = async ({ req, res, url, readBody, sendJson, controlApi 
   return true
 }
 
-export const createLiveKitApi = (controlApi) => {
+export const createLiveKitApi = (controlApi, options = {}) => {
   const cleanupTimer = setInterval(cleanupExpiredState, 30_000)
   cleanupTimer.unref?.()
+  let roomServiceClient = options.roomServiceClient
+
+  const getRoomServiceClient = () => {
+    if (roomServiceClient) return roomServiceClient
+    const config = getConfig()
+    roomServiceClient = new RoomServiceClient(config.livekitApiUrl, config.apiKey, config.apiSecret)
+    return roomServiceClient
+  }
 
   return {
     close: () => clearInterval(cleanupTimer),
@@ -485,13 +521,11 @@ export const createLiveKitApi = (controlApi) => {
     handle: async ({ req, res, url, readBody, sendJson }) => {
       try {
         if (url.pathname === '/api/livekit/status' && req.method === 'GET') {
-          if (getConfig().enabled) void checkOptionalLiveKitSdk()
           sendJson(res, 200, statusPayload())
           return true
         }
 
         if (url.pathname === '/api/livekit/token' && req.method === 'POST') {
-          void checkOptionalLiveKitSdk()
           return await handleToken({ req, res, readBody, sendJson, controlApi })
         }
 
@@ -500,7 +534,15 @@ export const createLiveKitApi = (controlApi) => {
         }
 
         if (mutatingPaths.has(url.pathname) && req.method === 'POST') {
-          return await handleModeration({ req, res, url, readBody, sendJson, controlApi })
+          return await handleModeration({
+            req,
+            res,
+            url,
+            readBody,
+            sendJson,
+            controlApi,
+            getRoomServiceClient,
+          })
         }
 
         return false

@@ -5,6 +5,7 @@ import type {
   LiveAudioAvailability,
   LiveAudioMicrophoneDiagnostics,
   LiveAudioExternalBroadcastState,
+  MicrophoneTrackState,
 } from '../../../../types/liveAudio';
 
 export interface AudienceLiveAudioContextValue {
@@ -12,6 +13,7 @@ export interface AudienceLiveAudioContextValue {
   connectionQuality: LiveAudioConnectionQuality;
   isActive: boolean;
   isMicrophoneActive: boolean;
+  microphoneTrackState: MicrophoneTrackState;
   hasAudioStarted: boolean;
   isPendingWord: boolean;
   isWordGranted: boolean;

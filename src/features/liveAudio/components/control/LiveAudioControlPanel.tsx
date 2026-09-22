@@ -41,6 +41,7 @@ interface LiveAudioControlPanelProps {
   pendingWordCount: number;
   externalBroadcastState: LiveAudioExternalBroadcastState;
   onExternalBroadcastStateChange: (state: LiveAudioExternalBroadcastState) => void;
+  moderationError?: string | null;
 }
 
 export const LiveAudioControlPanel: React.FC<LiveAudioControlPanelProps> = ({
@@ -78,6 +79,7 @@ export const LiveAudioControlPanel: React.FC<LiveAudioControlPanelProps> = ({
   pendingWordCount,
   externalBroadcastState,
   onExternalBroadcastStateChange,
+  moderationError,
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isListenVolOpen, setIsListenVolOpen] = useState(false);
@@ -94,6 +96,11 @@ export const LiveAudioControlPanel: React.FC<LiveAudioControlPanelProps> = ({
           ${isExpanded ? 'h-[60vh] max-h-[calc(100vh-80px)] md:h-[450px] opacity-100' : 'h-0 max-h-0 opacity-0 border-none'}`}
       >
         <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
+          {moderationError && (
+            <div role="alert" className="rounded border border-red-700 bg-red-950/70 px-3 py-2 text-sm text-red-100">
+              No se pudo aplicar la moderación: {moderationError}
+            </div>
+          )}
           {externalPermission !== 'NONE' && (
             <label className="flex flex-col gap-1 rounded border border-gray-700 bg-gray-950/60 p-2 text-xs text-gray-300">
               <span className="font-semibold">Estado externo declarado</span>

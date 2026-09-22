@@ -1,7 +1,9 @@
 import React from 'react';
 import { Mic, MicOff, Hand, Wifi, WifiOff, Loader2, RotateCcw, CheckCircle2, XCircle } from 'lucide-react';
 export type ParticipantStatus =
-  | 'talking'
+  | 'microphone-published'
+  | 'publishing'
+  | 'microphone-error'
   | 'permission-granted'
   | 'permission-requested'
   | 'kicked'
@@ -18,10 +20,26 @@ interface LiveAudioStatusBadgeProps {
 }
 
 export const LiveAudioStatusBadge: React.FC<LiveAudioStatusBadgeProps> = ({ status, isMuted, className = '' }) => {
-  if (status === 'talking') {
+  if (status === 'microphone-published') {
     return (
-      <div className={`flex items-center justify-center rounded-full bg-blue-500/20 p-1.5 ${className}`} title="Hablando">
+      <div className={`flex items-center justify-center rounded-full bg-blue-500/20 p-1.5 ${className}`} title="Micrófono publicado">
         <Mic size={16} className="text-blue-400" />
+      </div>
+    );
+  }
+
+  if (status === 'publishing') {
+    return (
+      <div className={`flex items-center justify-center rounded-full bg-orange-500/20 p-1.5 ${className}`} title="Publicando micrófono">
+        <Loader2 size={16} className="text-orange-400 animate-spin" />
+      </div>
+    );
+  }
+
+  if (status === 'microphone-error') {
+    return (
+      <div className={`flex items-center justify-center rounded-full bg-red-500/20 p-1.5 ${className}`} title="Error al publicar el micrófono">
+        <XCircle size={16} className="text-red-400" />
       </div>
     );
   }
