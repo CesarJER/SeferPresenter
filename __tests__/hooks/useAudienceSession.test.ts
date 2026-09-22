@@ -12,14 +12,13 @@ describe('useAudienceSession', () => {
     localStorage.clear();
   });
 
-  it('mantiene el alias solo en memoria durante la página activa', () => {
+  it('recupera y persiste el alias durante la sesión local', () => {
     localStorage.setItem('sefer-audience-nick', 'Alias heredado');
     localStorage.setItem('sefer-audience-alias-visible', 'true');
     const { result, unmount } = renderHook(() => useAudienceSession({}));
 
-    expect(result.current.nick).toBe('');
-    expect(localStorage.getItem('sefer-audience-nick')).toBeNull();
-    expect(localStorage.getItem('sefer-audience-alias-visible')).toBeNull();
+    expect(result.current.nick).toBe('Alias heredado');
+    expect(result.current.aliasVisible).toBe(true);
 
     act(() => {
       result.current.login('TestUser');
@@ -28,12 +27,13 @@ describe('useAudienceSession', () => {
 
     expect(result.current.nick).toBe('TestUser');
     expect(result.current.aliasVisible).toBe(true);
-    expect(localStorage.getItem('sefer-audience-nick')).toBeNull();
-    expect(localStorage.getItem('sefer-audience-alias-visible')).toBeNull();
+    expect(localStorage.getItem('sefer-audience-nick')).toBe('TestUser');
+    expect(localStorage.getItem('sefer-audience-alias-visible')).toBe('true');
 
     unmount();
     const remounted = renderHook(() => useAudienceSession({}));
-    expect(remounted.result.current.nick).toBe('');
+    expect(remounted.result.current.nick).toBe('TestUser');
+    expect(remounted.result.current.aliasVisible).toBe(true);
   });
 
   it('purga y rota la identidad técnica al salir', () => {

@@ -43,6 +43,8 @@ describe('legal document configuration', () => {
     expect(getStaticCacheHeaders('/audio/sounds/Pregunta.mp3')).toEqual({
       'Cache-Control': 'public, max-age=604800, stale-while-revalidate=2592000',
     });
-    expect(getStaticCacheHeaders('/audience')).toEqual({});
+    expect(getStaticCacheHeaders('/audience')).toEqual({
+      'Cache-Control': 'no-cache',
+    });
   });
 });
