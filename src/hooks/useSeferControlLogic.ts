@@ -114,11 +114,21 @@ export function useSeferControlLogic({
       onDeactivate?.();
       return;
     }
-    const state = activate();
-    if (state) {
-      markAndProject(state, 'navigate');
-    }
-  }, [activate, deactivate, isActive, markAndProject, onDeactivate]);
+    if (!currentVerse) return;
+
+    const normalizedEnd = endVerse || currentVerse.verse;
+    const finalState: SeferReaderState = {
+      ...currentVerse,
+      verseStart: currentVerse.verse,
+      verseEnd: normalizedEnd,
+      totalVerses: normalizedEnd
+        ? Math.max(1, Math.abs(Number(normalizedEnd) - Number(currentVerse.verse)) + 1)
+        : 1,
+    };
+
+    restoreState(finalState);
+    markAndProject(finalState, 'navigate');
+  }, [currentVerse, deactivate, endVerse, isActive, markAndProject, onDeactivate, restoreState]);
 
   const handleVerseSelect = useCallback((verse: string, command: SeferCommand = 'navigate') => {
     const state = goToVerse(verse);
@@ -131,7 +141,7 @@ export function useSeferControlLogic({
   const currentVerseIndex = currentVerse ? rangeVerses.indexOf(currentVerse.verse) : -1;
 
   const handleNext = useCallback(() => {
-    if (variant === 'mini' && currentVerse && hasActiveRange) {
+    if (currentVerse && hasActiveRange) {
       if (currentVerseIndex >= 0 && currentVerseIndex < rangeVerses.length - 1) {
         handleVerseSelect(rangeVerses[currentVerseIndex + 1], 'next');
         return;
@@ -155,7 +165,7 @@ export function useSeferControlLogic({
   ]);
 
   const handlePrev = useCallback(() => {
-    if (variant === 'mini' && currentVerse && hasActiveRange) {
+    if (currentVerse && hasActiveRange) {
       if (currentVerseIndex > 0) {
         handleVerseSelect(rangeVerses[currentVerseIndex - 1], 'previous');
         return;
