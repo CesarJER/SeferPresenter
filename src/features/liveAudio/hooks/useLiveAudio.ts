@@ -504,7 +504,7 @@ export const useLiveAudio = ({
     if (!canRolePublish(role)) {
       throw new Error('This Live Audio role cannot publish microphone audio');
     }
-    let room = roomRef.current;
+    const room = roomRef.current;
     if (!room || room.state !== ConnectionState.Connected) {
       throw new Error('Live Audio room is not connected');
     }

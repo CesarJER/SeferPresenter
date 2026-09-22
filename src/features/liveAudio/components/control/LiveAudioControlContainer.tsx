@@ -28,6 +28,7 @@ import {
 } from '../../utils/activeParticipants';
 import type { ScriptureNavState } from '../../../../types/presentation';
 import type { SeferReaderState } from '../../../../hooks/useSeferReader';
+import { isValidEphemeralParticipantId } from '../../../../utils/validation';
 
 const VoiceScriptureControl = import.meta.env.VITE_SEFER_VOICE_SCRIPTURE_BUILD === 'true'
   ? lazy(() => import('../../../voiceScripture/VoiceScriptureControl'))
@@ -78,6 +79,21 @@ const sanitizeAlias = (value: unknown): string | null => {
 const clampVolume = (volume: number) => Math.max(0, Math.min(volume, 300));
 const clampListenVolume = (volume: number) => Math.max(0, Math.min(volume, 100));
 
+type VoiceSourceSelectionSignal = {
+  type: 'VOICE_SOURCE_SELECTION';
+  participantId: string | null;
+  version: 1;
+  updatedAt: number;
+};
+
+const isVoiceSourceSelectionSignal = (value: Record<string, unknown>): value is VoiceSourceSelectionSignal =>
+  Object.keys(value).every((key) => ['type', 'participantId', 'version', 'updatedAt'].includes(key))
+  && value.type === 'VOICE_SOURCE_SELECTION'
+  && (value.participantId === null || isValidEphemeralParticipantId(value.participantId))
+  && value.version === 1
+  && Number.isSafeInteger(value.updatedAt)
+  && (value.updatedAt as number) > 0;
+
 const snapshotParticipantToStatus = (
   participant: LiveAudioOperationalSnapshot['participants'][number],
 ): LiveAudioParticipantStatusMessage => ({
@@ -117,7 +133,7 @@ export default function LiveAudioControlContainer({
   verificationCode,
 }: LiveAudioControlContainerProps) {
   const [isInboxOpen, setIsInboxOpen] = useState(false);
-  const [selectedVoiceId, setSelectedVoiceId] = useState('');
+  const [selectedVoiceParticipantId, setSelectedVoiceParticipantId] = useState('');
   const [voiceReady, setVoiceReady] = useState(false);
   const [operatorNick, setOperatorNick] = useState(() => localStorage.getItem('sefer_control_operator_nick') || '');
   const [isModeratorMuted, setIsModeratorMuted] = useState(true);
@@ -143,6 +159,15 @@ export default function LiveAudioControlContainer({
   const requestedAuthRef = useRef<string | null>(null);
   const moderatorConsentRevisionRef = useRef(0);
   const applyControllerConfig = useRef<(data: Record<string, unknown>) => void>(() => undefined);
+  const voiceSelectionRef = useRef({ participantId: null as string | null, updatedAt: 0, fromParticipantId: '' });
+  const voiceKeyIdRef = useRef<string | null>(null);
+  const previouslyAvailableVoiceSourcesRef = useRef(new Set<string>());
+
+  const resetVoiceSelection = useCallback(() => {
+    voiceSelectionRef.current = { participantId: null, updatedAt: 0, fromParticipantId: '' };
+    previouslyAvailableVoiceSourcesRef.current.clear();
+    setSelectedVoiceParticipantId('');
+  }, []);
 
   const { availability } = useLiveAudioAvailability();
 
@@ -156,6 +181,7 @@ export default function LiveAudioControlContainer({
     remoteTracks,
     controlParticipants,
     localMicrophoneTrack,
+    microphoneTrackState,
     startRemoteAudio,
   } = useLiveAudio({
     role: 'control',
@@ -212,6 +238,7 @@ export default function LiveAudioControlContainer({
         setConnectionCounts(null);
         setAudienceAccessRequests({});
         lastSentListRef.current = '';
+        resetVoiceSelection();
         return;
       }
       if (type === 'LIVE_AUDIO_SNAPSHOT') {
@@ -384,7 +411,7 @@ export default function LiveAudioControlContainer({
       }
     });
     return unsubscribe;
-  }, [controlSessionId, subscribeToWsMessage, wsSend]);
+  }, [controlSessionId, resetVoiceSelection, subscribeToWsMessage, wsSend]);
 
   useEffect(() => {
     if (!isControlAuthorized || !wsSend) return;
@@ -408,9 +435,22 @@ export default function LiveAudioControlContainer({
       return;
     }
 
-    if ((data.type === 'CONTROL_PROFILE' || data.type === 'CONTROL_MICROPHONE_CONFIG')
+    if ((data.type === 'CONTROL_PROFILE' || data.type === 'CONTROL_MICROPHONE_CONFIG' || data.type === 'VOICE_SOURCE_SELECTION')
       && signal.fromParticipantId !== participantId
       && !controlParticipants.some(control => control.participantId === signal.fromParticipantId)) return;
+    if (data.type === 'VOICE_SOURCE_SELECTION') {
+      if (!isValidEphemeralParticipantId(signal.fromParticipantId) || !isVoiceSourceSelectionSignal(data)) return;
+      const current = voiceSelectionRef.current;
+      if (data.updatedAt < current.updatedAt
+        || (data.updatedAt === current.updatedAt && signal.fromParticipantId <= current.fromParticipantId)) return;
+      voiceSelectionRef.current = {
+        participantId: data.participantId,
+        updatedAt: data.updatedAt,
+        fromParticipantId: signal.fromParticipantId,
+      };
+      setSelectedVoiceParticipantId(data.participantId || '');
+      return;
+    }
     if (data.type === 'CONTROL_MICROPHONE_CONFIG') { applyControllerConfig.current(data); return; }
     if (data.type === 'CONTROL_PROFILE') {
       setParticipantAliases(prev => ({ ...prev, [signal.fromParticipantId]: sanitizeAlias(data.alias) || 'Sin nick' }));
@@ -530,6 +570,7 @@ export default function LiveAudioControlContainer({
     sendPrivateSignalToControls,
     requestAliases,
     ready: privateSignalsReady,
+    keyId: privateSignalKeyId,
     requestControlAuthorization,
     authorizeSecondaryControl
   } = usePrivateControlSignals({
@@ -544,6 +585,37 @@ export default function LiveAudioControlContainer({
   });
 
   const controlRosterKey = controlParticipants.map(control => control.participantId).join(',');
+
+  useEffect(() => {
+    if (voiceKeyIdRef.current !== null && voiceKeyIdRef.current !== privateSignalKeyId) resetVoiceSelection();
+    voiceKeyIdRef.current = privateSignalKeyId;
+  }, [privateSignalKeyId, resetVoiceSelection]);
+
+  useEffect(() => {
+    const selection = voiceSelectionRef.current;
+    if (!privateSignalsReady || !participantId || selection.updatedAt === 0) return;
+    void sendPrivateSignalToControls({
+      type: 'VOICE_SOURCE_SELECTION',
+      participantId: selection.participantId,
+      version: 1,
+      updatedAt: selection.updatedAt,
+    } satisfies VoiceSourceSelectionSignal).catch(() => undefined);
+  }, [controlRosterKey, participantId, privateSignalsReady, sendPrivateSignalToControls]);
+
+  const setSharedVoiceSource = useCallback((nextParticipantId: string | null) => {
+    if (!isControlAuthorized || !participantId
+      || (nextParticipantId !== null && !isValidEphemeralParticipantId(nextParticipantId))) return;
+    const updatedAt = Math.max(Date.now(), voiceSelectionRef.current.updatedAt + 1);
+    const selection = { participantId: nextParticipantId, updatedAt, fromParticipantId: participantId };
+    voiceSelectionRef.current = selection;
+    setSelectedVoiceParticipantId(nextParticipantId || '');
+    void sendPrivateSignalToControls({
+      type: 'VOICE_SOURCE_SELECTION',
+      participantId: nextParticipantId,
+      version: 1,
+      updatedAt,
+    } satisfies VoiceSourceSelectionSignal).catch(() => undefined);
+  }, [isControlAuthorized, participantId, sendPrivateSignalToControls]);
   // Control nicknames travel only through the existing encrypted control channel.
   useEffect(() => {
     if (!privateSignalsReady || !participantId) return;
@@ -976,20 +1048,40 @@ export default function LiveAudioControlContainer({
   }, [wsSend]);
 
   const voiceTracks = [
-    ...(localMicrophoneTrack && !isModeratorMuted ? [{ id: 'local-mic', track: localMicrophoneTrack, label: operatorNick || 'Mi micrófono' }] : []),
+    ...(participantId && localMicrophoneTrack && !isModeratorMuted ? [{ id: participantId, track: localMicrophoneTrack, label: operatorNick || 'Mi micrófono' }] : []),
     ...remoteTracks.filter(remote => {
       const participant = participantsMap[remote.participantId || ''];
       const control = controlParticipants.find(p => p.participantId === remote.participantId);
       return control ? control.isMicrophoneActive : participant?.role === 'audience' && participant.isMuted !== true && participant.connected !== false;
-    }).map(remote => ({ id: remote.participantId || remote.id, track: remote.track, label: participantAliases[remote.participantId || ''] || 'Sin nick' })),
+    }).flatMap(remote => remote.participantId
+      ? [{ id: remote.participantId, track: remote.track, label: participantAliases[remote.participantId] || 'Sin nick' }]
+      : []),
   ];
-  const voiceParticipantId = selectedVoiceId === 'local-mic' ? participantId : selectedVoiceId;
+  voiceTracks.forEach(({ id }) => previouslyAvailableVoiceSourcesRef.current.add(id));
   const selectVoice = (id: string) => {
-    const trackId = id === participantId ? 'local-mic' : id;
-    if (trackId && trackId === selectedVoiceId) { setSelectedVoiceId(''); return; }
-    if (!trackId || !voiceReady || !voiceTracks.some(track => track.id === trackId)) return;
-    setSelectedVoiceId(trackId);
+    if (id === selectedVoiceParticipantId) { setSharedVoiceSource(null); return; }
+    if (!voiceReady || !voiceTracks.some(track => track.id === id)) return;
+    setSharedVoiceSource(id);
   };
+  const selectedVoiceTrack = voiceTracks.find(track => track.id === selectedVoiceParticipantId)?.track;
+  const selectedAudience = participantsMap[selectedVoiceParticipantId];
+  const selectedControl = controlParticipants.find(control => control.participantId === selectedVoiceParticipantId);
+  const selectedVoiceConnected = selectedVoiceParticipantId === participantId
+    ? state === 'connected' || state === 'reconnected'
+    : Boolean(selectedControl || (selectedAudience && selectedAudience.connected !== false));
+  const selectedTrackState = selectedVoiceParticipantId === participantId
+    ? microphoneTrackState
+    : selectedAudience?.microphoneTrackState;
+  const voiceSourceAvailability = !selectedVoiceParticipantId ? 'none'
+    : selectedVoiceTrack?.readyState === 'live' ? 'available'
+      : selectedVoiceConnected
+        && (selectedTrackState === 'notRequested' || selectedTrackState === 'publishing'
+          || (!selectedTrackState && !previouslyAvailableVoiceSourcesRef.current.has(selectedVoiceParticipantId)))
+        ? 'waiting'
+        : 'unavailable';
+  const voiceSourceLabel = !selectedVoiceParticipantId ? ''
+    : selectedVoiceParticipantId === participantId ? operatorNick.trim() || 'Mi micrófono'
+      : participantAliases[selectedVoiceParticipantId] || 'Participante seleccionado';
   const controllers: LiveAudioParticipant[] = controlParticipants
     .map(p => ({ participantId: p.participantId, alias: participantAliases[p.participantId] || 'Sin nick',
       speakerState: 'GRANTED', isMuted: !p.isMicrophoneActive, isMicrophoneActive: p.isMicrophoneActive,
@@ -1000,7 +1092,8 @@ export default function LiveAudioControlContainer({
     isMuted: isModeratorMuted, isMicrophoneActive, isActiveAudience: false, isKicked: false,
     microphoneVolume, isMusicMode: isModeratorMusicMode });
   const voiceRuntime = VoiceScriptureControl && isControlAuthorized && availability === 'enabled' ? <Suspense fallback={null}>
-    <VoiceScriptureControl tracks={voiceTracks} selectedId={selectedVoiceId} onSelectionChange={setSelectedVoiceId}
+    <VoiceScriptureControl tracks={voiceTracks} selectedId={selectedVoiceParticipantId} onSelectionChange={() => undefined}
+      canTranscribe={controlState === 'PRINCIPAL'}
       onAvailabilityChange={setVoiceReady} suggestionsTarget={voiceSuggestionsTarget}
       scriptureState={scriptureState} onProject={onProjectScripture} />
   </Suspense> : null;
@@ -1082,10 +1175,12 @@ export default function LiveAudioControlContainer({
 
       <LiveAudioControlPanel
         controllers={controllers}
-        selectedVoiceParticipantId={voiceParticipantId || ''}
-        voiceSelectableIds={voiceReady ? voiceTracks.map(track => track.id === 'local-mic' ? participantId || '' : track.id) : []}
+        selectedVoiceParticipantId={selectedVoiceParticipantId}
+        voiceSelectableIds={voiceReady ? voiceTracks.map(track => track.id) : []}
+        voiceSourceLabel={voiceSourceLabel}
+        voiceSourceAvailability={voiceSourceAvailability}
         onSelectVoice={selectVoice}
-        ownVoiceSelected={selectedVoiceId === 'local-mic'}
+        ownVoiceSelected={selectedVoiceParticipantId === participantId}
         onControllerMicrophoneConfigChange={(id, config) => {
           if (id !== participantId) {
             void sendPrivateSignalToControls({ type: 'CONTROL_MICROPHONE_CONFIG', targetParticipantId: id, ...config }).catch(() => undefined);

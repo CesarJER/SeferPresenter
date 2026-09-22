@@ -10,6 +10,8 @@ interface LiveAudioControlPanelProps {
   controllers?: LiveAudioParticipant[];
   selectedVoiceParticipantId?: string;
   voiceSelectableIds?: string[];
+  voiceSourceLabel?: string;
+  voiceSourceAvailability?: 'none' | 'waiting' | 'available' | 'unavailable';
   onSelectVoice?: (id: string) => void;
   ownVoiceSelected?: boolean;
   onControllerMicrophoneConfigChange?: (id: string, config: { volume?: number; musicMode?: boolean }) => void;
@@ -48,6 +50,8 @@ export const LiveAudioControlPanel: React.FC<LiveAudioControlPanelProps> = ({
   controllers = [],
   selectedVoiceParticipantId,
   voiceSelectableIds,
+  voiceSourceLabel,
+  voiceSourceAvailability = 'none',
   onSelectVoice,
   ownVoiceSelected,
   onControllerMicrophoneConfigChange,
@@ -86,6 +90,12 @@ export const LiveAudioControlPanel: React.FC<LiveAudioControlPanelProps> = ({
   const [isMicVolOpen, setIsMicVolOpen] = useState(false);
 
   const externalPermission = (import.meta.env.VITE_SEFER_PUBLICABLE_PERMISSION || 'RECORDING').toUpperCase();
+  const voiceSourceStatus = voiceSourceAvailability === 'none' ? 'Sin origen de voz'
+    : `${voiceSourceLabel || 'Participante seleccionado'} · ${
+      voiceSourceAvailability === 'available' ? 'Disponible'
+        : voiceSourceAvailability === 'waiting' ? 'Esperando micrófono'
+          : 'Micrófono no disponible'
+    }`;
 
   return (
     <div className="fixed bottom-0 right-0 md:bottom-4 md:right-4 w-full md:w-[400px] flex flex-col z-40">
@@ -201,6 +211,9 @@ export const LiveAudioControlPanel: React.FC<LiveAudioControlPanelProps> = ({
 
       {/* Bottom Bar (Always visible) */}
       <div className="bg-gray-800 border-t border-l border-r border-gray-700 md:rounded-b-lg shadow-xl p-2 flex items-center justify-between">
+        <div className="min-w-0 max-w-[45%] truncate text-xs text-gray-300" title={`Origen de voz: ${voiceSourceStatus}`}>
+          <span className="font-semibold">Voz: </span>{voiceSourceStatus}
+        </div>
         
         {/* Stats */}
         <div className="flex items-center gap-3 text-sm font-semibold text-gray-300 bg-gray-900 px-3 py-1.5 rounded-md border border-gray-700">

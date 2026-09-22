@@ -66,6 +66,22 @@ describe('Control automatic projection', () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(6_000); });
     expect(mocks.sessions).toHaveLength(1);
   });
+  it('reflects a shared source without opening STT on a secondary Control', async () => {
+    const onSelectionChange = vi.fn();
+    render(<VoiceScriptureControl canTranscribe={false} selectedId="local-mic" onSelectionChange={onSelectionChange}
+      tracks={tracks} scriptureState={null} onProject={vi.fn()} />);
+    await screen.findByText('Origen compartido · transcripción en Control principal');
+    expect(mocks.sessions).toHaveLength(0);
+    expect(onSelectionChange).not.toHaveBeenCalled();
+  });
+  it('retains the stable participant selection while its track is absent', async () => {
+    const onSelectionChange = vi.fn();
+    render(<VoiceScriptureControl selectedId="local-mic" onSelectionChange={onSelectionChange}
+      tracks={[]} scriptureState={null} onProject={vi.fn()} />);
+    await screen.findByText('Listo');
+    expect(mocks.sessions).toHaveLength(0);
+    expect(onSelectionChange).not.toHaveBeenCalled();
+  });
   it('hydrates the last reference and retains all options', async () => {
     const onProject = vi.fn();
     render(<VoiceScriptureControl selectedId="local-mic" onSelectionChange={() => undefined} tracks={tracks} scriptureState={null} onProject={onProject} />);

@@ -13,6 +13,7 @@ interface VoiceScriptureControlProps {
   tracks: VoiceTrack[];
   selectedId: string;
   onSelectionChange: (id: string) => void;
+  canTranscribe?: boolean;
   onAvailabilityChange?: (ready: boolean) => void;
   suggestionsTarget?: HTMLElement | null;
   scriptureState: ScriptureNavState | null;
@@ -26,7 +27,7 @@ const projectionKey = (state: ScriptureNavState | null) => JSON.stringify([
   state?.bookAbbrevEs || state?.bookEs, state?.chapter, state?.verse, state?.verseStart, state?.verseEnd, state?.commandId,
 ]);
 
-export default function VoiceScriptureControl({ tracks, scriptureState, onProject, selectedId, onSelectionChange, onAvailabilityChange, suggestionsTarget }: VoiceScriptureControlProps) {
+export default function VoiceScriptureControl({ tracks, scriptureState, onProject, selectedId, onSelectionChange, canTranscribe = true, onAvailabilityChange, suggestionsTarget }: VoiceScriptureControlProps) {
   const [availability, setAvailability] = useState<'checking' | 'disabled' | 'unavailable' | 'ready'>('checking');
   const [phase, setPhase] = useState<VoiceSessionPhase>('idle');
   const [detail, setDetail] = useState('');
@@ -129,7 +130,7 @@ export default function VoiceScriptureControl({ tracks, scriptureState, onProjec
   }, [clearPending, stop]);
   const start = useCallback(() => {
     const selected = tracks.find((track) => track.id === selectedId);
-    if (!selected || availability !== 'ready' || !mounted.current) return;
+    if (!canTranscribe || !selected || availability !== 'ready' || !mounted.current) return;
     session.current?.dispose();
     active.current = true;
     setDetail('');
@@ -158,7 +159,7 @@ export default function VoiceScriptureControl({ tracks, scriptureState, onProjec
     });
     session.current = next;
     void next.start();
-  }, [availability, selectedId, tracks, project, clearPending]);
+  }, [availability, canTranscribe, selectedId, tracks, project, clearPending]);
   restart.current = start;
   const source = tracks.find((entry) => entry.id === selectedId)?.track;
   useEffect(() => {
@@ -171,12 +172,11 @@ export default function VoiceScriptureControl({ tracks, scriptureState, onProjec
   }, [availability, refresh]);
   useEffect(() => {
     const generation = operation.current;
-    if (source && availability === 'ready') {
+    if (canTranscribe && source && availability === 'ready') {
       void closing.current.then(() => {
         if (mounted.current && generation === operation.current) restart.current();
       });
     }
-    else if (selectedId && !source) current.current.onSelectionChange('');
     return () => {
       active.current = false;
       operation.current += 1;
@@ -188,15 +188,15 @@ export default function VoiceScriptureControl({ tracks, scriptureState, onProjec
       setOptions([]);
       setPhase('idle');
     };
-  }, [source, selectedId, availability, clearPending]);
+  }, [canTranscribe, source, selectedId, availability, clearPending]);
   useEffect(() => {
-    if (phase !== 'error' || !source || !selectedId) return;
-    if (source.readyState !== 'live') { current.current.onSelectionChange(''); return; }
+    if (!canTranscribe || phase !== 'error' || !source || !selectedId || source.readyState !== 'live') return;
     const timer = setTimeout(() => restart.current(), 5_000);
     return () => clearTimeout(timer);
-  }, [phase, source, selectedId]);
+  }, [canTranscribe, phase, source, selectedId]);
   const view = <VoiceScriptureSuggestions
-    status={availability === 'ready' ? (phase === 'error' && selectedId ? `${detail} · reconectando…` : detail) || (selectedId ? phaseText[phase] : 'Voz desactivada · selecciona un micrófono')
+    status={availability === 'ready' ? (!canTranscribe && selectedId ? 'Origen compartido · transcripción en Control principal'
+      : (phase === 'error' && selectedId ? `${detail} · reconectando…` : detail) || (selectedId ? phaseText[phase] : 'Voz desactivada · selecciona un micrófono'))
       : availability === 'checking' ? 'Comprobando voz…' : availability === 'disabled' ? 'Voz no habilitada' : 'Motor de voz no disponible · reintentando…'}
     options={options} onProject={project} />;
   return suggestionsTarget === undefined ? view : suggestionsTarget ? createPortal(view, suggestionsTarget) : null;
