@@ -220,7 +220,6 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
 
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isMusicPanelOpen, setIsMusicPanelOpen] = useState(false);
-  const [showSeferControl, setShowSeferControl] = useState(false);
   const [voiceSuggestionsTarget, setVoiceSuggestionsTarget] = useState<HTMLDivElement | null>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [resolvedScriptureState, setResolvedScriptureState] = useState<any>(null);
@@ -1610,17 +1609,15 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
           <button
             type="button"
             onClick={() => {
-              const nextShow = !showSeferControl;
-              setShowSeferControl(nextShow);
               if (onToggleAppMode) {
-                onToggleAppMode(nextShow ? 'seferManual' : 'slides');
+                onToggleAppMode(appMode === 'seferManual' ? 'slides' : 'seferManual');
               }
             }}
             className={`flex items-center justify-center p-2 text-xs font-semibold rounded border transition-all cursor-pointer ${appMode === 'seferManual'
               ? 'bg-yellow-600 border-yellow-500 text-white font-bold'
               : 'bg-gray-800 border-gray-700 hover:bg-gray-700 text-gray-300 hover:text-white'
               }`}
-            title={showSeferControl ? "Cerrar Sefer manual" : "Abrir Sefer manual"}
+            title={appMode === 'seferManual' ? "Cerrar Sefer manual" : "Abrir Sefer manual"}
           >
             <span className="text-sm leading-none">📜</span>
           </button>
@@ -1657,7 +1654,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
         )}
 
         <div className="shrink-0 border-b border-gray-700 bg-gray-950/70 flex flex-col landscape:flex-row">
-          {showSeferControl && (
+          {appMode === 'seferManual' && (
             <div className="min-w-0 flex-1">
               <SeferControlPanel
                 onProject={(state, cmd) => {
@@ -2085,7 +2082,6 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
             scriptureState={scriptureState}
             voiceSuggestionsTarget={voiceSuggestionsTarget}
             onProjectScripture={(state, command) => {
-              setShowSeferControl(true);
               onToggleAppMode('seferManual');
               onProjectScripture?.(state, command);
             }}

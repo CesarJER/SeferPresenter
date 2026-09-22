@@ -481,12 +481,8 @@ function ControlApp() {
           setAppMode(mode);
           emitCommand({ command: 'TOGGLE_APP_MODE', mode });
         }}
-        onProjectScripture={(state) => {
-          if (appMode !== 'seferManual') {
-            setAppMode('seferManual');
-            emitCommand({ command: 'TOGGLE_APP_MODE', mode: 'seferManual' });
-          }
-          emitCommand({ command: 'SCRIPTURE_PROJECT', state, navCommand: 'navigate' });
+        onProjectScripture={(state, command = 'navigate') => {
+          emitCommand({ command: 'SCRIPTURE_PROJECT', state, navCommand: command });
         }}
         onAddScriptureSlide={handleAddScriptureSlide}
         onBoundaryReached={(dir) => emitCommand({ command: 'SCRIPTURE_BOUNDARY', direction: dir })}
