@@ -70,6 +70,9 @@ const allowDelegatedModerators = () =>
 const getDefaultModerationVisible = () =>
   String(process.env.SEFER_ACTIVE_ALIAS_MODERATION_DEFAULT_VISIBLE || 'true').toLowerCase() !== 'false'
 
+const getDefaultActiveListAccessForPublicProfiles = () =>
+  String(process.env.SEFER_ACTIVE_LIST_DEFAULT_FOR_PUBLIC_PROFILES || 'false').toLowerCase() === 'true'
+
 const getDefaultAccessMode = () =>
   String(process.env.SEFER_SESSION_ACCESS_DEFAULT || 'PUBLIC').toUpperCase() === 'CONTROLLED'
     ? 'CONTROLLED'
@@ -1493,6 +1496,7 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
           if (meta.role !== 'audience') break
           if (!validateActiveParticipantProfile(msg)) break
           const existing = liveAudioParticipants.get(msg.participantId)
+          const isInitialActiveJoin = !existing || !existing.isActiveAudience
           const shouldActivate = existing?.isKicked === true
             ? false
             : existing?.isActiveAudience ?? true
@@ -1514,6 +1518,9 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
           if (accessRecord) accessRecord.hasAlias = true
           participant.isAliasVisibleToActiveParticipants = msg.isAliasVisibleToActiveParticipants
           participant.activeListPublicKey = msg.activeListPublicKey
+          if (isInitialActiveJoin) {
+            participant.canViewActiveParticipants = msg.isAliasVisibleToActiveParticipants && getDefaultActiveListAccessForPublicProfiles()
+          }
           participant.updatedAt = Date.now()
           routeParticipantStatus(participant)
           broadcast({
