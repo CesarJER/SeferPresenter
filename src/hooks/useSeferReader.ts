@@ -69,6 +69,7 @@ interface UseSeferReaderResult {
   goPrev: () => SeferReaderState | null;    // go back verse
   deactivate: () => void;  // ESC or mode switch
   restoreState: (state: SeferReaderState) => void;
+  updateActiveRange: (startVerse: string, endVerse: string) => SeferReaderState | null;
   rangeVerses: string[];
   rangeLabel: string;
 }
@@ -184,7 +185,7 @@ export function useSeferReader(): UseSeferReaderResult {
     const verseEnd = hasActiveRange ? (rangeEndVerseRef.current ?? verseStart ?? chapterVerses[idx].verse) : undefined;
     return buildState(
       chapterVerses[idx],
-      hasActiveRange ? idx : Math.max(0, bookIdx >= 0 ? bookIdx : idx),
+      hasActiveRange ? Math.max(0, rangeChapterVerses.findIndex((v) => v.verse === selectedVerse)) : Math.max(0, bookIdx >= 0 ? bookIdx : idx),
       hasActiveRange ? rangeChapterVerses.length : bookData.length,
       verseStart,
       verseEnd
@@ -254,18 +255,35 @@ export function useSeferReader(): UseSeferReaderResult {
     if (idx < 0) return null;
     const bookIdx = bookData.findIndex((v) => v.chapter === selectedChapter && v.verse === verse);
 
+    let currentHasActiveRange = hasActiveRange;
+    if (currentHasActiveRange) {
+      const isWithinRange = rangeChapterVerses.some((v) => v.verse === verse);
+      if (!isWithinRange) {
+        rangeStartVerseRef.current = null;
+        rangeEndVerseRef.current = null;
+        scriptureKindRef.current = 'sefer';
+        currentHasActiveRange = false;
+      }
+    }
+
     setSelectedVerseState(verse);
     setIsActive(true);
-    const verseStart = hasActiveRange ? (rangeStartVerseRef.current ?? verse) : undefined;
-    const verseEnd = hasActiveRange ? (rangeEndVerseRef.current ?? verseStart ?? verse) : undefined;
+    const verseStart = currentHasActiveRange ? (rangeStartVerseRef.current ?? verse) : undefined;
+    const verseEnd = currentHasActiveRange ? (rangeEndVerseRef.current ?? verseStart ?? verse) : undefined;
     return buildState(
       chapterVerses[idx],
-      hasActiveRange ? idx : Math.max(0, bookIdx >= 0 ? bookIdx : idx),
-      hasActiveRange ? rangeChapterVerses.length : bookData.length,
+      currentHasActiveRange ? Math.max(0, rangeChapterVerses.findIndex((v) => v.verse === verse)) : Math.max(0, bookIdx >= 0 ? bookIdx : idx),
+      currentHasActiveRange ? rangeChapterVerses.length : bookData.length,
       verseStart,
       verseEnd
     );
-  }, [bookData, buildState, chapterVerses, hasActiveRange, rangeChapterVerses.length, selectedChapter]);
+  }, [bookData, buildState, chapterVerses, hasActiveRange, rangeChapterVerses, selectedChapter]);
+
+  const updateActiveRange = useCallback((startVerse: string, endVerse: string): SeferReaderState | null => {
+    rangeStartVerseRef.current = startVerse;
+    rangeEndVerseRef.current = endVerse;
+    return getCurrentVerseState();
+  }, [getCurrentVerseState]);
 
   const deactivate = useCallback(() => {
     setIsActive(false);
@@ -354,6 +372,7 @@ export function useSeferReader(): UseSeferReaderResult {
     goPrev,
     deactivate,
     restoreState,
+    updateActiveRange,
     rangeVerses,
     rangeLabel,
   };

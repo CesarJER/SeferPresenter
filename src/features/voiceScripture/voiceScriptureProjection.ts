@@ -7,6 +7,8 @@ export const makeContext = (state: ScriptureNavState | null) => state ? {
   book: state.bookAbbrevEs || state.bookEs,
   chapter: Number(state.chapter),
   verse: Number(state.verse),
+  verseStart: state.verseStart ? Number(state.verseStart) : undefined,
+  verseEnd: state.verseEnd ? Number(state.verseEnd) : undefined,
 } : null;
 
 export const hydrateCandidate = async (candidate: VoiceScriptureCandidate, signal?: AbortSignal): Promise<SeferReaderState | null> => {
@@ -33,21 +35,23 @@ export const hydrateCandidate = async (candidate: VoiceScriptureCandidate, signa
   if (endIndex < startIndex || endIndex - startIndex !== candidate.verseEnd - candidate.verseStart) return null;
   if (verses.slice(startIndex, endIndex + 1).some((verse, index) => verse.chapter !== String(candidate.chapter)
     || Number(verse.verse) !== candidate.verseStart + index)) return null;
-  const start = verses[startIndex];
+  const activeIndex = verses.findIndex((verse) => verse.chapter === String(candidate.chapter) && verse.verse === String(candidate.verse));
+  if (activeIndex < startIndex || activeIndex > endIndex) return null;
+  const active = verses[activeIndex];
   const rangeLength = candidate.verseEnd - candidate.verseStart + 1;
   return {
-    bookEs: start.bookEs,
-    bookHeb: start.bookHeb,
-    bookAbbrevEs: start.bookAbbrevEs,
+    bookEs: active.bookEs,
+    bookHeb: active.bookHeb,
+    bookAbbrevEs: active.bookAbbrevEs,
     chapter: String(candidate.chapter),
     verseStart: String(candidate.verseStart),
-    verse: String(candidate.verseStart),
+    verse: String(candidate.verse),
     verseEnd: candidate.verseEnd > candidate.verseStart ? String(candidate.verseEnd) : undefined,
-    verseNikud: start.verseNikudSanitized ?? start.verseNikud,
-    verseNikudSanitized: start.verseNikudSanitized,
-    transliteration: start.transliteration,
-    translation: start.translation,
-    verseIdx: rangeLength > 1 ? 0 : startIndex,
+    verseNikud: active.verseNikudSanitized ?? active.verseNikud,
+    verseNikudSanitized: active.verseNikudSanitized,
+    transliteration: active.transliteration,
+    translation: active.translation,
+    verseIdx: rangeLength > 1 ? (candidate.verse - candidate.verseStart) : startIndex,
     totalVerses: rangeLength > 1 ? rangeLength : verses.length,
     scriptureKind: 'sefer',
   };
@@ -57,6 +61,9 @@ export const candidateLabel = (candidate: VoiceScriptureCandidate) => {
   const range = candidate.verseEnd === candidate.verseStart
     ? candidate.verseStart
     : `${candidate.verseStart}-${candidate.verseEnd}`;
+  if (candidate.verseEnd !== candidate.verseStart && candidate.verse !== candidate.verseStart) {
+    return `${candidate.bookAbbrev} ${candidate.chapter}:${range} (${candidate.verse})`;
+  }
   return `${candidate.bookAbbrev} ${candidate.chapter}:${range}`;
 };
 

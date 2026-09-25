@@ -1107,11 +1107,12 @@ export default function LiveAudioControlContainer({
   const controllers: LiveAudioParticipant[] = controlParticipants
     .map(p => ({ participantId: p.participantId, alias: participantAliases[p.participantId] || 'Sin nick',
       speakerState: 'GRANTED', isMuted: !p.isMicrophoneActive, isMicrophoneActive: p.isMicrophoneActive,
+      microphoneTrackState: participantsMap[p.participantId]?.microphoneTrackState,
       isActiveAudience: false, isKicked: false,
       microphoneVolume: participantMicrophoneConfigs[p.participantId]?.volume,
       isMusicMode: participantMicrophoneConfigs[p.participantId]?.musicMode }));
   if (participantId) controllers.unshift({ participantId, alias: operatorNick.trim() || 'Sin nick', speakerState: 'GRANTED',
-    isMuted: isModeratorMuted, isMicrophoneActive, isActiveAudience: false, isKicked: false,
+    isMuted: isModeratorMuted, isMicrophoneActive, microphoneTrackState, isActiveAudience: false, isKicked: false,
     microphoneVolume, isMusicMode: isModeratorMusicMode });
   const voiceRuntime = VoiceScriptureControl && isControlAuthorized && availability === 'enabled' ? <Suspense fallback={null}>
     <VoiceScriptureControl tracks={voiceTracks} selectedId={selectedVoiceParticipantId} onSelectionChange={() => undefined}

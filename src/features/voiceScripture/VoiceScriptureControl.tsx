@@ -101,8 +101,10 @@ export default function VoiceScriptureControl({ tracks, scriptureState, onProjec
     const expected = pending.current?.candidate;
     if (!expected || !scriptureState) return;
     if ((scriptureState.bookAbbrevEs || scriptureState.bookEs) === expected.bookAbbrev
-      && Number(scriptureState.chapter) === expected.chapter && Number(scriptureState.verse) === expected.verseStart
-      && Number(scriptureState.verseEnd || scriptureState.verse) === expected.verseEnd) {
+      && Number(scriptureState.chapter) === expected.chapter
+      && Number(scriptureState.verseStart || scriptureState.verse) === expected.verseStart
+      && Number(scriptureState.verseEnd || scriptureState.verse) === expected.verseEnd
+      && Number(scriptureState.verse) === expected.verse) {
       clearPending();
       setDetail('Proyección confirmada por el servidor');
     }

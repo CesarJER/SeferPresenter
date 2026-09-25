@@ -1657,7 +1657,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
           />
         )}
 
-        <div className="shrink-0 border-b border-gray-700 bg-gray-950/70 flex flex-col landscape:flex-row">
+        <div className="shrink-0 border-b border-gray-700 bg-gray-950/70 flex flex-col md:flex-row">
           {appMode === 'seferManual' && (
             <div className="min-w-0 flex-1">
               <SeferControlPanel
@@ -1676,7 +1676,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
               />
             </div>
           )}
-          <div ref={setVoiceSuggestionsTarget} className="empty:hidden landscape:w-64 landscape:shrink-0" />
+          <div ref={setVoiceSuggestionsTarget} className="empty:hidden md:w-64 md:shrink-0" />
         </div>
         <div className="flex-1">
           {/* ── Visor Superior Panel ───────────────────────────────── */}

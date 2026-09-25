@@ -15,8 +15,8 @@ interface UseSeferControlLogicProps {
   onUpdateFontSizes?: (sizes: { hebrewFontSize: number; combinedTextBaseSize: number }) => void;
 }
 
-const makeStateKey = (state: Pick<SeferReaderState, 'bookEs' | 'chapter' | 'verse'>) =>
-  `${state.bookEs}-${state.chapter}-${state.verse}`;
+const makeStateKey = (state: Pick<SeferReaderState, 'bookEs' | 'chapter' | 'verse'> & { verseEnd?: string }) =>
+  `${state.bookEs}-${state.chapter}-${state.verse}-${state.verseEnd || ''}`;
 
 const clampNumber = (value: number, min: number, max: number) =>
   Math.max(min, Math.min(max, value));
@@ -79,6 +79,12 @@ export function useSeferControlLogic({
     if (stateKey !== lastSyncedStateRef.current) {
       lastSyncedStateRef.current = stateKey;
       restoreState(restoredState);
+      
+      if (restoredState.verseEnd && restoredState.verseEnd !== restoredState.verse) {
+        setEndVerse(restoredState.verseEnd);
+      } else {
+        setEndVerse('');
+      }
     }
   }, [restoreState, restoredState]);
 
@@ -115,14 +121,13 @@ export function useSeferControlLogic({
     }
     if (!currentVerse) return;
 
-    const normalizedEnd = endVerse || currentVerse.verse;
     const finalState: SeferReaderState = {
       ...currentVerse,
-      verseStart: currentVerse.verse,
-      verseEnd: normalizedEnd,
-      totalVerses: normalizedEnd
-        ? Math.max(1, Math.abs(Number(normalizedEnd) - Number(currentVerse.verse)) + 1)
-        : 1,
+      verseStart: endVerse ? currentVerse.verse : undefined,
+      verseEnd: endVerse || undefined,
+      totalVerses: endVerse
+        ? Math.max(1, Math.abs(Number(endVerse) - Number(currentVerse.verse)) + 1)
+        : currentVerse.totalVerses,
     };
 
     restoreState(finalState);
@@ -221,6 +226,20 @@ export function useSeferControlLogic({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleNext, handlePrev]);
 
+  const handleSetEndVerse = useCallback((value: string) => {
+    setEndVerse(value);
+    if (isActive) {
+      deactivate();
+    }
+  }, [isActive, deactivate]);
+
+  const handleActiveRangeChange = useCallback((startVerse: string, endVerse: string) => {
+    const state = reader.updateActiveRange(startVerse, endVerse);
+    if (state && isActive) {
+      markAndProject(state, 'navigate');
+    }
+  }, [isActive, markAndProject, reader]);
+
   return {
     ...reader,
     showFontSettings,
@@ -230,8 +249,9 @@ export function useSeferControlLogic({
     updateHebrewFontSize,
     updateCombinedTextBaseSize,
     endVerse,
-    setEndVerse,
+    setEndVerse: handleSetEndVerse,
     handleActivate,
+    handleActiveRangeChange,
     handleNext,
     handlePrev,
     handleVerseSelect,

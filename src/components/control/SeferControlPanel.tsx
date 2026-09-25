@@ -51,9 +51,12 @@ const SeferControlPanel: React.FC<SeferControlPanelProps> = ({
     endVerse,
     setEndVerse,
     handleActivate,
+    handleActiveRangeChange,
+    hasActiveRange,
     handleNext,
     handlePrev,
     handleAddSlide,
+    handleVerseSelect,
   } = useSeferControlLogic({
     variant: 'full',
     onProject,
@@ -113,7 +116,13 @@ const SeferControlPanel: React.FC<SeferControlPanelProps> = ({
           <select
             id="sefer-verse-select"
             value={selectedVerse}
-            onChange={(e) => setSelectedVerse(e.target.value)}
+            onChange={(e) => {
+              if (isActive) {
+                handleVerseSelect(e.target.value);
+              } else {
+                setSelectedVerse(e.target.value);
+              }
+            }}
             className="control-select flex-[1]"
           >
             {verses.map((v) => (
@@ -174,20 +183,50 @@ const SeferControlPanel: React.FC<SeferControlPanelProps> = ({
               >
                 <span>+📜</span>
               </button>
-              <select
-                value={endVerse}
-                onChange={(e) => setEndVerse(e.target.value)}
-                disabled={!currentVerse}
-                title="Versículo final opcional"
-                className="h-8 rounded-md border border-gray-700 bg-gray-800 px-1.5 text-[10px] font-bold text-gray-200 focus:outline-none focus:ring-1 focus:ring-yellow-500 disabled:opacity-40"
-              >
-                <option value=""></option>
-                {verses
-                  .filter((verse) => Number(verse) >= Number(selectedVerse))
-                  .map((verse) => (
-                    <option key={verse} value={verse}>{verse}</option>
-                  ))}
-              </select>
+              {isActive && hasActiveRange && currentVerse ? (
+                <div className="flex items-center gap-1">
+                  <select
+                    value={currentVerse.verseStart}
+                    onChange={(e) => handleActiveRangeChange(e.target.value, currentVerse.verseEnd!)}
+                    title="Versículo inicial del rango proyectado"
+                    className="h-8 rounded-md border border-gray-700 bg-gray-800 px-1.5 text-[10px] font-bold text-gray-200 focus:outline-none focus:ring-1 focus:ring-yellow-500 disabled:opacity-40"
+                  >
+                    {verses
+                      .filter((verse) => Number(verse) <= Number(currentVerse.verseEnd!))
+                      .map((verse) => (
+                        <option key={verse} value={verse}>{verse}</option>
+                      ))}
+                  </select>
+                  <span className="text-gray-400 font-bold text-xs">-</span>
+                  <select
+                    value={currentVerse.verseEnd}
+                    onChange={(e) => handleActiveRangeChange(currentVerse.verseStart!, e.target.value)}
+                    title="Versículo final del rango proyectado"
+                    className="h-8 rounded-md border border-gray-700 bg-gray-800 px-1.5 text-[10px] font-bold text-gray-200 focus:outline-none focus:ring-1 focus:ring-yellow-500 disabled:opacity-40"
+                  >
+                    {verses
+                      .filter((verse) => Number(verse) >= Number(currentVerse.verseStart!))
+                      .map((verse) => (
+                        <option key={verse} value={verse}>{verse}</option>
+                      ))}
+                  </select>
+                </div>
+              ) : (
+                <select
+                  value={endVerse}
+                  onChange={(e) => setEndVerse(e.target.value)}
+                  disabled={!currentVerse}
+                  title="Versículo final opcional"
+                  className="h-8 rounded-md border border-gray-700 bg-gray-800 px-1.5 text-[10px] font-bold text-gray-200 focus:outline-none focus:ring-1 focus:ring-yellow-500 disabled:opacity-40"
+                >
+                  <option value=""></option>
+                  {verses
+                    .filter((verse) => Number(verse) >= Number(selectedVerse))
+                    .map((verse) => (
+                      <option key={verse} value={verse}>{verse}</option>
+                    ))}
+                </select>
+              )}
               <button
                 id="tanaj-add-slide-btn"
                 onClick={() => handleAddSlide('tanaj')}

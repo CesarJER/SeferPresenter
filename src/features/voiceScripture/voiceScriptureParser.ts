@@ -4,12 +4,15 @@ export interface VoiceScriptureContext {
   book: string;
   chapter: number;
   verse: number;
+  verseStart?: number;
+  verseEnd?: number;
 }
 
 export interface VoiceScriptureCandidate {
   book: string;
   bookAbbrev: string;
   chapter: number;
+  verse: number;
   verseStart: number;
   verseEnd: number;
   source: 'voice';
@@ -131,15 +134,21 @@ const makeCandidate = (
   chapter: number,
   verseStart: number,
   verseEnd = verseStart,
+  verse?: number,
 ): VoiceScriptureCandidate | null => {
   const details = metadata[book];
   const verses = details?.chapters[String(chapter)];
   if (!details || !verses || verseStart < 1 || verseEnd < verseStart) return null;
   if (!verses.includes(String(verseStart)) || !verses.includes(String(verseEnd))) return null;
+  
+  const activeVerse = verse ?? verseStart;
+  if (!verses.includes(String(activeVerse))) return null;
+  
   return {
     book,
     bookAbbrev: details.bookAbbrevEs,
     chapter,
+    verse: activeVerse,
     verseStart,
     verseEnd,
     source: 'voice',
@@ -196,7 +205,14 @@ const moveRelative = (
   const currentVerses = metadata[book].chapters[String(context.chapter)] ?? [];
   const verseIndex = currentVerses.indexOf(String(context.verse));
   const adjacentVerse = currentVerses[verseIndex + direction];
-  if (adjacentVerse) return makeCandidate(metadata, book, context.chapter, Number(adjacentVerse));
+  if (adjacentVerse) {
+    const v = Number(adjacentVerse);
+    const inRange = context.verseStart && context.verseEnd && v >= context.verseStart && v <= context.verseEnd;
+    if (inRange) {
+      return makeCandidate(metadata, book, context.chapter, context.verseStart!, context.verseEnd, v);
+    }
+    return makeCandidate(metadata, book, context.chapter, v);
+  }
 
   const chapterIndex = chapters.indexOf(context.chapter);
   const adjacentChapter = chapters[chapterIndex + direction];
@@ -232,7 +248,12 @@ const parseContextual = (
     return null;
   }
   if (/^(versiculo|ahora el|volvamos al) /.test(normalized) && numbers.length === 1) {
-    return makeCandidate(metadata, book, context.chapter, numbers[0]);
+    const v = numbers[0];
+    const inRange = context.verseStart && context.verseEnd && v >= context.verseStart && v <= context.verseEnd;
+    if (inRange) {
+      return makeCandidate(metadata, book, context.chapter, context.verseStart!, context.verseEnd, v);
+    }
+    return makeCandidate(metadata, book, context.chapter, v);
   }
   if (/^(versiculos |del )/.test(normalized) && numbers.length === 2) {
     return makeCandidate(metadata, book, context.chapter, numbers[0], numbers[1]);
