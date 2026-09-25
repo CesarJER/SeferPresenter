@@ -233,6 +233,7 @@ const stopAllLocalTracks = (room: Room | null, localAudioTrack: LocalAudioTrack 
 export const useLiveAudio = ({
   role,
   roomSession,
+  controlSessionId,
   autoConnect = true,
   microphoneVolumePercent = 100,
   microphoneDeviceId,

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Settings, Mic, Volume2, Music } from 'lucide-react';
 import { useAudioDevices } from '../../../../hooks/useAudioDevices';
 
