@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AudienceLiveAudioPanel } from '../src/features/liveAudio/components/audience/AudienceLiveAudioPanel';
 import { LiveAudioParticipantRow, type LiveAudioParticipant } from '../src/features/liveAudio/components/control/LiveAudioParticipantRow';
@@ -68,5 +68,10 @@ describe('Live Audio microphone state UI', () => {
     />);
 
     expect(screen.getByText(/LiveKit rechazó la actualización/).textContent).toContain('LiveKit rechazó la actualización');
+    const volumeButton = screen.getByRole('button', { name: 'Regular volumen de salida de tu micro' });
+    expect(volumeButton.getAttribute('aria-expanded')).toBe('false');
+    fireEvent.click(volumeButton);
+    expect(volumeButton.getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByRole('slider', { name: 'Volumen de salida de tu micro' })).toBeTruthy();
   });
 });

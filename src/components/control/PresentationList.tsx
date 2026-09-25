@@ -226,6 +226,7 @@ export const PresentationList: React.FC<PresentationListProps> = ({
           <input
             ref={searchInputRef}
             type="text"
+            aria-label="Buscar presentación en el repertorio"
             placeholder="Buscar presentación en el repertorio..."
             value={searchQuery}
             onChange={(event) => setSearchQuery(event.target.value)}
@@ -270,6 +271,7 @@ export const PresentationList: React.FC<PresentationListProps> = ({
         </div>
       </div>
 
+      <p className="text-xs text-gray-300 sm:hidden">Desliza la tabla a la derecha para ver Gestión →</p>
       <div className="overflow-x-auto rounded-lg border border-gray-700 bg-gray-900/40 backdrop-blur-md shadow-lg">
         <table className="w-full text-left border-collapse">
           <thead>
@@ -305,7 +307,7 @@ export const PresentationList: React.FC<PresentationListProps> = ({
             {titleMatches.length === 0 && contentMatches.length === 0 && (
               <tr>
                 <td colSpan={5} className="p-8 text-center text-xs text-gray-500 italic">
-                  No se encontraron presentaciones que coincidan con la búsqueda
+                  {hasSearch ? 'No se encontraron presentaciones que coincidan con la búsqueda' : 'No hay presentaciones en el repertorio'}
                 </td>
               </tr>
             )}

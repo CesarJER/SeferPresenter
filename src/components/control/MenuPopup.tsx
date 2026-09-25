@@ -336,7 +336,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
   useEffect(() => {
     fetch('/api/public-catalogs')
       .then(r => r.json())
-      .then((catalogs: Array<{tags?: string[]}>) => {
+      .then((catalogs: Array<{ tags?: string[] }>) => {
         const allTags = new Set(catalogs.flatMap(c => c.tags || []));
         setAvailableTags(Array.from(allTags));
       })
@@ -1553,8 +1553,8 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
   return (
     <div id="section-menu-popup-container" className="flex h-full w-full flex-col bg-gray-800 text-white">
       {/* ── Menu Header ───────────────────────────────── */}
-      <div id="section-menu-header" className={`flex items-center justify-between border-b px-4 py-3 md:px-5 md:py-4 transition-colors ${isMediaMaster ? 'bg-red-950 border-red-800' : 'bg-gray-900 border-gray-700'}`}>
-        <h2 className="flex items-center gap-2 text-lg font-bold md:text-xl">
+      <div id="section-menu-header" className={`flex flex-wrap items-center justify-between gap-2 border-b px-4 py-3 md:flex-nowrap md:px-5 md:py-4 transition-colors ${isMediaMaster ? 'bg-red-950 border-red-800' : 'bg-gray-900 border-gray-700'}`}>
+        <h2 className="flex w-full items-center gap-2 text-lg font-bold md:w-auto md:text-xl">
           <img
             src="/api/branding/logo.svg"
             alt="Logo"
@@ -1563,7 +1563,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
             title="Restablecer estado del presentador"
             onClick={() => setShowResetConfirm(true)}
           />
-          <span>Gestor de Presentaciones</span>
+          <span>Panel de Control</span>
         </h2>
         <div className="flex items-center gap-2">
           {/* Live Audio Inbox Portal Target */}
@@ -1834,7 +1834,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                     <MediaControls
                       activeSlide={activeSlide!}
                       videoState={videoState || null}
-                      onVideoStateChange={onVideoStateChange || (() => {})}
+                      onVideoStateChange={onVideoStateChange || (() => { })}
                       autoduckState={autoduckState}
                       onAutoduckStateChange={onAutoduckStateChange}
                     />
