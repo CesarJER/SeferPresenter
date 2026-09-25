@@ -1224,6 +1224,7 @@ export default function LiveAudioControlContainer({
         externalBroadcastState={externalBroadcastState}
         onExternalBroadcastStateChange={handleExternalBroadcastStateChange}
         moderationError={moderationError}
+        moderatorMicrophoneTrackState={microphoneTrackState}
       />
     </>
   );

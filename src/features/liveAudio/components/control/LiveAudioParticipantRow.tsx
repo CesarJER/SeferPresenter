@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Eye, EyeOff, Hand, MessageSquare, Mic, MicOff, RotateCcw, Trash2, UserCheck, UserX, Volume2, X, XCircle } from 'lucide-react';
+import { Eye, EyeOff, Hand, MessageSquare, Mic, MicOff, RotateCcw, Trash2, UserCheck, UserX, Volume2, X, XCircle, Loader2 } from 'lucide-react';
 import type { MicrophoneTrackState, SpeakerState } from '../../../../types/liveAudio';
 import { LiveAudioStatusBadge, type ParticipantStatus } from '../shared/LiveAudioStatusBadge';
 
@@ -93,8 +93,20 @@ export const LiveAudioParticipantRow: React.FC<LiveAudioParticipantRowProps> = (
         {onSelectVoice ? <button type="button" aria-label={`Comandos de voz: ${displayName}`}
           aria-pressed={!!voiceSelected} disabled={!voiceSelectable && !voiceSelected}
           onClick={() => onSelectVoice(participant.participantId)}
-          className={`rounded-full p-1.5 disabled:opacity-40 ${hasOpenMicrophone && participant.microphoneTrackState === 'published' ? 'bg-blue-500/20 text-blue-400' : 'text-gray-400'} ${voiceSelected ? 'ring-2 ring-yellow-400 text-yellow-300' : ''}`}>
-          {hasOpenMicrophone ? <Mic size={16} /> : <MicOff size={16} />}
+          className={`rounded-full p-1.5 disabled:opacity-40 ${
+            hasOpenMicrophone ? 'bg-blue-500/20' : ''
+          } ${
+            voiceSelected ? 'ring-2 ring-yellow-400' : ''
+          } ${
+            participant.microphoneTrackState === 'publishing'
+              ? 'text-orange-400'
+              : voiceSelected
+                ? 'text-yellow-300'
+                : hasOpenMicrophone
+                  ? 'text-blue-400'
+                  : 'text-gray-400'
+          }`}>
+          {participant.microphoneTrackState === 'publishing' ? <Loader2 size={16} className="animate-spin" /> : hasOpenMicrophone ? <Mic size={16} /> : <MicOff size={16} />}
         </button> : <LiveAudioStatusBadge status={badgeStatus} isMuted={participant.isMuted} />}
 
         <span

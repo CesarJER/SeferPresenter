@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
-import { Users, UserCheck, Mic, MicOff, Volume2, VolumeX, ChevronUp, ChevronDown, ShieldAlert } from 'lucide-react';
+import { Users, UserCheck, Mic, MicOff, Volume2, VolumeX, ChevronUp, ChevronDown, ShieldAlert, Loader2 } from 'lucide-react';
 import { LiveAudioQueue } from './LiveAudioQueue';
 import { LiveAudioSpeakers } from './LiveAudioSpeakers';
 import { LiveAudioListeners } from './LiveAudioListeners';
 import { LiveAudioParticipantRow, type LiveAudioParticipant } from './LiveAudioParticipantRow';
-import type { LiveAudioExternalBroadcastState } from '../../../../types/liveAudio';
+import type { LiveAudioExternalBroadcastState, MicrophoneTrackState } from '../../../../types/liveAudio';
 
 interface LiveAudioControlPanelProps {
   controllers?: LiveAudioParticipant[];
@@ -44,6 +44,7 @@ interface LiveAudioControlPanelProps {
   externalBroadcastState: LiveAudioExternalBroadcastState;
   onExternalBroadcastStateChange: (state: LiveAudioExternalBroadcastState) => void;
   moderationError?: string | null;
+  moderatorMicrophoneTrackState?: MicrophoneTrackState;
 }
 
 export const LiveAudioControlPanel: React.FC<LiveAudioControlPanelProps> = ({
@@ -84,6 +85,7 @@ export const LiveAudioControlPanel: React.FC<LiveAudioControlPanelProps> = ({
   externalBroadcastState,
   onExternalBroadcastStateChange,
   moderationError,
+  moderatorMicrophoneTrackState,
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isListenVolOpen, setIsListenVolOpen] = useState(false);
@@ -257,6 +259,7 @@ export const LiveAudioControlPanel: React.FC<LiveAudioControlPanelProps> = ({
                 <div className="h-32 w-8 flex items-center justify-center">
                   <input
                     type="range"
+                    aria-label="Volumen de escucha"
                     min="0"
                     max="100"
                     value={listenVolume}
@@ -270,24 +273,32 @@ export const LiveAudioControlPanel: React.FC<LiveAudioControlPanelProps> = ({
 
           <button
             onClick={onToggleModeratorMic}
+            disabled={moderatorMicrophoneTrackState === 'publishing'}
             className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors shadow-lg
-              ${ownVoiceSelected ? 'ring-2 ring-yellow-400 ring-offset-2 ring-offset-gray-800' : ''} ${isModeratorMuted ? 'bg-gray-600 text-gray-300' : 'bg-blue-600 text-white'}`}
-            title={isModeratorMuted ? "Abrir tu micrófono" : "Silenciar tu micrófono"}
+              ${ownVoiceSelected ? 'ring-2 ring-yellow-400 ring-offset-2 ring-offset-gray-800' : ''} 
+              ${moderatorMicrophoneTrackState === 'publishing' ? 'bg-orange-600 text-white shadow-[0_0_15px_rgba(234,88,12,0.5)]' 
+              : moderatorMicrophoneTrackState === 'error' ? 'bg-red-700 hover:bg-red-600 text-white'
+              : isModeratorMuted ? 'bg-gray-600 text-gray-300' : 'bg-blue-600 text-white shadow-[0_0_15px_rgba(37,99,235,0.5)]'}`}
+            title={moderatorMicrophoneTrackState === 'publishing' ? "Activando micrófono" : moderatorMicrophoneTrackState === 'error' ? 'Error de micrófono; pulsar para reintentar' : isModeratorMuted ? "Abrir tu micrófono" : "Silenciar tu micrófono"}
           >
-            {isModeratorMuted ? <MicOff size={20} /> : <Mic size={20} />}
+            {moderatorMicrophoneTrackState === 'publishing' ? <Loader2 className="w-5 h-5 animate-spin" /> : isModeratorMuted ? <MicOff size={20} /> : <Mic size={20} />}
           </button>
 
-          <div
-            className="relative flex items-center bg-gray-900 border border-gray-700 rounded px-2 h-10 cursor-pointer"
-            onClick={() => setIsMicVolOpen(!isMicVolOpen)}
-            title="Regular volumen de salida de tu micro"
-          >
-            <span className="text-white text-xs w-10 text-center font-semibold">{microphoneVolume}%</span>
+          <div className="relative flex items-center">
+            <button
+              type="button"
+              aria-label="Regular volumen de salida de tu micro"
+              aria-expanded={isMicVolOpen}
+              className="flex items-center bg-gray-900 border border-gray-700 rounded px-2 h-10 cursor-pointer"
+              onClick={() => setIsMicVolOpen(!isMicVolOpen)}
+              title="Regular volumen de salida de tu micro"
+            >
+              <span className="text-white text-xs w-10 text-center font-semibold">{microphoneVolume}%</span>
+            </button>
 
             {isMicVolOpen && (
               <div
                 className="absolute bottom-full mb-2 -right-4 bg-gray-800 border border-gray-700 p-3 rounded shadow-xl flex flex-col items-center gap-2 z-[100]"
-                onClick={e => e.stopPropagation()}
               >
                 {onModeratorMusicModeChange && (
                   <label className="flex items-center gap-1 cursor-pointer bg-gray-900 px-2 py-1 rounded w-full justify-center" title="Modo Música">
@@ -304,6 +315,7 @@ export const LiveAudioControlPanel: React.FC<LiveAudioControlPanelProps> = ({
                 <div className="h-32 w-8 flex items-center justify-center">
                   <input
                     type="range"
+                    aria-label="Volumen de salida de tu micro"
                     min="0"
                     max="300"
                     value={microphoneVolume}
