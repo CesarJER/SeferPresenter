@@ -28,6 +28,7 @@ import { useServerClock } from './hooks/useServerClock';
 import { useAudioTimeline } from './hooks/useAudioTimeline';
 import { useAudioTimelineApplicator } from './hooks/useAudioTimelineApplicator';
 import { useProgramAudioPreference } from './hooks/useProgramAudioPreference';
+import { useAudioDevices } from './hooks/useAudioDevices';
 import { validateAudioSyncMaps, validatePresentationList } from './utils/validation';
 import { generateQuizSubslides } from './utils/quizUtils';
 import { generatePresentationSteps } from './utils/navigationUtils';
@@ -185,6 +186,7 @@ function ControlApp() {
     onAudioTimelineState: setAudioTimeline,
   });
   const [programAudioEnabled, setProgramAudioEnabled] = useProgramAudioPreference(isMediaMaster);
+  const { programOutputId } = useAudioDevices();
 
   const { serverNow } = useServerClock(wsSend, wsStatus, subscribeToWsMessage);
   const audioTimelineControls = useAudioTimeline(audioTimeline, serverNow, wsSend);
@@ -219,6 +221,11 @@ function ControlApp() {
       audio.removeEventListener('durationchange', updateDuration);
     };
   }, [audioTimeline?.audioSrc, audioTimeline?.timelineId]);
+
+  useEffect(() => {
+    applySinkId(audioRef, programOutputId);
+    applySinkId(audioTimelineRef, programOutputId);
+  }, [programOutputId]);
 
   const audioPanelState = useMemo<AudioState>(() => {
     if (!audioTimeline) return audioState;
@@ -435,6 +442,7 @@ function ControlApp() {
             setVideoState(s);
           }
         }}
+        audioOutputId={programOutputId}
         emitVideoTelemetry={emitVideoTelemetry}
         emitCommand={emitCommand}
         audioState={audioPanelState}
@@ -552,6 +560,13 @@ function ControlApp() {
       <audio ref={audioTimelineRef} preload="auto" style={{ display: 'none' }} />
     </div>
   );
+}
+
+function applySinkId(ref: React.RefObject<HTMLAudioElement | null>, sinkId: string) {
+  const audio = ref.current as HTMLAudioElement & { setSinkId?: (id: string) => Promise<void> };
+  if (audio && typeof audio.setSinkId === 'function') {
+    audio.setSinkId(sinkId === 'default' ? '' : sinkId).catch(err => console.warn('setSinkId error:', err));
+  }
 }
 
 createRoot(document.getElementById('root')!).render(

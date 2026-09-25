@@ -32,6 +32,7 @@ interface UseLiveAudioOptions {
   controlSessionId?: string;
   autoConnect?: boolean;
   microphoneVolumePercent?: number;
+  microphoneDeviceId?: string;
 }
 
 interface UseLiveAudioResult {
@@ -232,9 +233,9 @@ const stopAllLocalTracks = (room: Room | null, localAudioTrack: LocalAudioTrack 
 export const useLiveAudio = ({
   role,
   roomSession,
-  controlSessionId,
   autoConnect = true,
   microphoneVolumePercent = 100,
+  microphoneDeviceId,
 }: UseLiveAudioOptions): UseLiveAudioResult => {
   const { availability } = useLiveAudioAvailability();
   const [state, setState] = useState<LiveAudioConnectionState>('disconnected');
@@ -259,6 +260,7 @@ export const useLiveAudio = ({
   const participantIdRef = useRef<string | null>(null);
   const userDisconnectedRef = useRef(false);
   const microphoneVolumePercentRef = useRef(clampVolumePercent(microphoneVolumePercent));
+  const microphoneDeviceIdRef = useRef(microphoneDeviceId);
   const microphoneGainNodeRef = useRef<GainNode | null>(null);
   const microphoneAudioContextRef = useRef<AudioContext | null>(null);
   const microphoneProcessorRef = useRef<TrackProcessor<Track.Kind.Audio, AudioProcessorOptions> | null>(null);
@@ -341,6 +343,10 @@ export const useLiveAudio = ({
     microphoneVolumePercentRef.current = volume;
     if (microphoneGainNodeRef.current) microphoneGainNodeRef.current.gain.value = volume / 100;
   }, [microphoneVolumePercent]);
+
+  useEffect(() => {
+    microphoneDeviceIdRef.current = microphoneDeviceId;
+  }, [microphoneDeviceId]);
 
   const clearTimer = (timerRef: MutableRefObject<ReturnType<typeof setTimeout> | null>) => {
     if (timerRef.current === null) return;
@@ -525,6 +531,7 @@ export const useLiveAudio = ({
       }
       stage = 'capture';
       const localTrack = await createLocalAudioTrack({
+        deviceId: microphoneDeviceIdRef.current !== 'default' ? microphoneDeviceIdRef.current : undefined,
         echoCancellation: true,
         noiseSuppression: !options?.musicMode,
         autoGainControl: !options?.musicMode,

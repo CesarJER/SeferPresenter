@@ -21,6 +21,7 @@ interface SlideVisualizerProps {
   emitVideoTelemetry?: (state: VideoState) => void;
   emitCommand?: (payload: RemoteCommandPayload) => void;
   autoduckState?: AutoduckState;
+  audioOutputId?: string;
 }
 
 const containsHebrew = (text: string): boolean => {
@@ -38,6 +39,7 @@ const SlideVisualizer: React.FC<SlideVisualizerProps> = ({
   programAudioEnabled = isMediaMaster,
   emitVideoTelemetry,
   autoduckState,
+  audioOutputId,
 }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [quizVerseLines, setQuizVerseLines] = useState<string[]>([]);
@@ -51,6 +53,13 @@ const SlideVisualizer: React.FC<SlideVisualizerProps> = ({
       videoRef.current.muted = !programAudioEnabled;
     }
   }, [programAudioEnabled]);
+
+  useEffect(() => {
+    const video = videoRef.current as HTMLVideoElement & { setSinkId?: (id: string) => Promise<void> };
+    if (video && audioOutputId && typeof video.setSinkId === 'function') {
+      video.setSinkId(audioOutputId === 'default' ? '' : audioOutputId).catch(err => console.warn('setSinkId error:', err));
+    }
+  }, [audioOutputId, slide?.id]); // Re-run when slide changes because videoRef points to a new video tag possibly? Actually videoRef is bound to the element, but let's just trigger on audioOutputId.
 
   // 1. Listen to incoming videoState (from controller or projection)
   useEffect(() => {

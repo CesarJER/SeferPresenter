@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { useLiveAudioAvailability } from '../../hooks/useLiveAudioAvailability';
 import type { PendingControlAuthorization } from '../../../../types/liveAudio';
+import { AudioDeviceSettings } from './AudioDeviceSettings';
 
 export interface MessageReply {
   responseText: string;
@@ -242,10 +243,13 @@ export const PrivateControlInbox: React.FC<PrivateControlInboxProps> = ({
           </button>
         </div>
         {onProgramAudioEnabledChange && (
-          <label className="flex items-center gap-1 text-xs text-gray-200 cursor-pointer" title="Audio de la presentación que escucha este Control">
-            <input type="checkbox" checked={Boolean(programAudioEnabled)} onChange={e => onProgramAudioEnabledChange(e.target.checked)} />
-            <span>🔊 Audio de programa</span>
-          </label>
+          <div className="flex items-center gap-2">
+            <label className="flex items-center gap-1 text-xs text-gray-200 cursor-pointer" title="Audio de la presentación que escucha este Control">
+              <input type="checkbox" checked={Boolean(programAudioEnabled)} onChange={e => onProgramAudioEnabledChange(e.target.checked)} />
+              <span>🔊 Audio de programa</span>
+            </label>
+            <AudioDeviceSettings />
+          </div>
         )}
       </div>
 

@@ -103,6 +103,7 @@ interface MenuPopupProps {
   subscribeToWsMessage?: (handler: (type: string, payload: Record<string, unknown>) => void) => () => void;
   wsStatus?: WebSocketConnectionStatus;
   controlSessionId?: string | null;
+  audioOutputId?: string;
 }
 
 const isTitleSlide = (slide: Slide) =>
@@ -190,6 +191,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
   subscribeToWsMessage,
   wsStatus,
   controlSessionId,
+  audioOutputId,
 }) => {
   const controllerAnswers = useControllerAnswers(currentPresentation?.id ?? null);
   // ────────────────────────────────────────────────────────────────
@@ -1900,6 +1902,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
             programAudioEnabled={programAudioEnabled}
             emitVideoTelemetry={emitVideoTelemetry}
             emitCommand={emitCommand}
+            audioOutputId={audioOutputId}
           >
             {activeSlide?.type === 'quiz' && activeSlide.quizData && quizTimerState && (() => {
               const optionCounts: Record<string, number> = {};
