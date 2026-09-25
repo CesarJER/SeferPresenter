@@ -18,7 +18,7 @@ import type {
 import type { WebSocketConnectionStatus } from '../../../../hooks/useWebSocket';
 import { useLiveAudioAvailability } from '../../hooks/useLiveAudioAvailability';
 import { useLiveAudio } from '../../hooks/useLiveAudio';
-import { useAudioDevices } from '../../hooks/useAudioDevices';
+import { useAudioDevices } from '../../../../hooks/useAudioDevices';
 import { usePrivateControlSignals, type DecryptedPrivateControlSignal } from '../../../../hooks/usePrivateControlSignals';
 import { LiveAudioTrackOutput } from '../shared/LiveAudioTrackOutput';
 import { getAudienceParticipantsNeedingAliasRequest } from '../../utils/liveAudioAliasRequests';
@@ -178,7 +178,7 @@ export default function LiveAudioControlContainer({
   }, []);
 
   const { availability } = useLiveAudioAvailability();
-  const { liveMicrophoneId, liveOutputId, programOutputId } = useAudioDevices();
+  const { liveMicrophoneId, liveOutputId } = useAudioDevices();
 
   const {
     state,
