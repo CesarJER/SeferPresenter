@@ -29,6 +29,8 @@ import {
 import type { ScriptureNavState } from '../../../../types/presentation';
 import type { SeferReaderState } from '../../../../hooks/useSeferReader';
 import { isValidEphemeralParticipantId } from '../../../../utils/validation';
+import type { VoiceScriptureCandidate } from '../../../voiceScripture/voiceScriptureParser';
+import type { VoiceSessionPhase } from '../../../voiceScripture/voiceScriptureSession';
 
 const VoiceScriptureControl = import.meta.env.VITE_SEFER_VOICE_SCRIPTURE_BUILD === 'true'
   ? lazy(() => import('../../../voiceScripture/VoiceScriptureControl'))
@@ -138,6 +140,7 @@ export default function LiveAudioControlContainer({
 }: LiveAudioControlContainerProps) {
   const [isInboxOpen, setIsInboxOpen] = useState(false);
   const [selectedVoiceParticipantId, setSelectedVoiceParticipantId] = useState('');
+  const [remoteVoiceState, setRemoteVoiceState] = useState<{ options: VoiceScriptureCandidate[], detail: string, phase: VoiceSessionPhase } | undefined>(undefined);
   const [voiceReady, setVoiceReady] = useState(false);
   const [operatorNick, setOperatorNick] = useState(() => localStorage.getItem('sefer_control_operator_nick') || '');
   const [isModeratorMuted, setIsModeratorMuted] = useState(true);
@@ -547,6 +550,17 @@ export default function LiveAudioControlContainer({
       return;
     }
 
+    if (data.type === 'VOICE_SCRIPTURE_SYNC') {
+      if (typeof data.phase === 'string') {
+        setRemoteVoiceState({
+          options: Array.isArray(data.options) ? data.options : [],
+          detail: typeof data.detail === 'string' ? data.detail : '',
+          phase: data.phase as VoiceSessionPhase,
+        });
+      }
+      return;
+    }
+
     const signalType = typeof data.type === 'string' ? data.type : '';
     const content = typeof data.text === 'string'
       ? data.text.trim()
@@ -587,6 +601,10 @@ export default function LiveAudioControlContainer({
     transportReady: wsStatus === 'open',
     onPrivateSignal: handlePrivateSignal,
   });
+
+  const handleLocalVoiceOptions = useCallback((options: VoiceScriptureCandidate[], detail: string, phase: VoiceSessionPhase) => {
+    sendPrivateSignalToControls({ type: 'VOICE_SCRIPTURE_SYNC', options, detail, phase });
+  }, [sendPrivateSignalToControls]);
 
   const controlRosterKey = controlParticipants.map(control => control.participantId).join(',');
 
@@ -1099,7 +1117,8 @@ export default function LiveAudioControlContainer({
     <VoiceScriptureControl tracks={voiceTracks} selectedId={selectedVoiceParticipantId} onSelectionChange={() => undefined}
       canTranscribe={controlState === 'PRINCIPAL'}
       onAvailabilityChange={setVoiceReady} suggestionsTarget={voiceSuggestionsTarget}
-      scriptureState={scriptureState} onProject={onProjectScripture} />
+      scriptureState={scriptureState} onProject={onProjectScripture}
+      remoteState={remoteVoiceState} onLocalState={handleLocalVoiceOptions} />
   </Suspense> : null;
 
   const portalTarget = document.getElementById('live-audio-inbox-portal-target');

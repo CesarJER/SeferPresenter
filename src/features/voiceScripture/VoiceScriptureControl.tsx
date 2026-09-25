@@ -18,6 +18,8 @@ interface VoiceScriptureControlProps {
   suggestionsTarget?: HTMLElement | null;
   scriptureState: ScriptureNavState | null;
   onProject: (state: SeferReaderState, command?: 'navigate') => void;
+  remoteState?: { options: VoiceScriptureCandidate[]; detail: string; phase: VoiceSessionPhase };
+  onLocalState?: (options: VoiceScriptureCandidate[], detail: string, phase: VoiceSessionPhase) => void;
 }
 const phaseText: Record<VoiceSessionPhase, string> = {
   idle: 'Listo', connecting: 'Conectando…', listening: 'Recibiendo audio', partial: 'Transcribiendo…',
@@ -27,7 +29,7 @@ const projectionKey = (state: ScriptureNavState | null) => JSON.stringify([
   state?.bookAbbrevEs || state?.bookEs, state?.chapter, state?.verse, state?.verseStart, state?.verseEnd, state?.commandId,
 ]);
 
-export default function VoiceScriptureControl({ tracks, scriptureState, onProject, selectedId, onSelectionChange, canTranscribe = true, onAvailabilityChange, suggestionsTarget }: VoiceScriptureControlProps) {
+export default function VoiceScriptureControl({ tracks, scriptureState, onProject, selectedId, onSelectionChange, canTranscribe = true, onAvailabilityChange, suggestionsTarget, remoteState, onLocalState }: VoiceScriptureControlProps) {
   const [availability, setAvailability] = useState<'checking' | 'disabled' | 'unavailable' | 'ready'>('checking');
   const [phase, setPhase] = useState<VoiceSessionPhase>('idle');
   const [detail, setDetail] = useState('');
@@ -45,6 +47,14 @@ export default function VoiceScriptureControl({ tracks, scriptureState, onProjec
   const current = useRef({ scriptureState, onProject, onSelectionChange });
   const restart = useRef<() => void>(() => undefined);
   current.current = { scriptureState, onProject, onSelectionChange };
+  const onLocalStateRef = useRef(onLocalState);
+  onLocalStateRef.current = onLocalState;
+
+  useEffect(() => {
+    if (canTranscribe && onLocalStateRef.current) {
+      onLocalStateRef.current(options, detail, phase);
+    }
+  }, [canTranscribe, options, detail, phase]);
 
   const clearPending = useCallback(() => {
     if (pending.current) clearTimeout(pending.current.timer);
@@ -194,10 +204,14 @@ export default function VoiceScriptureControl({ tracks, scriptureState, onProjec
     const timer = setTimeout(() => restart.current(), 5_000);
     return () => clearTimeout(timer);
   }, [canTranscribe, phase, source, selectedId]);
+  const displayPhase = canTranscribe ? phase : (remoteState?.phase || 'idle');
+  const displayDetail = canTranscribe ? detail : (remoteState?.detail || '');
+  const displayOptions = canTranscribe ? options : (remoteState?.options || []);
+
   const view = <VoiceScriptureSuggestions
-    status={availability === 'ready' ? (!canTranscribe && selectedId ? 'Origen compartido · transcripción en Control principal'
+    status={availability === 'ready' ? (!canTranscribe && selectedId ? (displayPhase === 'idle' ? 'Origen compartido · transcripción en Control principal' : displayDetail || phaseText[displayPhase] || '')
       : (phase === 'error' && selectedId ? `${detail} · reconectando…` : detail) || (selectedId ? phaseText[phase] : 'Voz desactivada · selecciona un micrófono'))
       : availability === 'checking' ? 'Comprobando voz…' : availability === 'disabled' ? 'Voz no habilitada' : 'Motor de voz no disponible · reintentando…'}
-    options={options} onProject={project} />;
+    options={displayOptions} onProject={project} />;
   return suggestionsTarget === undefined ? view : suggestionsTarget ? createPortal(view, suggestionsTarget) : null;
 }
