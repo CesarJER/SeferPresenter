@@ -36,8 +36,8 @@ Evidencia principal: `src/App.tsx`, `src/main-control.tsx`,
 | Identificador | Creación | Ubicación | Ciclo de vida | Clasificación |
 | --- | --- | --- | --- | --- |
 | `clientId` | Navegador | RAM navegador/servidor | Página/conexión | Siempre cierta |
-| `presentationSessionId` | Servidor | RAM y envoltura caducable en `localStorage` Audience | Rotación/logout/expiración | Siempre cierta |
-| `submissionId` de quiz | Navegador; uno por aporte y ámbito | Tránsito y hash en RAM servidor | Presentación/limpieza | Siempre cierta |
+| `presentationSessionId` | Servidor | Marcador técnico privado de 24 h y envoltura caducable en `localStorage` Audience | Rotación/logout/expiración | Siempre cierta |
+| `submissionId` de quiz | Navegador; uno por aporte y ámbito | Envoltura caducable local, tránsito y hash en RAM servidor | Presentación/limpieza/expiración | Siempre cierta |
 | `participantId` | Servidor/WS | RAM WS, cliente y LiveKit | Conexión/reentrada | Función opcional |
 | `controlSessionId` | Control | RAM cliente/WS | Autorización/conexión | Función opcional |
 | identidad LiveKit | Servidor | JWT, RAM y SFU | TTL y gracia | Función opcional |
@@ -53,7 +53,7 @@ Se usa para:
 
 - estado de sincronización/proyección y preferencias;
 - referencia de sesión Audience en envoltura caducable;
-- respuestas y puntuaciones locales del quiz;
+- respuestas, puntuaciones y contribuciones pendientes/reenviables locales del quiz;
 - estado de Control y otros ajustes operativos.
 
 Evidencia: `src/hooks/useSyncState.ts:226-241`,
@@ -61,7 +61,7 @@ Evidencia: `src/hooks/useSyncState.ts:226-241`,
 `src/hooks/useQuizAnswers.ts:101-160` y
 `src/hooks/useSeferControlLogic.ts:35-99`.
 
-La referencia de sesión, las respuestas y las puntuaciones Audience usan
+La referencia de sesión, las respuestas, las puntuaciones y las contribuciones Audience usan
 envolturas versionadas con TTL de 24 horas por defecto, configurable entre 1 y
 168 horas. Lectura expirada, formato legado/malformado, logout y rotación purgan
 los valores de forma idempotente. Alias y visibilidad permanecen solo en memoria
@@ -192,7 +192,8 @@ de ejecución controlada multidispositivo**.
 | Participantes/Controles | RAM | Existen snapshots durante la sesión |
 | Tokens/credenciales LiveKit | RAM | TTL/gracia configurables |
 | Redis | Sin snapshot ni AOF en Compose | Perfil opcional |
-| Logs app | Docker `local`, 5 MB × 3, comprimido | Allowlist operativa; recreación programable a 144 h |
+| Marcador de sesión | Archivo privado con UUID de sesión y caducidad de 24 h | Distingue reinicio del proceso de cierre explícito; no contiene participantes |
+| Logs app | Docker `local`, 5 MB × 3, comprimido | Allowlist operativa; auditoría sin reinicios |
 | Logs Caddy/LiveKit/Redis | Driver Docker `none` | No se persisten porque pueden contener IP/ICE/JWT |
 
 Evidencia: `server/persistence.mjs`, `server/local-server.mjs`,
@@ -212,12 +213,18 @@ permitidos, valida la respuesta IPv4 y falla de forma segura si está desactivad
 o recibe un valor inválido.
 
 Docker no ofrece retención por edad en sus drivers `local`/`json-file`. El script
-general `rotate-docker-logs.ps1` recrea con Compose los contenedores que alcanzan
-144 horas; Docker elimina con ellos sus logs y conserva volúmenes/bind mounts.
-La garantía temporal requiere instalar y observar la tarea programada del host.
+`rotate-docker-logs.ps1` audita límites y antigüedad sin detener ni recrear
+contenedores. La antigüedad de un contenedor no demuestra la de sus registros.
+La tarea opcional del host ejecuta esta auditoría en modo no mutante.
+Los límites de tamaño y número de ficheros no garantizan un plazo de borrado;
+una política temporal estricta requiere una solución de logging revisada o
+mantenimiento explícito fuera de las sesiones.
 
-La tarea productiva está instalada y el fallback de IP queda explícito,
-HTTPS-only y validado. Debe observarse periódicamente la recreación por edad.
+El vigilante opcional `watch-livekit-network.mjs` consulta la IP de salida del
+servidor, la confirmación de DDNS y DNS público. Solo actúa sobre el contenedor
+LiveKit tras confirmar estabilidad y aplica espera entre recuperaciones. Sus
+registros privados contienen eventos de una lista cerrada, sin direcciones,
+credenciales ni identificadores de participantes, y tienen retención acotada.
 
 ## 11. Grabación y salida Audience pasiva
 
@@ -298,7 +305,7 @@ presenta un error y la barrera de micrófono permanece cerrada.
 | TTL/purga de sesión y quiz Audience | Verificada en código/tests; navegador real pendiente |
 | No persistir logs de proxy/SFU/Redis | Verificado en despliegue Compose |
 | Logs app sin IP/campos sensibles | Verificado mediante auditoría allowlist de runtime |
-| Máximo temporal de logs | Tarea diaria instalada, ejecutada y verificada en el host |
+| Máximo temporal de logs | La rotación por tamaño no garantiza borrado por tiempo; auditoría de solo lectura |
 | Estado externo declarado reflejado | Implementado; depende de la acción manual del operador |
 | Revocación al entrar en directo/grabación | Verificada en código/tests; LiveKit real pendiente |
 | Audience pasivo de OBS sin alias/lista | Verificado en flujo y prueba negativa de servidor |

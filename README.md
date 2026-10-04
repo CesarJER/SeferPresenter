@@ -195,12 +195,12 @@ variable no fue definida; no use ese opt-out para un despliegue expuesto.
 - Caddy no reenvia `X-Real-IP` ni `X-Forwarded-For` a Node/LiveKit.
 - Docker descarta la salida de Caddy, LiveKit y Redis; la aplicación usa el
   driver `local`, comprimido y limitado a tres ficheros de 5 MB.
-- Docker no ofrece caducidad por días en ese driver. En Windows, instale
-  `scripts/install-docker-log-retention-task.ps1`; el instalador comprueba la
-  retención inmediatamente y programa la siguiente ejecución una semana después.
-  `scripts/rotate-docker-logs.ps1` recrea servicios a las 144 horas y deja
-  que Docker elimine los logs con el contenedor antiguo. Los volúmenes y bind
-  mounts permanecen intactos.
+- Docker no ofrece caducidad por días en ese driver. En Windows,
+  `scripts/install-docker-log-retention-task.ps1` programa una auditoría no
+  mutante: `scripts/rotate-docker-logs.ps1` informa de límites y antigüedad,
+  sin recrear servicios ni interrumpir sesiones. El límite de tamaño no
+  garantiza borrado por fecha; una política temporal exige revisar el contenido
+  permitido y realizar mantenimiento explícito fuera de las sesiones.
 - `SEFER_PRIVACY_LOCAL_PATH` señala una raíz privada externa al repositorio que recibe los
   manifiestos de sesión. Al pasar a `recording`, el backend crea un JSON
   `.local` sin asistentes, alias, voz, IP ni identificadores de sesión; al salir
@@ -420,7 +420,10 @@ SEFER_BROADCAST_NOTICE_VERSION=broadcast-notice-v1
 
 Endpoints:
 
-- `GET /api/livekit/status`: devuelve `{ enabled, available?, reason? }`.
+- `GET /api/health`: comprueba que el backend responde, sin depender de LiveKit.
+- `GET /api/livekit/status`: devuelve `{ enabled, available?, reason? }` tras
+  comprobar la API de LiveKit con timeout y una caché breve. No demuestra que
+  los clientes reciban audio; ICE y reproducción requieren una prueba real.
 - `POST /api/livekit/token`: entrada Audience `{ role, roomSession? }`; Control
   añade `controlSessionId`. Devuelve `livekitUrl`, `token`, `expiresAt`,
   `participantIdentity`, `participantId` efímero y `refreshCredential` rotatorio.
@@ -432,9 +435,70 @@ Endpoints:
   autorización; credenciales ajenas, expiradas o reutilizadas se rechazan.
 - `POST /api/livekit/grant-speak`, `revoke-speak`, `mute-participant`,
   `mute-all`, `kick-participant`, `rescue-participant`: requieren
-  `role: "control"` y un `controlSessionId` autorizado por WebSocket.
+  Basic Auth, `role: "control"` y un `controlSessionId` autorizado por WebSocket.
   `audience` recibe 403. `rescue-participant` devuelve al usuario expulsado a
   audiencia activa muda (`LISTENER`) sin abrir ni publicar microfono.
+
+### Recuperación de Live Audio
+
+El cliente reintenta las caídas de red con espera creciente y un máximo de ocho
+intentos. No reintenta automáticamente una expulsión, una denegación de acceso
+o un fallo administrativo del permiso de micrófono. Si el backend ha perdido
+el registro o ha caducado la sesión, solicita una nueva admisión validada; no
+restaura permisos de hablar a partir de datos enviados por Audience. Una sesión
+nueva comienza escuchando y requiere activar el micrófono explícitamente.
+
+La conexión de la aplicación y la de LiveKit se muestran por separado. Control
+solo ofrece conceder palabra cuando el cliente informa de conexión de audio;
+el servidor confirma además la operación en LiveKit. Un error de captura no
+cierra la escucha. Silenciar cancela también una publicación pendiente, y el
+modo música recrea solamente la pista de micrófono.
+
+Compose publica UDP `50000–50050` y el fallback ICE/TCP `7881`; el host y el
+router deben permitir los mismos puertos. Las redes que solo admiten HTTPS
+requieren TURN/TLS con dominio, certificado y puerto propios, según la
+[documentación de LiveKit](https://docs.livekit.io/transport/self-hosting/deployment/).
+
+Para servidores con IP pública dinámica, el actualizador DDNS debe confirmar
+la IP en `SEFER_DATA_DIR/tmp/hostinger-ddns/last-confirmed-ip`. El vigilante
+opcional del host compara esa confirmación, DNS público y la IP anunciada por
+LiveKit. Solo actúa tras dos muestras estables, con espera entre recuperaciones;
+respeta servicios detenidos y configuraciones de IP fija o LAN. Reinicia
+únicamente LiveKit, sin reconstruir la aplicación ni conceder micrófonos.
+No necesita montar el socket de Docker en un contenedor.
+El lanzador privado puede iniciar el vigilante oculto después de levantar Compose.
+El intervalo DDNS debe ser corto; la caché DNS y las dos muestras consecutivas
+siguen introduciendo una espera antes de recuperar la IP anunciada.
+
+```powershell
+node scripts/watch-livekit-network.mjs --check
+node scripts/watch-livekit-network.mjs
+```
+
+`--check` es de solo lectura. El vigilante conserva eventos de una lista
+cerrada bajo la raíz privada de datos, sin IP, tokens ni datos de asistentes.
+Una caída completa del host o de su conexión interrumpe el audio: la recuperación
+no sustituye una segunda infraestructura independiente.
+
+Las puntuaciones del quiz permanecen en cada navegador dentro de su TTL local.
+Un marcador técnico privado de sesión, válido durante 24 horas, distingue un
+reinicio del proceso de un cierre explícito. Reiniciar la aplicación conserva
+la sesión vigente; `RESET_STATE`, logout y expiración siguen limpiando los datos.
+Las contribuciones anónimas se conservan localmente y se reenvían con los mismos
+identificadores al reconectar, para reconstruir los agregados en RAM sin sumar
+dos veces. Los totales solo se recuperan con los dispositivos que vuelven a
+conectarse y conservan sus datos; no existe un respaldo servidor de respuestas
+individuales.
+
+Antes de la primera actualización de un servidor que ya tiene una sesión
+abierta, ejecuta `scripts/seed-presentation-session.mjs` con `--url` apuntando
+al WebSocket de ese backend y `--data-dir` a la misma raíz privada que usará
+la aplicación. Así el primer arranque conserva el identificador vigente.
+El script admite únicamente un backend local y no imprime el identificador.
+Tras un reinicio completo, Control debe volver a seleccionar la misma
+presentación: la proyección y el temporizador continúan siendo volátiles.
+Los envíos anteriores a la cola nueva no disponen de IDs persistidos para
+una reconstrucción automática segura.
 
 No hay endpoints de consentimiento, alias legible ni chat legible. El backend no
 acepta alias en perfiles o snapshots operacionales y no persiste claves, alias,

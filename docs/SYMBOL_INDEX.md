@@ -206,8 +206,12 @@ Navigation-critical symbols and files. This is not an exhaustive API index.
   `AUDIENCE_PRIVACY_STORAGE_TTL_MS` - `src/utils/privacyStorage.ts`: versioned
   Audience TTL envelopes and idempotent expiry/legacy purge.
 - `scripts/rotate-docker-logs.ps1` /
-  `scripts/install-docker-log-retention-task.ps1`: bounded-age container
-  recreation and Windows scheduled-task installer.
+  `scripts/install-docker-log-retention-task.ps1`: read-only bounded-log audit
+  and Windows scheduled-task installer; never restarts containers.
+- `scripts/watch-livekit-network.mjs`: private host network recovery monitor;
+  validates DDNS, public DNS and advertised IP before a bounded LiveKit restart.
+- `createPresentationSessionStore` / `scripts/seed-presentation-session.mjs`:
+  private 24-hour session boundary and explicit continuity seed before upgrade.
 - `analyseLogText` / `hasPotentialPrivacyLeak` -
   `scripts/privacy-log-audit.mjs`: count-only runtime log inspection without
   echoing matched lines.
