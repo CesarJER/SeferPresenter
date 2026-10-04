@@ -108,9 +108,17 @@ export interface UseAudienceAnswersReturn {
 
 type AnswersByPresentation = Record<string, Record<string, QuizAudienceAnswer>>;
 type ScoresByPresentation = Record<string, Record<string, QuizQuestionScore>>;
+type QuizContribution = QuizAnswerAggregateMessage | QuizQuestionResultAggregateMessage | QuizFinalScoreAggregateMessage;
+type QuizContributionInput = Omit<QuizAnswerAggregateMessage, 'submissionId'>
+  | Omit<QuizQuestionResultAggregateMessage, 'submissionId'> | Omit<QuizFinalScoreAggregateMessage, 'submissionId'>;
+type QuizOutbox = Record<string, { message: QuizContribution; expiresAt: number }>;
 
 const ANSWERS_STORAGE_KEY = 'sefer-quiz-answers-by-presentation';
 const SCORES_STORAGE_KEY = 'sefer-quiz-scores-by-presentation';
+const OUTBOX_STORAGE_KEY = 'sefer-quiz-outbox';
+// Keep acknowledged IDs too: a reconnect can reach a restarted, empty aggregate server.
+const OUTBOX_TTL_MS = 24 * 60 * 60 * 1000;
+const RETRY_DELAYS_MS = [1000, 3000, 10000];
 const AUDIENCE_ACCESS_STORAGE_KEY = 'sefer-audience-access';
 const AUDIENCE_QUIZ_TICKET_KEY = 'sefer-audience-quiz-sse-ticket';
 
@@ -135,11 +143,145 @@ export function useAudienceAnswers(
   presentationId: string | null,
 ): UseAudienceAnswersReturn {
   const channel = useMemo(() => new BroadcastChannel('sefer-quiz'), []);
-  const answerSubmissionIdsRef = useRef<Record<string, string>>({});
-  const resultSubmissionIdsRef = useRef<Record<string, string>>({});
-  const finalSubmissionIdsRef = useRef<Record<number, string>>({});
   const scopeId = presentationId ?? '';
   const [ticketRevision, setTicketRevision] = useState(0);
+  const [initialOutbox] = useState<QuizOutbox>(() => {
+    try { return readExpiringStorage<QuizOutbox>(localStorage, OUTBOX_STORAGE_KEY) ?? {}; }
+    catch { return {}; }
+  });
+  const outboxRef = useRef(initialOutbox);
+  const transportRef = useRef({
+    running: false, blocked: false, retries: 0, generation: 0, active: true,
+    timer: undefined as ReturnType<typeof setTimeout> | undefined,
+    controller: null as AbortController | null,
+    delivered: new Set<string>(), replay: false,
+  });
+  const flushRef = useRef<() => void>(() => {});
+
+  const persistOutbox = useCallback(() => {
+    outboxRef.current = Object.fromEntries(Object.entries(outboxRef.current)
+      .filter(([, entry]) => entry?.message && Number.isFinite(entry.expiresAt) && entry.expiresAt > Date.now()));
+    try {
+      if (Object.keys(outboxRef.current).length) writeExpiringStorage(localStorage, OUTBOX_STORAGE_KEY, outboxRef.current);
+      else localStorage.removeItem(OUTBOX_STORAGE_KEY);
+    }
+    catch { /* Memory remains usable when browser storage is unavailable. */ }
+  }, []);
+
+  const flushOutbox = useCallback(async () => {
+    const transport = transportRef.current;
+    if (!transport.active || transport.blocked || !scopeId || navigator.onLine === false) return;
+    if (getAudienceAccessCredential() && !sessionStorage.getItem(AUDIENCE_QUIZ_TICKET_KEY)) return;
+    if (transport.running) { transport.replay = true; return; }
+    transport.running = true;
+    transport.replay = false;
+    const generation = transport.generation;
+    let retry = false;
+    try {
+      persistOutbox();
+      for (const [key, entry] of Object.entries(outboxRef.current)) {
+        if (!transport.active || transport.generation !== generation) break;
+        const message = entry.message;
+        if (message.presentationId !== scopeId || transport.delivered.has(message.submissionId)) continue;
+        if (outboxRef.current[key] !== entry) continue;
+        const controller = new AbortController();
+        transport.controller = controller;
+        const timeout = setTimeout(() => controller.abort(), 5000);
+        try {
+          const response = await fetch('/api/quiz-answer', {
+            method: 'POST', headers: getAudienceRequestHeaders(),
+            body: JSON.stringify(message), signal: controller.signal,
+          });
+          if (transport.generation !== generation || !transport.active) break;
+          if (response.ok) transport.delivered.add(message.submissionId);
+          else if (response.status === 401 || response.status === 403) {
+            transport.blocked = true;
+            break;
+          } else {
+            retry = response.status >= 500;
+            if (response.status === 409) {
+              const body = await response.json().catch(() => null);
+              retry = body?.error === 'Quiz message does not match the active presentation';
+            }
+            if (retry) break;
+          }
+        } catch {
+          retry = transport.generation === generation && transport.active;
+          break;
+        } finally {
+          clearTimeout(timeout);
+          transport.controller = null;
+        }
+      }
+    } finally {
+      transport.running = false;
+      if (transport.active && !transport.blocked) {
+        if (transport.replay || transport.generation !== generation) {
+          transport.replay = false;
+          flushRef.current();
+        } else if (retry && transport.retries < RETRY_DELAYS_MS.length) {
+          clearTimeout(transport.timer);
+          transport.timer = setTimeout(() => flushRef.current(), RETRY_DELAYS_MS[transport.retries++]);
+        }
+      }
+    }
+  }, [scopeId, persistOutbox]);
+
+  useEffect(() => {
+    const transport = transportRef.current;
+    transport.active = true;
+    flushRef.current = () => { void flushOutbox(); };
+    flushRef.current();
+    return () => {
+      transport.active = false;
+      transport.generation++;
+      clearTimeout(transport.timer);
+      transport.controller?.abort();
+    };
+  }, [flushOutbox]);
+
+  const replayOutbox = useCallback((accessUpdated = false) => {
+    const transport = transportRef.current;
+    if (accessUpdated) transport.blocked = false;
+    transport.generation++;
+    transport.delivered.clear();
+    transport.retries = 0;
+    clearTimeout(transport.timer);
+    transport.controller?.abort();
+    flushRef.current();
+  }, []);
+
+  const clearQueuedSlide = useCallback((slideId: string) => {
+    for (const [key, entry] of Object.entries(outboxRef.current)) {
+      if (entry.message.presentationId === scopeId &&
+          (entry.message.type === 'QUIZ_FINAL_SCORE_AGGREGATE' || entry.message.slideId === slideId)) {
+        delete outboxRef.current[key];
+      }
+    }
+    transportRef.current.generation++;
+    transportRef.current.controller?.abort();
+    clearTimeout(transportRef.current.timer);
+    persistOutbox();
+  }, [scopeId, persistOutbox]);
+
+  const enqueue = useCallback((input: QuizContributionInput) => {
+    persistOutbox();
+    const key = JSON.stringify([input.presentationId, input.type,
+      input.type === 'QUIZ_FINAL_SCORE_AGGREGATE' ? 'final' : input.slideId]);
+    const previous = outboxRef.current[key];
+    if (input.type === 'QUIZ_FINAL_SCORE_AGGREGATE' && previous?.message.type === input.type &&
+        input.requestId < previous.message.requestId) return;
+    if (!previous || (input.type === 'QUIZ_FINAL_SCORE_AGGREGATE' &&
+        previous.message.type === input.type && previous.message.requestId !== input.requestId)) {
+      outboxRef.current[key] = {
+        message: { ...input, submissionId: makeQuizSubmissionId() }, expiresAt: Date.now() + OUTBOX_TTL_MS,
+      };
+      persistOutbox();
+    }
+    transportRef.current.retries = 0;
+    clearTimeout(transportRef.current.timer);
+    flushRef.current();
+  }, [persistOutbox]);
 
   const [answersByPresentation, setAnswersByPresentation] = useState<AnswersByPresentation>(() => {
     try {
@@ -188,9 +330,12 @@ export function useAudienceAnswers(
       localStorage.removeItem(ANSWERS_STORAGE_KEY);
       localStorage.removeItem(SCORES_STORAGE_KEY);
       localStorage.removeItem('sefer-quiz-session-id');
-      answerSubmissionIdsRef.current = {};
-      resultSubmissionIdsRef.current = {};
-      finalSubmissionIdsRef.current = {};
+      outboxRef.current = {};
+      localStorage.removeItem(OUTBOX_STORAGE_KEY);
+      transportRef.current.generation++;
+      transportRef.current.controller?.abort();
+      transportRef.current.delivered.clear();
+      clearTimeout(transportRef.current.timer);
       setAnswersByPresentation({});
       setScoresByPresentation({});
     };
@@ -199,18 +344,24 @@ export function useAudienceAnswers(
   }, []);
 
   useEffect(() => {
-    const handleTicketUpdate = () => setTicketRevision(revision => revision + 1);
+    const handleTicketUpdate = () => {
+      setTicketRevision(revision => revision + 1);
+      replayOutbox(true);
+    };
+    const handleOnline = () => replayOutbox();
     window.addEventListener('sefer-audience-tickets-updated', handleTicketUpdate);
-    return () => window.removeEventListener('sefer-audience-tickets-updated', handleTicketUpdate);
-  }, []);
+    window.addEventListener('online', handleOnline);
+    return () => {
+      window.removeEventListener('sefer-audience-tickets-updated', handleTicketUpdate);
+      window.removeEventListener('online', handleOnline);
+    };
+  }, [replayOutbox]);
 
   // Listen for CLEAR commands from controller and LOGOUT events from PWA identity
   useEffect(() => {
     const processClear = (slideId: string) => {
       if (!scopeId) return;
-      delete answerSubmissionIdsRef.current[slideId];
-      delete resultSubmissionIdsRef.current[slideId];
-      finalSubmissionIdsRef.current = {};
+      clearQueuedSlide(slideId);
       setAnswersByPresentation(prev => {
         const scoped = prev[scopeId] ?? {};
         const current = scoped[slideId];
@@ -251,6 +402,7 @@ export function useAudienceAnswers(
     const eventSource = new EventSource(
       ticket ? `/api/quiz-events?ticket=${encodeURIComponent(ticket)}` : '/api/quiz-events',
     );
+    eventSource.onopen = () => replayOutbox(true);
     eventSource.onmessage = (event) => {
       try {
         if (event.data === 'heartbeat') return;
@@ -272,7 +424,7 @@ export function useAudienceAnswers(
       channel.removeEventListener('message', handleChannelMessage);
       eventSource.close();
     };
-  }, [channel, scopeId, ticketRevision]);
+  }, [channel, scopeId, ticketRevision, clearQueuedSlide, replayOutbox]);
 
   const getAnswers = useCallback(() => answers, [answers]);
 
@@ -292,22 +444,13 @@ export function useAudienceAnswers(
 
   const broadcast = useCallback((slideId: string, answer: QuizAudienceAnswer) => {
     if (!presentationId) return;
-    const submissionId = answerSubmissionIdsRef.current[slideId] ?? makeQuizSubmissionId();
-    answerSubmissionIdsRef.current[slideId] = submissionId;
-    const msg: QuizAnswerAggregateMessage = {
+    enqueue({
       type: 'QUIZ_ANSWER_AGGREGATE',
       presentationId,
-      submissionId,
       slideId,
       selectedOptionIds: answer.selectedOptionIds,
-    };
-
-    fetch('/api/quiz-answer', {
-      method: 'POST',
-      headers: getAudienceRequestHeaders(),
-      body: JSON.stringify(msg),
-    }).catch(() => {}); // Non-critical — local state is source of truth
-  }, [presentationId]);
+    });
+  }, [presentationId, enqueue]);
 
   const selectRadioOption = useCallback((slideId: string, optionId: QuizOptionId) => {
     updateAnswer(slideId, prev => ({ ...prev, selectedOptionIds: [optionId] }));
@@ -363,8 +506,7 @@ export function useAudienceAnswers(
 
   const clearAnswer = useCallback((slideId: string) => {
     if (!scopeId) return;
-    delete answerSubmissionIdsRef.current[slideId];
-    delete resultSubmissionIdsRef.current[slideId];
+    clearQueuedSlide(slideId);
     setAnswersByPresentation(prev => {
       const nextScoped = { ...(prev[scopeId] ?? {}) };
       delete nextScoped[slideId];
@@ -375,26 +517,17 @@ export function useAudienceAnswers(
       delete nextScoped[slideId];
       return { ...prev, [scopeId]: nextScoped };
     });
-  }, [scopeId]);
+  }, [scopeId, clearQueuedSlide]);
 
   const sendFinalScore = useCallback((rank: number, requestId: number) => {
     if (!presentationId) return;
-    const submissionId = finalSubmissionIdsRef.current[requestId] ?? makeQuizSubmissionId();
-    finalSubmissionIdsRef.current[requestId] = submissionId;
-    const msg: QuizFinalScoreAggregateMessage = {
+    enqueue({
       type: 'QUIZ_FINAL_SCORE_AGGREGATE',
       presentationId,
-      submissionId,
       requestId,
       rank,
-    };
-
-    fetch('/api/quiz-answer', {
-      method: 'POST',
-      headers: getAudienceRequestHeaders(),
-      body: JSON.stringify(msg),
-    }).catch(() => {});
-  }, [presentationId]);
+    });
+  }, [presentationId, enqueue]);
 
   const getScores = useCallback(() => scores, [scores]);
 
@@ -404,22 +537,14 @@ export function useAudienceAnswers(
       ...prev,
       [scopeId]: { ...(prev[scopeId] ?? {}), [slideId]: score },
     }));
-    if (!presentationId || resultSubmissionIdsRef.current[slideId]) return;
-    const submissionId = makeQuizSubmissionId();
-    resultSubmissionIdsRef.current[slideId] = submissionId;
-    const msg: QuizQuestionResultAggregateMessage = {
+    if (!presentationId) return;
+    enqueue({
       type: 'QUIZ_QUESTION_RESULT_AGGREGATE',
       presentationId,
-      submissionId,
       slideId,
       isCitaCorrect: score.citaCentipunts > 0,
-    };
-    fetch('/api/quiz-answer', {
-      method: 'POST',
-      headers: getAudienceRequestHeaders(),
-      body: JSON.stringify(msg),
-    }).catch(() => {});
-  }, [presentationId, scopeId]);
+    });
+  }, [presentationId, scopeId, enqueue]);
 
   return {
     getAnswers,

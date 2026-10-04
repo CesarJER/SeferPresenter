@@ -49,6 +49,7 @@ import {
   validatePresentationsPayload,
 } from './content-validation.mjs'
 import { writeJsonSafely } from './json-persistence.mjs'
+import { createPresentationSessionStore } from './presentation-session.mjs'
 import { resolvePathInsideRoot } from './path-containment.mjs'
 import { createPrivacySessionManifestRecorder } from './privacy-session-manifest.mjs'
 import { getStaticCacheHeaders } from './static-cache-policy.mjs'
@@ -67,6 +68,7 @@ const exampleDataDir = path.join(rootDir, 'examples', 'SeferPrivateData')
 const seferDataDir = resolveSeferDataDir({ rootDir })
 const dataInitialization = initializeSeferDataDir({ dataDir: seferDataDir, exampleDir: exampleDataDir })
 const seferDataPaths = getSeferDataPaths(seferDataDir)
+const presentationSessionStore = createPresentationSessionStore({ filePath: seferDataPaths.presentationSession })
 const legalRepository = loadLegalRepository({ dataDir: seferDataDir })
 const legalDocuments = legalRepository.status === 'ACTIVE'
   ? new Map([
@@ -651,7 +653,7 @@ const syncTimelineToSlideSelection = (payload, now = Date.now()) => {
   broadcastTimelineState()
 }
 
-const reduceRemoteCommandMessage = (message, sourceMeta) => {
+const reduceRemoteCommandMessage = (message, sourceMeta, beforeSessionReset) => {
   if (!isObjectRecord(message) || message.type !== 'REMOTE_COMMAND') {
     return { ok: false, status: 400, error: 'Invalid remote command message' }
   }
@@ -674,6 +676,14 @@ const reduceRemoteCommandMessage = (message, sourceMeta) => {
   }
 
   if (message.payload.command === 'RESET_STATE' && message.payload.clearSession === true) {
+    try {
+      if (beforeSessionReset) beforeSessionReset()
+      else wsServer.rotatePresentationSession(message.payload)
+    } catch {
+      const error = new Error('Presentation session reset could not be persisted')
+      error.code = 'SESSION_PERSISTENCE_FAILED'
+      throw error
+    }
     const presentationId = currentState.presentation?.id
     if (presentationId) clearQuizScope(presentationId)
   }
@@ -944,7 +954,11 @@ const handleApi = async (req, res, url) => {
       }
       sendJson(res, 200, { success: true, state: result.state })
     } catch (err) {
-      sendJson(res, 400, { error: err.message || 'Invalid JSON' })
+      if (err.code === 'SESSION_PERSISTENCE_FAILED') {
+        sendJson(res, 503, { code: err.code, error: 'Presentation session reset could not be persisted' })
+      } else {
+        sendJson(res, 400, { error: err.message || 'Invalid JSON' })
+      }
     }
     return true
   }
@@ -1295,7 +1309,7 @@ const server = http.createServer(async (req, res) => {
 
 const voiceScriptureService = createVoiceScriptureService(server)
 
-const handleWsMessageFromClient = (msg, meta) => {
+const handleWsMessageFromClient = (msg, meta, beforeSessionReset) => {
   if (msg.type === 'SYNC_STATE') {
     if (meta?.role === 'control' && !canReduceRemoteCommand(meta)) return false
     commitState(normalizeProjectionState(msg), {
@@ -1306,7 +1320,7 @@ const handleWsMessageFromClient = (msg, meta) => {
     })
     return true
   } else if (msg.type === 'REMOTE_COMMAND') {
-    const result = reduceRemoteCommandMessage(msg, meta)
+    const result = reduceRemoteCommandMessage(msg, meta, beforeSessionReset)
     if (!result.ok) {
       console.warn(`[SERVER] Command rejected role=${meta?.role || 'http'} error=${result.error}`)
     }
@@ -1409,6 +1423,7 @@ server.listen(port, () => {
   readPresentationsCache()
   const staticLabel = staticDir ? `, serving ${path.relative(rootDir, staticDir)}` : ''
   wsServer = createWsServer(server, handleWsMessageFromClient, {
+    presentationSessionStore,
     getLiveKitState: () => liveKitApi?.getState?.() || {
       enabled: false,
       available: false,

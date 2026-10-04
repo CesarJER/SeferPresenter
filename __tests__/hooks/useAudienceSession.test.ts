@@ -76,4 +76,19 @@ describe('useAudienceSession', () => {
     expect(JSON.parse(localStorage.getItem('sefer-audience-session-id') || '{}').data).toBe('session-new');
     expect(localStorage.getItem('sefer-quiz-session-id')).toBeNull();
   });
+
+  it('purges an offline audience on WELCOME after an explicit session reset', () => {
+    let wsHandler: ((type: string, payload: Record<string, unknown>) => void) | undefined;
+    const subscribeToWsMessage = (handler: NonNullable<typeof wsHandler>) => { wsHandler = handler; return vi.fn(); };
+    const { result } = renderHook(() => useAudienceSession({ subscribeToWsMessage }));
+    act(() => {
+      wsHandler?.('WELCOME', { presentationSessionId: 'before-reset' });
+      result.current.login('TestUser');
+    });
+    localStorage.setItem('sefer-quiz-session-id', 'prior-quiz');
+    act(() => { wsHandler?.('WELCOME', { presentationSessionId: 'after-reset' }); });
+    expect(result.current.nick).toBe('');
+    expect(result.current.presentationSessionId).toBe('after-reset');
+    expect(localStorage.getItem('sefer-quiz-session-id')).toBeNull();
+  });
 });

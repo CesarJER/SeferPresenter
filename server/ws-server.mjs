@@ -464,6 +464,9 @@ const resetWsServerStateForTests = () => {
 }
 
 const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) => {
+  if (snapshotProviders.presentationSessionStore) {
+    presentationSessionId = snapshotProviders.presentationSessionStore.getSessionId()
+  }
   const wss = new WebSocketServer({
     noServer: true,
     maxPayload: WS_MAX_PAYLOAD_BYTES,
@@ -1357,6 +1360,23 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
     return msg.participantId === targetMeta.participantId
   }
 
+  const rotatePresentationSession = ({ hardRefresh = false } = {}) => {
+    // Persist the new boundary before clearing state or notifying any client.
+    const nextSessionId = snapshotProviders.presentationSessionStore?.rotate() || randomUUID()
+    presentationSessionId = nextSessionId
+    liveAudioControls.clear()
+    liveAudioParticipants.clear()
+    audienceAccessRecords.clear()
+    audienceSseTickets.clear()
+    accessMode = getDefaultAccessMode()
+    setExternalBroadcastState('off')
+    broadcastConnectionCounts()
+    broadcastAuthorizationState()
+    broadcast({ type: 'PRESENTATION_SESSION_ROTATED', presentationSessionId, hardRefresh: hardRefresh === true })
+    console.log('[SERVER] Presentation session rotated')
+  }
+  wss.rotatePresentationSession = rotatePresentationSession
+
   wss.on('connection', (ws, req) => {
     ws.isAlive = true
     ws.on('pong', () => {
@@ -1761,25 +1781,22 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
             break
           }
           {
-            const accepted = onFallbackMessage ? onFallbackMessage(msg, meta) === true : false
-            if (!accepted) break
-          }
-          if (msg.payload?.command === 'RESET_STATE' && msg.payload.clearSession) {
-            presentationSessionId = randomUUID()
-            liveAudioControls.clear()
-            liveAudioParticipants.clear()
-            audienceAccessRecords.clear()
-            audienceSseTickets.clear()
-            accessMode = getDefaultAccessMode()
-            setExternalBroadcastState('off')
-            broadcastConnectionCounts()
-            broadcastAuthorizationState()
-            broadcast(JSON.stringify({
-              type: 'PRESENTATION_SESSION_ROTATED',
-              presentationSessionId,
-              hardRefresh: msg.payload.hardRefresh === true
-            }))
-            console.log('[SERVER] Presentation session rotated')
+            const resetsSession = msg.payload?.command === 'RESET_STATE' && msg.payload.clearSession === true
+            let rotated = false
+            const beforeSessionReset = () => {
+              if (rotated) return
+              rotatePresentationSession(msg.payload)
+              rotated = true
+            }
+            try {
+              const accepted = onFallbackMessage
+                ? onFallbackMessage(msg, meta, resetsSession ? beforeSessionReset : undefined) === true
+                : false
+              if (!accepted) break
+              if (resetsSession) beforeSessionReset()
+            } catch {
+              sendError(ws, 'SESSION_PERSISTENCE_FAILED', 'Presentation session reset could not be persisted')
+            }
           }
           break
 
