@@ -2,6 +2,7 @@ param(
   [ValidateRange(1, 167)]
   [int]$RetentionHours = 144,
   [string]$ComposeFile = 'docker-compose.yml',
+  # Kept for existing callers. Every invocation is now a read-only audit.
   [switch]$DryRun
 )
 
@@ -27,40 +28,51 @@ if (-not $composePath.StartsWith($rootPrefix, [StringComparison]::OrdinalIgnoreC
 
 Push-Location $repositoryRoot
 try {
-  $containerIds = @(& docker compose -f $composePath ps -q)
+  # Include stopped/profile/override services in this project without changing
+  # its effective Compose files, profiles, or running containers.
+  $containerIds = @(& docker compose -f $composePath ps --all --quiet --orphans=true)
   if ($LASTEXITCODE -ne 0) { throw 'docker compose ps failed.' }
   $containerIds = @($containerIds | Where-Object { $_ -match '^[a-f0-9]{12,64}$' })
   if ($containerIds.Count -eq 0) {
-    Write-Output 'No running Compose containers found; nothing to rotate.'
+    Write-Output 'No Compose containers found; nothing to audit.'
     exit 0
   }
 
   $cutoff = [DateTimeOffset]::UtcNow.AddHours(-$RetentionHours)
-  $staleContainers = @()
+  $needsAttention = $false
+  # Go raw strings also survive Windows PowerShell 5.1 native argument quoting.
+  $metadataFormat = '{{.Created}}|{{index .Config.Labels `com.docker.compose.service`}}|{{.HostConfig.LogConfig.Type}}|{{index .HostConfig.LogConfig.Config `max-size`}}|{{index .HostConfig.LogConfig.Config `max-file`}}'
   foreach ($containerId in $containerIds) {
-    $createdRaw = (& docker inspect --format '{{.Created}}' $containerId).Trim()
+    # Read only logging metadata; never read credentials or log contents.
+    $metadataRaw = & docker inspect --format $metadataFormat $containerId
     if ($LASTEXITCODE -ne 0) { throw "docker inspect failed for container $containerId." }
-    $createdAt = [DateTimeOffset]::Parse($createdRaw).ToUniversalTime()
+    $metadata = ($metadataRaw -join '') -split '\|'
+    if ($metadata.Count -ne 5) { throw "Unexpected logging metadata for container $containerId." }
+    $createdAt = [DateTimeOffset]::Parse($metadata[0]).ToUniversalTime()
+    $service = $metadata[1]
+    $driver = $metadata[2]
+    if ($driver -eq 'none') { continue }
+
+    $maxFiles = 0
+    $hasExplicitBounds = $metadata[3] -match '^[1-9][0-9]*[kmg]?$' -and
+      [int]::TryParse($metadata[4], [ref]$maxFiles) -and $maxFiles -gt 0
+    # The local driver has bounded defaults even without explicit options.
+    if ($driver -ne 'local' -and -not ($driver -eq 'json-file' -and $hasExplicitBounds)) {
+      Write-Warning "$($service): log size limits cannot be confirmed for driver '$driver'. Review logging configuration during planned maintenance."
+      $needsAttention = $true
+    }
     if ($createdAt -le $cutoff) {
-      $staleContainers += $containerId
+      Write-Warning "$($service): container exceeds $RetentionHours hours; its logs may exceed the time-retention policy. Review during planned maintenance; container age does not establish log age."
+      $needsAttention = $true
     }
   }
 
-  if ($staleContainers.Count -eq 0) {
-    Write-Output "All container logs are younger than $RetentionHours hours."
-    exit 0
-  }
-
-  if ($DryRun) {
-    Write-Output "Dry run: $($staleContainers.Count) container(s) require recreation."
-    exit 0
-  }
-
-  # Compose removes the old containers and their driver-managed logs. Named
-  # volumes and bind-mounted presentation content are preserved.
-  & docker compose -f $composePath up -d --force-recreate --remove-orphans
-  if ($LASTEXITCODE -ne 0) { throw 'docker compose recreation failed.' }
-  Write-Output "Recreated Compose services; logs older than $RetentionHours hours were removed with their containers."
+  # Docker rotates local/json-file logs by size, not elapsed time, and owns
+  # their internal files. Never truncate them or interrupt sessions to erase
+  # them. A strict time limit needs a separate reviewed logging policy.
+  Write-Output 'Audit only: no containers or logs changed. Size rotation does not guarantee time-based deletion.'
+  if ($needsAttention) { exit 2 }
+  exit 0
 } finally {
   Pop-Location
 }

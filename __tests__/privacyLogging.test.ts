@@ -27,10 +27,13 @@ describe('privacy logging configuration', () => {
     expect(caddy).not.toMatch(/^\s*log\s*(?:\{|$)/m);
   });
 
-  it('rotates by safe Compose recreation without direct log-file deletion', () => {
+  it('audits log retention without recreating services or deleting Docker-owned logs', () => {
     const rotation = read('scripts/rotate-docker-logs.ps1');
-    expect(rotation).toContain('--force-recreate');
+    const scheduler = read('scripts/install-docker-log-retention-task.ps1');
+    expect(rotation).not.toMatch(/--force-recreate|--remove-orphans|\b(?:up|restart|stop|kill)\s+-/);
     expect(rotation).toContain('ValidateRange(1, 167)');
+    expect(rotation).toContain('exit 2');
+    expect(scheduler).toContain('-DryRun');
     expect(rotation).not.toMatch(/Remove-Item|Clear-Content|\/var\/lib\/docker/i);
   });
 

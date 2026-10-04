@@ -1,6 +1,6 @@
 x-logging: &bounded-logging
   # Docker's local driver rotates by size and uses an efficient compressed
-  # format. Time retention is enforced by scripts/rotate-docker-logs.ps1.
+  # format. The host audit reports retention without restarting active services.
   driver: local
   options:
     max-size: "5m"
@@ -69,7 +69,7 @@ services:
     expose:
       - "8787"
     healthcheck:
-      test: [ "CMD", "node", "-e", "fetch('http://127.0.0.1:8787/api/livekit/status').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))" ]
+      test: [ "CMD", "node", "-e", "fetch('http://127.0.0.1:8787/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))" ]
       interval: 15s
       timeout: 5s
       retries: 5
@@ -165,6 +165,7 @@ services:
       - "UDP_PORT=50000-50050"
     ports:
       - "50000-50050:50000-50050/udp"
+      - "7881:7881/tcp" # ICE fallback for client networks that block UDP.
     mem_limit: 4g
     memswap_limit: 4g
     cpus: "8"

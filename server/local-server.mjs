@@ -742,6 +742,11 @@ const invalidateAudienceStreams = () => {
 }
 
 const handleApi = async (req, res, url) => {
+  if (url.pathname === '/api/health' && req.method === 'GET') {
+    res.setHeader('Cache-Control', 'no-store')
+    sendJson(res, 200, { healthy: true })
+    return true
+  }
   if (url.pathname === '/api/voice-scripture/status' && req.method === 'GET') {
     sendJson(res, 200, await voiceScriptureService.getStatus())
     return true
