@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObjec
 import {
   ConnectionState,
   ConnectionQuality,
+  DisconnectReason,
   createLocalAudioTrack,
   type Participant,
   Room,
@@ -43,11 +44,14 @@ interface UseLiveAudioResult {
   controlParticipants: { participantId: string; isMicrophoneActive: boolean }[];
   participantId: string | null;
   participantIdentity: string | null;
+  sessionRevision: number;
   isMicrophoneActive: boolean;
   microphoneTrackState: MicrophoneTrackState;
   isDuckingActive: boolean;
-  startRemoteAudio: () => Promise<void>;
+  hasAudioStarted: boolean;
+  startRemoteAudio: () => Promise<boolean>;
   publishMicrophone: (options?: { musicMode?: boolean }) => Promise<void>;
+  republishMicrophone: (options: { musicMode: boolean }) => Promise<void>;
   unpublishMicrophone: () => Promise<void>;
   retryAudio: () => Promise<void>;
   disconnect: () => void;
@@ -79,6 +83,47 @@ const getErrorName = (error: unknown) =>
 
 const getErrorMessage = (error: unknown) =>
   error instanceof Error ? error.message : String(error);
+
+export const isMicrophonePublicationCancelled = (error: unknown) => getErrorName(error) === 'AbortError';
+
+class LiveAudioRequestError extends Error {
+  readonly status: number;
+  readonly code: string | null;
+  constructor(status: number, code: string | null, message: string) {
+    super(message);
+    this.status = status;
+    this.code = code;
+  }
+}
+
+const readTokenResponse = async (response: Response): Promise<LiveAudioTokenResponse> => {
+  const body = await response.json().catch(() => null) as (LiveAudioTokenResponse & { error?: unknown; code?: unknown }) | null;
+  if (!response.ok) {
+    throw new LiveAudioRequestError(
+      response.status,
+      typeof body?.code === 'string' ? body.code : null,
+      typeof body?.error === 'string' ? body.error : `Live Audio request failed (HTTP ${response.status})`,
+    );
+  }
+  if (!body) throw new Error('Live Audio returned an invalid token response');
+  return body;
+};
+
+interface MicrophonePublicationOperation {
+  cancelled: boolean;
+  track: LocalAudioTrack | null;
+  audioContext: AudioContext | null;
+  processor: TrackProcessor<Track.Kind.Audio, AudioProcessorOptions> | null;
+  promise: Promise<void>;
+}
+
+const disposePendingMicrophone = (operation: MicrophonePublicationOperation) => {
+  operation.track?.stop();
+  if (operation.processor) void operation.processor.destroy().catch(() => undefined);
+  if (operation.audioContext && operation.audioContext.state !== 'closed') {
+    void operation.audioContext.close().catch(() => undefined);
+  }
+};
 
 const makeInitialMicrophoneDiagnostics = (): LiveAudioMicrophoneDiagnostics => ({
   secureContext: typeof window !== 'undefined' ? window.isSecureContext : false,
@@ -200,8 +245,7 @@ const requestToken = async (
     body: JSON.stringify({ role, roomSession, controlSessionId, audienceAccessCredential }),
   });
 
-  if (!response.ok) throw new Error('Live Audio token request failed');
-  return (await response.json()) as LiveAudioTokenResponse;
+  return readTokenResponse(response);
 };
 
 const refreshToken = async (participantId: string, refreshCredential: string) => {
@@ -218,8 +262,7 @@ const refreshToken = async (participantId: string, refreshCredential: string) =>
     body: JSON.stringify({ participantId, refreshCredential, audienceAccessCredential }),
   });
 
-  if (!response.ok) throw new Error('Live Audio token refresh failed');
-  return (await response.json()) as LiveAudioTokenResponse;
+  return readTokenResponse(response);
 };
 
 const stopAllLocalTracks = (room: Room | null, localAudioTrack: LocalAudioTrack | null) => {
@@ -245,27 +288,35 @@ export const useLiveAudio = ({
   const [controlParticipants, setControlParticipants] = useState<UseLiveAudioResult['controlParticipants']>([]);
   const [participantId, setParticipantId] = useState<string | null>(null);
   const [participantIdentity, setParticipantIdentity] = useState<string | null>(null);
+  const [sessionRevision, setSessionRevision] = useState(0);
   const [isMicrophoneActive, setIsMicrophoneActive] = useState(false);
   const [microphoneTrackState, setMicrophoneTrackState] = useState<MicrophoneTrackState>('notRequested');
   const [isDuckingActive, setIsDuckingActive] = useState(false);
+  const [hasAudioStarted, setHasAudioStarted] = useState(false);
   const [microphoneDiagnostics, setMicrophoneDiagnostics] = useState<LiveAudioMicrophoneDiagnostics>(makeInitialMicrophoneDiagnostics);
 
   const roomRef = useRef<Room | null>(null);
   const localAudioTrackRef = useRef<LocalAudioTrack | null>(null);
   const connectionRunRef = useRef(0);
-  const isConnectingRef = useRef(false);
+  const connectingRunRef = useRef<number | null>(null);
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reconnectFailureTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reconnectedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const tokenRef = useRef<LiveAudioTokenResponse | null>(null);
   const participantIdRef = useRef<string | null>(null);
   const userDisconnectedRef = useRef(false);
+  const automaticRecoveryRef = useRef(true);
+  const recoveryAttemptsRef = useRef(0);
   const microphoneVolumePercentRef = useRef(clampVolumePercent(microphoneVolumePercent));
   const microphoneDeviceIdRef = useRef(microphoneDeviceId);
   const microphoneGainNodeRef = useRef<GainNode | null>(null);
   const microphoneAudioContextRef = useRef<AudioContext | null>(null);
   const microphoneProcessorRef = useRef<TrackProcessor<Track.Kind.Audio, AudioProcessorOptions> | null>(null);
-  const isPublishingMicrophoneRef = useRef(false);
+  const microphonePublicationRef = useRef<MicrophonePublicationOperation | null>(null);
+  const microphoneIntentRef = useRef(0);
+  const pendingRefreshRef = useRef<{
+    participantId: string; credential: string; promise: Promise<LiveAudioTokenResponse>;
+  } | null>(null);
 
   const observeControls = useCallback((room: Room) => {
     const update = () => {
@@ -373,6 +424,7 @@ export const useLiveAudio = ({
   }, []);
 
   const setConnectedState = useCallback((nextState: LiveAudioConnectionState) => {
+    recoveryAttemptsRef.current = 0;
     clearTimer(reconnectFailureTimerRef);
     clearTimer(reconnectedTimerRef);
     setState((current) => {
@@ -435,11 +487,18 @@ export const useLiveAudio = ({
   }, [subscribePublication]);
 
   const unpublishMicrophone = useCallback(async () => {
+    microphoneIntentRef.current += 1;
+    const pending = microphonePublicationRef.current;
+    if (pending) {
+      pending.cancelled = true;
+      disposePendingMicrophone(pending);
+    }
     const room = roomRef.current;
     const localTrack = localAudioTrackRef.current;
+    setIsMicrophoneActive(false);
+    setMicrophoneTrackState('off');
+    clearMicrophoneProcessor();
     if (!localTrack) {
-      setIsMicrophoneActive(false);
-      setMicrophoneTrackState('off');
       return;
     }
 
@@ -449,10 +508,7 @@ export const useLiveAudio = ({
         await room.localParticipant.unpublishTrack(localTrack, true);
       }
     } finally {
-      stopAllLocalTracks(room, localTrack);
-      clearMicrophoneProcessor();
-      setIsMicrophoneActive(false);
-      setMicrophoneTrackState('off');
+      localTrack.stop();
     }
   }, [clearMicrophoneProcessor]);
 
@@ -467,12 +523,14 @@ export const useLiveAudio = ({
     localAudioTrackRef.current = null;
     roomRef.current = null;
     tokenRef.current = null;
+    pendingRefreshRef.current = null;
     participantIdRef.current = null;
     setRemoteTracks([]);
     setControlParticipants([]);
     setParticipantId(null);
     setParticipantIdentity(null);
     setIsDuckingActive(false);
+    setHasAudioStarted(false);
     window.dispatchEvent(new CustomEvent('sefer-autoduck', { detail: { active: false, isDuckingActive: false } }));
     setConnectionQuality('unknown');
     setState(availability === 'enabled' ? 'disconnected' : 'unavailable');
@@ -482,16 +540,58 @@ export const useLiveAudio = ({
     }
   }, [availability, clearLifecycleTimers, clearMicrophoneProcessor, unpublishMicrophone]);
 
+  const refreshCurrentToken = useCallback((id: string, credential: string) => {
+    if (pendingRefreshRef.current?.participantId !== id || pendingRefreshRef.current.credential !== credential) {
+      const promise = refreshToken(id, credential).finally(() => {
+        if (pendingRefreshRef.current?.promise === promise) pendingRefreshRef.current = null;
+      });
+      pendingRefreshRef.current = { participantId: id, credential, promise };
+    }
+    return pendingRefreshRef.current.promise;
+  }, []);
+
+  const requestConnectionToken = useCallback(async () => {
+    const runId = connectionRunRef.current;
+    const token = await requestToken(role, roomSession, controlSessionId);
+    if (connectionRunRef.current === runId) setSessionRevision((value) => value + 1);
+    return token;
+  }, [controlSessionId, role, roomSession]);
+
+  const obtainConnectionToken = useCallback(async () => {
+    const runId = connectionRunRef.current;
+    const id = participantIdRef.current;
+    if (id) {
+      try {
+        const token = await refreshCurrentToken(id, tokenRef.current?.refreshCredential || '');
+        if (connectionRunRef.current !== runId) throw new DOMException('Connection attempt cancelled', 'AbortError');
+        if (token.participantId !== id) throw new Error('Live Audio token refresh returned a different participant');
+        return token;
+      } catch (error) {
+        if (connectionRunRef.current !== runId) throw new DOMException('Connection attempt cancelled', 'AbortError');
+        const recoverable = error instanceof LiveAudioRequestError && (
+          (error.status === 401 && error.code === 'session_expired') ||
+          (error.status === 403 && error.code === 'participant_inactive')
+        );
+        if (!recoverable) throw error;
+        tokenRef.current = null;
+        participantIdRef.current = null;
+        setParticipantId(null);
+        setParticipantIdentity(null);
+      }
+    }
+    return requestConnectionToken();
+  }, [refreshCurrentToken, requestConnectionToken]);
+
   const scheduleTokenRefresh = useCallback((tokenResponse: LiveAudioTokenResponse, runId: number) => {
     clearTimer(refreshTimerRef);
     const timeUntilExpiry = tokenResponse.expiresInMs ?? (tokenResponse.expiresAt - Date.now());
     const delayMs = Math.max(timeUntilExpiry - TOKEN_REFRESH_MARGIN_MS, 5_000);
 
-    refreshTimerRef.current = setTimeout(() => {
+    const renew = () => {
       const activeParticipantId = participantIdRef.current;
       if (!activeParticipantId || connectionRunRef.current !== runId) return;
 
-      void refreshToken(activeParticipantId, tokenResponse.refreshCredential)
+      void refreshCurrentToken(activeParticipantId, tokenResponse.refreshCredential)
         .then((nextToken) => {
           if (connectionRunRef.current !== runId) return;
           if (nextToken.participantId !== activeParticipantId) {
@@ -501,11 +601,21 @@ export const useLiveAudio = ({
           setParticipantIdentity(nextToken.participantIdentity);
           scheduleTokenRefresh(nextToken, runId);
         })
-        .catch(() => {
-          if (connectionRunRef.current === runId) setState('reconnectFailed');
+        .catch((error) => {
+          if (connectionRunRef.current !== runId) return;
+          // A failed API renewal does not mean the media connection failed.
+          // Keep listening and retry transient errors without replacing Room.
+          if (error instanceof LiveAudioRequestError && error.status < 500) {
+            automaticRecoveryRef.current =
+              (error.status === 401 && error.code === 'session_expired') ||
+              (error.status === 403 && error.code === 'participant_inactive');
+          } else {
+            refreshTimerRef.current = setTimeout(renew, 30_000);
+          }
         });
-    }, delayMs);
-  }, []);
+    };
+    refreshTimerRef.current = setTimeout(renew, delayMs);
+  }, [refreshCurrentToken]);
 
   const publishMicrophone = useCallback(async (options?: { musicMode?: boolean }) => {
     if (!canRolePublish(role)) {
@@ -516,9 +626,20 @@ export const useLiveAudio = ({
       throw new Error('Live Audio room is not connected');
     }
     if (localAudioTrackRef.current) return;
-    if (isPublishingMicrophoneRef.current) return;
-
-    isPublishingMicrophoneRef.current = true;
+    if (microphonePublicationRef.current) return microphonePublicationRef.current.promise;
+    const operation: MicrophonePublicationOperation = {
+      cancelled: false, track: null, audioContext: null, processor: null, promise: Promise.resolve(),
+    };
+    const runId = connectionRunRef.current;
+    const checkCurrent = () => {
+      if (operation.cancelled || connectionRunRef.current !== runId || roomRef.current !== room ||
+          room.state !== ConnectionState.Connected ||
+          (role === 'audience' && room.localParticipant.permissions?.canPublish !== true)) {
+        throw new DOMException('Microphone publication cancelled', 'AbortError');
+      }
+    };
+    microphonePublicationRef.current = operation;
+    operation.promise = (async () => {
     setIsMicrophoneActive(false);
     setMicrophoneTrackState('publishing');
     const startedAt = performance.now();
@@ -539,13 +660,18 @@ export const useLiveAudio = ({
       });
       console.log(`[LIVEKIT] livekit:microphone:track-created durationMs=${Math.round(performance.now() - startedAt)}`);
       pendingLocalTrack = localTrack;
+      operation.track = localTrack;
+      checkCurrent();
       stage = 'processing';
       const audioContext = createBrowserAudioContext();
+      operation.audioContext = audioContext;
       if (audioContext) {
         try {
           localTrack.setAudioContext(audioContext);
           const processor = createMicrophoneGainProcessor(microphoneVolumePercentRef, microphoneGainNodeRef);
+          operation.processor = processor;
           await localTrack.setProcessor(processor);
+          checkCurrent();
           microphoneAudioContextRef.current = audioContext;
           microphoneProcessorRef.current = processor;
           console.log(`[LIVEKIT] livekit:microphone:processor-ready durationMs=${Math.round(performance.now() - startedAt)}`);
@@ -557,12 +683,19 @@ export const useLiveAudio = ({
         }
       }
       stage = 'publication';
+      checkCurrent();
       await room.localParticipant.publishTrack(localTrack, {
         source: Track.Source.Microphone,
         name: 'microphone',
         dtx: true,
         red: true,
       });
+      try {
+        checkCurrent();
+      } catch (error) {
+        await room.localParticipant.unpublishTrack(localTrack, true).catch(() => undefined);
+        throw error;
+      }
       localAudioTrackRef.current = localTrack;
       pendingLocalTrack = null;
       setIsMicrophoneActive(true);
@@ -574,6 +707,11 @@ export const useLiveAudio = ({
         lastErrorMessage: null,
       }));
     } catch (error) {
+      pendingLocalTrack?.stop();
+      disposePendingMicrophone(operation);
+      if (operation.cancelled || connectionRunRef.current !== runId || isMicrophonePublicationCancelled(error)) {
+        throw new DOMException('Microphone publication cancelled', 'AbortError');
+      }
       setIsMicrophoneActive(false);
       setMicrophoneTrackState('error');
       console.warn(`[LIVEKIT] livekit:microphone:failed stage=${stage} error=${getErrorName(error)} durationMs=${Math.round(performance.now() - startedAt)}`);
@@ -585,20 +723,36 @@ export const useLiveAudio = ({
       }));
       if (isPermissionDeniedError(error)) {
         console.log(`[LIVEKIT] livekit:microphone:permission-denied`);
-        setState('permissionDenied');
       }
       pendingLocalTrack?.stop();
       clearMicrophoneProcessor();
       throw error;
     } finally {
-      isPublishingMicrophoneRef.current = false;
+      if (microphonePublicationRef.current === operation) microphonePublicationRef.current = null;
     }
+    })();
+    return operation.promise;
   }, [clearMicrophoneProcessor, role]);
+
+  const republishMicrophone = useCallback(async (options: { musicMode: boolean }) => {
+    if (!localAudioTrackRef.current && !microphonePublicationRef.current) return;
+    const expectedIntent = microphoneIntentRef.current + 1;
+    const pending = microphonePublicationRef.current?.promise;
+    await unpublishMicrophone();
+    await pending?.catch(() => undefined);
+    if (microphoneIntentRef.current !== expectedIntent) {
+      throw new DOMException('Microphone configuration cancelled', 'AbortError');
+    }
+    await publishMicrophone(options);
+  }, [publishMicrophone, unpublishMicrophone]);
 
   const startRemoteAudio = useCallback(async () => {
     const room = roomRef.current;
-    if (!room || room.state !== ConnectionState.Connected) return;
+    if (!room || room.state !== ConnectionState.Connected) return false;
     await room.startAudio();
+    if (roomRef.current !== room || room.state !== ConnectionState.Connected) return false;
+    setHasAudioStarted(true);
+    return true;
   }, []);
 
   useEffect(() => {
@@ -619,6 +773,7 @@ export const useLiveAudio = ({
       stopLocalTrackOnUnpublish: true,
     });
     roomRef.current = room;
+    setHasAudioStarted(false);
     observeControls(room);
 
     const handleConnectionStateChanged = (nextState: ConnectionState) => {
@@ -667,22 +822,23 @@ export const useLiveAudio = ({
         setIsDuckingActive(active);
         window.dispatchEvent(new CustomEvent('sefer-autoduck', { detail: { active, isDuckingActive: active } }));
       })
-      .on(RoomEvent.Disconnected, () => {
+      .on(RoomEvent.Disconnected, (reason?: DisconnectReason) => {
         if (connectionRunRef.current !== runId || userDisconnectedRef.current) return;
-        setState('reconnecting');
-        scheduleReconnectFailure(runId);
+        automaticRecoveryRef.current = automaticRecoveryRef.current && ![
+          DisconnectReason.CLIENT_INITIATED, DisconnectReason.DUPLICATE_IDENTITY,
+          DisconnectReason.PARTICIPANT_REMOVED, DisconnectReason.ROOM_DELETED,
+        ].includes(reason as DisconnectReason);
+        void unpublishMicrophone();
+        setState('reconnectFailed');
       });
 
     const connect = async () => {
-      if (isConnectingRef.current || room.state === ConnectionState.Connected) return;
-      isConnectingRef.current = true;
+      if (connectingRunRef.current === runId || room.state === ConnectionState.Connected) return;
+      connectingRunRef.current = runId;
       setState('connecting');
       try {
-        const existingParticipantId = participantIdRef.current;
         console.log(`[LIVEKIT] livekit:connect:start role=${role}`);
-        const tokenResponse = existingParticipantId
-          ? await refreshToken(existingParticipantId, tokenRef.current?.refreshCredential || '')
-          : await requestToken(role, roomSession, controlSessionId);
+        const tokenResponse = await obtainConnectionToken();
         if (cancelled || connectionRunRef.current !== runId) return;
         tokenRef.current = tokenResponse;
         setParticipantId(tokenResponse.participantId);
@@ -692,13 +848,15 @@ export const useLiveAudio = ({
         console.log(`[LIVEKIT] livekit:connect:success`);
         subscribeExistingAudio(room);
         scheduleTokenRefresh(tokenResponse, runId);
+        automaticRecoveryRef.current = true;
         setConnectionQuality(mapConnectionQuality(room.localParticipant.connectionQuality));
         setConnectedState('connected');
       } catch (err) {
         if (cancelled || connectionRunRef.current !== runId) return;
+        automaticRecoveryRef.current = !(err instanceof LiveAudioRequestError && err.status < 500) && !isPermissionDeniedError(err);
         const errMsg = err instanceof Error ? err.message : String(err);
         console.log(`[LIVEKIT] livekit:connect:fail error=${errMsg}`);
-        if (errMsg.toLowerCase().includes('invalid token') || errMsg.toLowerCase().includes('expired') || errMsg.toLowerCase().includes('unauthorized')) {
+        if (!(err instanceof LiveAudioRequestError) && (errMsg.toLowerCase().includes('invalid token') || errMsg.toLowerCase().includes('expired'))) {
           console.log(`[LIVEKIT] livekit:invalid-token:retry discarding token and retrying once...`);
           tokenRef.current = null;
           setParticipantId(null);
@@ -706,7 +864,7 @@ export const useLiveAudio = ({
           participantIdRef.current = null;
           
           try {
-            const tokenResponse = await requestToken(role, roomSession, controlSessionId);
+            const tokenResponse = await requestConnectionToken();
             if (cancelled || connectionRunRef.current !== runId) return;
             tokenRef.current = tokenResponse;
             setParticipantId(tokenResponse.participantId);
@@ -716,6 +874,7 @@ export const useLiveAudio = ({
             console.log(`[LIVEKIT] livekit:connect:success (retry)`);
             subscribeExistingAudio(room);
             scheduleTokenRefresh(tokenResponse, runId);
+            automaticRecoveryRef.current = true;
             setConnectionQuality(mapConnectionQuality(room.localParticipant.connectionQuality));
             setConnectedState('connected');
             return;
@@ -727,7 +886,7 @@ export const useLiveAudio = ({
         }
         setState(participantIdRef.current ? 'reconnectFailed' : 'unavailable');
       } finally {
-        isConnectingRef.current = false;
+        if (connectingRunRef.current === runId) connectingRunRef.current = null;
       }
     };
 
@@ -735,14 +894,18 @@ export const useLiveAudio = ({
 
     return () => {
       cancelled = true;
+      connectionRunRef.current += 1;
       clearLifecycleTimers();
-      if (roomRef.current === room) roomRef.current = null;
+      const activeRoom = roomRef.current;
+      roomRef.current = null;
       room.removeAllListeners();
+      activeRoom?.removeAllListeners();
       void unpublishMicrophone();
-      stopAllLocalTracks(room, localAudioTrackRef.current);
+      stopAllLocalTracks(activeRoom, localAudioTrackRef.current);
       clearMicrophoneProcessor();
       localAudioTrackRef.current = null;
       void room.disconnect(true);
+      if (activeRoom && activeRoom !== room) void activeRoom.disconnect(true);
       setRemoteTracks([]);
       setControlParticipants([]);
     };
@@ -764,14 +927,19 @@ export const useLiveAudio = ({
     clearLifecycleTimers,
     controlSessionId,
     observeControls,
+    obtainConnectionToken,
+    requestConnectionToken,
   ]);
 
   const retryAudio = useCallback(async () => {
+    if (connectingRunRef.current === connectionRunRef.current) return;
     connectionRunRef.current += 1;
     const runId = connectionRunRef.current;
+    connectingRunRef.current = runId;
     clearLifecycleTimers();
     userDisconnectedRef.current = false;
 
+    try {
     const previousRoom = roomRef.current;
     void unpublishMicrophone();
     stopAllLocalTracks(previousRoom, localAudioTrackRef.current);
@@ -779,6 +947,7 @@ export const useLiveAudio = ({
     localAudioTrackRef.current = null;
     previousRoom?.removeAllListeners();
     await previousRoom?.disconnect(true);
+    if (connectionRunRef.current !== runId) return;
 
     const room = new Room({
       adaptiveStream: false,
@@ -786,6 +955,7 @@ export const useLiveAudio = ({
       stopLocalTrackOnUnpublish: true,
     });
     roomRef.current = room;
+    setHasAudioStarted(false);
     observeControls(room);
     setRemoteTracks([]);
     setControlParticipants([]);
@@ -818,6 +988,15 @@ export const useLiveAudio = ({
       .on(RoomEvent.TrackUnsubscribed, (track: RemoteTrack) => {
         removeRemoteTrack(track);
       })
+      .on(RoomEvent.Disconnected, (reason?: DisconnectReason) => {
+        if (connectionRunRef.current !== runId || userDisconnectedRef.current) return;
+        automaticRecoveryRef.current = automaticRecoveryRef.current && ![
+          DisconnectReason.CLIENT_INITIATED, DisconnectReason.DUPLICATE_IDENTITY,
+          DisconnectReason.PARTICIPANT_REMOVED, DisconnectReason.ROOM_DELETED,
+        ].includes(reason as DisconnectReason);
+        void unpublishMicrophone();
+        setState('reconnectFailed');
+      })
       .on(RoomEvent.ActiveSpeakersChanged, (speakers: Participant[]) => {
         if (connectionRunRef.current !== runId) return;
         const duckRoles = (import.meta.env.VITE_AUTODUCK_ROLES || 'control,audience').split(',');
@@ -830,13 +1009,8 @@ export const useLiveAudio = ({
         window.dispatchEvent(new CustomEvent('sefer-autoduck', { detail: { active, isDuckingActive: active } }));
       });
 
-    try {
-      isConnectingRef.current = true;
-      const activeParticipantId = participantIdRef.current;
       console.log(`[LIVEKIT] livekit:connect:start role=${role} (retryAudio)`);
-      const tokenResponse = activeParticipantId
-        ? await refreshToken(activeParticipantId, tokenRef.current?.refreshCredential || '')
-        : await requestToken(role, roomSession, controlSessionId);
+      const tokenResponse = await obtainConnectionToken();
       if (connectionRunRef.current !== runId) return;
       tokenRef.current = tokenResponse;
       setParticipantId(tokenResponse.participantId);
@@ -846,23 +1020,24 @@ export const useLiveAudio = ({
       console.log(`[LIVEKIT] livekit:connect:success`);
       subscribeExistingAudio(room);
       scheduleTokenRefresh(tokenResponse, runId);
+      automaticRecoveryRef.current = true;
       setConnectionQuality(mapConnectionQuality(room.localParticipant.connectionQuality));
       setConnectedState('connected');
     } catch (err) {
+      if (connectionRunRef.current !== runId) return;
+      automaticRecoveryRef.current = !(err instanceof LiveAudioRequestError && err.status < 500) && !isPermissionDeniedError(err);
       const errMsg = err instanceof Error ? err.message : String(err);
       console.log(`[LIVEKIT] livekit:connect:fail error=${errMsg}`);
       if (connectionRunRef.current === runId) setState('reconnectFailed');
     } finally {
-      isConnectingRef.current = false;
+      if (connectingRunRef.current === runId) connectingRunRef.current = null;
     }
   }, [
     addRemoteTrack,
     clearMicrophoneProcessor,
     clearLifecycleTimers,
-    controlSessionId,
     removeRemoteTrack,
     role,
-    roomSession,
     scheduleReconnectFailure,
     scheduleTokenRefresh,
     setConnectedState,
@@ -870,7 +1045,28 @@ export const useLiveAudio = ({
     subscribePublication,
     unpublishMicrophone,
     observeControls,
+    obtainConnectionToken,
   ]);
+
+  useEffect(() => {
+    if (!autoConnect || availability !== 'enabled' || userDisconnectedRef.current || !automaticRecoveryRef.current ||
+        !['reconnectFailed', 'unavailable'].includes(state) || recoveryAttemptsRef.current >= 8) return;
+    const delay = Math.min(1_000 * 2 ** recoveryAttemptsRef.current, 30_000);
+    const timer = setTimeout(() => {
+      recoveryAttemptsRef.current += 1;
+      void retryAudio();
+    }, delay);
+    const handleOnline = () => {
+      clearTimeout(timer);
+      recoveryAttemptsRef.current = 0;
+      void retryAudio();
+    };
+    window.addEventListener('online', handleOnline);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('online', handleOnline);
+    };
+  }, [autoConnect, availability, retryAudio, state]);
 
   useEffect(() => {
     type WakeLockSentinelLike = { release: () => Promise<void> };
@@ -918,11 +1114,14 @@ export const useLiveAudio = ({
     controlParticipants,
     participantId,
     participantIdentity,
+    sessionRevision,
     isMicrophoneActive,
     microphoneTrackState,
     isDuckingActive,
+    hasAudioStarted,
     startRemoteAudio,
     publishMicrophone,
+    republishMicrophone,
     unpublishMicrophone,
     retryAudio,
     disconnect,
@@ -934,10 +1133,13 @@ export const useLiveAudio = ({
     isMicrophoneActive,
     microphoneTrackState,
     isDuckingActive,
+    hasAudioStarted,
     connectionQuality,
     participantId,
     participantIdentity,
+    sessionRevision,
     publishMicrophone,
+    republishMicrophone,
     retryAudio,
     remoteTracks,
     controlParticipants,

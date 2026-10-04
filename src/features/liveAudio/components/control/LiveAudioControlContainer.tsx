@@ -114,6 +114,7 @@ const snapshotParticipantToStatus = (
   isKicked: participant.isKicked,
   microphonePermissionState: participant.microphonePermissionState,
   microphoneTrackState: participant.microphoneTrackState,
+  liveAudioConnectionState: participant.liveAudioConnectionState,
   isAliasVisibleToActiveParticipants: participant.isAliasVisibleToActiveParticipants,
   canViewActiveParticipants: participant.canViewActiveParticipants,
   isAliasHiddenByControl: participant.isAliasHiddenByControl,
@@ -184,6 +185,7 @@ export default function LiveAudioControlContainer({
     state,
     connectionQuality,
     publishMicrophone,
+    republishMicrophone,
     unpublishMicrophone,
     isMicrophoneActive,
     participantId,
@@ -832,6 +834,7 @@ export default function LiveAudioControlContainer({
           isMuted: p.isMuted ?? !isMicrophoneActive,
           isMicrophoneActive,
           microphoneTrackState: p.microphoneTrackState,
+          liveAudioConnectionState: p.liveAudioConnectionState,
           isActiveAudience,
           isKicked,
           isAliasVisibleToActiveParticipants: p.isAliasVisibleToActiveParticipants,
@@ -885,12 +888,11 @@ export default function LiveAudioControlContainer({
     setIsModeratorMusicMode(nextMusicMode);
     if (!isMicrophoneActive || nextMusicMode === isModeratorMusicMode) return;
 
-    void unpublishMicrophone()
-      .then(() => publishMicrophone({ musicMode: nextMusicMode }))
+    void republishMicrophone({ musicMode: nextMusicMode })
       .catch((err) => {
         console.error('Failed to republish moderator microphone with music mode:', err);
       });
-  }, [isMicrophoneActive, isModeratorMusicMode, publishMicrophone, unpublishMicrophone]);
+  }, [isMicrophoneActive, isModeratorMusicMode, republishMicrophone]);
 
   applyControllerConfig.current = (data) => {
     if (data.targetParticipantId !== participantId) return;
@@ -994,7 +996,9 @@ export default function LiveAudioControlContainer({
       ? queued
       : participants.filter(p => p.speakerState === 'LISTENER' && p.isActiveAudience && !p.isKicked);
 
-    targets.forEach(p => void doModerationAction('grant-speak', p.participantId));
+    targets
+      .filter(p => p.liveAudioConnectionState === 'connected' || p.liveAudioConnectionState === 'reconnected')
+      .forEach(p => void doModerationAction('grant-speak', p.participantId));
   }, [doModerationAction, participants]);
 
   const handleParticipantMicrophoneConfigChange = useCallback((id: string, config: { volume?: number; musicMode?: boolean }) => {

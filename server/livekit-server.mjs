@@ -68,7 +68,43 @@ const statusPayload = () => {
       ? { enabled: false }
       : { enabled: false, available: false, reason: config.reason }
   }
-  return { enabled: true, available: true }
+  return { enabled: true, available: false }
+}
+
+const sdkErrorCodes = new Set(['not_found', 'invalid_argument', 'unauthenticated', 'permission_denied', 'canceled', 'deadline_exceeded', 'unavailable', 'internal', 'unknown', 'already_exists', 'resource_exhausted', 'aborted', 'failed_precondition'])
+const sdkErrorDetails = (error) => ({
+  status: Number.isInteger(error?.status) && error.status >= 100 && error.status <= 599 ? error.status : 0,
+  code: sdkErrorCodes.has(error?.code) ? error.code : 'unknown',
+})
+const isParticipantAbsent = (error) => error?.code === 'not_found'
+
+const markParticipantAbsent = (participant) => {
+  participant.livekitConnected = false
+  participant.speakerState = 'LISTENER'
+  participant.canPublish = false
+  roomState.speakers.delete(participant.participantId)
+  roomState.muted.delete(participant.participantId)
+}
+
+const updatePublishPermission = async (client, participant, canPublish) => {
+  await client.updateParticipant(participant.room, participant.participantIdentity, {
+    permission: {
+      canPublish,
+      canSubscribe: participant.canSubscribe,
+      canPublishData: false,
+      canPublishSources: canPublish ? [TrackSource.MICROPHONE] : [],
+    },
+  })
+  participant.livekitConnected = true
+}
+
+const muteParticipantTracks = async (client, participant) => {
+  const remoteParticipant = await client.getParticipant(participant.room, participant.participantIdentity)
+  for (const track of remoteParticipant.tracks || []) {
+    if (track.source !== TrackSource.MICROPHONE) continue
+    await client.mutePublishedTrack(participant.room, participant.participantIdentity, track.sid, true)
+  }
+  participant.livekitConnected = true
 }
 
 const base64url = (value) =>
@@ -108,9 +144,7 @@ const getRoomName = (config, roomSession) => {
 
 const canAudiencePublish = (participantId, existingParticipant) => {
   if (participantId && roomState.kicked.has(participantId)) return false
-  return Boolean(participantId && roomState.speakers.has(participantId)) ||
-    existingParticipant?.speakerState === 'GRANTED' ||
-    existingParticipant?.canPublish === true
+  return existingParticipant?.canPublish === true
 }
 
 const getVideoGrant = (role, room, config, participantId, existingParticipant) => {
@@ -136,7 +170,7 @@ const getVideoGrant = (role, room, config, participantId, existingParticipant) =
   }
 }
 
-const issueToken = ({ role, roomSession, controlSessionId, existingParticipant }) => {
+const issueToken = ({ role, roomSession, controlSessionId, existingParticipant, audienceParticipantId }) => {
   const config = getConfig()
   if (!config.enabled) {
     return { ok: false, status: 503, error: 'Live Audio is disabled or misconfigured' }
@@ -149,9 +183,13 @@ const issueToken = ({ role, roomSession, controlSessionId, existingParticipant }
   const nowSeconds = Math.floor(Date.now() / 1000)
   const expiresInMs = config.tokenTtlMinutes * 60_000
   const expiresAt = Date.now() + expiresInMs
-  const participantId = existingParticipant?.participantId || randomUUID()
+  const participantId = existingParticipant?.participantId || audienceParticipantId || randomUUID()
   const participantIdentity = existingParticipant?.participantIdentity || `${role}-${participantId}`
   const room = getRoomName(config, roomSession || existingParticipant?.roomSession)
+  if (!existingParticipant && audienceParticipantId) {
+    roomState.speakers.delete(participantId)
+    roomState.muted.delete(participantId)
+  }
   const video = getVideoGrant(role, room, config, participantId, existingParticipant)
   const payload = {
     iss: config.apiKey,
@@ -177,6 +215,7 @@ const issueToken = ({ role, roomSession, controlSessionId, existingParticipant }
     issuedAt: Date.now(),
     expiresAt,
     lastSeenAt: Date.now(),
+    livekitConnected: existingParticipant?.livekitConnected ?? false,
     refreshCredentialHash: hashRefreshCredential(refreshCredential),
   }
 
@@ -217,13 +256,16 @@ const requireConfigured = (res, sendJson) => {
 const isValidParticipantId = (value) =>
   typeof value === 'string' && uuidV4Pattern.test(value) && participants.has(value)
 
-const requireAuthorizedControl = (body, controlApi) => {
+const requireAuthorizedControl = (body, controlApi, req) => {
+  if (!hasValidBasicAuth(req)) {
+    return { ok: false, status: 403, code: 'privileged_auth_required', error: 'Live Audio moderation requires authentication' }
+  }
   if (!isRecord(body) || body.role !== 'control') {
-    return { ok: false, status: 403, error: 'Only authorized Control can perform this action' }
+    return { ok: false, status: 403, code: 'control_unauthorized', error: 'Only authorized Control can perform this action' }
   }
 
   if (typeof body.controlSessionId !== 'string' || !controlApi.isLiveAudioControlAuthorized(body.controlSessionId)) {
-    return { ok: false, status: 403, error: 'Control is not authorized' }
+    return { ok: false, status: 403, code: 'control_unauthorized', error: 'Control is not authorized' }
   }
 
   return { ok: true }
@@ -265,11 +307,15 @@ const handleToken = async ({ req, res, readBody, sendJson, controlApi }) => {
   if (!requireConfigured(res, sendJson)) return true
   const body = await readJson(req, readBody)
   const requestedRole = roles.has(body.role) ? body.role : 'audience'
+  let audienceRecord
 
-  if (requestedRole === 'audience' && controlApi?.getSessionAccessMode?.() === 'CONTROLLED') {
-    const record = controlApi?.authorizeAudienceCredential?.(body.audienceAccessCredential)
-    if (!record) {
-      sendJson(res, 403, { error: 'Audience admission is required for Live Audio' })
+  if (requestedRole === 'audience') {
+    audienceRecord = controlApi?.authorizeAudienceCredential?.(body.audienceAccessCredential)
+    if (
+      audienceRecord?.accessState === 'BLOCKED' ||
+      (!audienceRecord && (controlApi?.getSessionAccessMode?.() === 'CONTROLLED' || body.audienceAccessCredential !== undefined))
+    ) {
+      sendJson(res, 403, { code: 'admission_required', error: 'Audience admission is required for Live Audio' })
       return true
     }
   }
@@ -292,6 +338,7 @@ const handleToken = async ({ req, res, readBody, sendJson, controlApi }) => {
     role: requestedRole,
     roomSession: body.roomSession,
     controlSessionId: requestedRole === 'control' ? body.controlSessionId : undefined,
+    audienceParticipantId: requestedRole === 'audience' ? audienceRecord?.participantId : undefined,
   })
 
   if (!result.ok) {
@@ -307,54 +354,40 @@ const handleRefreshToken = async ({ req, res, readBody, sendJson, controlApi }) 
   if (!requireConfigured(res, sendJson)) return true
   const body = await readJson(req, readBody)
   if (!isValidParticipantId(body.participantId)) {
-    sendJson(res, 403, { error: 'Participant is not active' })
+    sendJson(res, 403, { code: 'participant_inactive', error: 'Participant is not active' })
     return true
   }
 
   const existingParticipant = participants.get(body.participantId)
-  if (
-    existingParticipant.role === 'audience' &&
-    controlApi?.getSessionAccessMode?.() === 'CONTROLLED' &&
-    !controlApi?.authorizeAudienceCredential?.(body.audienceAccessCredential)
-  ) {
-    sendJson(res, 403, { error: 'Audience admission is required for Live Audio' })
-    return true
+  if (existingParticipant.role === 'audience') {
+    const audienceRecord = controlApi?.authorizeAudienceCredential?.(body.audienceAccessCredential)
+    if (
+      audienceRecord?.accessState === 'BLOCKED' ||
+      (controlApi?.getSessionAccessMode?.() === 'CONTROLLED' &&
+        (!audienceRecord || audienceRecord.participantId !== existingParticipant.participantId))
+    ) {
+      sendJson(res, 403, { code: 'admission_required', error: 'Audience admission is required for Live Audio' })
+      return true
+    }
   }
   if (existingParticipant.expiresAt <= Date.now()) {
-    sendJson(res, 401, { error: 'Live Audio session has expired' })
+    sendJson(res, 401, { code: 'session_expired', error: 'Live Audio session has expired' })
     return true
   }
   if (!hasValidRefreshCredential(existingParticipant, body.refreshCredential)) {
-    sendJson(res, 403, { error: 'Live Audio refresh credential is invalid' })
+    sendJson(res, 403, { code: 'refresh_credential_invalid', error: 'Live Audio refresh credential is invalid' })
     return true
   }
   if (existingParticipant.role !== 'audience' && !hasValidBasicAuth(req)) {
-    sendJson(res, 403, { error: 'Privileged Live Audio refresh requires authentication' })
+    sendJson(res, 403, { code: 'privileged_auth_required', error: 'Privileged Live Audio refresh requires authentication' })
     return true
   }
   if (
     existingParticipant.role === 'control' &&
     !controlApi?.isLiveAudioControlAuthorized?.(existingParticipant.controlSessionId)
   ) {
-    sendJson(res, 403, { error: 'Control is no longer authorized for Live Audio' })
+    sendJson(res, 403, { code: 'control_unauthorized', error: 'Control is no longer authorized for Live Audio' })
     return true
-  }
-  const wsParticipant = controlApi?.getLiveAudioParticipantState?.(body.participantId)
-  if (wsParticipant) {
-    existingParticipant.speakerState = wsParticipant.speakerState
-    existingParticipant.canPublish = wsParticipant.canPublishAudio
-    existingParticipant.canSubscribe = wsParticipant.canSubscribe
-    if (wsParticipant.speakerState === 'GRANTED' || wsParticipant.canPublishAudio) {
-      roomState.speakers.add(body.participantId)
-      if (wsParticipant.isMuted) {
-        roomState.muted.add(body.participantId)
-      } else {
-        roomState.muted.delete(body.participantId)
-      }
-    } else if (wsParticipant.speakerState === 'REVOKED' || wsParticipant.speakerState === 'MUTED' || wsParticipant.speakerState === 'LISTENER') {
-      roomState.speakers.delete(body.participantId)
-      if (wsParticipant.speakerState === 'MUTED') roomState.muted.add(body.participantId)
-    }
   }
   const result = issueToken({
     role: existingParticipant.role,
@@ -372,17 +405,31 @@ const handleRefreshToken = async ({ req, res, readBody, sendJson, controlApi }) 
 const handleModeration = async ({ req, res, url, readBody, sendJson, controlApi, getRoomServiceClient }) => {
   if (!requireConfigured(res, sendJson)) return true
   const body = await readJson(req, readBody)
-  const auth = requireAuthorizedControl(body, controlApi)
+  const auth = requireAuthorizedControl(body, controlApi, req)
 
   if (!auth.ok) {
-    sendJson(res, auth.status, { error: auth.error })
+    sendJson(res, auth.status, { code: auth.code, error: auth.error })
     return true
   }
 
   if (url.pathname === '/api/livekit/mute-all') {
+    const excluded = new Set(Array.isArray(body.excludeParticipantIds) ? body.excludeParticipantIds : [])
     for (const [participantId, participant] of participants) {
       if (participant.role === 'control') continue
       if (participant.speakerState !== 'GRANTED') continue
+      if (excluded.has(participantId)) continue
+      try {
+        await muteParticipantTracks(getRoomServiceClient(), participant)
+      } catch (error) {
+        const details = sdkErrorDetails(error)
+        console.warn(`[LIVEKIT] livekit:moderation:permission-failed action=mute-all status=${details.status} code=${details.code}`)
+        if (isParticipantAbsent(error)) {
+          markParticipantAbsent(participant)
+          continue
+        }
+        sendJson(res, 502, { code: 'livekit_unavailable', error: 'LiveKit could not mute all participants' })
+        return true
+      }
       roomState.speakers.add(participantId)
       roomState.muted.add(participantId)
       participant.speakerState = 'GRANTED'
@@ -395,35 +442,41 @@ const handleModeration = async ({ req, res, url, readBody, sendJson, controlApi,
 
   const participantId = body.participantId
   if (!isValidParticipantId(participantId)) {
-    sendJson(res, 404, { error: 'Participant not found' })
+    sendJson(res, 409, { code: 'participant_not_ready', error: 'Participant needs to reconnect to Live Audio' })
     return true
   }
 
   const participant = participants.get(participantId)
+  if (url.pathname === '/api/livekit/mute-participant' && !participant.canPublish) {
+    sendJson(res, 409, { code: 'publish_permission_required', error: 'Participant does not have microphone permission' })
+    return true
+  }
   const publishPermission = url.pathname === '/api/livekit/grant-speak'
     ? true
     : ['/api/livekit/revoke-speak', '/api/livekit/kick-participant', '/api/livekit/rescue-participant'].includes(url.pathname)
       ? false
       : null
 
-  if (publishPermission !== null) {
+  if (publishPermission !== null || url.pathname === '/api/livekit/mute-participant') {
     const action = url.pathname.replace('/api/livekit/', '')
     const startedAt = Date.now()
     console.log(`[LIVEKIT] livekit:moderation:request action=${action}`)
     try {
-      await getRoomServiceClient().updateParticipant(participant.room, participant.participantIdentity, {
-        permission: {
-          canPublish: publishPermission,
-          canSubscribe: participant.canSubscribe,
-          canPublishData: false,
-          canPublishSources: publishPermission ? [TrackSource.MICROPHONE] : [],
-        },
-      })
+      if (publishPermission === null) {
+        await muteParticipantTracks(getRoomServiceClient(), participant)
+      } else {
+        await updatePublishPermission(getRoomServiceClient(), participant, publishPermission)
+      }
       console.log(`[LIVEKIT] livekit:moderation:permission-updated action=${action} durationMs=${Date.now() - startedAt}`)
     } catch (error) {
-      const errorName = error instanceof Error ? error.name : 'Error'
-      console.warn(`[LIVEKIT] livekit:moderation:permission-failed action=${action} error=${errorName}`)
-      sendJson(res, 502, { error: 'LiveKit rejected the participant permission update' })
+      const details = sdkErrorDetails(error)
+      console.warn(`[LIVEKIT] livekit:moderation:permission-failed action=${action} status=${details.status} code=${details.code}`)
+      if (isParticipantAbsent(error)) {
+        markParticipantAbsent(participant)
+        sendJson(res, 409, { code: 'participant_not_ready', error: 'Participant needs to reconnect to Live Audio' })
+      } else {
+        sendJson(res, 502, { code: 'livekit_unavailable', error: 'LiveKit rejected the participant permission update' })
+      }
       return true
     }
   }
@@ -482,29 +535,82 @@ export const createLiveKitApi = (controlApi, options = {}) => {
   const cleanupTimer = setInterval(cleanupExpiredState, 30_000)
   cleanupTimer.unref?.()
   let roomServiceClient = options.roomServiceClient
+  let cachedStatus = { enabled: getConfig().enabled, available: false }
+  let statusExpiresAt = 0
+  let pendingStatus = null
+  let revokingAll = false
+  const pendingModerations = new Set()
 
   const getRoomServiceClient = () => {
     if (roomServiceClient) return roomServiceClient
     const config = getConfig()
-    roomServiceClient = new RoomServiceClient(config.livekitApiUrl, config.apiKey, config.apiSecret)
+    roomServiceClient = new RoomServiceClient(config.livekitApiUrl, config.apiKey, config.apiSecret, { requestTimeout: 2 })
     return roomServiceClient
+  }
+
+  const getOperationalStatus = async () => {
+    const configStatus = statusPayload()
+    if (!configStatus.enabled) return configStatus
+    if (Date.now() < statusExpiresAt) return cachedStatus
+    if (pendingStatus) return pendingStatus
+    pendingStatus = (async () => {
+      let timeout
+      try {
+        await Promise.race([
+          Promise.resolve().then(() => getRoomServiceClient().listRooms()),
+          new Promise((_, reject) => { timeout = setTimeout(() => reject(new Error('LiveKit readiness timeout')), options.statusTimeoutMs ?? 2000) }),
+        ])
+        cachedStatus = { enabled: true, available: true }
+      } catch (error) {
+        const details = sdkErrorDetails(error)
+        console.warn(`[LIVEKIT] livekit:status:unavailable status=${details.status} code=${details.code}`)
+        cachedStatus = { enabled: true, available: false, reason: 'livekit-unreachable' }
+      } finally {
+        clearTimeout(timeout)
+        statusExpiresAt = Date.now() + 5000
+        pendingStatus = null
+      }
+      return cachedStatus
+    })()
+    return pendingStatus
   }
 
   return {
     close: () => clearInterval(cleanupTimer),
-    revokeAllSpeakers: () => {
-      for (const participant of participants.values()) {
-        if (participant.role === 'control') continue
-        participant.speakerState = 'LISTENER'
-        participant.canPublish = false
-        participant.lastSeenAt = Date.now()
+    revokeAllSpeakers: async () => {
+      if (revokingAll) return false
+      revokingAll = true
+      let revokedAll = true
+      try {
+        await Promise.allSettled([...pendingModerations])
+        for (const participant of participants.values()) {
+          if (participant.role === 'control') continue
+          if (!participant.canPublish) continue
+          try {
+            await updatePublishPermission(getRoomServiceClient(), participant, false)
+          } catch (error) {
+            const details = sdkErrorDetails(error)
+            console.warn(`[LIVEKIT] livekit:moderation:permission-failed action=revoke-all status=${details.status} code=${details.code}`)
+            if (!isParticipantAbsent(error)) {
+              revokedAll = false
+              continue
+            }
+            markParticipantAbsent(participant)
+          }
+          participant.speakerState = 'LISTENER'
+          participant.canPublish = false
+          participant.lastSeenAt = Date.now()
+          roomState.speakers.delete(participant.participantId)
+          roomState.muted.delete(participant.participantId)
+        }
+        return revokedAll
+      } finally {
+        revokingAll = false
       }
-      roomState.speakers.clear()
-      roomState.muted.clear()
     },
     getState: () => ({
       enabled: getConfig().enabled,
-      available: getConfig().available,
+      available: getConfig().enabled && cachedStatus.available,
       participants: Array.from(participants.values()).map((participant) => ({
         participantId: participant.participantId,
         role: participant.role,
@@ -512,6 +618,7 @@ export const createLiveKitApi = (controlApi, options = {}) => {
         speakerState: participant.speakerState,
         canSubscribe: participant.canSubscribe,
         canPublish: participant.canPublish,
+        livekitConnected: participant.livekitConnected === true,
         expiresAt: participant.expiresAt,
       })),
       speakers: Array.from(roomState.speakers),
@@ -521,7 +628,7 @@ export const createLiveKitApi = (controlApi, options = {}) => {
     handle: async ({ req, res, url, readBody, sendJson }) => {
       try {
         if (url.pathname === '/api/livekit/status' && req.method === 'GET') {
-          sendJson(res, 200, statusPayload())
+          sendJson(res, 200, await getOperationalStatus())
           return true
         }
 
@@ -534,7 +641,11 @@ export const createLiveKitApi = (controlApi, options = {}) => {
         }
 
         if (mutatingPaths.has(url.pathname) && req.method === 'POST') {
-          return await handleModeration({
+          if (revokingAll) {
+            sendJson(res, 409, { code: 'publication_transition_pending', error: 'Wait for the microphone revocation to finish and retry explicitly' })
+            return true
+          }
+          const moderation = handleModeration({
             req,
             res,
             url,
@@ -543,13 +654,27 @@ export const createLiveKitApi = (controlApi, options = {}) => {
             controlApi,
             getRoomServiceClient,
           })
+          pendingModerations.add(moderation)
+          try {
+            return await moderation
+          } finally {
+            pendingModerations.delete(moderation)
+          }
         }
 
         return false
-      } catch (err) {
-        sendJson(res, 400, { error: err.message || 'Invalid Live Audio request' })
+      } catch {
+        sendJson(res, 400, { code: 'invalid_request', error: 'Invalid Live Audio request' })
         return true
       }
     },
   }
+}
+
+export const resetLiveKitStateForTests = () => {
+  participants.clear()
+  issuedTokens.clear()
+  roomState.speakers.clear()
+  roomState.muted.clear()
+  roomState.kicked.clear()
 }

@@ -27,6 +27,8 @@ let wss: WebSocketServer;
 let baseUrl: string;
 let clients: WsClient[] = [];
 const recordExternalBroadcastTransition = vi.fn();
+const revokeAllLiveKitSpeakers = vi.fn();
+const liveKitPermissions = new Map<string, boolean>();
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -117,14 +119,21 @@ describe('visible active participants', () => {
     process.env.SEFER_LIVE_AUDIO_REJOIN_GRACE_SECONDS = '1';
     resetWsServerStateForTests();
     recordExternalBroadcastTransition.mockReset();
+    liveKitPermissions.clear();
+    revokeAllLiveKitSpeakers.mockReset();
+    revokeAllLiveKitSpeakers.mockImplementation(async () => { liveKitPermissions.clear(); return true; });
 
     httpServer = createServer();
     wss = createWsServer(httpServer, undefined, {
       recordExternalBroadcastTransition,
+      revokeAllLiveKitSpeakers,
       getLiveKitState: () => ({
-        participants: getLiveAudioParticipantSnapshot().participants.map((participant) => ({
-          participantId: participant.participantId,
-          canPublish: false,
+        participants: [...new Set([
+          ...getLiveAudioParticipantSnapshot().participants.map((participant) => participant.participantId),
+          ...liveKitPermissions.keys(),
+        ])].map((participantId) => ({
+          participantId,
+          canPublish: liveKitPermissions.get(participantId) ?? false,
         })),
       }),
     });
@@ -328,6 +337,7 @@ describe('visible active participants', () => {
     const control = await connectWs('control');
     const audience = await connectWs('audience');
     const participantId = randomUUID();
+    liveKitPermissions.set(participantId, true);
 
     audience.send(makeParticipantStatus(participantId, {
       speakerState: 'GRANTED',
@@ -400,6 +410,7 @@ describe('visible active participants', () => {
     const control = await connectWs('control');
     const audience = await connectWs('audience');
     const participantId = randomUUID();
+    liveKitPermissions.set(participantId, true);
 
     audience.send(makeParticipantStatus(participantId, {
       speakerState: 'GRANTED',
@@ -430,6 +441,35 @@ describe('visible active participants', () => {
     expect(participant?.canPublishAudio).toBe(true);
     expect(participant?.isMuted).toBe(false);
     expect(participant?.isMicrophoneActive).toBe(true);
+  });
+
+  it('does not declare external recording before SFU revocation succeeds', async () => {
+    let completeRevocation!: (value: boolean) => void;
+    revokeAllLiveKitSpeakers.mockImplementation(() => new Promise<boolean>((resolve) => { completeRevocation = resolve; }));
+    const control = await connectWs('control');
+    const audience = await connectWs('audience');
+    control.send({ type: 'LIVE_AUDIO_SET_EXTERNAL_BROADCAST_STATE', state: 'recording', createdAt: Date.now() });
+    await wait(50);
+    expect(audience.messages.some((message) => message.type === 'LIVE_AUDIO_EXTERNAL_BROADCAST_STATE' && message.state === 'recording')).toBe(false);
+    completeRevocation(false);
+    await waitFor(control, (message) => message.type === 'ERROR' && message.code === 'LIVEKIT_PERMISSION_NOT_CONFIRMED');
+    expect(recordExternalBroadcastTransition).not.toHaveBeenCalled();
+  });
+
+  it('keeps external broadcast off when an outstanding transition is canceled', async () => {
+    let completeRevocation!: (value: boolean) => void;
+    revokeAllLiveKitSpeakers.mockImplementation(() => new Promise<boolean>((resolve) => { completeRevocation = resolve; }));
+    const control = await connectWs('control');
+    const audience = await connectWs('audience');
+    control.send({ type: 'LIVE_AUDIO_SET_EXTERNAL_BROADCAST_STATE', state: 'recording', createdAt: Date.now() });
+    await wait(50);
+    control.send({ type: 'LIVE_AUDIO_SET_EXTERNAL_BROADCAST_STATE', state: 'off', createdAt: Date.now() });
+    control.send({ type: 'SERVER_TIME_PING', clientSentAtMs: 5678 });
+    await waitFor(control, (message) => message.type === 'SERVER_TIME_PONG' && message.clientSentAtMs === 5678);
+    completeRevocation(true);
+    await wait(50);
+    expect(audience.messages.some((message) => message.type === 'LIVE_AUDIO_EXTERNAL_BROADCAST_STATE' && message.state === 'recording')).toBe(false);
+    expect(recordExternalBroadcastTransition).not.toHaveBeenCalled();
   });
 
   it('removes only kicked participants and clears active-list flags', async () => {

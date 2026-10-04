@@ -20,6 +20,17 @@ const participant = (overrides: Partial<LiveAudioParticipant> = {}): LiveAudioPa
 });
 
 describe('Live Audio microphone state UI', () => {
+  it('waits for an audio connection before allowing a Control grant', () => {
+    const onGrant = vi.fn();
+    const view = render(<LiveAudioParticipantRow participant={participant({ speakerState: 'LISTENER', liveAudioConnectionState: 'reconnectFailed' })} isControlAuthorized onGrant={onGrant} />);
+    const button = screen.getByRole('button', { name: 'Permitir' }) as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+    fireEvent.click(button);
+    expect(onGrant).not.toHaveBeenCalled();
+    view.rerender(<LiveAudioParticipantRow participant={participant({ speakerState: 'LISTENER', liveAudioConnectionState: 'connected' })} isControlAuthorized onGrant={onGrant} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Permitir' }));
+    expect(onGrant).toHaveBeenCalledExactlyOnceWith('participant-1');
+  });
   it.each([
     ['permission granted without a track', participant(), 'Micrófono apagado'],
     ['publishing', participant({ microphoneTrackState: 'publishing' }), 'Publicando micrófono'],

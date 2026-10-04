@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Eye, EyeOff, Hand, MessageSquare, Mic, MicOff, RotateCcw, Trash2, UserCheck, UserX, Volume2, X, XCircle, Loader2 } from 'lucide-react';
-import type { MicrophoneTrackState, SpeakerState } from '../../../../types/liveAudio';
+import type { LiveAudioConnectionState, MicrophoneTrackState, SpeakerState } from '../../../../types/liveAudio';
 import { LiveAudioStatusBadge, type ParticipantStatus } from '../shared/LiveAudioStatusBadge';
 
 export interface LiveAudioParticipant {
@@ -10,6 +10,7 @@ export interface LiveAudioParticipant {
   isMuted: boolean;
   isMicrophoneActive: boolean;
   microphoneTrackState?: MicrophoneTrackState;
+  liveAudioConnectionState?: LiveAudioConnectionState;
   isActiveAudience: boolean;
   isKicked: boolean;
   isAliasVisibleToActiveParticipants?: boolean;
@@ -61,6 +62,7 @@ export const LiveAudioParticipantRow: React.FC<LiveAudioParticipantRowProps> = (
 
   const isRequested = participant.speakerState === 'REQUESTED' && !participant.isKicked;
   const isGranted = participant.speakerState === 'GRANTED' && !participant.isKicked;
+  const audioReady = participant.liveAudioConnectionState === 'connected' || participant.liveAudioConnectionState === 'reconnected';
   const isListener =
     participant.speakerState === 'LISTENER' &&
     participant.isActiveAudience &&
@@ -121,8 +123,9 @@ export const LiveAudioParticipantRow: React.FC<LiveAudioParticipantRowProps> = (
         {isRequested && onGrant && (
           <button
             onClick={() => onGrant(participant.participantId)}
+            disabled={!audioReady}
             className="flex items-center gap-1 bg-green-600 hover:bg-green-500 text-white px-2 py-1 rounded text-xs"
-            title="Conceder palabra"
+            title={audioReady ? 'Conceder palabra' : 'Esperando conexión de audio; Audience debe reintentar el audio'}
           >
             <Hand size={14} />
             <span className="hidden sm:inline">Aprobar</span>
@@ -132,8 +135,9 @@ export const LiveAudioParticipantRow: React.FC<LiveAudioParticipantRowProps> = (
         {isListener && onGrant && (
           <button
             onClick={() => onGrant(participant.participantId)}
+            disabled={!audioReady}
             className="flex items-center gap-1 bg-gray-700 hover:bg-gray-600 text-white px-2 py-1 rounded text-xs"
-            title="Permitir micrófono"
+            title={audioReady ? 'Permitir micrófono' : 'Esperando conexión de audio; Audience debe reintentar el audio'}
           >
             <MessageSquare size={14} />
             <span className="hidden sm:inline">Permitir</span>

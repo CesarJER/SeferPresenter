@@ -3,7 +3,7 @@ import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const liveKit = vi.hoisted(() => {
-  const rooms: Array<{ localParticipant: Record<string, unknown>; disconnect: ReturnType<typeof vi.fn> }> = [];
+  const rooms: Room[] = [];
   const createLocalAudioTrack = vi.fn();
 
   class Room {
@@ -43,6 +43,7 @@ const liveKit = vi.hoisted(() => {
 });
 
 vi.mock('livekit-client', () => ({
+  DisconnectReason: { CLIENT_INITIATED: 1, DUPLICATE_IDENTITY: 2, SERVER_SHUTDOWN: 3, PARTICIPANT_REMOVED: 4, ROOM_DELETED: 5 },
   ConnectionState: {
     Connected: 'connected',
     Connecting: 'connecting',
@@ -93,7 +94,7 @@ const deferred = <T,>() => {
 };
 
 describe('useLiveAudio microphone publication', () => {
-  afterEach(cleanup);
+  afterEach(() => { cleanup(); vi.useRealTimers(); });
 
   beforeEach(() => {
     liveKit.rooms.length = 0;
@@ -189,5 +190,221 @@ describe('useLiveAudio microphone publication', () => {
       publication.resolve({});
       await first;
     });
+  });
+
+  it('keeps listening and microphone controls recoverable when the browser denies capture', async () => {
+    const hook = await renderConnectedHook();
+    liveKit.createLocalAudioTrack.mockRejectedValueOnce(new DOMException('Denied', 'NotAllowedError'));
+    await act(async () => {
+      await expect(hook.result.current.publishMicrophone()).rejects.toMatchObject({ name: 'NotAllowedError' });
+      expect(await hook.result.current.startRemoteAudio()).toBe(true);
+    });
+    expect(hook.result.current.state).toBe('connected');
+    expect(hook.result.current.microphoneTrackState).toBe('error');
+    expect(hook.result.current.hasAudioStarted).toBe(true);
+    expect(liveKit.rooms[0].disconnect).not.toHaveBeenCalled();
+  });
+
+  it('stops a capture that finishes after Control has silenced the microphone', async () => {
+    const hook = await renderConnectedHook();
+    const capture = deferred<ReturnType<typeof makeTrack>>();
+    const track = makeTrack();
+    liveKit.createLocalAudioTrack.mockReturnValueOnce(capture.promise);
+    let pending!: Promise<void>;
+    act(() => { pending = hook.result.current.publishMicrophone(); });
+    const rejected = expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+    await act(async () => {
+      await hook.result.current.unpublishMicrophone();
+      capture.resolve(track);
+      await rejected;
+    });
+    expect(track.stop).toHaveBeenCalled();
+    expect(liveKit.rooms[0].localParticipant.publishTrack).not.toHaveBeenCalled();
+    expect(hook.result.current.microphoneTrackState).toBe('off');
+  });
+
+  it('releases an in-flight publication immediately and removes its late SDK publication', async () => {
+    const hook = await renderConnectedHook();
+    const publication = deferred<unknown>();
+    const track = makeTrack();
+    liveKit.createLocalAudioTrack.mockResolvedValueOnce(track);
+    liveKit.rooms[0].localParticipant.publishTrack.mockReturnValueOnce(publication.promise);
+    let pending!: Promise<void>;
+    act(() => { pending = hook.result.current.publishMicrophone(); });
+    const rejected = expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+    await waitFor(() => expect(liveKit.rooms[0].localParticipant.publishTrack).toHaveBeenCalled());
+    await act(async () => { await hook.result.current.unpublishMicrophone(); });
+    expect(track.stop).toHaveBeenCalled();
+    await act(async () => { publication.resolve({}); await rejected; });
+    expect(liveKit.rooms[0].localParticipant.unpublishTrack).toHaveBeenCalledWith(track, true);
+    expect(hook.result.current.isMicrophoneActive).toBe(false);
+    expect(hook.result.current.microphoneTrackState).toBe('off');
+  });
+
+  it('applies music mode to new capture without rebuilding the room', async () => {
+    const hook = await renderConnectedHook();
+    await act(async () => { await hook.result.current.publishMicrophone(); });
+    await act(async () => { await hook.result.current.republishMicrophone({ musicMode: true }); });
+    expect(liveKit.createLocalAudioTrack).toHaveBeenLastCalledWith(expect.objectContaining({ noiseSuppression: false, autoGainControl: false }));
+    expect(liveKit.rooms).toHaveLength(1);
+    expect(liveKit.rooms[0].disconnect).not.toHaveBeenCalled();
+    expect(hook.result.current.isMicrophoneActive).toBe(true);
+  });
+
+  it('does not reopen audio if silenced while changing capture filters', async () => {
+    const hook = await renderConnectedHook();
+    await act(async () => { await hook.result.current.publishMicrophone(); });
+    const unpublish = deferred<void>();
+    liveKit.rooms[0].localParticipant.unpublishTrack.mockReturnValueOnce(unpublish.promise);
+    let configuration!: Promise<void>;
+    act(() => { configuration = hook.result.current.republishMicrophone({ musicMode: true }); });
+    const rejected = expect(configuration).rejects.toMatchObject({ name: 'AbortError' });
+    await act(async () => {
+      await hook.result.current.unpublishMicrophone();
+      unpublish.resolve();
+      await rejected;
+    });
+    expect(liveKit.createLocalAudioTrack).toHaveBeenCalledTimes(1);
+    expect(hook.result.current.isMicrophoneActive).toBe(false);
+  });
+
+  it('marks playback started only on a connected room and resets it on retry', async () => {
+    const response = deferred<unknown>();
+    const existingFetch = fetch;
+    vi.stubGlobal('fetch', vi.fn().mockReturnValueOnce(response.promise).mockImplementation(existingFetch));
+    const hook = renderHook(() => useLiveAudio({ role: 'audience' }));
+    await act(async () => { expect(await hook.result.current.startRemoteAudio()).toBe(false); });
+    expect(hook.result.current.hasAudioStarted).toBe(false);
+    response.resolve(await existingFetch('/api/livekit/token'));
+    await waitFor(() => expect(hook.result.current.state).toBe('connected'));
+    await act(async () => { expect(await hook.result.current.startRemoteAudio()).toBe(true); });
+    expect(hook.result.current.hasAudioStarted).toBe(true);
+    await act(async () => { await hook.result.current.retryAudio(); });
+    expect(hook.result.current.hasAudioStarted).toBe(false);
+  });
+
+  it('obtains a new admitted listener session after the backend lost the old registry', async () => {
+    const hook = await renderConnectedHook();
+    expect(hook.result.current.sessionRevision).toBe(1);
+    const originalFetch = fetch;
+    const requests: string[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      requests.push(url);
+      if (url.endsWith('refresh-token')) return { ok: false, status: 403, json: async () => ({ code: 'participant_inactive', error: 'Participant is not active' }) };
+      return originalFetch(url);
+    }));
+    await act(async () => { await hook.result.current.retryAudio(); });
+    expect(requests).toEqual(['/api/livekit/refresh-token', '/api/livekit/token']);
+    expect(hook.result.current.state).toBe('connected');
+    expect(hook.result.current.isMicrophoneActive).toBe(false);
+    expect(hook.result.current.participantId).toBe('participant-1');
+    expect(hook.result.current.sessionRevision).toBe(2);
+  });
+
+  it.each([403, 503])('keeps a working media connection when token renewal fails with HTTP %s', async (status) => {
+    const originalFetch = fetch;
+    const request = vi.fn(async (url: string) => {
+      if (url.endsWith('refresh-token')) return {
+        ok: false, status, json: async () => ({ code: 'invalid_refresh_credential', error: 'Renewal failed' }),
+      };
+      const response = await originalFetch(url);
+      return { ...response, json: async () => ({ ...await response.json(), expiresInMs: 125_000 }) };
+    });
+    vi.stubGlobal('fetch', request);
+    vi.useFakeTimers();
+    const hook = renderHook(() => useLiveAudio({ role: 'audience' }));
+    await act(async () => {});
+    expect(hook.result.current.state).toBe('connected');
+    await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
+    expect(request).toHaveBeenCalledTimes(2);
+    expect(hook.result.current.state).toBe('connected');
+    expect(liveKit.rooms[0].disconnect).not.toHaveBeenCalled();
+    if (status === 503) {
+      await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
+      expect(request).toHaveBeenCalledTimes(3);
+      expect(liveKit.rooms).toHaveLength(1);
+    } else {
+      act(() => {
+        liveKit.rooms[0].state = 'disconnected';
+        liveKit.rooms[0].listeners.get('disconnected')?.forEach(listener => listener(3));
+      });
+      await act(async () => { await vi.advanceTimersByTimeAsync(1_000); });
+      expect(liveKit.rooms).toHaveLength(1);
+    }
+  });
+
+  it('preserves the admission revision when reconnecting with a valid refreshed session', async () => {
+    const hook = await renderConnectedHook();
+    await act(async () => { await hook.result.current.retryAudio(); });
+    expect(hook.result.current.sessionRevision).toBe(1);
+  });
+
+  it('coalesces retries while the previous room is still disconnecting', async () => {
+    const hook = await renderConnectedHook();
+    const disconnection = deferred<void>();
+    liveKit.rooms[0].disconnect.mockReturnValueOnce(disconnection.promise);
+    let first!: Promise<void>;
+    act(() => { first = hook.result.current.retryAudio(); });
+    await act(async () => { await hook.result.current.retryAudio(); });
+    expect(liveKit.rooms).toHaveLength(1);
+    await act(async () => { disconnection.resolve(); await first; });
+    expect(liveKit.rooms).toHaveLength(2);
+    expect(hook.result.current.state).toBe('connected');
+  });
+
+  it('does not create a replacement room after unmount during disconnection', async () => {
+    const hook = await renderConnectedHook();
+    const disconnection = deferred<void>();
+    liveKit.rooms[0].disconnect.mockReturnValueOnce(disconnection.promise);
+    let pending!: Promise<void>;
+    act(() => { pending = hook.result.current.retryAudio(); });
+    hook.unmount();
+    await act(async () => { disconnection.resolve(); await pending; });
+    expect(liveKit.rooms).toHaveLength(1);
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('rearms network recovery after an explicitly accepted retry', async () => {
+    const hook = await renderConnectedHook();
+    act(() => {
+      liveKit.rooms[0].state = 'disconnected';
+      liveKit.rooms[0].listeners.get('disconnected')?.forEach(listener => listener(4));
+    });
+    await act(async () => { await hook.result.current.retryAudio(); });
+    vi.useFakeTimers();
+    act(() => {
+      liveKit.rooms[1].state = 'disconnected';
+      liveKit.rooms[1].listeners.get('disconnected')?.forEach(listener => listener(3));
+    });
+    await act(async () => { await vi.advanceTimersByTimeAsync(1_000); });
+    expect(liveKit.rooms).toHaveLength(3);
+    expect(hook.result.current.isMicrophoneActive).toBe(false);
+  });
+
+  it('does not bypass a denied refresh credential with a new token request', async () => {
+    const hook = await renderConnectedHook();
+    const requests: string[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      requests.push(url);
+      return { ok: false, status: 403, json: async () => ({ code: 'invalid_refresh_credential', error: 'Invalid credential' }) };
+    }));
+    await act(async () => { await hook.result.current.retryAudio(); });
+    expect(requests).toEqual(['/api/livekit/refresh-token']);
+    expect(hook.result.current.state).toBe('reconnectFailed');
+  });
+
+  it.each([[3, 2], [4, 1]])('recovers a server shutdown but respects an administrative removal (%s)', async (reason, expectedRooms) => {
+    const hook = await renderConnectedHook();
+    vi.useFakeTimers();
+    act(() => {
+      liveKit.rooms[0].state = 'disconnected';
+      liveKit.rooms[0].listeners.get('disconnected')?.forEach(listener => listener(reason));
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_000);
+    });
+    expect(liveKit.rooms).toHaveLength(expectedRooms);
+    expect(hook.result.current.isMicrophoneActive).toBe(false);
+    expect(liveKit.createLocalAudioTrack).not.toHaveBeenCalled();
   });
 });

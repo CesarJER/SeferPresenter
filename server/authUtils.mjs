@@ -2,6 +2,7 @@
 export const isAuthRequired = () => process.env.SEFER_REQUIRE_AUTH !== 'false'
 
 const publicApiGetPaths = new Set([
+  '/api/health',
   '/api/audience/state',
   '/api/audience/events',
   '/api/quiz-events',
@@ -30,7 +31,8 @@ const normalizeOrigin = (value) => {
 }
 
 export const isPublicApiRequest = (pathname, method = 'GET') => {
-  if (pathname.startsWith('/api/livekit/')) return true
+  if (method === 'GET' && pathname === '/api/livekit/status') return true
+  if (method === 'POST' && (pathname === '/api/livekit/token' || pathname === '/api/livekit/refresh-token')) return true
   if (method === 'POST' && (pathname === '/api/audience/access/bootstrap' || pathname === '/api/audience/sse-ticket')) return true
   if (method === 'POST' && pathname === '/api/quiz-answer') return true
   if (method !== 'GET') return false

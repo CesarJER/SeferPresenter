@@ -31,6 +31,7 @@ const uuidV4Pattern = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[
 const base64Pattern = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/
 const speakerStates = new Set(['LISTENER', 'REQUESTED', 'GRANTED', 'MUTED', 'REVOKED'])
 const microphonePermissionStates = new Set(['unknown', 'prompt', 'denied', 'granted', 'unavailable'])
+const liveAudioConnectionStates = new Set(['connected', 'connecting', 'reconnecting', 'reconnected', 'reconnectFailed', 'disconnected', 'permissionDenied', 'unavailable'])
 const microphoneTrackStates = new Set(['notRequested', 'off', 'publishing', 'published', 'mutedByUser', 'mutedByControl', 'error'])
 const liveAudioModerationTypes = new Set([
   'LIVE_AUDIO_GRANT_SPEAK',
@@ -262,6 +263,7 @@ const getLiveAudioParticipantSnapshot = () => ({
     canViewActiveParticipants: participant.canViewActiveParticipants ?? false,
     isAliasHiddenByControl: participant.isAliasHiddenByControl ?? false,
     activeListPublicKey: participant.activeListPublicKey,
+    liveAudioConnectionState: participant.liveAudioConnectionState,
     connected: Boolean(participant.ws && participant.ws.readyState === WebSocket.OPEN),
     disconnectedAt: participant.disconnectedAt,
     updatedAt: participant.updatedAt,
@@ -315,6 +317,7 @@ const makeOperationalParticipantSnapshot = (participant) => {
     operationalRole: inferOperationalRole(participant),
     microphonePermissionState: participant.microphonePermissionState || 'unknown',
     microphoneTrackState: participant.microphoneTrackState || inferMicrophoneTrackState(participant),
+    liveAudioConnectionState: participant.liveAudioConnectionState,
     speakerState: participant.speakerState,
     canSubscribe: participant.canSubscribe,
     canPublishAudio: participant.canPublishAudio,
@@ -436,6 +439,7 @@ const getLiveAudioParticipantState = (participantId) => {
     canViewActiveParticipants: participant.canViewActiveParticipants ?? false,
     isAliasHiddenByControl: participant.isAliasHiddenByControl ?? false,
     activeListPublicKey: participant.activeListPublicKey,
+    liveAudioConnectionState: participant.liveAudioConnectionState,
     connected: Boolean(participant.ws && participant.ws.readyState === WebSocket.OPEN),
     disconnectedAt: participant.disconnectedAt,
     updatedAt: participant.updatedAt,
@@ -936,6 +940,7 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
     if (msg.isKicked !== undefined && typeof msg.isKicked !== 'boolean') return false
     if (msg.microphonePermissionState !== undefined && !microphonePermissionStates.has(msg.microphonePermissionState)) return false
     if (msg.microphoneTrackState !== undefined && !microphoneTrackStates.has(msg.microphoneTrackState)) return false
+    if (msg.liveAudioConnectionState !== undefined && !liveAudioConnectionStates.has(msg.liveAudioConnectionState)) return false
     if (msg.updatedAt !== undefined && (typeof msg.updatedAt !== 'number' || !Number.isFinite(msg.updatedAt))) return false
     return msg.alias === undefined
   }
@@ -961,7 +966,7 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
       )
       if (!isAllowedAccessTransition) return null
       const accessParticipant = liveAudioParticipants.get(meta.participantId)
-      if (accessParticipant?.ws === meta.ws && meta.participantId === meta.audienceAccessId) {
+      if (accessParticipant?.ws === meta.ws) {
         liveAudioParticipants.delete(meta.participantId)
       }
     }
@@ -976,13 +981,17 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
     }
 
     const now = Date.now()
-    const isKicked = existing?.isKicked === true || status.isKicked === true
+    const registered = snapshotProviders.getLiveKitState?.()?.participants?.find((participant) => participant.participantId === participantId)
+    const isKicked = existing?.isKicked === true
+    const canPublishAudio = !isKicked && (registered ? registered.canPublish === true : existing?.canPublishAudio === true)
     const speakerState = isKicked
       ? 'REVOKED'
-      : typeof status.speakerState === 'string'
-        ? status.speakerState
-        : existing?.speakerState || 'LISTENER'
-    const isMicrophoneActive = isKicked
+      : canPublishAudio
+        ? 'GRANTED'
+        : status.speakerState === 'REQUESTED'
+          ? 'REQUESTED'
+          : 'LISTENER'
+    const isMicrophoneActive = !canPublishAudio
       ? false
       : typeof status.isMicrophoneActive === 'boolean'
         ? status.isMicrophoneActive
@@ -993,9 +1002,9 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
       clientId: meta.clientId,
       ws: meta.ws,
       speakerState,
-      canSubscribe: typeof status.canSubscribe === 'boolean' ? status.canSubscribe : existing?.canSubscribe ?? true,
-      canPublishAudio: isKicked ? false : typeof status.canPublishAudio === 'boolean' ? status.canPublishAudio : existing?.canPublishAudio ?? false,
-      isMuted: isKicked ? true : typeof status.isMuted === 'boolean' ? status.isMuted : existing?.isMuted ?? false,
+      canSubscribe: registered?.canSubscribe ?? existing?.canSubscribe ?? true,
+      canPublishAudio,
+      isMuted: !canPublishAudio ? true : typeof status.isMuted === 'boolean' ? status.isMuted : existing?.isMuted ?? true,
       isActiveAudience: isKicked ? false : typeof status.isActiveAudience === 'boolean' ? status.isActiveAudience : existing?.isActiveAudience ?? false,
       isMicrophoneActive,
       isKicked,
@@ -1009,6 +1018,9 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
       microphoneTrackState: typeof status.microphoneTrackState === 'string'
         ? status.microphoneTrackState
         : existing?.microphoneTrackState,
+      liveAudioConnectionState: liveAudioConnectionStates.has(status.liveAudioConnectionState)
+        ? status.liveAudioConnectionState
+        : existing?.liveAudioConnectionState,
       connectedAt: existing?.connectedAt || now,
       updatedAt: now,
       disconnectedAt: undefined,
@@ -1142,6 +1154,7 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
     activeListPublicKey: msg.activeListPublicKey,
     microphonePermissionState: msg.microphonePermissionState,
     microphoneTrackState: msg.microphoneTrackState,
+    liveAudioConnectionState: msg.liveAudioConnectionState,
     updatedAt: msg.updatedAt || Date.now(),
   })
 
@@ -1254,9 +1267,24 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
     }
   }
 
-  const setExternalBroadcastState = (nextState) => {
+  let externalBroadcastUpdatePending = false
+  let externalBroadcastRequestVersion = 0
+  const setExternalBroadcastState = async (nextState) => {
     if (!['off', 'live', 'recording'].includes(nextState)) return false
+    if (externalBroadcastUpdatePending && nextState !== 'off') return false
+    const requestVersion = ++externalBroadcastRequestVersion
     if (externalBroadcastState.state === nextState) return true
+    if (nextState !== 'off') {
+      externalBroadcastUpdatePending = true
+      try {
+        if (await snapshotProviders.revokeAllLiveKitSpeakers?.() === false) return false
+      } catch {
+        return false
+      } finally {
+        externalBroadcastUpdatePending = false
+      }
+      if (requestVersion !== externalBroadcastRequestVersion) return false
+    }
 
     const previousState = externalBroadcastState.state
     externalBroadcastState = {
@@ -1273,7 +1301,6 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
     })
 
     if (nextState !== 'off') {
-      snapshotProviders.revokeAllLiveKitSpeakers?.()
       for (const participant of liveAudioParticipants.values()) {
         if (participant.role !== 'audience' || participant.isKicked) continue
         if (
@@ -1409,6 +1436,7 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
       } catch {
         return
       }
+      if (!msg || typeof msg !== 'object' || Array.isArray(msg)) return
 
       const meta = wsClients.get(ws)
       if (!meta) return
@@ -1654,7 +1682,9 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
             break
           }
           if (!['off', 'live', 'recording'].includes(msg.state)) break
-          setExternalBroadcastState(msg.state)
+          void setExternalBroadcastState(msg.state).then((accepted) => {
+            if (!accepted) sendError(ws, 'LIVEKIT_PERMISSION_NOT_CONFIRMED', 'LiveKit could not revoke all microphones; retry explicitly')
+          })
           break
         }
 
@@ -1766,7 +1796,7 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
             sendError(ws, 'CONTROL_PENDING_FORBIDDEN', 'Pending controls cannot send moderation actions')
             break
           }
-          const expectedCanPublish = msg.type === 'LIVE_AUDIO_GRANT_SPEAK'
+          const expectedCanPublish = ['LIVE_AUDIO_GRANT_SPEAK', 'LIVE_AUDIO_MUTE_PARTICIPANT'].includes(msg.type)
             ? true
             : ['LIVE_AUDIO_REVOKE_SPEAK', 'LIVE_AUDIO_KICK_PARTICIPANT', 'LIVE_AUDIO_RESCUE_PARTICIPANT'].includes(msg.type)
               ? false

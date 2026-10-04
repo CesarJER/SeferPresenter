@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createLiveKitApi } from '../server/livekit-server.mjs';
+import { createLiveKitApi, resetLiveKitStateForTests } from '../server/livekit-server.mjs';
+import { isProtectedRequestPath } from '../server/authUtils.mjs';
 
 interface ApiResponse {
   status: number;
@@ -19,6 +20,7 @@ describe('LiveKit token endpoint security', () => {
   const authorizedControls = new Set(['authorized-control']);
 
   beforeEach(() => {
+    resetLiveKitStateForTests();
     authorizedControls.clear();
     authorizedControls.add('authorized-control');
     process.env.SEFER_LIVE_AUDIO_ENABLED = 'true';
@@ -35,6 +37,7 @@ describe('LiveKit token endpoint security', () => {
 
   afterEach(() => {
     api.close();
+    resetLiveKitStateForTests();
     vi.useRealTimers();
     delete process.env.SEFER_LIVE_AUDIO_ENABLED;
     delete process.env.LIVEKIT_URL;
@@ -45,13 +48,13 @@ describe('LiveKit token endpoint security', () => {
   });
 
   const call = async (
-    pathname: '/api/livekit/token' | '/api/livekit/refresh-token' | '/api/livekit/grant-speak' | '/api/livekit/revoke-speak',
+    pathname: string,
     body: Record<string, unknown>,
-    authorization?: string,
+    authorization = pathname.endsWith('/token') || pathname.endsWith('/refresh-token') || pathname.endsWith('/status') ? '' : basicAuth(),
   ): Promise<ApiResponse> => {
     let response: ApiResponse | null = null;
     const handled = await api.handle({
-      req: { method: 'POST', headers: authorization ? { authorization } : {} },
+      req: { method: pathname.endsWith('/status') ? 'GET' : 'POST', headers: authorization ? { authorization } : {} },
       res: {},
       url: new URL(pathname, 'http://localhost'),
       readBody: async () => JSON.stringify(body),
@@ -150,6 +153,25 @@ describe('LiveKit token endpoint security', () => {
     expect(replay.status).toBe(403);
   });
 
+  it('reuses the admitted Audience identity for a fresh listener session and ignores a supplied UUID', async () => {
+    api.close();
+    const participantId = '00000000-0000-4000-8000-000000000001';
+    api = createLiveKitApi({
+      getSessionAccessMode: () => 'CONTROLLED',
+      authorizeAudienceCredential: (credential: string) => credential === 'admitted-access' ? { participantId, accessState: 'ADMITTED' } : null,
+    });
+    const first = await call('/api/livekit/token', { role: 'audience', audienceAccessCredential: 'admitted-access' });
+    expect(first.status).toBe(200);
+    expect(first.body.participantId).toBe(participantId);
+    const second = await call('/api/livekit/token', {
+      role: 'audience', audienceAccessCredential: 'admitted-access', participantId: '00000000-0000-4000-8000-000000000099',
+    });
+    expect(second.body.participantId).toBe(participantId);
+    expect(second.body.participantIdentity).toBe(first.body.participantIdentity);
+    expect(decodeJwtPayload(String(second.body.token)).video).toMatchObject({ canPublish: false });
+    expect((await call('/api/livekit/token', { role: 'audience', audienceAccessCredential: 'invalid' })).status).toBe(403);
+  });
+
   it('rejects an otherwise valid refresh credential after session expiry', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-01-01T00:00:00Z'));
@@ -239,5 +261,174 @@ describe('LiveKit token endpoint security', () => {
     );
     expect(api.getState().participants.find((participant) => participant.participantId === audience.participantId))
       .toMatchObject({ speakerState: 'LISTENER', canPublish: false });
+  });
+
+  it('requires authentication for moderation even with a public authorized Control id', async () => {
+    const audience = await issueAudience();
+    const rejected = await call('/api/livekit/grant-speak', {
+      role: 'control', controlSessionId: 'authorized-control', participantId: audience.participantId,
+    }, '');
+    expect(rejected).toMatchObject({ status: 403, body: { code: 'privileged_auth_required' } });
+    expect(isProtectedRequestPath('/api/livekit/grant-speak', 'POST')).toBe(true);
+    expect(api.getState().participants.find((p) => p.participantId === audience.participantId)?.canPublish).toBe(false);
+  });
+
+  it('does not turn Audience telemetry into a publishing JWT on refresh', async () => {
+    api.close();
+    const updateParticipant = vi.fn();
+    api = createLiveKitApi({
+      isLiveAudioControlAuthorized: () => true,
+      getLiveAudioParticipantState: () => ({ speakerState: 'GRANTED', canPublishAudio: true, canSubscribe: true }),
+    }, { roomServiceClient: { updateParticipant } });
+    const audience = await issueAudience();
+    const refreshed = await call('/api/livekit/refresh-token', {
+      participantId: audience.participantId, refreshCredential: audience.refreshCredential,
+    });
+    expect(refreshed.status).toBe(200);
+    expect(decodeJwtPayload(String(refreshed.body.token)).video).toMatchObject({ canPublish: false });
+    expect(updateParticipant).not.toHaveBeenCalled();
+  });
+
+  it('classifies an absent SFU participant and logs only allowlisted error fields', async () => {
+    api.close();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    api = createLiveKitApi({ isLiveAudioControlAuthorized: () => true }, {
+      roomServiceClient: { updateParticipant: vi.fn().mockRejectedValue(Object.assign(new Error('203.0.113.8 secret-room'), {
+        name: 'secret-name', code: 'not_found', status: 404,
+      })) },
+    });
+    const audience = await issueAudience();
+    const rejected = await call('/api/livekit/grant-speak', {
+      role: 'control', controlSessionId: 'authorized-control', participantId: audience.participantId,
+    });
+    expect(rejected).toMatchObject({ status: 409, body: { code: 'participant_not_ready' } });
+    expect(api.getState().participants.find((p) => p.participantId === audience.participantId))
+      .toMatchObject({ canPublish: false, livekitConnected: false });
+    expect(String(warn.mock.calls)).toContain('status=404 code=not_found');
+    expect(String(warn.mock.calls)).not.toMatch(/203\.0\.113|secret-room|secret-name/);
+    warn.mockRestore();
+  });
+
+  it('distinguishes an inactive record and an expired session from invalid credentials', async () => {
+    const audience = await issueAudience();
+    const inactive = await call('/api/livekit/refresh-token', {
+      participantId: '00000000-0000-4000-8000-000000000000', refreshCredential: audience.refreshCredential,
+    });
+    expect(inactive).toMatchObject({ status: 403, body: { code: 'participant_inactive' } });
+    const invalid = await call('/api/livekit/refresh-token', {
+      participantId: audience.participantId, refreshCredential: 'invalid-credential-with-enough-length',
+    });
+    expect(invalid).toMatchObject({ status: 403, body: { code: 'refresh_credential_invalid' } });
+    vi.useFakeTimers();
+    vi.setSystemTime(audience.expiresAt + 1);
+    const expired = await call('/api/livekit/refresh-token', {
+      participantId: audience.participantId, refreshCredential: audience.refreshCredential,
+    });
+    expect(expired).toMatchObject({ status: 401, body: { code: 'session_expired' } });
+  });
+
+  it('checks the actual LiveKit API and briefly caches readiness', async () => {
+    api.close();
+    vi.useFakeTimers();
+    const listRooms = vi.fn().mockResolvedValue([]);
+    api = createLiveKitApi({}, { roomServiceClient: { listRooms } });
+    expect(await call('/api/livekit/status', {})).toMatchObject({ status: 200, body: { enabled: true, available: true } });
+    await call('/api/livekit/status', {});
+    expect(listRooms).toHaveBeenCalledTimes(1);
+    listRooms.mockRejectedValue(Object.assign(new Error('synthetic down'), { code: 'unavailable', status: 503 }));
+    await vi.advanceTimersByTimeAsync(5001);
+    expect(await call('/api/livekit/status', {})).toMatchObject({ status: 200, body: { enabled: true, available: false, reason: 'livekit-unreachable' } });
+    expect(listRooms).toHaveBeenCalledTimes(2);
+  });
+
+  it('bounds an unresponsive LiveKit readiness request', async () => {
+    api.close();
+    vi.useFakeTimers();
+    api = createLiveKitApi({}, { roomServiceClient: { listRooms: () => new Promise(() => {}) }, statusTimeoutMs: 25 });
+    const response = call('/api/livekit/status', {});
+    await vi.advanceTimersByTimeAsync(25);
+    expect(await response).toMatchObject({ body: { available: false, reason: 'livekit-unreachable' } });
+  });
+
+  it('mutes microphone tracks in LiveKit while retaining the grant for explicit user reopening', async () => {
+    api.close();
+    const mutePublishedTrack = vi.fn().mockResolvedValue({});
+    api = createLiveKitApi({ isLiveAudioControlAuthorized: () => true }, { roomServiceClient: {
+      updateParticipant: vi.fn().mockResolvedValue({}),
+      getParticipant: vi.fn().mockResolvedValue({ tracks: [{ sid: 'microphone-track', source: 2 }, { sid: 'camera-track', source: 1 }] }),
+      mutePublishedTrack,
+    } });
+    const audience = await issueAudience();
+    const body = { role: 'control', controlSessionId: 'authorized-control', participantId: audience.participantId };
+    await call('/api/livekit/grant-speak', body);
+    expect((await call('/api/livekit/mute-participant', body)).status).toBe(200);
+    expect(mutePublishedTrack).toHaveBeenCalledExactlyOnceWith('sefer-live-audio', audience.participantIdentity, 'microphone-track', true);
+    expect(api.getState().participants.find((p) => p.participantId === audience.participantId)?.canPublish).toBe(true);
+  });
+
+  it('revokes publication in LiveKit before confirming a broadcast transition', async () => {
+    api.close();
+    const updateParticipant = vi.fn().mockResolvedValue({});
+    api = createLiveKitApi({ isLiveAudioControlAuthorized: () => true }, { roomServiceClient: { updateParticipant } });
+    const audience = await issueAudience();
+    await call('/api/livekit/grant-speak', { role: 'control', controlSessionId: 'authorized-control', participantId: audience.participantId });
+    expect(await api.revokeAllSpeakers()).toBe(true);
+    expect(updateParticipant).toHaveBeenLastCalledWith('sefer-live-audio', audience.participantIdentity,
+      expect.objectContaining({ permission: expect.objectContaining({ canPublish: false }) }));
+    expect(api.getState().participants.find((p) => p.participantId === audience.participantId)?.canPublish).toBe(false);
+  });
+
+  it('does not confirm global revocation when LiveKit cannot revoke an existing speaker', async () => {
+    api.close();
+    const updateParticipant = vi.fn().mockResolvedValue({});
+    api = createLiveKitApi({ isLiveAudioControlAuthorized: () => true }, { roomServiceClient: { updateParticipant } });
+    const audience = await issueAudience();
+    await call('/api/livekit/grant-speak', { role: 'control', controlSessionId: 'authorized-control', participantId: audience.participantId });
+    updateParticipant.mockRejectedValue(Object.assign(new Error('synthetic unavailable'), { code: 'unavailable', status: 503 }));
+    expect(await api.revokeAllSpeakers()).toBe(false);
+    expect(api.getState().participants.find((p) => p.participantId === audience.participantId)?.canPublish).toBe(true);
+  });
+
+  it('waits for an outstanding grant before revocation and rejects new grants during the transition', async () => {
+    api.close();
+    let finishGrant!: () => void;
+    const updateParticipant = vi.fn().mockImplementation((_room, _identity, options) => options.permission.canPublish
+      ? new Promise<void>((resolve) => { finishGrant = resolve; })
+      : Promise.resolve({}));
+    api = createLiveKitApi({ isLiveAudioControlAuthorized: () => true }, { roomServiceClient: { updateParticipant } });
+    const audience = await issueAudience();
+    const body = { role: 'control', controlSessionId: 'authorized-control', participantId: audience.participantId };
+    const grant = call('/api/livekit/grant-speak', body);
+    await vi.waitFor(() => expect(updateParticipant).toHaveBeenCalledTimes(1));
+    const revoke = api.revokeAllSpeakers();
+    const lateGrant = await call('/api/livekit/grant-speak', body);
+    expect(lateGrant).toMatchObject({ status: 409, body: { code: 'publication_transition_pending' } });
+    expect(updateParticipant).toHaveBeenCalledTimes(1);
+    finishGrant();
+    expect((await grant).status).toBe(200);
+    expect(await revoke).toBe(true);
+    expect(updateParticipant).toHaveBeenLastCalledWith('sefer-live-audio', audience.participantIdentity,
+      expect.objectContaining({ permission: expect.objectContaining({ canPublish: false }) }));
+    expect(api.getState().participants.find((p) => p.participantId === audience.participantId)?.canPublish).toBe(false);
+  });
+
+  it('honors exclusions while muting all microphone tracks in LiveKit', async () => {
+    api.close();
+    const mutePublishedTrack = vi.fn().mockResolvedValue({});
+    api = createLiveKitApi({ isLiveAudioControlAuthorized: () => true }, { roomServiceClient: {
+      updateParticipant: vi.fn().mockResolvedValue({}),
+      getParticipant: vi.fn().mockResolvedValue({ tracks: [{ sid: 'microphone-track', source: 2 }] }),
+      mutePublishedTrack,
+    } });
+    const first = await issueAudience();
+    const second = await issueAudience();
+    for (const audience of [first, second]) {
+      await call('/api/livekit/grant-speak', { role: 'control', controlSessionId: 'authorized-control', participantId: audience.participantId });
+    }
+    const muted = await call('/api/livekit/mute-all', {
+      role: 'control', controlSessionId: 'authorized-control', excludeParticipantIds: [first.participantId],
+    });
+    expect(muted.status).toBe(200);
+    expect(mutePublishedTrack).toHaveBeenCalledExactlyOnceWith('sefer-live-audio', second.participantIdentity, 'microphone-track', true);
   });
 });

@@ -64,6 +64,7 @@ export interface LiveAudioParticipantStatusMessage {
   operationalRole?: LiveAudioOperationalRole;
   microphonePermissionState?: MicrophonePermissionState;
   microphoneTrackState?: MicrophoneTrackState;
+  liveAudioConnectionState?: LiveAudioConnectionState;
   speakerState: SpeakerState;
   controlState?: ControlPrincipalState | ControlSecondaryState;
   canSubscribe: boolean;
@@ -249,6 +250,7 @@ export interface LiveAudioOperationalParticipantSnapshot {
   operationalRole: LiveAudioOperationalRole;
   microphonePermissionState: MicrophonePermissionState;
   microphoneTrackState: MicrophoneTrackState;
+  liveAudioConnectionState?: LiveAudioConnectionState;
   speakerState: SpeakerState;
   canSubscribe: boolean;
   canPublishAudio: boolean;
@@ -339,6 +341,7 @@ export interface LiveAudioOperationalSnapshot {
       speakerState: SpeakerState;
       canSubscribe: boolean;
       canPublish: boolean;
+      livekitConnected?: boolean;
       expiresAt?: number;
     }>;
     speakers: string[];

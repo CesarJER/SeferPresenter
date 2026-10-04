@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { MessageSquare, X } from 'lucide-react';
 import { AudienceInterventionModal } from './AudienceInterventionModal';
 import { AudiencePrivateControlMessage } from './AudiencePrivateControlMessage';
-import { useLiveAudio } from '../../hooks/useLiveAudio';
+import { isMicrophonePublicationCancelled, useLiveAudio } from '../../hooks/useLiveAudio';
 import { usePrivateControlSignals } from '../../../../hooks/usePrivateControlSignals';
 import type {
   LiveAudioAvailability,
@@ -66,7 +66,6 @@ export default function LiveAudioAudienceContainer({
     Array<{ id: string; senderNick: string; text: string; timestamp: number }>
   >([]);
 
-  const [hasAudioStarted, setHasAudioStarted] = useState(false);
   const [volume, setVolume] = useState(1);
   const [microphoneVolume, setMicrophoneVolume] = useState(100);
   const [isMusicMode, setIsMusicMode] = useState(false);
@@ -91,10 +90,13 @@ export default function LiveAudioAudienceContainer({
     connectionQuality,
     remoteTracks,
     participantId,
+    sessionRevision,
     isMicrophoneActive,
     microphoneTrackState,
+    hasAudioStarted,
     startRemoteAudio,
     publishMicrophone,
+    republishMicrophone,
     unpublishMicrophone,
     retryAudio,
     microphoneDiagnostics,
@@ -103,6 +105,14 @@ export default function LiveAudioAudienceContainer({
     autoConnect: availability === 'enabled',
     microphoneVolumePercent: microphoneVolume,
   });
+
+  useEffect(() => {
+    if (!sessionRevision) return;
+    // A fresh admission is a listener even when its stable participant ID is reused.
+    setIsWordGranted(false);
+    setIsPendingWord(false);
+    microphoneConsentRevisionRef.current = -1;
+  }, [sessionRevision]);
 
   useEffect(() => {
     const handleVisibilityChange = () => {
@@ -150,6 +160,7 @@ export default function LiveAudioAudienceContainer({
       isMuted: options.isMuted ?? true,
       isActiveAudience: options.isActiveAudience ?? false,
       isMicrophoneActive: options.isMicrophoneActive ?? false,
+      liveAudioConnectionState: liveKitState,
       isKicked: options.isKicked ?? false,
       microphonePermissionState: options.microphonePermissionState ?? 'unknown',
       microphoneTrackState: options.microphoneTrackState ?? (
@@ -161,7 +172,16 @@ export default function LiveAudioAudienceContainer({
       ),
       updatedAt: Date.now(),
     });
-  }, [participantId, wsSend]);
+  }, [liveKitState, participantId, wsSend]);
+
+  const handleMusicModeChange = useCallback((nextMusicMode: boolean) => {
+    setIsMusicMode(nextMusicMode);
+    if (nextMusicMode === isMusicMode || (!isMicrophoneActive && microphoneTrackState !== 'publishing')) return;
+    void republishMicrophone({ musicMode: nextMusicMode })
+      .catch((error) => {
+        if (!isMicrophonePublicationCancelled(error)) console.warn('Microphone configuration failed');
+      });
+  }, [isMicrophoneActive, isMusicMode, microphoneTrackState, republishMicrophone]);
 
   // 2. Setup private signals
   const { sendPrivateSignal, ready: privateSignalReady, getAudiencePublicKey } = usePrivateControlSignals({
@@ -178,8 +198,7 @@ export default function LiveAudioAudienceContainer({
           setMicrophoneVolume(payload.volume);
         }
         if (typeof payload.musicMode === 'boolean') {
-          const nextMusicMode = payload.musicMode;
-          setIsMusicMode(nextMusicMode);
+          handleMusicModeChange(payload.musicMode);
         }
       } else if (payload.type === 'VISIBLE_ACTIVE_PARTICIPANTS' && Array.isArray(payload.participants)) {
         setVisibleParticipants(payload.participants.filter((participant): participant is string => typeof participant === 'string'));
@@ -227,7 +246,7 @@ export default function LiveAudioAudienceContainer({
           setExternalBroadcastRevision(revision);
           if (state === 'off') {
             microphoneConsentRevisionRef.current = revision;
-          } else if (microphoneConsentRevisionRef.current !== revision && isMicrophoneActive) {
+          } else if (microphoneConsentRevisionRef.current !== revision && (isMicrophoneActive || microphoneTrackState === 'publishing')) {
             void unpublishMicrophone();
             sendParticipantStatus('GRANTED', {
               canPublishAudio: true,
@@ -369,6 +388,8 @@ export default function LiveAudioAudienceContainer({
     isPendingWord,
     isKicked,
     isMicrophoneActive,
+    microphoneTrackState,
+    handleMusicModeChange,
     audienceSession,
     externalBroadcastRevision,
   ]);
@@ -456,7 +477,7 @@ export default function LiveAudioAudienceContainer({
     if (hasAudioStarted || isStartingAudioRef.current) return;
     isStartingAudioRef.current = true;
     void startRemoteAudio()
-      .then(() => setHasAudioStarted(true))
+      .catch(() => undefined)
       .finally(() => {
         isStartingAudioRef.current = false;
       });
@@ -584,6 +605,7 @@ export default function LiveAudioAudienceContainer({
           microphoneTrackState: 'published',
         }))
         .catch((err) => {
+          if (isMicrophonePublicationCancelled(err)) return;
           console.error("Failed to publish mic:", err);
           sendParticipantStatus('GRANTED', {
             canPublishAudio: true,
@@ -613,23 +635,6 @@ export default function LiveAudioAudienceContainer({
       alias: audienceSession.nick || undefined,
     });
   }, [audienceSession.nick, privateSignalReady, sendPrivateSignal]);
-
-  const handleMusicModeChange = useCallback((nextMusicMode: boolean) => {
-    setIsMusicMode(nextMusicMode);
-    if (!isMicrophoneActive || nextMusicMode === isMusicMode) return;
-
-    void unpublishMicrophone()
-      .then(() => publishMicrophone({ musicMode: nextMusicMode }))
-      .then(() => sendParticipantStatus('GRANTED', {
-        canPublishAudio: true,
-        isMuted: false,
-        isActiveAudience: true,
-        isMicrophoneActive: true,
-      }))
-      .catch((err) => {
-        console.error('Failed to republish microphone with music mode:', err);
-      });
-  }, [isMicrophoneActive, isMusicMode, publishMicrophone, sendParticipantStatus, unpublishMicrophone]);
 
   if (availability !== 'enabled') {
     return <>{children}</>;

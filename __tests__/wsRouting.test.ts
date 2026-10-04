@@ -472,6 +472,25 @@ describe('Live Audio WebSocket routing', () => {
     expect(getLiveAudioParticipantSnapshot().participants.find((participant) => participant.participantId === participantId)?.speakerState).not.toBe('GRANTED');
   });
 
+  it('keeps client reported publication permission and connection telemetry separate from authority', async () => {
+    const control = await connectWs('control');
+    const audience = await connectWs('audience');
+    const participantId = randomUUID();
+    liveKitPermissions.set(participantId, false);
+    audience.send({ ...makeParticipantStatus(participantId), speakerState: 'GRANTED', canPublishAudio: true,
+      isMicrophoneActive: true, isMuted: false, liveAudioConnectionState: 'connected' });
+    const status = await waitFor(control, (message) => message.type === 'LIVE_AUDIO_PARTICIPANT_STATUS' && message.participantId === participantId);
+    expect(status).toMatchObject({ speakerState: 'LISTENER', canPublishAudio: false, isMicrophoneActive: false, liveAudioConnectionState: 'connected' });
+  });
+
+  it('ignores null and non-object messages without terminating the WebSocket server', async () => {
+    const audience = await connectWs('audience');
+    audience.ws.send('null');
+    audience.ws.send('[]');
+    audience.send({ type: 'SERVER_TIME_PING', clientSentAtMs: 1234 });
+    expect(await waitFor(audience, (message) => message.type === 'SERVER_TIME_PONG')).toMatchObject({ clientSentAtMs: 1234 });
+  });
+
   it('broadcasts total live audio websocket connection counts to control and presenter', async () => {
     const presenter = await connectWs('presenter');
     const control = await connectWs('control');
