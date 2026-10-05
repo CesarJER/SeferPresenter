@@ -16,6 +16,7 @@ interface SeferReaderScreenProps {
   onBoundaryReached?: (direction: 'next' | 'previous') => void;
   onLogoClick?: () => void;
   liveAudioPanel?: React.ReactNode;
+  interactive?: boolean;
 }
 
 export const SeferReaderScreen: React.FC<SeferReaderScreenProps> = ({
@@ -24,6 +25,7 @@ export const SeferReaderScreen: React.FC<SeferReaderScreenProps> = ({
   onBoundaryReached,
   onLogoClick,
   liveAudioPanel,
+  interactive = true,
 }) => {
   const [metadata, setMetadata] = useState<AppMetadata>({});
   const [data, setData] = useState<VerseData[]>([]);
@@ -119,45 +121,26 @@ export const SeferReaderScreen: React.FC<SeferReaderScreenProps> = ({
 
   // Handle command (next/previous) changes
   useEffect(() => {
-    if (data.length === 0 || scriptureState.commandId === undefined) return;
+    if (!interactive || data.length === 0 || scriptureState.commandId === undefined) return;
     if (scriptureState.commandId === lastProcessedCommandId.current) return;
 
     lastProcessedCommandId.current = scriptureState.commandId;
 
-    if (scriptureState.command === 'next') {
-      setSelectedVerseIdx((prev) => {
-        if (prev === null) return 0;
-        const nextLimit = hasVerseRange && rangeBounds ? rangeBounds.endIdx : data.length - 1;
-        const nextIdx = Math.min(prev + 1, nextLimit);
-        if (nextIdx === prev) {
-          if (hasVerseRange) onBoundaryReached?.('next');
-          return prev;
-        }
-        // Propagate selection back to App so other screens keep up
-        const verse = data[nextIdx];
-        if (verse) {
-          onVerseSelected(buildVersePayload(verse, nextIdx));
-        }
-        return nextIdx;
-      });
-    } else if (scriptureState.command === 'previous') {
-      setSelectedVerseIdx((prev) => {
-        if (prev === null) return 0;
-        const prevLimit = hasVerseRange && rangeBounds ? rangeBounds.startIdx : 0;
-        const prevIdx = Math.max(prev - 1, prevLimit);
-        if (prevIdx === prev) {
-          if (hasVerseRange) onBoundaryReached?.('previous');
-          return prev;
-        }
-        // Propagate selection back to App so other screens keep up
-        const verse = data[prevIdx];
-        if (verse) {
-          onVerseSelected(buildVersePayload(verse, prevIdx));
-        }
-        return prevIdx;
-      });
+    const direction = scriptureState.command;
+    if (direction !== 'next' && direction !== 'previous') return;
+    const baseIdx = data.findIndex(v => v.chapter === scriptureState.chapter && v.verse === scriptureState.verse);
+    if (baseIdx < 0) return;
+    const limit = direction === 'next'
+      ? (hasVerseRange && rangeBounds ? rangeBounds.endIdx : data.length - 1)
+      : (hasVerseRange && rangeBounds ? rangeBounds.startIdx : 0);
+    const nextIdx = direction === 'next' ? Math.min(baseIdx + 1, limit) : Math.max(baseIdx - 1, limit);
+    if (nextIdx === baseIdx) {
+      if (hasVerseRange) onBoundaryReached?.(direction);
+      return;
     }
-  }, [buildVersePayload, data, hasVerseRange, onBoundaryReached, onVerseSelected, rangeBounds, scriptureState.command, scriptureState.commandId]);
+    setSelectedVerseIdx(nextIdx);
+    onVerseSelected(buildVersePayload(data[nextIdx], nextIdx));
+  }, [interactive, buildVersePayload, data, hasVerseRange, onBoundaryReached, onVerseSelected, rangeBounds, scriptureState.command, scriptureState.commandId, scriptureState.chapter, scriptureState.verse]);
 
   // Scrolling logic
   const scrollToTarget = useCallback((idx: number) => {
@@ -228,24 +211,26 @@ export const SeferReaderScreen: React.FC<SeferReaderScreenProps> = ({
 
   const handleVerseClick = useCallback(
     (_e: React.MouseEvent, idx: number) => {
+      if (!interactive) return;
       setSelectedVerseIdx(idx);
       const verse = data[idx];
       if (verse) {
         onVerseSelected(buildVersePayload(verse, idx));
       }
     },
-    [buildVersePayload, data, onVerseSelected]
+    [interactive, buildVersePayload, data, onVerseSelected]
   );
 
   const handleVerseTouchEnd = useCallback(
     (_e: React.TouchEvent, idx: number) => {
+      if (!interactive) return;
       setSelectedVerseIdx(idx);
       const verse = data[idx];
       if (verse) {
         onVerseSelected(buildVersePayload(verse, idx));
       }
     },
-    [buildVersePayload, data, onVerseSelected]
+    [interactive, buildVersePayload, data, onVerseSelected]
   );
 
   const currentSelectedVerse = useMemo(() => {

@@ -648,7 +648,8 @@ export const reduceProjectionCommand = (currentState, payload, metadata = {}) =>
           verseIdx: isFiniteNumber(projected.verseIdx) ? projected.verseIdx : 0,
           totalVerses: isFiniteNumber(projected.totalVerses) ? projected.totalVerses : 0,
           scriptureKind: projected.scriptureKind === 'tanaj' ? 'tanaj' : 'sefer',
-          command: payload.navCommand || 'navigate',
+          // An explicit projection already contains the resolved verse.
+          command: 'navigate',
           commandId: now,
           hebrewFontSize: state.scriptureState?.hebrewFontSize ?? 42,
           combinedTextBaseSize: state.scriptureState?.combinedTextBaseSize ?? 50,

@@ -112,6 +112,7 @@ const AudienceScreen = ({
       <div className="pointer-events-none flex flex-col h-dvh w-dvw select-none overflow-hidden bg-black">
         <div className="flex-1 relative min-h-0">
           <SeferReaderScreen
+            interactive={false}
             scriptureState={scriptureState}
             onVerseSelected={() => {}}
             onLogoClick={handleFullscreen}
@@ -158,6 +159,7 @@ const AudienceScreen = ({
       <div className="pointer-events-none flex flex-col h-dvh w-dvw select-none overflow-hidden bg-black">
         <div className="flex-1 relative min-h-0">
           <SeferReaderScreen
+            interactive={false}
             scriptureState={scriptureState}
             onVerseSelected={() => {}}
             onLogoClick={handleFullscreen}
