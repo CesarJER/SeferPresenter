@@ -169,9 +169,10 @@ authorization.
 ### Participantes Activos Visibles (E2E)
 
 Active audience participants may voluntarily share their alias with other active
-participants. Alias, technical audience ID and
-`isAliasVisibleToActiveParticipants` are page-session state and are not stored
-in `localStorage`; startup removes keys left by older versions. Logout and
+participants. Alias and `isAliasVisibleToActiveParticipants` use a versioned
+localStorage envelope bounded by the presentation-session reference expiry.
+The technical audience ID remains in page memory. Startup removes legacy
+unbounded identity keys; expiration clears the bounded identity. Logout and
 presentation-session rotation purge them, rotate the technical ID and clear quiz
 identity/state. `VITE_SEFER_ACTIVE_ALIAS_VISIBLE_BY_DEFAULT=false` keeps the
 checkbox off unless explicitly configured otherwise.

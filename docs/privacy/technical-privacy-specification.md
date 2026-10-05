@@ -52,7 +52,7 @@ una sesión o participante.
 Se usa para:
 
 - estado de sincronización/proyección y preferencias;
-- referencia de sesión Audience en envoltura caducable;
+- referencia de sesión e identidad local Audience (alias y visibilidad) en envolturas caducables;
 - respuestas, puntuaciones y contribuciones pendientes/reenviables locales del quiz;
 - estado de Control y otros ajustes operativos.
 
@@ -64,8 +64,10 @@ Evidencia: `src/hooks/useSyncState.ts:226-241`,
 La referencia de sesión, las respuestas, las puntuaciones y las contribuciones Audience usan
 envolturas versionadas con TTL de 24 horas por defecto, configurable entre 1 y
 168 horas. Lectura expirada, formato legado/malformado, logout y rotación purgan
-los valores de forma idempotente. Alias y visibilidad permanecen solo en memoria
-de página. El estado operativo de Presenter/Control no se considera identidad de
+los valores de forma idempotente. Alias y visibilidad comparten una envoltura
+caducable vinculada a la referencia de sesión y nunca sobreviven a su expiración.
+Las claves antiguas sin TTL se purgan. Logout se sincroniza entre instancias y
+pestañas mediante eventos locales y de storage. El estado operativo de Presenter/Control no se considera identidad de
 Audience y conserva su ciclo funcional propio.
 
 ### `sessionStorage`
