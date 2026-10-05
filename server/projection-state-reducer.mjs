@@ -115,7 +115,7 @@ const getActiveSlide = (state) => {
 export const makeAudienceSyncStateMessage = (state) => {
   const normalized = normalizeProjectionState(state);
   const slide = getActiveSlide(normalized);
-  return makeSyncState({
+  const message = makeSyncState({
     ...normalized,
     presentation: normalized.presentation
       ? { ...normalized.presentation, slides: slide ? [slide] : [] }
@@ -128,6 +128,7 @@ export const makeAudienceSyncStateMessage = (state) => {
     now: state.timestamp,
     messageId: state.messageId,
   });
+  return state.stateEpoch ? { ...message, stateEpoch: state.stateEpoch, stateRevision: state.stateRevision } : message;
 };
 
 const parseCitaRef = (citaRef) => {

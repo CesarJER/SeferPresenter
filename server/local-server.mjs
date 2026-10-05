@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import http from 'node:http'
 import path from 'node:path'
-import { createHash } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import { createLiveKitApi } from './livekit-server.mjs'
 import {
@@ -110,10 +110,14 @@ if (dataInitialization.created.length > 0) {
   console.info(`[DATA] Initialized ${dataInitialization.created.length} missing file(s) in SEFER_DATA_DIR`)
 }
 
+const stateEpoch = randomUUID()
+let stateRevision = 0
 let currentState = makeProjectionSyncStateMessage(getDefaultProjectionState(), {
   clientId: 'server',
   origin: 'control',
 })
+
+currentState = { ...currentState, stateEpoch, stateRevision }
 
 let clients = new Set()
 let audienceClients = new Set()
@@ -364,6 +368,11 @@ const walkAssets = (directory, matcher) => {
 }
 
 const broadcast = (body) => {
+  const message = JSON.parse(body)
+  if (['AUDIO_TELEMETRY', 'VIDEO_TELEMETRY', 'DISPLAY_TELEMETRY'].includes(message.type)) {
+    currentState = { ...currentState, stateEpoch, stateRevision: ++stateRevision }
+    body = JSON.stringify({ ...message, stateEpoch, stateRevision })
+  }
   writeSseSet(clients, body)
   const audienceBody = JSON.stringify(makeAudienceSyncStateMessage(currentState))
   writeSseSet(audienceClients, audienceBody)
@@ -612,6 +621,7 @@ const commitState = (state, metadata = {}) => {
     now: metadata.now,
     messageId: metadata.messageId,
   })
+  currentState = { ...currentState, stateEpoch, stateRevision: ++stateRevision }
   logStateChange(currentState)
   broadcast(JSON.stringify(currentState))
   return currentState

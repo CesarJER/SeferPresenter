@@ -64,6 +64,9 @@ interface UseSyncStateProps {
   onWsMessage?: (type: string, payload: Record<string, unknown>) => void;
 }
 
+const isServerVersioned = (data: Record<string, unknown>) =>
+  typeof data.stateEpoch === 'string' && Number.isSafeInteger(data.stateRevision) && (data.stateRevision as number) >= 0;
+
 async function postOperatorUpdate(path: string, payload: unknown) {
   const response = await fetch(path, {
     method: 'POST', headers: { 'Content-Type': 'application/json', ...getOperatorHeaders() },
@@ -189,6 +192,23 @@ export function useSyncState(props: UseSyncStateProps) {
 
   const channel = useMemo(() => new BroadcastChannel('sefer-presenter'), []);
   const processedMessageIdsRef = useRef<Set<string>>(new Set());
+  const lastVersionRef = useRef<{ epoch: string; revision: number } | null>(null);
+  const retiredEpochsRef = useRef(new Set<string>());
+  const acceptVersion = useCallback((data: Record<string, unknown>, allowNewEpoch = true) => {
+    const epoch = data.stateEpoch;
+    const revision = data.stateRevision;
+    const previous = lastVersionRef.current;
+    if (typeof epoch !== 'string' || !Number.isSafeInteger(revision) || (revision as number) < 0) return !previous;
+    if (retiredEpochsRef.current.has(epoch)) return false;
+    if (previous?.epoch === epoch && (revision as number) <= previous.revision) return false;
+    if (previous && previous.epoch !== epoch) {
+      if (!allowNewEpoch) return false;
+      retiredEpochsRef.current.add(previous.epoch);
+      if (retiredEpochsRef.current.size > 10) retiredEpochsRef.current.delete(retiredEpochsRef.current.values().next().value!);
+    }
+    lastVersionRef.current = { epoch, revision: revision as number };
+    return true;
+  }, []);
   const lastControllerUpdateMsRef = useRef<number>(0);
   const [stateSnapshotPath, stateEventsPath] = getStateSyncPaths(isControlMode, isPresenterMode);
 
@@ -467,7 +487,7 @@ export function useSyncState(props: UseSyncStateProps) {
   ]);
 
   // ── Apply incoming remote state (unified for both BroadcastChannel and SSE) ─
-  const applyRemoteState = useCallback((data: Record<string, unknown>, persist = true, alreadyValidated = false) => {
+  const applyRemoteState = useCallback((data: Record<string, unknown>, persist = true, alreadyValidated = false, allowNewEpoch = true) => {
     const validation = alreadyValidated ? null : validateRemoteStatePayload(data);
     if (validation && (!validation.ok || !validation.value)) {
       console.error('Ignoring invalid remote state payload', validation.errors);
@@ -475,6 +495,7 @@ export function useSyncState(props: UseSyncStateProps) {
     }
 
     const safeData = validation?.value ? { ...data, ...validation.value } : data;
+    if (!acceptVersion(safeData, allowNewEpoch)) return;
     const normalizedPresentation = safeData.presentation
       ? normalizePresentation(safeData.presentation as Presentation)
       : null;
@@ -534,7 +555,7 @@ export function useSyncState(props: UseSyncStateProps) {
       );
     }
   }, [
-    currentPresentationRef, currentSlideIndexRef, currentStepIndexRef, backgroundLockRef,
+    acceptVersion, currentPresentationRef, currentSlideIndexRef, currentStepIndexRef, backgroundLockRef,
     lockedBackgroundValueRef, userSelectedBackgroundRef, videoStateRef,
     appModeRef, scriptureStateRef,
     setCurrentPresentation, setCurrentSlideIndex, setCurrentStepIndex, setBackgroundLock,
@@ -563,6 +584,7 @@ export function useSyncState(props: UseSyncStateProps) {
   const requestBackendState = useCallback(async () => {
     if (isAudienceMode && !audienceAuthorized) return false;
     try {
+      const versionAtRequest = lastVersionRef.current;
       const response = await fetch(stateSnapshotPath, {
         method: 'GET',
         headers: {
@@ -585,12 +607,12 @@ export function useSyncState(props: UseSyncStateProps) {
         }
         const safeData = validation.value;
         if (safeData.type === 'SYNC_STATE') {
-          applyRemoteStateRef.current(safeData as unknown as Record<string, unknown>, true, true);
+          applyRemoteStateRef.current(safeData as unknown as Record<string, unknown>, true, true, versionAtRequest === lastVersionRef.current);
           return true;
         }
       }
 
-      applyRemoteStateRef.current(data as Record<string, unknown>);
+      applyRemoteStateRef.current(data as Record<string, unknown>, true, false, versionAtRequest === lastVersionRef.current);
       return true;
     } catch (err) {
       console.error('Error requesting backend state snapshot', err);
@@ -620,7 +642,7 @@ export function useSyncState(props: UseSyncStateProps) {
         return;
       }
 
-      if (data.messageId) {
+      if (data.messageId && !isServerVersioned(data as unknown as Record<string, unknown>)) {
         if (processedMessageIdsRef.current.has(data.messageId)) return;
         processedMessageIdsRef.current.add(data.messageId);
         if (processedMessageIdsRef.current.size > 100) {
@@ -634,6 +656,7 @@ export function useSyncState(props: UseSyncStateProps) {
         return;
       }
 
+      if (['AUDIO_TELEMETRY', 'VIDEO_TELEMETRY', 'DISPLAY_TELEMETRY'].includes(data.type) && !acceptVersion(data as unknown as Record<string, unknown>, false)) return;
       if (data.type === 'AUDIO_TELEMETRY') {
         applyAudioTelemetryRef.current(data.audioState as AudioState);
         return;
@@ -667,7 +690,7 @@ export function useSyncState(props: UseSyncStateProps) {
       }
 
       if (data.type === 'SYNC_STATE') {
-        applyRemoteStateRef.current(data as unknown as Record<string, unknown>, true, true);
+        applyRemoteStateRef.current(data as unknown as Record<string, unknown>, true, true, false);
       }
     };
 
@@ -681,7 +704,7 @@ export function useSyncState(props: UseSyncStateProps) {
 
     return () => channel.removeEventListener('message', handleMessage);
   }, [
-    audienceAuthorized, isAudienceMode, isPresenterMode, channel, clientIdRef, requestBackendState, videoStateRef
+    acceptVersion, audienceAuthorized, isAudienceMode, isPresenterMode, channel, clientIdRef, requestBackendState, videoStateRef
   ]);
 
   // ── SSE listener (web mode only) ──────────────────────────────────
@@ -710,7 +733,7 @@ export function useSyncState(props: UseSyncStateProps) {
 
           if (isLiveAudioWsOnlyType(safeData.type)) return;
 
-          if (safeData.messageId) {
+          if (safeData.messageId && !isServerVersioned(safeData as unknown as Record<string, unknown>)) {
             if (processedMessageIdsRef.current.has(safeData.messageId)) return;
             processedMessageIdsRef.current.add(safeData.messageId);
             if (processedMessageIdsRef.current.size > 100) {
@@ -719,6 +742,7 @@ export function useSyncState(props: UseSyncStateProps) {
             }
           }
 
+          if (['AUDIO_TELEMETRY', 'VIDEO_TELEMETRY', 'DISPLAY_TELEMETRY'].includes(safeData.type) && !acceptVersion(safeData as unknown as Record<string, unknown>)) return;
           if (safeData.type === 'AUDIO_TELEMETRY') {
             applyAudioTelemetryRef.current(safeData.audioState as AudioState);
             return;
@@ -769,7 +793,7 @@ export function useSyncState(props: UseSyncStateProps) {
 
     return () => eventSource.close();
   }, [
-    audienceAuthorized, audienceSseTicket, clientIdRef, isAudienceMode,
+    acceptVersion, audienceAuthorized, audienceSseTicket, clientIdRef, isAudienceMode,
     isPresenterMode, onAudienceSseReconnect, stateEventsPath, videoStateRef
   ]);
 
