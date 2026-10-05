@@ -1,3 +1,4 @@
+import { loadCatalog, saveCatalog } from './utils/catalogApi';
 import { StrictMode, useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { createRoot } from 'react-dom/client';
 import './index.css';
@@ -32,7 +33,6 @@ import { useAudioDevices } from './hooks/useAudioDevices';
 import { validateAudioSyncMaps, validatePresentationList } from './utils/validation';
 import { generateQuizSubslides } from './utils/quizUtils';
 import { generatePresentationSteps } from './utils/navigationUtils';
-import { makeSyncMessage } from './utils/syncProtocol';
 import { registerScopedServiceWorker } from './utils/pwaUpdate';
 
 function ControlApp() {
@@ -122,12 +122,11 @@ function ControlApp() {
 
     fetchMedia();
 
-    fetch('/api/presentations')
-      .then(res => res.json())
+    loadCatalog<Presentation>('/api/presentations', normalizePresentation)
       .then(data => {
         const validation = validatePresentationList(data);
         if (validation.ok && validation.value) {
-          setPresentations(validation.value.map(normalizePresentation));
+          setPresentations(data);
         } else {
           console.error("Invalid presentations payload", validation.errors);
           setPresentations([]);
@@ -138,12 +137,11 @@ function ControlApp() {
         setPresentations([]);
       });
       
-    fetch('/api/audio-sync')
-      .then(res => res.json())
+    loadCatalog<AudioSyncMap>('/api/audio-sync')
       .then(data => {
         const validation = validateAudioSyncMaps(data);
         if (validation.ok && validation.value) {
-          setAudioSyncMaps(validation.value);
+          setAudioSyncMaps(data);
         } else {
           console.error("Invalid audio sync payload", validation.errors);
         }
@@ -154,7 +152,7 @@ function ControlApp() {
     return () => window.removeEventListener('focus', fetchMedia);
   }, []);
 
-  const { emitCommand, channel, wsStatus, wsSend, subscribeToWsMessage, isMediaMaster, emitVideoTelemetry, emitAudioTelemetry } = useSyncState({
+  const { emitCommand, wsStatus, wsSend, subscribeToWsMessage, isMediaMaster, emitVideoTelemetry, emitAudioTelemetry } = useSyncState({
     isControlMode: true,
     isPresenterMode: false,
     clientIdRef,
@@ -322,7 +320,7 @@ function ControlApp() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [emitCommand]);
 
-  const savePresentations = async (updated: Presentation[]) => {
+  const savePresentations = useCallback(async (updated: Presentation[]) => {
     const normalized = updated.map(normalizePresentation);
     const validation = validatePresentationList(normalized);
     if (!validation.ok || !validation.value) {
@@ -330,19 +328,17 @@ function ControlApp() {
       alert(`No se guardaron las presentaciones porque contienen datos inválidos:\n${validation.errors.slice(0, 5).join('\n')}`);
       return;
     }
-    setPresentations(normalized);
     try {
-      await fetch('/api/presentations', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(normalized)
-      });
+      await saveCatalog('/api/presentations', normalized, presentations);
+      setPresentations(normalized);
+      return true;
     } catch (err) {
-      console.error("Error saving presentations", err);
+      alert(err instanceof Error ? err.message : 'No se pudieron guardar las presentaciones. El borrador se conserva.');
+      return false;
     }
-  };
+  }, [presentations]);
 
-  const handleSave = useCallback((presentation: Presentation) => {
+  const handleSave = useCallback(async (presentation: Presentation) => {
     const normalizedPresentation = normalizePresentation(presentation);
     const existing = presentations.findIndex(p => p.id === normalizedPresentation.id);
     const updated = [...presentations];
@@ -351,7 +347,7 @@ function ControlApp() {
     } else {
       updated.push(normalizedPresentation);
     }
-    savePresentations(updated);
+    if (!await savePresentations(updated)) return;
     const nextIndex = existing >= 0
       ? Math.min(currentSlideIndexRef.current, normalizedPresentation.slides.length - 1)
       : normalizedPresentation.slides.length > 0 ? 0 : -1;
@@ -362,7 +358,7 @@ function ControlApp() {
       slideIndex: nextIndex,
       direction: 'forward'
     });
-  }, [presentations, emitCommand]);
+  }, [presentations, emitCommand, savePresentations]);
 
   const handleAddScriptureSlide = useCallback((state: SeferReaderState, kind: 'sefer' | 'tanaj' = 'sefer') => {
     const presentation = currentPresentationRef.current;
@@ -427,8 +423,8 @@ function ControlApp() {
           setCurrentSlideIndex(idx);
           emitCommand({ command: 'SELECT_PRESENTATION_AND_SLIDE', presentation: currentPresentation, slideIndex: idx, direction: idx < currentSlideIndex ? 'backward' : 'forward' });
         }}
-        onImport={(imported) => {
-          savePresentations(imported);
+        onImport={async (imported) => {
+          if (!await savePresentations(imported)) return;
           if (imported.length > 0) {
             emitCommand({ command: 'SELECT_PRESENTATION_AND_SLIDE', presentation: imported[0], slideIndex: imported[0].slides.length > 0 ? 0 : -1, direction: 'forward' });
           } else {
@@ -465,20 +461,11 @@ function ControlApp() {
             setAutoduckState(state);
           }
         }}
-        onAudioSyncMapsChange={(maps) => {
+        onAudioSyncMapsChange={async (maps, baseMaps = audioSyncMaps) => {
           const validation = validateAudioSyncMaps(maps);
-          if (!validation.ok || !validation.value) {
-            console.error('Refusing to save invalid audio sync maps', validation.errors);
-            alert(`No se guardaron los mapas de audio porque contienen datos inválidos:\n${validation.errors.slice(0, 5).join('\n')}`);
-            return;
-          }
-          setAudioSyncMaps(validation.value);
-          fetch('/api/audio-sync', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(validation.value)
-          }).catch(err => console.error('Error saving audio sync maps', err));
-          channel.postMessage(makeSyncMessage({ type: 'AUDIO_SYNC_MAPS_UPDATE', maps: validation.value }));
+          if (!validation.ok || !validation.value) throw new Error('Mapas de audio inválidos');
+          await saveCatalog('/api/audio-sync', maps, baseMaps);
+          setAudioSyncMaps(maps);
         }}
         appMode={appMode}
         scriptureState={scriptureState}

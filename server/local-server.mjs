@@ -183,6 +183,7 @@ const normalizePresentations = (presentations) =>
   }))
 
 const sendJson = (res, status, payload) => {
+  res.setHeader('Cache-Control', 'no-store')
   res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' })
   res.end(JSON.stringify(payload))
 }
@@ -299,6 +300,13 @@ const readJsonFile = (filePath, fallback) => {
   return JSON.parse(content)
 }
 
+const catalogEtag = (data) => '"' + createHash('sha256').update(JSON.stringify(data)).digest('hex') + '"'
+const requireCatalogRevision = (req, res, current) => {
+  const expected = req.headers['if-match']
+  if (!expected) { sendJson(res, 428, { error: 'Reload the catalog before saving' }); return false }
+  if (expected !== catalogEtag(current)) { sendJson(res, 412, { error: 'Catalog changed in another editor; your draft was not saved' }); return false }
+  return true
+}
 const persistJson = (filePath, value) => {
   const configuredBackupDir = process.env.SEFER_BACKUP_DIR?.trim()
   const backupPath = configuredBackupDir
@@ -1069,7 +1077,9 @@ const handleApi = async (req, res, url) => {
   }
 
   if (url.pathname === '/api/audio-sync' && req.method === 'GET') {
-    sendJson(res, 200, readAudioSyncMapsCache())
+    const maps = readAudioSyncMapsCache()
+    res.setHeader('ETag', catalogEtag(maps))
+    sendJson(res, 200, maps)
     return true
   }
 
@@ -1081,8 +1091,11 @@ const handleApi = async (req, res, url) => {
         sendJson(res, 400, { error: `Invalid audio sync payload: ${formatValidationError(validation)}` })
         return true
       }
+      if (!requireCatalogRevision(req, res, readAudioSyncMapsCache())) return true
       persistJson(seferDataPaths.audioSync, validation.value)
       audioSyncMapsCache = validation.value
+      res.setHeader('ETag', catalogEtag(audioSyncMapsCache))
+      writeSseSet(clients, JSON.stringify({ type: 'AUDIO_SYNC_MAPS_UPDATE', maps: audioSyncMapsCache, protocolVersion: 1, messageId: randomUUID(), timestamp: Date.now() }))
       sendJson(res, 200, { success: true })
     } catch (err) {
       const status = err instanceof SyntaxError ? 400 : 500
@@ -1093,7 +1106,9 @@ const handleApi = async (req, res, url) => {
 
   if (url.pathname === '/api/presentations' && req.method === 'GET') {
     try {
-      sendJson(res, 200, readPresentationsCache())
+      const presentations = readPresentationsCache()
+      res.setHeader('ETag', catalogEtag(presentations))
+      sendJson(res, 200, presentations)
     } catch {
       sendJson(res, 500, { error: 'Invalid presentations JSON' })
     }
@@ -1108,12 +1123,14 @@ const handleApi = async (req, res, url) => {
         sendJson(res, 400, { error: `Invalid presentations payload: ${formatValidationError(validation)}` })
         return true
       }
+      if (!requireCatalogRevision(req, res, readPresentationsCache())) return true
       const presentations = normalizePresentations(validation.value)
       persistJson(seferDataPaths.presentations, presentations)
       presentationsCache = presentations
       publicPresentationsCache = buildPublicPresentations(presentationsCache, getPublicCatalogs(), {
         publicDataDir: seferDataPaths.public,
       })
+      res.setHeader('ETag', catalogEtag(presentationsCache))
       sendJson(res, 200, { success: true })
     } catch (err) {
       const status = err instanceof SyntaxError ? 400 : 500

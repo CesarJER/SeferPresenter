@@ -14,7 +14,7 @@ interface AudioSyncEditorProps {
   activeAudioSrc?: string | null;
   availableAudioFiles: string[];
   audioSyncMaps: AudioSyncMap[];
-  onAudioSyncMapsChange: (maps: AudioSyncMap[]) => void;
+  onAudioSyncMapsChange: (maps: AudioSyncMap[], baseMaps?: AudioSyncMap[]) => void | Promise<void>;
 }
 
 interface DisplayRow {
@@ -58,11 +58,17 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
   const [playbackRate, setPlaybackRate] = useState<number>(1.0);
   const [isConfigCollapsed, setIsConfigCollapsed] = useState<boolean>(false);
 
+  const dirtyRef = useRef(false);
+  const initializedRef = useRef(false);
+  const editBaseMapsRef = useRef(audioSyncMaps);
+  const [isSaving, setIsSaving] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Initialize selected presentation and audio
   useEffect(() => {
+    if (!isOpen) { dirtyRef.current = false; initializedRef.current = false; return; }
+    if (dirtyRef.current || initializedRef.current) return;
     if (isOpen) {
       const initialAudio = activeAudioSrc || '';
       setSelectedAudioFile(initialAudio);
@@ -79,12 +85,15 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
         initialPresId = activePresentationId || (presentations[0]?.id ?? '');
       }
 
+      if (initialPresId && presentations.some(p => p.id === initialPresId)) initializedRef.current = true;
       setSelectedPresentationId(initialPresId);
     }
-  }, [isOpen, activePresentationId, activeAudioSrc, presentations, audioSyncMaps]);
+  }, [isOpen, activePresentationId, activeAudioSrc, presentations, audioSyncMaps, selectedPresentationId]);
 
   // Load available sync map if it exists for this presentation + audio
   useEffect(() => {
+    if (dirtyRef.current) return;
+    editBaseMapsRef.current = audioSyncMaps;
     if (!selectedPresentationId || !selectedAudioFile) {
       setRowTimes({});
       return;
@@ -297,6 +306,7 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
   const handleCaptureTime = (rowKey: string) => {
     if (!selectedAudioFile) return;
     const timeVal = parseFloat(currentTime.toFixed(2));
+    dirtyRef.current = true;
     setRowTimes((prev) => ({
       ...prev,
       [rowKey]: timeVal.toString(),
@@ -305,6 +315,7 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
 
   // Manual time input change
   const handleTimeInputChange = (rowKey: string, val: string) => {
+    dirtyRef.current = true;
     setRowTimes((prev) => ({
       ...prev,
       [rowKey]: val,
@@ -313,6 +324,7 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
 
   // Remove cue time
   const handleClearTime = (rowKey: string) => {
+    dirtyRef.current = true;
     setRowTimes((prev) => {
       const copy = { ...prev };
       delete copy[rowKey];
@@ -323,12 +335,14 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
   // Clear all cues
   const handleClearAll = () => {
     if (window.confirm('¿Está seguro de que desea eliminar todas las marcas de tiempo?')) {
+      dirtyRef.current = true;
       setRowTimes({});
     }
   };
 
   // Save changes
-  const handleSave = () => {
+  const handleSave = async () => {
+    if (isSaving) return;
     if (!selectedPresentationId) {
       alert('Por favor seleccione una presentación.');
       return;
@@ -359,11 +373,12 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
     cues.sort((a, b) => a.timeSec - b.timeSec);
 
     // Existing sync map or create new one
-    const existingIndex = audioSyncMaps.findIndex(
+    const baseMaps = editBaseMapsRef.current;
+    const existingIndex = baseMaps.findIndex(
       (m) => m.presentationId === selectedPresentationId && m.audioSrc === selectedAudioFile
     );
 
-    const mapId = existingIndex >= 0 ? audioSyncMaps[existingIndex].id : `sync-${Date.now()}`;
+    const mapId = existingIndex >= 0 ? baseMaps[existingIndex].id : `sync-${Date.now()}`;
     
     // Automatically determine name from clean audio filename (without extension)
     const filename = selectedAudioFile.split('/').pop()?.split('.')[0] || 'Sincronización';
@@ -379,15 +394,22 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
       defaultVolume,
     };
 
-    const updatedMaps = [...audioSyncMaps];
+    const updatedMaps = [...baseMaps];
     if (existingIndex >= 0) {
       updatedMaps[existingIndex] = newMap;
     } else {
       updatedMaps.push(newMap);
     }
 
-    onAudioSyncMapsChange(updatedMaps);
-    alert('Sincronización guardada correctamente.');
+    setIsSaving(true);
+    try {
+      await onAudioSyncMapsChange(updatedMaps, baseMaps);
+      dirtyRef.current = false;
+      editBaseMapsRef.current = updatedMaps;
+      alert('Sincronización guardada correctamente.');
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'No se pudo guardar. Tu borrador se conserva.');
+    } finally { setIsSaving(false); }
   };
 
   // Export JSON
@@ -411,7 +433,7 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
       try {
         const parsed = JSON.parse(event.target?.result as string);
         if (Array.isArray(parsed)) {
@@ -425,7 +447,9 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
               alert(`El formato del archivo JSON no es valido:\n${validation.errors.slice(0, 8).join('\n')}`);
               return;
             }
-            onAudioSyncMapsChange(validation.value);
+            await onAudioSyncMapsChange(validation.value, editBaseMapsRef.current);
+            dirtyRef.current = false;
+            editBaseMapsRef.current = validation.value;
             alert('Mapas de sincronización importados correctamente.');
           } else {
             alert('El formato del archivo JSON no es válido.');
@@ -433,8 +457,8 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
         } else {
           alert('El archivo JSON debe contener un arreglo de mapas.');
         }
-      } catch {
-        alert('Error al leer el archivo JSON.');
+      } catch (err) {
+        alert(err instanceof Error ? err.message : 'No se pudo importar. Tu borrador se conserva.');
       }
     };
     reader.readAsText(file);
@@ -491,6 +515,8 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
                   <select
                     value={selectedAudioFile}
                     onChange={(e) => {
+                      if (dirtyRef.current && !window.confirm('¿Descartar el borrador para cambiar de pista?')) return;
+                      dirtyRef.current = false;
                       const audioFile = e.target.value;
                       setSelectedAudioFile(audioFile);
                       if (audioFile) {
@@ -522,7 +548,11 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
                   <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">Presentación</label>
                   <select
                     value={selectedPresentationId}
-                    onChange={(e) => setSelectedPresentationId(e.target.value)}
+                    onChange={(e) => {
+                      if (dirtyRef.current && !window.confirm('¿Descartar el borrador para cambiar de presentación?')) return;
+                      dirtyRef.current = false;
+                      setSelectedPresentationId(e.target.value);
+                    }}
                     className="w-full text-xs bg-gray-900 border border-gray-800 rounded px-2.5 py-1.5 focus:border-yellow-500 outline-none text-white cursor-pointer shadow-sm"
                   >
                     <option value="">-- Seleccionar Presentación --</option>
@@ -552,7 +582,7 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
                     <div className="flex gap-0.5">
                       <button
                         type="button"
-                        onClick={() => setDefaultSyncMode('none')}
+                        onClick={() => { dirtyRef.current = true; setDefaultSyncMode('none'); }}
                         className={`flex-1 py-2 rounded border text-[10px] font-bold transition-all cursor-pointer flex items-center justify-center ${
                           defaultSyncMode === 'none'
                             ? 'bg-orange-650 border-orange-500 text-white'
@@ -564,7 +594,7 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
                       </button>
                       <button
                         type="button"
-                        onClick={() => setDefaultSyncMode('unilateral')}
+                        onClick={() => { dirtyRef.current = true; setDefaultSyncMode('unilateral'); }}
                         className={`flex-1 py-2 rounded border text-[10px] font-bold transition-all cursor-pointer flex items-center justify-center ${
                           defaultSyncMode === 'unilateral'
                             ? 'bg-sky-650 border-sky-500 text-white'
@@ -576,7 +606,7 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
                       </button>
                       <button
                         type="button"
-                        onClick={() => setDefaultSyncMode('bilateral')}
+                        onClick={() => { dirtyRef.current = true; setDefaultSyncMode('bilateral'); }}
                         className={`flex-1 py-2 rounded border text-[10px] font-bold transition-all cursor-pointer flex items-center justify-center ${
                           defaultSyncMode === 'bilateral'
                             ? 'bg-emerald-650 border-emerald-500 text-white'
@@ -602,7 +632,7 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
                         max="1"
                         step="0.05"
                         value={defaultVolume}
-                        onChange={(e) => setDefaultVolume(parseFloat(e.target.value))}
+                        onChange={(e) => { dirtyRef.current = true; setDefaultVolume(parseFloat(e.target.value)); }}
                         className="w-full h-1 bg-gray-800 rounded appearance-none cursor-pointer accent-yellow-500"
                       />
                     </div>
@@ -913,7 +943,7 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
               <button
                 type="button"
                 onClick={handleSave}
-                disabled={!selectedPresentationId || !selectedAudioFile}
+                disabled={isSaving || !selectedPresentationId || !selectedAudioFile}
                 className="flex items-center justify-center gap-2 px-6 py-2.5 rounded-lg bg-yellow-600 hover:bg-yellow-500 text-white font-extrabold text-xs tracking-wider transition-all shadow-md shadow-yellow-950/20 disabled:opacity-40 disabled:hover:bg-yellow-600 cursor-pointer"
               >
                 <Save size={14} />

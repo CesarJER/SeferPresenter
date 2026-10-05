@@ -1,3 +1,4 @@
+import { loadCatalog, saveCatalog } from './utils/catalogApi';
 import { StrictMode, useCallback, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import './index.css';
@@ -8,17 +9,18 @@ import { normalizePresentation } from './utils/normalizePresentation';
 import { validateAudioSyncMaps, validatePresentationList } from './utils/validation';
 
 const fetchJson = async <T,>(url: string): Promise<T> => {
-  const response = await fetch(url);
+  const response = await fetch(url, { cache: 'no-store', headers: { Accept: 'application/json' } });
   if (!response.ok) {
     throw new Error(`${url} returned ${response.status}`);
   }
   return response.json() as Promise<T>;
 };
 
-const AudioEditorApp = () => {
+export const AudioEditorApp = () => {
   const [presentations, setPresentations] = useState<Presentation[]>([]);
   const [audioSyncMaps, setAudioSyncMaps] = useState<AudioSyncMap[]>([]);
   const [availableAudioFiles, setAvailableAudioFiles] = useState<string[]>([]);
+  const [reloadVersion, setReloadVersion] = useState(0);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -27,8 +29,8 @@ const AudioEditorApp = () => {
     const loadEditorData = async () => {
       try {
         const [presentationsPayload, audioSyncPayload, audioFilesPayload] = await Promise.all([
-          fetchJson<unknown>('/api/presentations'),
-          fetchJson<unknown>('/api/audio-sync'),
+          loadCatalog<Presentation>('/api/presentations', normalizePresentation),
+          loadCatalog<AudioSyncMap>('/api/audio-sync'),
           fetchJson<unknown>('/api/audio'),
         ]);
 
@@ -47,14 +49,14 @@ const AudioEditorApp = () => {
           : [];
 
         if (!active) return;
-        setPresentations(presentationValidation.value.map(normalizePresentation));
-        setAudioSyncMaps(audioSyncValidation.value);
+        setPresentations(presentationsPayload);
+        setAudioSyncMaps(audioSyncPayload);
         setAvailableAudioFiles(audioFiles);
         setLoadError(null);
       } catch (err) {
         console.error('Error loading audio editor data', err);
         if (active) {
-          setLoadError('No se pudieron cargar los datos del editor de audio.');
+          setLoadError(`No se pudieron cargar los datos del editor de audio. ${err instanceof Error ? err.message : ''}`);
         }
       }
     };
@@ -64,32 +66,39 @@ const AudioEditorApp = () => {
     return () => {
       active = false;
     };
+  }, [reloadVersion]);
+
+  useEffect(() => {
+    const stream = new EventSource('/api/state-events');
+    let active = true;
+    let generation = 0;
+    stream.onmessage = event => {
+      if (event.data === 'heartbeat') return;
+      try {
+        if (JSON.parse(event.data).type !== 'AUDIO_SYNC_MAPS_UPDATE') return;
+      } catch { return; }
+      const request = ++generation;
+      void loadCatalog<AudioSyncMap>('/api/audio-sync').then(maps => {
+        const validation = validateAudioSyncMaps(maps);
+        if (active && request === generation && validation.ok) setAudioSyncMaps(maps);
+      }).catch(err => { if (active) setLoadError(err instanceof Error ? err.message : 'No se pudieron actualizar los mapas de audio.'); });
+    };
+    return () => { active = false; stream.close(); };
   }, []);
 
-  const handleAudioSyncMapsChange = useCallback((maps: AudioSyncMap[]) => {
+  const handleAudioSyncMapsChange = useCallback(async (maps: AudioSyncMap[], baseMaps = audioSyncMaps) => {
     const validation = validateAudioSyncMaps(maps);
-    if (!validation.ok || !validation.value) {
-      console.error('Refusing to save invalid audio sync maps', validation.errors);
-      alert(`No se guardaron los mapas de audio porque contienen datos invalidos:\n${validation.errors.slice(0, 5).join('\n')}`);
-      return;
-    }
-
-    setAudioSyncMaps(validation.value);
-    fetch('/api/audio-sync', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(validation.value),
-    }).catch((err) => {
-      console.error('Error saving audio sync maps', err);
-      alert('No se pudieron guardar los mapas de audio.');
-    });
-  }, []);
+    if (!validation.ok || !validation.value) throw new Error('Mapas de audio inválidos');
+    await saveCatalog('/api/audio-sync', maps, baseMaps);
+    setAudioSyncMaps(maps);
+  }, [audioSyncMaps]);
 
   return (
     <div className="w-dvw h-dvh bg-gray-900 overflow-hidden">
       {loadError && (
         <div className="absolute left-4 right-4 top-4 z-50 rounded border border-red-800 bg-red-950 px-4 py-3 text-sm font-semibold text-red-100 shadow">
           {loadError}
+          <button type="button" className="ml-3 underline" onClick={() => setReloadVersion(value => value + 1)}>Reintentar carga</button>
         </div>
       )}
       <AudioSyncEditor
@@ -106,7 +115,8 @@ const AudioEditorApp = () => {
   );
 };
 
-createRoot(document.getElementById('root')!).render(
+const root = document.getElementById('root');
+if (root) createRoot(root).render(
   <StrictMode>
     <AudioEditorApp />
   </StrictMode>,

@@ -1,3 +1,4 @@
+import { loadCatalog } from '../utils/catalogApi';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { AudioState, AudioSyncMap, AudioTimelineState } from '../types/audio';
 import type { AppMode, Presentation, ScriptureNavState, VideoState } from '../types/presentation';
@@ -209,6 +210,7 @@ export function useSyncState(props: UseSyncStateProps) {
     lastVersionRef.current = { epoch, revision: revision as number };
     return true;
   }, []);
+  const audioMapRequestRef = useRef(0);
   const lastControllerUpdateMsRef = useRef<number>(0);
   const [stateSnapshotPath, stateEventsPath] = getStateSyncPaths(isControlMode, isPresenterMode);
 
@@ -581,6 +583,12 @@ export function useSyncState(props: UseSyncStateProps) {
     setAudioSyncMapsRef.current = setAudioSyncMaps;
   }, [applyRemoteState, onRemoteCommand, applyAudioTelemetry, applyDisplayTelemetry, setVideoState, setAudioSyncMaps]);
 
+  const reloadAudioSyncMaps = useCallback(() => {
+    const request = ++audioMapRequestRef.current;
+    void loadCatalog<AudioSyncMap>('/api/audio-sync').then(maps => {
+      if (request === audioMapRequestRef.current) setAudioSyncMapsRef.current(maps);
+    }).catch(err => console.error('No se pudieron actualizar los mapas de audio', err));
+  }, []);
   const requestBackendState = useCallback(async () => {
     if (isAudienceMode && !audienceAuthorized) return false;
     try {
@@ -652,7 +660,7 @@ export function useSyncState(props: UseSyncStateProps) {
       }
 
       if (data.type === 'AUDIO_SYNC_MAPS_UPDATE') {
-        setAudioSyncMapsRef.current(data.maps as AudioSyncMap[]);
+        reloadAudioSyncMaps();
         return;
       }
 
@@ -704,7 +712,7 @@ export function useSyncState(props: UseSyncStateProps) {
 
     return () => channel.removeEventListener('message', handleMessage);
   }, [
-    acceptVersion, audienceAuthorized, isAudienceMode, isPresenterMode, channel, clientIdRef, requestBackendState, videoStateRef
+    reloadAudioSyncMaps, acceptVersion, audienceAuthorized, isAudienceMode, isPresenterMode, channel, clientIdRef, requestBackendState, videoStateRef
   ]);
 
   // ── SSE listener (web mode only) ──────────────────────────────────
@@ -743,6 +751,10 @@ export function useSyncState(props: UseSyncStateProps) {
           }
 
           if (['AUDIO_TELEMETRY', 'VIDEO_TELEMETRY', 'DISPLAY_TELEMETRY'].includes(safeData.type) && !acceptVersion(safeData as unknown as Record<string, unknown>)) return;
+          if (safeData.type === 'AUDIO_SYNC_MAPS_UPDATE') {
+            reloadAudioSyncMaps();
+            return;
+          }
           if (safeData.type === 'AUDIO_TELEMETRY') {
             applyAudioTelemetryRef.current(safeData.audioState as AudioState);
             return;
@@ -793,7 +805,7 @@ export function useSyncState(props: UseSyncStateProps) {
 
     return () => eventSource.close();
   }, [
-    acceptVersion, audienceAuthorized, audienceSseTicket, clientIdRef, isAudienceMode,
+    reloadAudioSyncMaps, acceptVersion, audienceAuthorized, audienceSseTicket, clientIdRef, isAudienceMode,
     isPresenterMode, onAudienceSseReconnect, stateEventsPath, videoStateRef
   ]);
 

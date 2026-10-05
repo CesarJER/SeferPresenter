@@ -71,3 +71,21 @@ it('blocks pending/copy-ID HTTP mutations, allows Presenter telemetry and reente
   expect((await post('/api/state', before, reentered.welcome.operatorCredential)).status).toBe(200);
   const audience = await connect('audience'); expect(audience.welcome.operatorCredential).toBeUndefined();
 }, 10000);
+it('rejects stale catalog replacements and emits audio-map invalidation only after persistence', async () => {
+  const { base, post } = await start();
+  const catalog = await fetch(`${base}/api/presentations`, { headers }); const initial = await catalog.json();
+  const etag = catalog.headers.get('ETag')!; expect(catalog.headers.get('Cache-Control')).toBe('no-store');
+  const item = { id: 'synthetic', title: 'First edit', mode: 'trilingual', background: '', slides: [{ id: 's', label: 's', lines: ['a'] }] };
+  expect((await post('/api/presentations', [...initial, item], undefined, etag)).status).toBe(200);
+  expect((await post('/api/presentations', [...initial, { ...item, title: 'Stale edit' }], undefined, etag)).status).toBe(412);
+  expect((await (await fetch(`${base}/api/presentations`, { headers })).json()).at(-1).title).toBe('First edit');
+  expect((await post('/api/presentations', initial)).status).toBe(428);
+  const stream = await fetch(`${base}/api/state-events`, { headers, signal: AbortSignal.timeout(3000) });
+  const reader = stream.body!.getReader(); await reader.read();
+  const maps = await fetch(`${base}/api/audio-sync`, { headers });
+  const map = { id: 'sync', name: 'Synthetic map', defaultSyncMode: 'unilateral', defaultVolume: 0.7, audioSrc: '/audio/test.mp3', presentationId: item.id, cues: [{ slideIndex: 0, timeSec: 1 }] };
+  expect((await post('/api/audio-sync', [map], undefined, maps.headers.get('ETag')!)).status).toBe(200);
+  let received = '';
+  while (!received.includes('AUDIO_SYNC_MAPS_UPDATE')) received += new TextDecoder().decode((await reader.read()).value);
+  expect(received).toContain('Synthetic map'); await reader.cancel();
+}, 10000);

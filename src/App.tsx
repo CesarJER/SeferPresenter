@@ -1,3 +1,4 @@
+import { loadCatalog, saveCatalog } from './utils/catalogApi';
 import { useState, useEffect, useCallback, useMemo, useRef, Suspense, lazy } from 'react';
 import PresenterScreen from './components/presenter/PresenterScreen';
 import SeferReaderScreen from './components/presenter/SeferReaderScreen';
@@ -303,12 +304,11 @@ function App() {
 
 
   useEffect(() => {
-    fetch('/api/presentations')
-      .then(res => res.json())
+    loadCatalog<Presentation>('/api/presentations', normalizePresentation)
       .then(data => {
         const validation = validatePresentationList(data);
         if (validation.ok && validation.value) {
-          setPresentations(validation.value.map(normalizePresentation));
+          setPresentations(data);
         } else {
           console.error("Invalid presentations payload", validation.errors);
           setPresentations([]);
@@ -318,12 +318,11 @@ function App() {
         console.error("Error loading presentations", err);
         setPresentations([]);
       });
-    fetch('/api/audio-sync')
-      .then(res => res.json())
+    loadCatalog<AudioSyncMap>('/api/audio-sync')
       .then(data => {
         const validation = validateAudioSyncMaps(data);
         if (validation.ok && validation.value) {
-          setAudioSyncMaps(validation.value);
+          setAudioSyncMaps(data);
         } else {
           console.error("Invalid audio sync payload", validation.errors);
         }
@@ -606,7 +605,7 @@ function App() {
   }, [syncState, buildScriptureSlideState, makeInitialQuizState, resetQuizTimer, backgroundLockRef, lockedBackgroundValueRef, userSelectedBackgroundRef, scriptureStateRef, getFirstStepIndexForSlide]);
   handleSelectPresentationAndSlideRef.current = handleSelectPresentationAndSlide;
 
-  const savePresentations = async (updated: Presentation[]) => {
+  const savePresentations = useCallback(async (updated: Presentation[]) => {
     const normalized = updated.map(normalizePresentation);
     const validation = validatePresentationList(normalized);
     if (!validation.ok || !validation.value) {
@@ -614,19 +613,17 @@ function App() {
       alert(`No se guardaron las presentaciones porque contienen datos inv\u00e1lidos:\n${validation.errors.slice(0, 5).join('\n')}`);
       return;
     }
-    setPresentations(normalized);
     try {
-      await fetch('/api/presentations', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(normalized)
-      });
+      await saveCatalog('/api/presentations', normalized, presentations);
+      setPresentations(normalized);
+      return true;
     } catch (err) {
-      console.error("Error saving presentations", err);
+      alert(err instanceof Error ? err.message : 'No se pudieron guardar las presentaciones. El borrador se conserva.');
+      return false;
     }
-  };
+  }, [presentations]);
 
-  const handleSave = useCallback((presentation: Presentation) => {
+  const handleSave = useCallback(async (presentation: Presentation) => {
     const normalizedPresentation = normalizePresentation(presentation);
     const existing = presentations.findIndex(p => p.id === normalizedPresentation.id);
     const updated = [...presentations];
@@ -635,7 +632,7 @@ function App() {
     } else {
       updated.push(normalizedPresentation);
     }
-    savePresentations(updated);
+    if (!await savePresentations(updated)) return;
     const nextIndex = existing >= 0
       ? Math.min(currentSlideIndexRef.current, normalizedPresentation.slides.length - 1)
       : normalizedPresentation.slides.length > 0 ? 0 : -1;
@@ -649,7 +646,7 @@ function App() {
     } else {
       handleSelectPresentationAndSlide(normalizedPresentation, nextIndex);
     }
-  }, [presentations, handleSelectPresentationAndSlide, isControlMode, emitCommand]);
+  }, [presentations, handleSelectPresentationAndSlide, isControlMode, emitCommand, savePresentations]);
   handleSaveRef.current = handleSave;
 
   const handleResetState = useCallback(() => {

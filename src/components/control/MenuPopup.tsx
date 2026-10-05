@@ -77,7 +77,7 @@ interface MenuPopupProps {
   audioDispatchAction?: (action: AudioTimelineAction) => void;
   audioEstimatedPositionSec?: number;
   audioLoop?: boolean;
-  onAudioSyncMapsChange: (maps: AudioSyncMap[]) => void;
+  onAudioSyncMapsChange: (maps: AudioSyncMap[], baseMaps?: AudioSyncMap[]) => void | Promise<void>;
   autoduckState?: import('../../types/sync').AutoduckState;
   onAutoduckStateChange?: (state: import('../../types/sync').AutoduckState) => void;
   onResetState?: (clearSession?: boolean, hardRefresh?: boolean) => void;
@@ -296,7 +296,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
 
     window.open(
       `${window.location.origin}/audio-editor`,
-      'AudioSyncEditor',
+      '_blank',
       `width=${width},height=${height},top=${top},left=${left},resizable=yes,scrollbars=yes`
     );
   };
