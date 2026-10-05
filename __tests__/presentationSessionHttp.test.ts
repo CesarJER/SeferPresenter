@@ -1,3 +1,4 @@
+import { WebSocket } from 'ws';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -5,10 +6,12 @@ import { createServer } from 'node:net';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { afterEach, expect, it, vi } from 'vitest';
 
+const sockets: WebSocket[] = [];
 let child: ChildProcess | undefined;
 let dataDir: string | undefined;
 
 afterEach(async () => {
+  sockets.forEach(ws => ws.terminate()); sockets.length = 0;
   if (child && child.exitCode === null) {
     const exited = new Promise<void>((resolve) => child!.once('exit', () => resolve()));
     child.kill();
@@ -39,10 +42,16 @@ it('persists HTTP reset before success and fails closed without changing project
     const health = await fetch(`${baseUrl}/api/health`, { signal: AbortSignal.timeout(300) });
     expect(health.ok).toBe(true);
   }, { timeout: 5_000, interval: 50 });
+  const connect = () => new Promise<string>((resolve, reject) => {
+    const ws = new WebSocket(baseUrl.replace('http', 'ws') + '/ws?role=control'); sockets.push(ws);
+    ws.on('message', raw => { const msg = JSON.parse(raw.toString()); if (msg.type === 'WELCOME') resolve(msg.operatorCredential); });
+    ws.on('error', reject);
+  });
+  let credential = await connect();
   const markerPath = path.join(dataDir, 'presentation-session.json');
   const marker = () => JSON.parse(fs.readFileSync(markerPath, 'utf8')) as { sessionId: string; expiresAt: number };
   const command = (payload: unknown) => fetch(`${baseUrl}/api/command`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Sefer-Operator-Credential': credential },
     body: JSON.stringify({ type: 'REMOTE_COMMAND', clientId: 'test-control', payload }),
   });
   const initialId = marker().sessionId;
@@ -51,6 +60,7 @@ it('persists HTTP reset before success and fails closed without changing project
   expect(marker().sessionId).toBe(initialId);
   const accepted = await command({ command: 'RESET_STATE', clearSession: true });
   expect(accepted.status).toBe(200);
+  credential = await connect();
   const nextId = marker().sessionId;
   expect(nextId).not.toBe(initialId);
   expect(Object.keys(marker()).sort()).toEqual(['expiresAt', 'sessionId']);

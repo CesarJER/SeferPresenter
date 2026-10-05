@@ -1,3 +1,4 @@
+import { getOperatorHeaders } from '../../../utils/operatorAuth';
 import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react';
 import {
   ConnectionState,
@@ -241,7 +242,7 @@ const requestToken = async (
   }
   const response = await fetch('/api/livekit/token', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json', ...getOperatorHeaders() },
     body: JSON.stringify({ role, roomSession, controlSessionId, audienceAccessCredential }),
   });
 
@@ -258,7 +259,7 @@ const refreshToken = async (participantId: string, refreshCredential: string) =>
   }
   const response = await fetch('/api/livekit/refresh-token', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json', ...getOperatorHeaders() },
     body: JSON.stringify({ participantId, refreshCredential, audienceAccessCredential }),
   });
 

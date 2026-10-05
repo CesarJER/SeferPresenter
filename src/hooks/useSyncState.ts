@@ -7,6 +7,7 @@ import { normalizePresentation } from '../utils/normalizePresentation';
 import { makeSyncMessage } from '../utils/syncProtocol';
 import { validateRemoteStatePayload, validateSyncMessage } from '../utils/validation';
 import { useWebSocket } from './useWebSocket';
+import { getOperatorHeaders, setOperatorCredential } from '../utils/operatorAuth';
 
 interface SyncStateOptions {
   presentation: Presentation | null;
@@ -61,6 +62,14 @@ interface UseSyncStateProps {
   audienceSseTicket?: string | null;
   onAudienceSseReconnect?: () => void;
   onWsMessage?: (type: string, payload: Record<string, unknown>) => void;
+}
+
+async function postOperatorUpdate(path: string, payload: unknown) {
+  const response = await fetch(path, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', ...getOperatorHeaders() },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) throw new Error(path + ': HTTP ' + response.status);
 }
 
 const areJsonEqual = (left: unknown, right: unknown) => JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
@@ -222,6 +231,7 @@ export function useSyncState(props: UseSyncStateProps) {
     }
     
     if (type === 'WELCOME') {
+      if (payload.role === 'control' || payload.role === 'presenter') setOperatorCredential(payload.operatorCredential);
       controlSessionIdRef.current = payload.controlSessionId as string | undefined;
       console.log(`[CLIENT DBG] WebSocket WELCOME - clientId=${payload.clientId} role=${payload.role} controlSessionId=${payload.controlSessionId}`);
       wsSendRef.current('SERVER_TIME_PING', { clientSentAtMs: Date.now() });
@@ -256,6 +266,9 @@ export function useSyncState(props: UseSyncStateProps) {
   });
   const wsSendRef = useRef(wsSend);
   useEffect(() => { wsSendRef.current = wsSend; }, [wsSend]);
+  useEffect(() => {
+    if (wsStatus === 'closed' || wsStatus === 'error') setOperatorCredential(null);
+  }, [wsStatus]);
   useEffect(() => {
     if (isAudienceMode && wsStatus === 'open' && audienceAccessCredential) {
       wsSend('AUDIENCE_ACCESS_BIND', { credential: audienceAccessCredential });
@@ -331,11 +344,7 @@ export function useSyncState(props: UseSyncStateProps) {
     if (wsStatus === 'open') {
       wsSendRef.current(payload.type, payload as unknown as Record<string, unknown>);
     } else {
-      fetch('/api/state', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      }).catch(err => console.error('Error syncing state to network', err));
+      postOperatorUpdate('/api/state', payload).catch(err => console.error('Error syncing state to network', err));
     }
   }, [channel, isControlMode, persistState, videoStateRef, appModeRef, scriptureStateRef, audioStateRef, quizStateRef, autoduckStateRef, currentStepIndexRef, clientIdRef, wsStatus]);
 
@@ -349,11 +358,10 @@ export function useSyncState(props: UseSyncStateProps) {
     if (wsStatus === 'open') {
       wsSendRef.current(message.type, message as unknown as Record<string, unknown>);
     } else {
-      fetch('/api/command', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(message)
-      }).catch(err => console.error('Error syncing command to network', err));
+      postOperatorUpdate('/api/command', message).catch(err => {
+        console.error('Error syncing command to network', err);
+        window.alert('No se pudo enviar el comando. Espera a que Control se reconecte y vuelve a intentarlo.');
+      });
     }
   }, [channel, clientIdRef, wsStatus]);
 
@@ -388,11 +396,7 @@ export function useSyncState(props: UseSyncStateProps) {
 
     channel.postMessage(payload);
 
-    fetch('/api/audio-telemetry', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    }).catch(err => console.error('Error syncing audio telemetry to network', err));
+    postOperatorUpdate('/api/audio-telemetry', payload).catch(err => console.error('Error syncing audio telemetry to network', err));
   }, [audioStateRef, channel, clientIdRef, isControlMode]);
 
   const emitVideoTelemetry = useCallback((incomingVideoState: VideoState | null) => {
@@ -407,11 +411,7 @@ export function useSyncState(props: UseSyncStateProps) {
 
     channel.postMessage(payload);
 
-    fetch('/api/video-telemetry', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    }).catch(err => console.error('Error syncing video telemetry to network', err));
+    postOperatorUpdate('/api/video-telemetry', payload).catch(err => console.error('Error syncing video telemetry to network', err));
   }, [videoStateRef, channel, clientIdRef, isControlMode]);
 
   const applyDisplayTelemetry = useCallback((displayState: DisplayTelemetryState) => {
@@ -460,11 +460,7 @@ export function useSyncState(props: UseSyncStateProps) {
 
     channel.postMessage(payload);
 
-    fetch('/api/display-telemetry', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    }).catch(err => console.error('Error syncing display telemetry to network', err));
+    postOperatorUpdate('/api/display-telemetry', payload).catch(err => console.error('Error syncing display telemetry to network', err));
   }, [
     backgroundLockRef, lockedBackgroundValueRef, userSelectedBackgroundRef,
     channel, clientIdRef, isControlMode,

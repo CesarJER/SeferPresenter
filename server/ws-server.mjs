@@ -4,6 +4,17 @@ import { applyAction, getTimeline } from './timelineManager.mjs'
 import { hasAllowedRequestOrigin, isAuthRequired, hasValidBasicAuth } from './authUtils.mjs'
 
 const wsClients = new Map()
+export const authorizeOperatorCredential = (req, { controlOnly = false } = {}) => {
+  const credential = req.headers?.['x-sefer-operator-credential']
+  if (typeof credential !== 'string' || !/^[0-9a-f]{64}$/.test(credential)) return null
+  for (const meta of wsClients.values()) {
+    if (meta.ws.readyState !== WebSocket.OPEN || !meta.operatorCredential) continue
+    if (!timingSafeEqual(Buffer.from(credential), Buffer.from(meta.operatorCredential))) continue
+    if (meta.role === 'control' && isControlAuthorized(liveAudioControls.get(meta.controlSessionId))) return meta
+    if (!controlOnly && meta.role === 'presenter') return meta
+  }
+  return null
+}
 const roles = new Set(['presenter', 'control', 'audience', 'unknown'])
 const liveAudioControls = new Map()
 const liveAudioParticipants = new Map()
@@ -793,7 +804,7 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
 
   const registerControl = (ws, clientId, requestedControlSessionId) => {
     const connectedAt = Date.now()
-    const controlSessionId = requestedControlSessionId || `control-${randomUUID()}`
+    const controlSessionId = requestedControlSessionId && !liveAudioControls.has(requestedControlSessionId) ? requestedControlSessionId : `control-${randomUUID()}`
     const hasPrincipal = Boolean(findPrincipalControl())
     const control = {
       ws,
@@ -961,13 +972,15 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
 
   const bindParticipantToConnection = (meta, participantId, status = {}) => {
     if (!isValidParticipantId(participantId)) return null
+    const registered = snapshotProviders.getLiveKitState?.()?.participants?.find((participant) => participant.participantId === participantId)
+    if (meta.role === 'control' && registered?.controlSessionId && registered.controlSessionId !== meta.controlSessionId) return null
     const isNewParticipantId = meta.participantId && meta.participantId !== participantId
     if (isNewParticipantId) {
       const isAllowedAccessTransition = meta.role === 'audience' && (
         meta.participantId === meta.audienceAccessId ||
         participantId === meta.audienceAccessId
       )
-      if (!isAllowedAccessTransition) return null
+      if (!isAllowedAccessTransition && !(meta.role === 'control' && registered?.controlSessionId && registered.controlSessionId === meta.controlSessionId)) return null
       const accessParticipant = liveAudioParticipants.get(meta.participantId)
       if (accessParticipant?.ws === meta.ws) {
         liveAudioParticipants.delete(meta.participantId)
@@ -984,7 +997,6 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
     }
 
     const now = Date.now()
-    const registered = snapshotProviders.getLiveKitState?.()?.participants?.find((participant) => participant.participantId === participantId)
     const isKicked = existing?.isKicked === true
     const canPublishAudio = !isKicked && (registered ? registered.canPublish === true : existing?.canPublishAudio === true)
     const speakerState = isKicked
@@ -1364,6 +1376,7 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
     // Persist the new boundary before clearing state or notifying any client.
     const nextSessionId = snapshotProviders.presentationSessionStore?.rotate() || randomUUID()
     presentationSessionId = nextSessionId
+    for (const control of liveAudioControls.values()) clearTimeout(control.expiryTimer)
     liveAudioControls.clear()
     liveAudioParticipants.clear()
     audienceAccessRecords.clear()
@@ -1373,6 +1386,12 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
     broadcastConnectionCounts()
     broadcastAuthorizationState()
     broadcast({ type: 'PRESENTATION_SESSION_ROTATED', presentationSessionId, hardRefresh: hardRefresh === true })
+    resetPrivateControlSession()
+    for (const [ws, meta] of wsClients) {
+      if (meta.role !== 'control' && meta.role !== 'presenter') continue
+      wsClients.delete(ws)
+      ws.close(1012, 'Presentation session rotated')
+    }
     console.log('[SERVER] Presentation session rotated')
   }
   wss.rotatePresentationSession = rotatePresentationSession
@@ -1415,6 +1434,7 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
       clientId,
       ws,
       controlSessionId: control?.controlSessionId,
+      operatorCredential: role === 'control' || role === 'presenter' ? randomBytes(32).toString('hex') : undefined,
     }
     wsClients.set(ws, meta)
 
@@ -1425,6 +1445,7 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
       role,
       controlSessionId: control?.controlSessionId,
       controlState: control?.controlState,
+      operatorCredential: meta.operatorCredential,
       presentationSessionId,
       accessMode,
     }))

@@ -1,3 +1,4 @@
+import { getOperatorHeaders } from '../../../../utils/operatorAuth';
 import { useState, useEffect, useCallback, useMemo, useRef, Suspense, lazy } from 'react';
 import { createPortal } from 'react-dom';
 import { Bell } from 'lucide-react';
@@ -960,7 +961,7 @@ export default function LiveAudioControlContainer({
     try {
       const response = await fetch(`/api/livekit/${endpoint}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getOperatorHeaders() },
         body: JSON.stringify({
           role: 'control',
           controlSessionId,

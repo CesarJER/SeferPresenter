@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url'
 import { createLiveKitApi } from './livekit-server.mjs'
 import {
   createWsServer,
+  authorizeOperatorCredential,
   getLiveAudioControlSnapshot,
   getLiveAudioParticipantState,
   isLiveAudioControlAuthorized,
@@ -947,7 +948,7 @@ const handleApi = async (req, res, url) => {
     try {
       const body = await readBody(req)
       const parsed = JSON.parse(body)
-      const result = reduceRemoteCommandMessage(parsed)
+      const result = reduceRemoteCommandMessage(parsed, req.operatorMeta)
       if (!result.ok) {
         sendJson(res, result.status, { error: result.error })
         return true
@@ -1295,6 +1296,14 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (requireAuth(req, res, url)) return
+  const operatorPaths = ['/api/command', '/api/state', '/api/audio-telemetry', '/api/video-telemetry', '/api/display-telemetry'];
+  if (req.method === 'POST' && operatorPaths.includes(url.pathname)) {
+    req.operatorMeta = authorizeOperatorCredential(req, { controlOnly: url.pathname === '/api/command' });
+    if (!req.operatorMeta) {
+      sendJson(res, 403, { code: 'OPERATOR_FORBIDDEN', error: 'An authorized operator connection is required' });
+      return;
+    }
+  }
 
   if (url.pathname.startsWith('/api/')) {
     const handled = await handleApi(req, res, url)
@@ -1413,6 +1422,7 @@ liveKitApi = createLiveKitApi({
   getLiveAudioParticipantState,
   isLiveAudioControlAuthorized,
   authorizeAudienceCredential,
+  authorizeOperatorCredential,
   getSessionAccessMode,
 })
 

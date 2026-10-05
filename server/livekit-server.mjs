@@ -264,6 +264,10 @@ const requireAuthorizedControl = (body, controlApi, req) => {
     return { ok: false, status: 403, code: 'control_unauthorized', error: 'Only authorized Control can perform this action' }
   }
 
+  const operator = controlApi.authorizeOperatorCredential?.(req, { controlOnly: true })
+  if (!operator || operator.controlSessionId !== body.controlSessionId) {
+    return { ok: false, status: 403, code: 'control_unauthorized', error: 'Private Control connection credential required' }
+  }
   if (typeof body.controlSessionId !== 'string' || !controlApi.isLiveAudioControlAuthorized(body.controlSessionId)) {
     return { ok: false, status: 403, code: 'control_unauthorized', error: 'Control is not authorized' }
   }
@@ -324,6 +328,13 @@ const handleToken = async ({ req, res, readBody, sendJson, controlApi }) => {
     if (!hasValidBasicAuth(req)) {
       sendJson(res, 403, { error: 'Privileged Live Audio roles require authentication' })
       return true
+    }
+    if (requestedRole === 'control') {
+      const operator = controlApi?.authorizeOperatorCredential?.(req, { controlOnly: true })
+      if (!operator || operator.controlSessionId !== body.controlSessionId) {
+        sendJson(res, 403, { error: 'Private Control connection credential required' })
+        return true
+      }
     }
     if (
       requestedRole === 'control' &&
@@ -614,6 +625,7 @@ export const createLiveKitApi = (controlApi, options = {}) => {
       participants: Array.from(participants.values()).map((participant) => ({
         participantId: participant.participantId,
         role: participant.role,
+        controlSessionId: participant.controlSessionId,
         room: participant.room,
         speakerState: participant.speakerState,
         canSubscribe: participant.canSubscribe,

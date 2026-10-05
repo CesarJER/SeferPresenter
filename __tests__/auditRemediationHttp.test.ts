@@ -1,0 +1,73 @@
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { createServer } from 'node:net';
+import { spawn, type ChildProcess } from 'node:child_process';
+import { WebSocket } from 'ws';
+import { afterEach, expect, it, vi } from 'vitest';
+
+let child: ChildProcess | undefined;
+let dataDir: string | undefined;
+const sockets: WebSocket[] = [];
+const headers = { Authorization: `Basic ${Buffer.from('control:synthetic-password').toString('base64')}` };
+afterEach(async () => {
+  sockets.forEach(ws => ws.terminate()); sockets.length = 0;
+  if (child && child.exitCode === null) {
+    const exited = new Promise<void>(resolve => child!.once('exit', () => resolve())); child.kill(); await exited;
+  }
+  if (dataDir) {
+    if (path.dirname(path.resolve(dataDir)) !== path.resolve(os.tmpdir()) || !path.basename(dataDir).startsWith('sefer-remediation-')) throw new Error('Unexpected cleanup target');
+    fs.rmSync(dataDir, { recursive: true, force: true });
+  }
+  child = undefined; dataDir = undefined;
+});
+async function start() {
+  dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sefer-remediation-'));
+  const reserve = createServer(); await new Promise<void>(resolve => reserve.listen(0, '127.0.0.1', resolve));
+  const address = reserve.address(); if (!address || typeof address === 'string') throw new Error('Address required');
+  const port = address.port; await new Promise<void>(resolve => reserve.close(() => resolve()));
+  child = spawn(process.execPath, ['server/local-server.mjs'], { windowsHide: true, stdio: 'ignore', env: {
+    ...process.env, SEFER_DATA_DIR: dataDir, SEFER_PORT: String(port), SEFER_REQUIRE_AUTH: 'true',
+    SEFER_CONTROL_PASSWORD: 'synthetic-password', SEFER_LIVE_AUDIO_ENABLED: 'false', SEFER_VOICE_SCRIPTURE_ENABLED: 'false',
+  } });
+  const base = `http://127.0.0.1:${port}`;
+  await vi.waitFor(async () => expect((await fetch(`${base}/api/health`)).ok).toBe(true), { timeout: 5000 });
+  const connect = (role = 'control', controlSessionId?: string) => new Promise<{ ws: WebSocket; welcome: Record<string, string> }>((resolve, reject) => {
+    const ws = new WebSocket(`${base.replace('http', 'ws')}/ws?role=${role}${controlSessionId ? `&controlSessionId=${encodeURIComponent(controlSessionId)}` : ''}`, { headers }); sockets.push(ws);
+    ws.on('message', raw => { const message = JSON.parse(raw.toString()); if (message.type === 'WELCOME') resolve({ ws, welcome: message }); });
+    ws.on('error', reject);
+  });
+  const post = (route: string, body: unknown, credential?: string, etag?: string) => fetch(`${base}${route}`, { method: 'POST',
+    headers: { ...headers, 'Content-Type': 'application/json', ...(credential ? { 'X-Sefer-Operator-Credential': credential } : {}), ...(etag ? { 'If-Match': etag } : {}) }, body: JSON.stringify(body) });
+  return { base, connect, post };
+}
+it('blocks pending/copy-ID HTTP mutations, allows Presenter telemetry and reenters after soft reset', async () => {
+  const { base, connect, post } = await start();
+  const principal = await connect(); const pending = await connect('control', principal.welcome.controlSessionId);
+  expect(pending.welcome.controlSessionId).not.toBe(principal.welcome.controlSessionId); const presenter = await connect('presenter');
+  expect(pending.welcome.controlState).toBe('PENDING');
+  for (const route of ['/api/command', '/api/state', '/api/audio-telemetry', '/api/video-telemetry', '/api/display-telemetry']) {
+    const response = await post(route, { controlSessionId: principal.welcome.controlSessionId }, pending.welcome.operatorCredential);
+    expect(response.status).toBe(403);
+  }
+  const approval = new Promise<void>(resolve => pending.ws.on('message', raw => {
+    const msg = JSON.parse(raw.toString());
+    if (msg.type === 'LIVE_AUDIO_CONTROL_AUTHORIZATION_STATE' && msg.controlState === 'AUTHORIZED') resolve();
+  }));
+  principal.ws.send(JSON.stringify({ type: 'LIVE_AUDIO_CONTROL_AUTHORIZATION_DECISION', targetControlSessionId: pending.welcome.controlSessionId, decision: 'APPROVE', createdAt: Date.now() }));
+  await approval;
+  const telemetry = { type: 'DISPLAY_TELEMETRY', clientId: 'presenter', backgroundLock: false, lockedBackgroundValue: null, userSelectedBackground: null };
+  expect((await post('/api/display-telemetry', telemetry, presenter.welcome.operatorCredential)).status).toBe(200);
+  expect((await post('/api/display-telemetry', telemetry, pending.welcome.operatorCredential)).status).toBe(200);
+  expect((await post('/api/command', {}, presenter.welcome.operatorCredential)).status).toBe(403);
+  expect((await post('/api/state', {})).status).toBe(403);
+  const before = await (await fetch(`${base}/api/state`, { headers })).json();
+  const closed = new Promise<void>(resolve => principal.ws.once('close', () => resolve()));
+  const reset = await post('/api/command', { type: 'REMOTE_COMMAND', clientId: principal.welcome.clientId, payload: { command: 'RESET_STATE', clearSession: true, hardRefresh: false } }, principal.welcome.operatorCredential);
+  expect(reset.status).toBe(200); await closed;
+  expect((await post('/api/state', before, principal.welcome.operatorCredential)).status).toBe(403);
+  const reentered = await connect(); expect(reentered.welcome.controlState).toBe('PRINCIPAL');
+  expect(reentered.welcome.operatorCredential).not.toBe(principal.welcome.operatorCredential);
+  expect((await post('/api/state', before, reentered.welcome.operatorCredential)).status).toBe(200);
+  const audience = await connect('audience'); expect(audience.welcome.operatorCredential).toBeUndefined();
+}, 10000);
