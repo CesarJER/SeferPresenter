@@ -1,13 +1,11 @@
 import { spawn } from 'node:child_process'
-import fs from 'node:fs'
 import path from 'node:path'
-import { loadEnvFile } from 'node:process'
+import { loadProjectEnvironment } from './env-utils.mjs'
 import { fileURLToPath } from 'node:url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const rootDir = path.resolve(__dirname, '..')
-const localEnvPath = path.join(rootDir, '.env.local')
-if (fs.existsSync(localEnvPath)) loadEnvFile(localEnvPath)
+loadProjectEnvironment(rootDir)
 const viteBin = path.join(rootDir, 'node_modules', 'vite', 'bin', 'vite.js')
 const viteArgs = process.argv.slice(2)
 const devEnvironment = {

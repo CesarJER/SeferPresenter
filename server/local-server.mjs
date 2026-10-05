@@ -3,6 +3,7 @@ import http from 'node:http'
 import path from 'node:path'
 import { createHash, randomUUID } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
+import { loadProjectEnvironment } from './env-utils.mjs'
 import { createLiveKitApi } from './livekit-server.mjs'
 import {
   createWsServer,
@@ -64,6 +65,9 @@ import {
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const rootDir = path.resolve(__dirname, '..')
+
+loadProjectEnvironment(rootDir)
+
 const productStaticDir = path.join(rootDir, 'static')
 const exampleDataDir = path.join(rootDir, 'examples', 'SeferPrivateData')
 const seferDataDir = resolveSeferDataDir({ rootDir })
