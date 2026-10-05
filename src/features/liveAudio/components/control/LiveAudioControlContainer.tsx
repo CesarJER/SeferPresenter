@@ -260,7 +260,7 @@ export default function LiveAudioControlContainer({
         setParticipantsMap(prev => {
           const next = { ...prev };
           snapshot.participants.forEach((participant) => {
-            if (participant.role !== 'audience') return;
+            if (participant.role !== 'audience' && participant.role !== 'control') return;
             const existing = next[participant.participantId];
             if (existing?.updatedAt && existing.updatedAt > participant.updatedAt) return;
             next[participant.participantId] = snapshotParticipantToStatus(participant);
@@ -607,6 +607,16 @@ export default function LiveAudioControlContainer({
     transportReady: wsStatus === 'open',
     onPrivateSignal: handlePrivateSignal,
   });
+
+  useEffect(() => {
+    if (!participantId || !wsSend || wsStatus !== 'open') return;
+    wsSend('LIVE_AUDIO_PARTICIPANT_STATUS', {
+      participantId, role: 'control', speakerState: 'GRANTED', canSubscribe: true,
+      canPublishAudio: true, isMuted: !isMicrophoneActive || isModeratorMuted,
+      isMicrophoneActive, isActiveAudience: false, isKicked: false,
+      microphoneTrackState, liveAudioConnectionState: state, updatedAt: Date.now(),
+    });
+  }, [participantId, wsSend, wsStatus, isMicrophoneActive, isModeratorMuted, microphoneTrackState, state]);
 
   const handleLocalVoiceOptions = useCallback((options: VoiceScriptureCandidate[], detail: string, phase: VoiceSessionPhase) => {
     sendPrivateSignalToControls({ type: 'VOICE_SCRIPTURE_SYNC', options, detail, phase });
@@ -1112,13 +1122,23 @@ export default function LiveAudioControlContainer({
   const voiceSourceLabel = !selectedVoiceParticipantId ? ''
     : selectedVoiceParticipantId === participantId ? operatorNick.trim() || 'Mi micrófono'
       : participantAliases[selectedVoiceParticipantId] || 'Participante seleccionado';
-  const controllers: LiveAudioParticipant[] = controlParticipants
-    .map(p => ({ participantId: p.participantId, alias: participantAliases[p.participantId] || 'Sin nick',
-      speakerState: 'GRANTED', isMuted: !p.isMicrophoneActive, isMicrophoneActive: p.isMicrophoneActive,
-      microphoneTrackState: participantsMap[p.participantId]?.microphoneTrackState,
+  const controllerIds = new Set([
+    ...controlParticipants.map(p => p.participantId),
+    ...Object.values(participantsMap).filter(p => p.role === 'control' && p.connected !== false).map(p => p.participantId),
+  ]);
+  if (participantId) controllerIds.delete(participantId);
+  const controllers: LiveAudioParticipant[] = Array.from(controllerIds).map(id => {
+    const reported = participantsMap[id];
+    const remote = controlParticipants.find(p => p.participantId === id);
+    const active = reported?.isMicrophoneActive ?? remote?.isMicrophoneActive ?? false;
+    return { participantId: id, alias: participantAliases[id] || 'Sin nick',
+      speakerState: 'GRANTED', isMuted: reported?.isMuted ?? !active, isMicrophoneActive: active,
+      microphoneTrackState: reported?.microphoneTrackState ?? (active ? 'published' : 'off'),
+      liveAudioConnectionState: reported?.liveAudioConnectionState,
       isActiveAudience: false, isKicked: false,
-      microphoneVolume: participantMicrophoneConfigs[p.participantId]?.volume,
-      isMusicMode: participantMicrophoneConfigs[p.participantId]?.musicMode }));
+      microphoneVolume: participantMicrophoneConfigs[id]?.volume,
+      isMusicMode: participantMicrophoneConfigs[id]?.musicMode };
+  });
   if (participantId) controllers.unshift({ participantId, alias: operatorNick.trim() || 'Sin nick', speakerState: 'GRANTED',
     isMuted: isModeratorMuted, isMicrophoneActive, microphoneTrackState, isActiveAudience: false, isKicked: false,
     microphoneVolume, isMusicMode: isModeratorMusicMode });

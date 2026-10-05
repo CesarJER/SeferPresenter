@@ -94,6 +94,24 @@ it('shows controller nicknames in a collapsible group without moderation actions
   expect(mocks.send).toHaveBeenCalledWith({ type: 'CONTROL_MICROPHONE_CONFIG', targetParticipantId: mocks.remoteId, volume: 125 });
 });
 
+it('shows remote Control publication in blue and its publishing transition in orange', async () => {
+  await setup();
+  const remote = screen.getByRole('button', { name: 'Comandos de voz: Operador remoto' });
+  expect(remote.className).toContain('text-blue-400');
+  await act(async () => mocks.ws?.('LIVE_AUDIO_PARTICIPANT_STATUS', {
+    type: 'LIVE_AUDIO_PARTICIPANT_STATUS', participantId: mocks.remoteId, role: 'control',
+    speakerState: 'GRANTED', canPublishAudio: true, canSubscribe: true, isMuted: true,
+    isMicrophoneActive: false, microphoneTrackState: 'publishing', connected: true, updatedAt: 1,
+  }));
+  expect(remote.className).toContain('text-orange-400');
+  await act(async () => mocks.ws?.('LIVE_AUDIO_PARTICIPANT_STATUS', {
+    type: 'LIVE_AUDIO_PARTICIPANT_STATUS', participantId: mocks.remoteId, role: 'control',
+    speakerState: 'GRANTED', canPublishAudio: true, canSubscribe: true, isMuted: false,
+    isMicrophoneActive: true, microphoneTrackState: 'published', connected: true, updatedAt: 2,
+  }));
+  expect(remote.className).toContain('text-blue-400');
+});
+
 it('does not accept controller configuration from an audience sender', async () => {
   await setup();
   await act(async () => mocks.signal?.({ fromParticipantId: '33333333-3333-4333-8333-333333333333', value: { type: 'CONTROL_MICROPHONE_CONFIG', targetParticipantId: mocks.localId, volume: 0 } }));
