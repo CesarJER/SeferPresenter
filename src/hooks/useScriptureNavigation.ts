@@ -107,10 +107,8 @@ export function useScriptureNavigation(props: UseScriptureNavigationProps) {
   }, [scriptureStateRef]);
 
   const handleProjectScripture = useCallback((
-    state: SeferReaderState,
-    command: ScriptureNavState['command'] = 'navigate'
+    state: SeferReaderState
   ) => {
-    const projectedCommand: ScriptureNavState['command'] = isControlMode ? 'navigate' : command;
     const verseStart = state.verseStart ?? state.verse;
     const verseEnd = state.verseEnd || undefined;
     const navState: ScriptureNavState = {
@@ -127,7 +125,8 @@ export function useScriptureNavigation(props: UseScriptureNavigationProps) {
       verseIdx: state.verseIdx,
       totalVerses: state.totalVerses,
       scriptureKind: state.scriptureKind ?? 'sefer',
-      command: projectedCommand,
+      // The verse is already resolved; do not apply another directional offset.
+      command: 'navigate',
       commandId: ++scriptureCommandIdRef.current,
       hebrewFontSize: scriptureStateRef.current?.hebrewFontSize ?? 42,
       combinedTextBaseSize: scriptureStateRef.current?.combinedTextBaseSize ?? 50,
@@ -145,7 +144,7 @@ export function useScriptureNavigation(props: UseScriptureNavigationProps) {
       scriptureState: navState,
     });
     if (appModeRef.current !== nextMode) setAppMode(nextMode);
-  }, [isControlMode, syncState, currentPresentationRef, currentSlideIndexRef, backgroundLockRef, lockedBackgroundValueRef, userSelectedBackgroundRef, videoStateRef, appModeRef, setAppMode, setScriptureState, scriptureStateRef]);
+  }, [syncState, currentPresentationRef, currentSlideIndexRef, backgroundLockRef, lockedBackgroundValueRef, userSelectedBackgroundRef, videoStateRef, appModeRef, setAppMode, setScriptureState, scriptureStateRef]);
 
   const handleUpdateScriptureFontSizes = useCallback((sizes: {
     hebrewFontSize: number;

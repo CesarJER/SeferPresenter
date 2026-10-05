@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 import { StrictMode } from 'react';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, render, renderHook, screen, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import SeferReaderScreen from '../src/components/presenter/SeferReaderScreen';
+import { useScriptureNavigation } from '../src/hooks/useScriptureNavigation';
 import type { ScriptureNavState } from '../src/types/presentation';
 
 vi.mock('../src/utils/metadataCache', () => ({
@@ -36,4 +37,23 @@ it('resolves a directional request only once under StrictMode', async () => {
   render(<StrictMode><SeferReaderScreen scriptureState={state('1', 'next')} onVerseSelected={onVerseSelected} /></StrictMode>);
   await waitFor(() => expect(onVerseSelected).toHaveBeenCalledTimes(1));
   expect(onVerseSelected.mock.calls[0][0]).toMatchObject({ verse: 2, translation: 'Contenido 2' });
+});
+
+it('publishes the resolved Presenter verse as an absolute projection', () => {
+  const ref = <T,>(current: T) => ({ current });
+  const syncState = vi.fn();
+  const { result } = renderHook(() => useScriptureNavigation({
+    isControlMode: false, currentPresentationRef: ref(null), currentSlideIndexRef: ref(0),
+    backgroundLockRef: ref(false), lockedBackgroundValueRef: ref(null), userSelectedBackgroundRef: ref(null),
+    videoStateRef: ref(null), appModeRef: ref('scripture'), scriptureStateRef: ref(null),
+    setAppMode: vi.fn(), setScriptureState: vi.fn(), syncState,
+    handleSelectPresentationAndSlide: vi.fn(), handleSave: vi.fn(), steps: [],
+    currentStepIndex: 0, setCurrentStepIndex: vi.fn(), slideScriptureStateBeforeManualRef: ref(null),
+  }));
+  act(() => result.current.handleProjectScripture({
+    ...state('2'), verseNikud: 'Hebreo 2', translation: 'Contenido 2', scriptureKind: 'sefer',
+  }));
+  expect(syncState).toHaveBeenCalledWith(expect.objectContaining({
+    scriptureState: expect.objectContaining({ verse: '2', translation: 'Contenido 2', command: 'navigate' }),
+  }));
 });
