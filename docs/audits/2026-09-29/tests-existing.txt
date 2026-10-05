@@ -1,0 +1,8 @@
+
+ RUN  v4.1.8 C:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter
+
+
+ Test Files  61 passed (61)
+      Tests  486 passed (486)
+   Duration  155.33s (transform 5.54s, setup 0ms, import 76.69s, tests 24.87s, environment 151.96s)
+

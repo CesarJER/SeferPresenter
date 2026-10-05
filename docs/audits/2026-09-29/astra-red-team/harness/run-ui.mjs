@@ -1,0 +1,14 @@
+import { spawnSync } from 'node:child_process';
+import { writeFileSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+const here = path.dirname(fileURLToPath(import.meta.url));
+const root = path.resolve(here, '../../../../..');
+const args = ['node_modules/vitest/vitest.mjs', 'run', '--config', 'docs/audits/2026-09-29/astra-red-team/harness/vitest.config.ts', '--configLoader', 'runner', '--reporter=verbose'];
+const result = spawnSync(process.execPath, args, { cwd: root, encoding: 'utf8', windowsHide: true, env: { ...process.env, NO_COLOR: '1' }, timeout: 120000 });
+const stdout = (result.stdout || '').replace(/^.*Start at.*\r?\n/gm, '');
+const evidence = { date: '29/09/2026 · 17:45', command: `node ${args.join(' ')}`, preconditions: 'React real; jsdom y storage sintético; fetch, WS, SSE y BroadcastChannel sustituidos; sin servicios externos.', stdout, stderr: result.stderr || '', exitCode: result.status, error: result.error?.message, interpretation: 'Las aserciones documentan el comportamiento actual, incluidos defectos; verde no significa corrección del producto.' };
+writeFileSync(path.join(here, '../evidence/ui-results.json'), JSON.stringify(evidence, null, 2));
+console.log(stdout);
+console.error(result.stderr || '');
+process.exitCode = result.status ?? 1;

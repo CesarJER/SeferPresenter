@@ -1,0 +1,52 @@
+[
+  {
+    "name": "adversarial-checks.mjs",
+    "sha256": "98E895F477D3C37550A4872EE6D924C8FAF73BE3A4AEB45ACEA3DB9A0CE22FF4",
+    "length": 7047
+  },
+  {
+    "name": "adversarial-results.txt",
+    "sha256": "06B5B31DAA1CF07D890AFC700D04D3A2345CDF81EE92E85DB6E083F69B6067F1",
+    "length": 421
+  },
+  {
+    "name": "auditoria-tecnica-2026-09-29.md",
+    "sha256": "E9E70357346C844762F3520AF536A2FBE8F1DC3CCF2F6263AE9F8829DFE01EA2",
+    "length": 65214
+  },
+  {
+    "name": "lint.txt",
+    "sha256": "86895769F0F11E2F7AE27E3E5FF3A10731502A767196E0EF05385B4DECA0970B",
+    "length": 1012
+  },
+  {
+    "name": "runtime-evidence.test.ts",
+    "sha256": "679E92F1E25932AA183258F9ADA0C0F592F5BF780B7E5ACD797AC5AE0795C10E",
+    "length": 4412
+  },
+  {
+    "name": "runtime-results.txt",
+    "sha256": "683AFAFD20EB5CA643609221F8C9F53045F498ADD715281ECB709398CFE5B4BD",
+    "length": 227
+  },
+  {
+    "name": "tests-existing.txt",
+    "sha256": "D0B6523B191CB8528B572C3138CF14F78394612104437F98F75330250EF57433",
+    "length": 240
+  },
+  {
+    "name": "typecheck-app.txt",
+    "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855",
+    "length": 0
+  },
+  {
+    "name": "typecheck-node.txt",
+    "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855",
+    "length": 0
+  },
+  {
+    "name": "vitest.audit.config.ts",
+    "sha256": "255BDE929EF8EEA0B3B6499DEAA5534F29D91582EB0E56FAE108826F68776924",
+    "length": 538
+  }
+]

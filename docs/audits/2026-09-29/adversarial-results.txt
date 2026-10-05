@@ -1,0 +1,4 @@
+PASS null-message: unauthenticated Audience terminates the isolated server process
+PASS audience-self-grant: PROOF listener JWT canPublish=false becomes canPublish=true without any Control
+PASS forged-moderation: PROOF no Basic credential: public Control ID authorizes the mocked SFU permission update
+PASS reset-control: PROOF soft session reset keeps socket open but removes its authority; next command is rejected

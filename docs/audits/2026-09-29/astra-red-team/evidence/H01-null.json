@@ -1,0 +1,28 @@
+{
+  "date": "29/09/2026 · 17:45",
+  "scenario": "H01-null",
+  "command": "node docs/audits/2026-09-29/astra-red-team/harness/backend-review.mjs H01-null",
+  "preconditions": {
+    "access": "PUBLIC",
+    "realBackend": true,
+    "loopbackEphemeral": true,
+    "syntheticData": true,
+    "environmentFile": false,
+    "outgoingConnections": "blocked",
+    "sdk": "final administration methods mocked"
+  },
+  "observation": {
+    "payload": "null",
+    "exitCode": 1,
+    "httpAfter": "connection refused",
+    "laterValidMessage": "process no longer exists"
+  },
+  "assertionExitCode": 0,
+  "backendExit": {
+    "code": 1,
+    "signal": null
+  },
+  "stdout": "[DATA] Initialized 8 missing file(s) in SEFER_DATA_DIR\nSeferPresenter local backend listening on http://localhost:0, serving dist\nSeferPresenter WebSocket disponible en ws://localhost:0/ws\n",
+  "stderr": "file:///C:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/server/ws-server.mjs:1418\r\n      if (meta.role === 'audience' && !audienceAllowedTypes.has(msg.type)) {\r\n                                                                    ^\r\n\r\nTypeError: Cannot read properties of null (reading 'type')\r\n    at WebSocket.<anonymous> (file:///C:/Users/cesae/Desktop/Tanaj/SeferProyect/SeferPresenter/server/ws-server.mjs:1418:69)\r\n    at WebSocket.emit (node:events:509:28)\r\n    at Receiver.receiverOnMessage (C:\\Users\\cesae\\Desktop\\Tanaj\\SeferProyect\\SeferPresenter\\node_modules\\ws\\lib\\websocket.js:1239:20)\r\n    at Receiver.emit (node:events:509:28)\r\n    at Receiver.dataMessage (C:\\Users\\cesae\\Desktop\\Tanaj\\SeferProyect\\SeferPresenter\\node_modules\\ws\\lib\\receiver.js:650:14)\r\n    at Receiver.getData (C:\\Users\\cesae\\Desktop\\Tanaj\\SeferProyect\\SeferPresenter\\node_modules\\ws\\lib\\receiver.js:534:10)\r\n    at Receiver.startLoop (C:\\Users\\cesae\\Desktop\\Tanaj\\SeferProyect\\SeferPresenter\\node_modules\\ws\\lib\\receiver.js:189:16)\r\n    at Receiver._write (C:\\Users\\cesae\\Desktop\\Tanaj\\SeferProyect\\SeferPresenter\\node_modules\\ws\\lib\\receiver.js:116:10)\r\n    at writeOrBuffer (node:internal/streams/writable:570:12)\r\n    at _write (node:internal/streams/writable:499:10)\r\n\r\nNode.js v24.15.0\r\n",
+  "interpretation": "Observations and counterchecks met; see finding verdict for scope."
+}

@@ -1,0 +1,10 @@
+
+C:\Users\cesae\Desktop\Tanaj\SeferProyect\SeferPresenter\src\components\presenter\PresenterScreen.tsx
+  188:6  warning  React Hook useEffect has a missing dependency: 'serverNow'. Either include it or remove the dependency array. If 'serverNow' changes too often, find the parent component that defines it and wrap that definition in useCallback                                react-hooks/exhaustive-deps
+  319:6  warning  React Hook useEffect has missing dependencies: 'enableDriftCorrection' and 'serverNow'. Either include them or remove the dependency array. If 'serverNow' changes too often, find the parent component that defines it and wrap that definition in useCallback  react-hooks/exhaustive-deps
+
+C:\Users\cesae\Desktop\Tanaj\SeferProyect\SeferPresenter\src\hooks\useSeferReader.ts
+  193:6  warning  React Hook useCallback has a missing dependency: 'rangeChapterVerses'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+✖ 3 problems (0 errors, 3 warnings)
+

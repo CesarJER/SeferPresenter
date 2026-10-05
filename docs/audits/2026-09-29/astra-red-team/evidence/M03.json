@@ -1,0 +1,49 @@
+{
+  "date": "29/09/2026 · 17:45",
+  "scenario": "M03",
+  "command": "node docs/audits/2026-09-29/astra-red-team/harness/backend-review.mjs M03",
+  "preconditions": {
+    "access": "PUBLIC",
+    "realBackend": true,
+    "loopbackEphemeral": true,
+    "syntheticData": true,
+    "environmentFile": false,
+    "outgoingConnections": "blocked",
+    "sdk": "final administration methods mocked"
+  },
+  "observation": {
+    "initial": [
+      "A0",
+      "B0"
+    ],
+    "firstWrite": [
+      "A1",
+      "B0"
+    ],
+    "secondWrite": [
+      "A0",
+      "B1"
+    ],
+    "statusCodes": [
+      200,
+      200
+    ],
+    "final": [
+      "A0",
+      "B1"
+    ],
+    "backup": [
+      "A1",
+      "B0"
+    ],
+    "etag": null
+  },
+  "assertionExitCode": 0,
+  "backendExit": {
+    "code": null,
+    "signal": "SIGTERM"
+  },
+  "stdout": "[DATA] Initialized 8 missing file(s) in SEFER_DATA_DIR\nSeferPresenter local backend listening on http://localhost:0, serving dist\nSeferPresenter WebSocket disponible en ws://localhost:0/ws\n",
+  "stderr": "",
+  "interpretation": "Observations and counterchecks met; see finding verdict for scope."
+}

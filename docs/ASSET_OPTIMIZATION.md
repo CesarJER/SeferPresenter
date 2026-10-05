@@ -29,4 +29,4 @@ Las imágenes conservan el PNG hasta confirmar la actualización de presentation
 
 ## Validación
 
-__tests__/optimize_assets_test.py usa únicamente medios sintéticos temporales. Comprueba vista previa sin escrituras, índice sin legacy, modificación de contenido, ausencia de reducción, índice inválido y recuperación tras un fallo de catálogo. La compresión de vídeo se simula; la conversión PNG/WebP usa Pillow real. No se ejecutó optimización sobre archivos del operador ni se ejecutó deploy.
+__tests__/optimize_assets_test.py usa únicamente medios sintéticos temporales. Comprueba vista previa sin escrituras, índice sin legacy, modificación de contenido, ausencia de reducción, fallo al persistir el índice, índice inválido y recuperación tras un fallo de catálogo. La compresión de vídeo se simula; la conversión PNG/WebP usa Pillow real. No se ejecutó optimización sobre archivos del operador ni se ejecutó deploy.
