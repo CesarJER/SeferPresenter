@@ -909,7 +909,6 @@ const handleApi = async (req, res, url) => {
   }
 
   if (url.pathname === '/api/quiz-answer' && req.method === 'POST') {
-    if (!requireControlledAudience(req, res)) return true
     try {
       const body = await readBody(req)
       const parsed = JSON.parse(body)
@@ -918,8 +917,16 @@ const handleApi = async (req, res, url) => {
         sendJson(res, 400, { error: validationError })
         return true
       }
-      if (parsed.type === 'QUIZ_CLEAR_ANSWERS' && isAuthRequired() && !hasValidBasicAuth(req)) {
-        sendJson(res, 401, { error: 'Authentication required to clear quiz answers' })
+      if (parsed.type === 'QUIZ_CLEAR_ANSWERS') {
+        if (isAuthRequired() && !hasValidBasicAuth(req)) {
+          sendJson(res, 401, { error: 'Authentication required to clear quiz answers' })
+          return true
+        }
+        if (!authorizeOperatorCredential(req, { controlOnly: true })) {
+          sendJson(res, 403, { code: 'OPERATOR_FORBIDDEN', error: 'An authorized Control connection is required' })
+          return true
+        }
+      } else if (!requireControlledAudience(req, res)) {
         return true
       }
       const aggregateError = canAcceptQuizAggregateMessage(parsed)

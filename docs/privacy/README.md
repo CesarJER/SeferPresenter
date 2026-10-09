@@ -1,5 +1,12 @@
 # Documentación de privacidad
 
+Entrada común: [documentación](../README.md). Responsabilidades y datos/estado:
+[arquitectura](../architecture/overview.md); permisos y mensajes:
+[contratos](../api/README.md); capacidades opcionales:
+[Live Audio](../features/live-audio.md) y [Voice Scripture](../features/voice-scripture.md).
+Configuración y recuperación técnica: [operación](../operations/deployment.md).
+Este dominio conserva tratamiento de datos, límites, procedimientos y plantillas.
+
 Esta carpeta contiene la documentación general y versionable de privacidad de
 SeferPresenter. Las evidencias e informes específicos de cada despliegue viven
 fuera del repositorio principal. Los documentos aplicables del operador viven
@@ -11,27 +18,30 @@ Solo debe contener hechos técnicos comunes al producto, plantillas neutras,
 guías para operadores e informes de auditoría sin datos identificativos de una
 comunidad concreta.
 
-Estructura inicial:
+Referencias actuales:
 
 ```text
 docs/privacy/
 ├── README.md
+├── technical-privacy-specification.md
+├── operator-compliance-guide.md
+├── legal-repository-blueprint.md
 ├── audits/
 └── templates/
 ```
 
-Los documentos definitivos se añadirán después del inventario técnico, el mapa
-de tratamientos y las respuestas del operador. Una plantilla no debe
-presentarse como política aplicable por defecto.
+Cada operador debe elaborar sus documentos aplicables a partir del inventario,
+el mapa de tratamientos y sus decisiones. Una plantilla no debe presentarse
+como política aplicable por defecto.
 
 Documentación general:
 
-- `technical-privacy-specification.md`: comportamiento, datos, cifrado,
+- [Especificación técnica](technical-privacy-specification.md): comportamiento, datos, cifrado,
   almacenamiento y garantías reales del producto.
-- `operator-compliance-guide.md`: decisiones y controles para cada despliegue.
-- `legal-repository-blueprint.md`: estructura y reglas del repositorio jurídico
+- [Guía del operador](operator-compliance-guide.md): decisiones y controles para cada despliegue.
+- [Plano del repositorio jurídico](legal-repository-blueprint.md): estructura y reglas del repositorio jurídico
   privado y su cadena verificable.
-- `templates/operator-privacy-policy-template-es.md`: plantilla neutral que
+- [Plantilla de política](templates/operator-privacy-policy-template-es.md): plantilla neutral que
   requiere adaptación y validación.
 
 Informes disponibles:

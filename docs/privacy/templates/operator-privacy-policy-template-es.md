@@ -43,6 +43,7 @@ Complete solo las utilizadas:
 - lista de alias voluntariamente visibles;
 - mensaje privado a Control;
 - voz y metadata WebRTC;
+- audio/transcripciones y frases de contexto del STT, si habilita Voice Scripture;
 - respuestas/progreso de quiz;
 - contenido de presentaciones;
 - logs, errores y diagnósticos;
@@ -51,6 +52,11 @@ Complete solo las utilizadas:
 
 Un UUID o alias no es anónimo si permite distinguir o volver a encontrar a una
 persona/sesión. La voz puede identificar aunque no exista nombre visual.
+
+Si utiliza Voice Scripture, identifique el servicio STT, ubicación, destinatarios
+y retención real. El flujo normal del gateway es en RAM; su modo diagnóstico
+explícito puede loguear transcripciones y aliases privados. No atribuya al
+servicio STT una garantía de borrado que no haya verificado.
 
 ## 4. Finalidades y bases
 

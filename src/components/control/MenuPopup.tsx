@@ -212,9 +212,14 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
     if (recalculateResultSlideIds.length === 0) return;
     emitCommand?.({ command: 'QUIZ_RECALCULATE_RESULTS', slideIds: recalculateResultSlideIds });
   };
-  const handleClearQuizAnswers = (slideId: string) => {
-    controllerAnswers.clearSlideAnswers(slideId);
-    emitCommand?.({ command: 'QUIZ_CLEAR_QUESTION_RESULTS', slideId });
+  const handleClearQuizAnswers = async (slideId: string) => {
+    try {
+      if (await controllerAnswers.clearSlideAnswers(slideId)) {
+        emitCommand?.({ command: 'QUIZ_CLEAR_QUESTION_RESULTS', slideId });
+      }
+    } catch {
+      alert('No se pudo confirmar el borrado de respuestas. Comprueba la conexión, la autorización de Control y el estado del servidor antes de reintentar.');
+    }
   };
   const isActiveScriptureSlide = !!activeSlide && (activeSlide.type === 'sefer' || activeSlide.type === 'tanaj' || !!activeSlide.scriptureBook);
 

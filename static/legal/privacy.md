@@ -40,6 +40,10 @@ superar siete días. Logout, rotación de sesión y expiración purgan los valor
 forma idempotente. Las preferencias operativas de Control pueden tener un ciclo
 distinto porque no identifican a asistentes.
 
+La caducidad invalida los valores al leerlos; la eliminación física depende de
+que el navegador ejecute la aplicación. No se garantiza borrado puntual mientras
+el navegador permanezca cerrado o suspendido.
+
 ## Voz y retransmisión externa
 
 Live Audio procesa la voz en tiempo real cuando la función está habilitada. El
@@ -74,8 +78,14 @@ tokens ni respuestas de quiz en sus logs. La configuración general elimina las
 cabeceras de IP antes de los upstream y descarta los logs de proxy, LiveKit y
 Redis porque esos terceros pueden emitir direcciones o valores sensibles. Los
 logs allowlist de la aplicación usan almacenamiento Docker local, comprimido y
-acotado por tamaño. El máximo temporal de siete días solo queda garantizado en
-un despliegue cuando se instala y verifica la tarea de retención documentada.
+acotado por tamaño. La tarea documentada solo audita metadatos; no borra logs y
+no garantiza un máximo temporal de siete días. Una política de borrado por tiempo
+requiere una solución específica y verificación en el despliegue.
+
+Si se habilita Voice Scripture, audio y transcripciones se procesan en memoria
+por el gateway y el STT configurado. El modo diagnóstico explícito puede escribir
+texto y aliases privados en consola; debe quedar apagado en operación normal.
+El operador debe revisar por separado los logs y retención del servicio STT.
 
 ## Derechos
 

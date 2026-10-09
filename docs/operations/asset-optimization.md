@@ -1,6 +1,6 @@
 # Optimización modular de medios
 
-El optimizador reduce tamaño de imágenes PNG en backgrounds/videos y vídeos MP4 mayores de 15 MiB. Mantiene WebP de calidad 80, ancho máximo 1920 y vídeo H.264 720p con AAC; intenta NVENC y usa CPU si falla. Solo reemplaza un archivo cuando reduce su tamaño.
+El optimizador reduce tamaño de imágenes PNG en backgrounds/videos y vídeos MP4 mayores de 15 MiB. Mantiene WebP de calidad 80, ancho máximo 1920 y vídeo H.264 con ancho 1280 y altura proporcional par (`scale=1280:-2`), con AAC; 720 píxeles de alto solo corresponden a vídeo 16:9. Intenta NVENC y usa CPU si falla. Solo reemplaza un archivo cuando reduce su tamaño.
 
 ## Uso
 
@@ -27,6 +27,11 @@ Las copias de seguridad son independientes y se conservan por defecto; no se sob
 
 Las imágenes conservan el PNG hasta confirmar la actualización de presentations.json. Si falla el catálogo, el siguiente intento reutiliza el WebP indexado de la misma fuente sin comprimirlo otra vez. Un WebP previo que no coincide con el índice se conserva y se informa; no se sobrescribe de forma silenciosa.
 
-## Validación
+## Evidencia de validación anterior
+
+Resultados de la documentación recibida, no reejecutados durante esta reorganización. Antes de optimizar, usar `npm run optimize:preview`, comprobar destino/backups y parar ante índice inválido o persistencia fallida.
+
 
 __tests__/optimize_assets_test.py usa únicamente medios sintéticos temporales. Comprueba vista previa sin escrituras, índice sin legacy, modificación de contenido, ausencia de reducción, fallo al persistir el índice, índice inválido y recuperación tras un fallo de catálogo. La compresión de vídeo se simula; la conversión PNG/WebP usa Pillow real. No se ejecutó optimización sobre archivos del operador ni se ejecutó deploy.
+
+Fuente: [optimizador](../../scripts/optimize_assets.py), [tests](../../__tests__/optimize_assets_test.py).

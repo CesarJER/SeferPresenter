@@ -6,8 +6,7 @@
  *   per-frame re-renders of the full component tree).
  * - The timer state (status, startedAt, duration, pausedRemaining) IS stored
  *   in React state because it controls the UI phase transitions.
- * - Callers read remainingMs via the returned ref during render via
- *   `useRemainingMs` hook below.
+ * - Callers read the derived remaining time through `getRemainingMs`.
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';

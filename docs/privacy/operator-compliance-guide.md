@@ -1,5 +1,9 @@
 # Guía de cumplimiento para operadores de SeferPresenter
 
+Configuración, diagnóstico y recuperación técnica:
+[operación](../operations/deployment.md). Interfaces: [API](../api/README.md).
+Esta guía concentra decisiones y procedimientos de tratamiento del operador.
+
 Versión: 2026-07-30  
 Esta guía es general y no sustituye el análisis del despliegue ni asesoramiento
 jurídico.
@@ -63,8 +67,8 @@ plataformas pueden recibir datos técnicos.
 - Evite exponer puertos internos.
 - Mantenga descartados los logs de proxy/SFU/Redis salvo que implante una
   redacción equivalente y la verifique.
-- Instale la tarea de retención Docker, observe una ejecución real y documente
-  cualquier interrupción breve por recreación.
+- Si instala la tarea de auditoría Docker, observe una ejecución real y revise
+  sus avisos. Solo inspecciona metadatos; no borra logs ni recrea contenedores.
 - Pruebe restauración de copias que realmente necesite.
 
 ## 5. Sesiones y Audience
@@ -207,9 +211,10 @@ Defina por dato, no con una frase global. Como orientación:
 - backups: ciclo, restauración y supresión diferida.
 
 Compruebe el borrado con pruebas de runtime. El límite por tamaño de Docker no
-equivale a plazo temporal: la configuración general usa recreación programada a
-144 horas para mantenerse por debajo de siete días incluso con la comprobación
-diaria. Si no instala la tarea, no afirme ese máximo.
+equivale a plazo temporal. El script actual usa 144 horas como umbral de aviso
+sobre antigüedad del contenedor; la tarea opcional lo audita semanalmente y no
+borra registros. Instalarla no garantiza un máximo de siete días. El borrado por
+antigüedad sin recrear contenedores queda pendiente en [TODO.md](../../TODO.md).
 
 ## 13. Documentos
 

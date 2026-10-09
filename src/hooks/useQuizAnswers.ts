@@ -3,13 +3,14 @@
  *
  * This hook manages:
  * 1. The audience member's own answers (local state)
- * 2. Sending unlinkable, bounded aggregate contributions to the backend
+ * 2. Sending bounded aggregate contributions with independent IDs per scope
  * 3. On the controller side: receiving aggregate snapshots only
  *
  * Architecture:
  * - Audience side: detailed answers remain local to the current presentation.
  * - Backend side: submissions use independent IDs per aggregation scope so
- *   answers and result buckets cannot be linked into a participant history.
+ *   the aggregate store has no shared participant ID across those buckets.
+ *   This does not guarantee anonymity against timing/network correlation.
  * - Controller side: no individual answer or Audience identity is exposed.
  */
 
@@ -24,6 +25,7 @@ import type {
 } from '../types/quiz';
 import { makeEmptyAudienceAnswer } from '../types/quiz';
 import { readExpiringStorage, writeExpiringStorage } from '../utils/privacyStorage';
+import { getOperatorHeaders } from '../utils/operatorAuth';
 
 // ── Unlinkable submission IDs ────────────────────────────────────────────────
 
@@ -92,7 +94,7 @@ export interface UseAudienceAnswersReturn {
   setCitaField: (slideId: string, field: Partial<Pick<QuizAudienceAnswer, 'citaBook' | 'citaChapter' | 'citaVerseStart' | 'citaVerseEnd'>>) => void;
   /** Toggle bonus reading claim */
   setBonusClaim: (slideId: string, claimed: boolean) => void;
-  /** Submit answer for a slide (broadcasts to controller) */
+  /** Submit an aggregate contribution for a slide; Control receives aggregate snapshots. */
   submitAnswer: (slideId: string) => void;
   /** Auto-submit all unsubmitted answers (called on timer expire) */
   submitAll: (slideId: string) => void;
@@ -580,12 +582,14 @@ export interface UseControllerAnswersReturn {
   totalParticipants: number;
   clearAll: () => void;
   calcRangeStats: (profiles: QuizResultProfile[]) => QuizRangeStats[];
-  clearSlideAnswers: (slideId: string) => void;
+  clearSlideAnswers: (slideId: string) => Promise<boolean>;
 }
 
 export function useControllerAnswers(presentationId: string | null): UseControllerAnswersReturn {
   const channel = useMemo(() => new BroadcastChannel('sefer-quiz'), []);
   const [aggregate, setAggregate] = useState<QuizAggregateSnapshot>(EMPTY_AGGREGATE);
+  const currentPresentationId = useRef(presentationId);
+  currentPresentationId.current = presentationId;
 
   useEffect(() => {
     let cancelled = false;
@@ -642,18 +646,17 @@ export function useControllerAnswers(presentationId: string | null): UseControll
 
   const clearAll = useCallback(() => setAggregate(EMPTY_AGGREGATE), []);
 
-  const clearSlideAnswers = useCallback((slideId: string) => {
-    if (!presentationId) return;
-    // Send clear message locally via BroadcastChannel
+  const clearSlideAnswers = useCallback(async (slideId: string) => {
+    if (!presentationId) return false;
     const msg: QuizClearMessage = { type: 'QUIZ_CLEAR_ANSWERS', presentationId, slideId };
-    channel.postMessage(msg);
-
-    // Also send to server via SSE endpoint for cross-device sync (smartphones)
-    fetch('/api/quiz-answer', {
+    const response = await fetch('/api/quiz-answer', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...getOperatorHeaders() },
       body: JSON.stringify(msg),
-    }).catch(() => {});
+    });
+    if (!response.ok) throw new Error(`Quiz clear failed (${response.status})`);
+    channel.postMessage(msg);
+    if (currentPresentationId.current !== presentationId) return false;
 
     setAggregate(prev => {
       const slides = { ...prev.slides };
@@ -669,6 +672,7 @@ export function useControllerAnswers(presentationId: string | null): UseControll
         finalScoreRequestId: null,
       };
     });
+    return true;
   }, [channel, presentationId]);
 
   const calcRangeStats = useCallback((profiles: QuizResultProfile[]): QuizRangeStats[] => (

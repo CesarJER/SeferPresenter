@@ -2,6 +2,7 @@
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
 import { renderHook, act, waitFor, cleanup } from '@testing-library/react';
 import { useAudienceAnswers, useControllerAnswers } from '../../src/hooks/useQuizAnswers';
+import { setOperatorCredential } from '../../src/utils/operatorAuth';
 
 Object.defineProperty(window, 'BroadcastChannel', {
   value: class {
@@ -33,6 +34,7 @@ const score = { slideId: 'slide-1', optionCentipunts: 50, citaCentipunts: 50, bo
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
+  setOperatorCredential(null);
 });
 
 describe('useQuizAnswers - Audience', () => {
@@ -387,8 +389,40 @@ describe('useQuizAnswers - Control', () => {
     await waitFor(() => expect(result.current.getSubmittedCount('q1')).toBe(3));
     expect(result.current.getSlideAggregate('q1').optionCounts).toEqual({ A: 2, B: 1 });
 
-    act(() => result.current.clearSlideAnswers('q1'));
+    setOperatorCredential('synthetic-operator');
+    await act(async () => { await result.current.clearSlideAnswers('q1'); });
+    expect(fetch).toHaveBeenLastCalledWith('/api/quiz-answer', expect.objectContaining({
+      headers: { 'Content-Type': 'application/json', 'X-Sefer-Operator-Credential': 'synthetic-operator' },
+    }));
     expect(result.current.getSubmittedCount('q1')).toBe(0);
+  });
+
+  it('conserva el agregado y no distribuye clear cuando HTTP rechaza la operación', async () => {
+    const { result } = renderHook(() => useControllerAnswers('presentation-1'));
+    act(() => eventSources.at(-1)?.onmessage?.({ data: JSON.stringify({
+      type: 'QUIZ_AGGREGATE_SNAPSHOT', presentationId: 'presentation-1',
+      aggregate: { slides: { q1: { submittedCount: 3 } }, submittedAnswersBySlideId: {}, finalScoreRanges: {} },
+    }) }));
+    const broadcast = vi.spyOn(BroadcastChannel.prototype, 'postMessage');
+    vi.mocked(fetch).mockResolvedValueOnce(response(403));
+    await act(async () => { await expect(result.current.clearSlideAnswers('q1')).rejects.toThrow('403'); });
+    expect(result.current.getSubmittedCount('q1')).toBe(3);
+    expect(broadcast).not.toHaveBeenCalled();
+    broadcast.mockRestore();
+  });
+
+  it('no aplica un clear pendiente a una presentación nueva', async () => {
+    const { result, rerender } = renderHook(({ id }) => useControllerAnswers(id), { initialProps: { id: 'presentation-1' } });
+    let finish!: (value: Response) => void;
+    vi.mocked(fetch).mockReturnValueOnce(new Promise(resolve => { finish = resolve; }));
+    const clearing = result.current.clearSlideAnswers('q1');
+    rerender({ id: 'presentation-2' });
+    act(() => eventSources.at(-1)?.onmessage?.({ data: JSON.stringify({
+      type: 'QUIZ_AGGREGATE_SNAPSHOT', presentationId: 'presentation-2',
+      aggregate: { slides: { q1: { submittedCount: 4 } }, submittedAnswersBySlideId: {}, finalScoreRanges: {} },
+    }) }));
+    await act(async () => { finish(response()); expect(await clearing).toBe(false); });
+    expect(result.current.getSubmittedCount('q1')).toBe(4);
   });
 
   it('muestra rangos ya agregados sin identificadores de sesion', async () => {

@@ -1,7 +1,10 @@
 # Plano para un repositorio jurídico privado
 
-Estado: arquitectura implementada localmente; la protección del futuro remoto
-privado sigue siendo una operación del propietario.
+Estado: el formato de publicaciones y su validación están implementados en el
+producto. Los controles de GitHub y el flujo de gobernanza siguientes son una
+propuesta con criterios de aceptación pendientes del propietario; esta página
+no acredita su implantación remota. Publicación legal vigente:
+[privacidad](README.md) y [operación](../operations/deployment.md).
 
 ## 1. Contenido permitido
 
@@ -12,7 +15,7 @@ mensajes, direcciones IP ni expedientes reales de derechos o incidentes con
 datos personales. Estos últimos requieren un expediente cifrado y separado; Git
 no facilita la supresión completa de información ya incluida en su historial.
 
-## 2. Estructura propuesta
+## 2. Estructura de publicación soportada
 
 ```text
 SeferPrivateData/legal/

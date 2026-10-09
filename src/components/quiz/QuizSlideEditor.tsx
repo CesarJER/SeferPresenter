@@ -9,7 +9,7 @@
  * - Timer, randomize, multiSelect controls
  * - Biblical citation (CITA: / CITA!:) via ScriptureRangeEditor
  * - Toggle: Modo Resultados — switches to result profiles editor (R1–R9)
- * - Auto-save on blur (no submit button needed)
+ * - Propagates draft edits on blur/change; durable save belongs to the parent editor
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';

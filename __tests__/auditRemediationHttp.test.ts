@@ -21,13 +21,13 @@ afterEach(async () => {
   }
   child = undefined; dataDir = undefined;
 });
-async function start() {
+async function start(authRequired = true) {
   dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sefer-remediation-'));
   const reserve = createServer(); await new Promise<void>(resolve => reserve.listen(0, '127.0.0.1', resolve));
   const address = reserve.address(); if (!address || typeof address === 'string') throw new Error('Address required');
   const port = address.port; await new Promise<void>(resolve => reserve.close(() => resolve()));
   child = spawn(process.execPath, ['server/local-server.mjs'], { windowsHide: true, stdio: 'ignore', env: {
-    ...process.env, SEFER_DATA_DIR: dataDir, SEFER_PORT: String(port), SEFER_REQUIRE_AUTH: 'true',
+    ...process.env, SEFER_DATA_DIR: dataDir, SEFER_PORT: String(port), SEFER_REQUIRE_AUTH: String(authRequired),
     SEFER_CONTROL_PASSWORD: 'synthetic-password', SEFER_LIVE_AUDIO_ENABLED: 'false', SEFER_VOICE_SCRIPTURE_ENABLED: 'false',
   } });
   const base = `http://127.0.0.1:${port}`;
@@ -41,6 +41,44 @@ async function start() {
     headers: { ...headers, 'Content-Type': 'application/json', ...(credential ? { 'X-Sefer-Operator-Credential': credential } : {}), ...(etag ? { 'If-Match': etag } : {}) }, body: JSON.stringify(body) });
   return { base, connect, post };
 }
+it.each([true, false])('clears controlled quiz aggregates only for active Controls (auth=%s)', async (authRequired) => {
+  const { connect, post } = await start(authRequired);
+  const principal = await connect();
+  const pending = await connect('control');
+  const presenter = await connect('presenter');
+  const audience = await connect('audience');
+  const presentationId = 'release-quiz';
+  expect((await post('/api/state', {
+    clientId: principal.welcome.clientId, slideIndex: 0,
+    presentation: { id: presentationId, title: 'Synthetic quiz', mode: 'trilingual', background: '',
+      slides: [{ id: 'q1', label: 'Question', lines: ['Synthetic'] }] },
+  }, principal.welcome.operatorCredential)).status).toBe(200);
+  for (const slideId of ['q1', 'q2']) {
+    for (let i = 0; i < 3; i++) {
+      expect((await post('/api/quiz-answer', { type: 'QUIZ_ANSWER_AGGREGATE', presentationId,
+        slideId, submissionId: `${slideId}-${i}`, selectedOptionIds: ['A'] })).status).toBe(200);
+    }
+  }
+  const controlled = new Promise<void>(resolve => principal.ws.on('message', raw => {
+    const message = JSON.parse(raw.toString());
+    if (message.type === 'SESSION_ACCESS_POLICY' && message.accessMode === 'CONTROLLED') resolve();
+  }));
+  principal.ws.send(JSON.stringify({ type: 'SESSION_ACCESS_POLICY_UPDATE', accessMode: 'CONTROLLED' }));
+  await controlled;
+  const clear = { type: 'QUIZ_CLEAR_ANSWERS', presentationId, slideId: 'q1' };
+  expect((await post('/api/quiz-answer', clear, principal.welcome.operatorCredential)).status).toBe(200);
+  const snapshot = await (await post('/api/quiz-control-state', { presentationId })).json();
+  expect(snapshot.aggregate.slides.q1).toBeUndefined();
+  expect(snapshot.aggregate.slides.q2.submittedCount).toBe(3);
+  for (const credential of [undefined, pending.welcome.operatorCredential, presenter.welcome.operatorCredential, audience.welcome.operatorCredential]) {
+    expect((await post('/api/quiz-answer', { ...clear, slideId: 'q2' }, credential)).status).toBe(403);
+  }
+  expect((await post('/api/quiz-answer', { type: 'QUIZ_ANSWER_AGGREGATE', presentationId,
+    slideId: 'q2', submissionId: 'not-admitted', selectedOptionIds: ['B'] })).status).toBe(401);
+  const closed = new Promise<void>(resolve => principal.ws.once('close', () => resolve()));
+  principal.ws.close(); await closed;
+  expect((await post('/api/quiz-answer', { ...clear, slideId: 'q2' }, principal.welcome.operatorCredential)).status).toBe(403);
+}, 10000);
 it('blocks pending/copy-ID HTTP mutations, allows Presenter telemetry and reenters after soft reset', async () => {
   const { base, connect, post } = await start();
   const principal = await connect(); const pending = await connect('control', principal.welcome.controlSessionId);

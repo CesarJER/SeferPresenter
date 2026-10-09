@@ -19,6 +19,7 @@ dist-ssr
 *.local.*
 launcher
 AGENTS.md
+!/AGENTS.md
 
 # Editor directories and files
 .vscode/*

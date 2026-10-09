@@ -1,12 +1,13 @@
 # Especificación técnica de privacidad de SeferPresenter
 
-Versión: 2026-07-31  
+Versión: 2026-10-07
 Ámbito: comportamiento común del producto auditado.  
 No contiene decisiones ni datos de un operador concreto.
 
 ## 1. Clasificación
 
-- **Siempre cierta:** deriva del diseño actual y no depende de configuración.
+- **Siempre cierta:** propiedad del flujo inspeccionado en la revisión auditada,
+  no garantía de todos los despliegues ni de futuras modificaciones.
 - **Predeterminada pero configurable:** existe un valor por defecto modificable.
 - **Dependiente del despliegue:** cambia por infraestructura o variables.
 - **Dependiente del operador:** requiere una decisión organizativa.
@@ -14,6 +15,10 @@ No contiene decisiones ni datos de un operador concreto.
 - **Pendiente de implementar:** requisito identificado pero no garantizado.
 
 ## 2. Arquitectura y roles técnicos
+
+Responsabilidades y trust boundaries: [arquitectura](../architecture/overview.md).
+Autoridad y recuperación: [sincronización](../architecture/synchronization.md).
+La tabla concentra el punto de vista de tratamiento de datos, sin redefinir contratos.
 
 | Componente | Función | Datos principales | Clasificación |
 | --- | --- | --- | --- |
@@ -39,11 +44,24 @@ Evidencia principal: `src/App.tsx`, `src/main-control.tsx`,
 | `presentationSessionId` | Servidor | Marcador técnico privado de 24 h y envoltura caducable en `localStorage` Audience | Rotación/logout/expiración | Siempre cierta |
 | `submissionId` de quiz | Navegador; uno por aporte y ámbito | Envoltura caducable local, tránsito y hash en RAM servidor | Presentación/limpieza/expiración | Siempre cierta |
 | `participantId` | Servidor/WS | RAM WS, cliente y LiveKit | Conexión/reentrada | Función opcional |
-| `controlSessionId` | Control | RAM cliente/WS | Autorización/conexión | Función opcional |
+| `controlSessionId` | Control | RAM cliente/WS | Autorización/conexión | Siempre cierta para Control WS |
 | identidad LiveKit | Servidor | JWT, RAM y SFU | TTL y gracia | Función opcional |
 
 Son seudónimos, no datos anónimos, mientras permitan distinguir o correlacionar
 una sesión o participante.
+
+La admisión Audience utiliza además una credencial aleatoria de acceso: el
+servidor mantiene su hash/registro en RAM y `useAudienceAccess` conserva
+`sefer-audience-access` en localStorage junto a presentationSessionId. Esa
+envoltura no implementa el mismo TTL explícito de las respuestas/alias; su
+validez depende del registro servidor y de la sesión. Los tickets STATE/QUIZ
+caducan en 30 segundos y son de un uso. Contrato y lifecycle:
+[admisión HTTP](../api/http.md#admisión-de-audience).
+
+El marcador de sesión comprueba `expiresAt` al cargar el proceso. Su
+`getSessionId` no rota automáticamente una sesión que siga en RAM más de 24 horas;
+la rotación explícita sí escribe un marcador nuevo. No interprete el plazo del
+archivo como un temporizador de cierre de todos los participantes del servidor.
 
 ## 4. Almacenamiento del navegador
 
@@ -56,16 +74,18 @@ Se usa para:
 - respuestas, puntuaciones y contribuciones pendientes/reenviables locales del quiz;
 - estado de Control y otros ajustes operativos.
 
-Evidencia: `src/hooks/useSyncState.ts:226-241`,
-`src/hooks/useAudienceSession.ts:20-71`,
-`src/hooks/useQuizAnswers.ts:101-160` y
-`src/hooks/useSeferControlLogic.ts:35-99`.
+Evidencia: [src/hooks/useSyncState.ts](../../src/hooks/useSyncState.ts),
+[src/hooks/useAudienceSession.ts](../../src/hooks/useAudienceSession.ts),
+[src/hooks/useQuizAnswers.ts](../../src/hooks/useQuizAnswers.ts) y
+[src/hooks/useSeferControlLogic.ts](../../src/hooks/useSeferControlLogic.ts).
 
 La referencia de sesión, las respuestas, las puntuaciones y las contribuciones Audience usan
 envolturas versionadas con TTL de 24 horas por defecto, configurable entre 1 y
 168 horas. Lectura expirada, formato legado/malformado, logout y rotación purgan
 los valores de forma idempotente. Alias y visibilidad comparten una envoltura
-caducable vinculada a la referencia de sesión y nunca sobreviven a su expiración.
+caducable vinculada a la referencia de sesión y se rechazan al leerla expirada.
+La purga física depende de que el navegador ejecute lectura, eventos o timers;
+cerrar o suspender el navegador no garantiza borrado en disco en el instante del TTL.
 Las claves antiguas sin TTL se purgan. Logout se sincroniza entre instancias y
 pestañas mediante eventos locales y de storage. El estado operativo de Presenter/Control no se considera identidad de
 Audience y conserva su ciclo funcional propio.
@@ -83,7 +103,7 @@ tokens, LiveKit, documentos legales y medios pesados mediante reglas explícitas
 `/proteccion-datos` y `/legal/*` se solicitan con `no-store`; el backend añade
 también cabeceras HTTP `no-store`. Sin red, el producto muestra indisponibilidad
 en vez de presentar una política almacenada como si siguiera vigente.
-Evidencia: `public/audience-sw.js:65-83,138-216`.
+Evidencia: `static/audience-sw.js` y `__tests__/pwa.test.ts`.
 
 ### Cookies e IndexedDB
 
@@ -104,7 +124,7 @@ Evidencia:
 
 - `LiveAudioAudienceContainer.tsx`;
 - `server/ws-server.mjs`;
-- `src/hooks/usePrivateControlSignals.ts:144-274`.
+- [src/hooks/usePrivateControlSignals.ts](../../src/hooks/usePrivateControlSignals.ts).
 
 ### Lista voluntariamente visible
 
@@ -128,18 +148,32 @@ Clasificación:
 
 ## 6. Mensajes privados
 
-Los mensajes `PRIVATE_CONTROL_SIGNAL` usan ECDH P-256, HKDF y AES-256-GCM,
-además de TLS. El servidor enruta ciphertext y aplica validación/anti-replay.
-Los Controles autorizados pueden descifrar.
+Envelope, productores/consumidores y límites:
+[señales privadas](../api/realtime.md#señales-privadas-envelope-y-payload-descifrado).
+Aquí se conserva el análisis de protección y sus límites.
 
-Evidencia: `src/utils/cryptoUtils.ts:13-129`,
-`src/hooks/usePrivateControlSignals.ts:144-274` y
-`server/ws-server.mjs:708-742`.
+Los mensajes `PRIVATE_CONTROL_SIGNAL` usan ECDH P-256 con derivación directa
+de clave AES-256-GCM mediante Web Crypto; no hay HKDF en este flujo.
+Los clientes rechazan reutilización de nonce dentro de su contexto de recepción.
+El servidor valida forma, tamaño, frecuencia y autoridad de enrutamiento; no
+descifra esos mensajes. Los Controles autorizados pueden descifrar. HTTPS/WSS
+depende del despliegue. Las claves públicas se distribuyen por el servidor:
+esta arquitectura no demuestra autenticación independiente frente a un servidor
+malicioso. El cifrado privado tampoco describe el transporte de audio LiveKit.
+
+Evidencia: [src/utils/cryptoUtils.ts](../../src/utils/cryptoUtils.ts),
+[src/hooks/usePrivateControlSignals.ts](../../src/hooks/usePrivateControlSignals.ts) y
+[server/ws-server.mjs](../../server/ws-server.mjs).
 
 Clasificación: **siempre cierta para el canal privado auditado**, sin extender la
 afirmación a alias enviados por otras rutas.
 
 ## 7. Live Audio
+
+Comportamiento: [feature](../features/live-audio.md). Tokens y permisos:
+[HTTP](../api/http.md#live-audio-tokens-y-moderación). Procedimiento:
+[guía](../guides/live-audio-session.md). Las afirmaciones siguientes describen
+tratamiento de voz y límites, no certificación del SFU desplegado.
 
 Live Audio es opcional. Node emite JWT temporales para una sala configurada,
 mantiene credenciales/permisos en RAM y solicita a LiveKit cambios de
@@ -150,8 +184,8 @@ todas las publicaciones de audio, no a vídeo. El micrófono se publica solo tra
 una acción local mediante `getUserMedia`/LiveKit. Control puede retirar permiso
 o silenciar, pero no activar el micrófono físico.
 
-Evidencia: `server/livekit-server.mjs:101-205,252-432` y
-`src/features/liveAudio/hooks/useLiveAudio.ts:354-390,469-526,614-655`.
+Evidencia: [server/livekit-server.mjs](../../server/livekit-server.mjs) y
+[src/features/liveAudio/hooks/useLiveAudio.ts](../../src/features/liveAudio/hooks/useLiveAudio.ts).
 
 La voz usa cifrado WebRTC en tránsito. No se configuró E2EE de medios frente al
 SFU. No se encontró LiveKit Egress ni escritura de audio en disco.
@@ -173,6 +207,10 @@ para evitar duplicados. Control recibe opciones/citas/rangos agregados, nunca
 estable que permita reconstruir el recorrido de una persona.
 Las distribuciones permanecen ocultas para Control hasta reunir al menos tres
 aportes en el ámbito correspondiente.
+
+Los IDs independientes evitan una clave común de participante en el almacén de
+agregados; no demuestran anonimato frente a correlación temporal, tráfico o
+conocimiento externo. El umbral de tres tampoco certifica anonimización jurídica.
 
 Evidencia: `src/hooks/useQuizAnswers.ts`,
 `server/quiz-message-validation.mjs` y `server/local-server.mjs`.
@@ -198,15 +236,19 @@ de ejecución controlada multidispositivo**.
 | Logs app | Docker `local`, 5 MB × 3, comprimido | Allowlist operativa; auditoría sin reinicios |
 | Logs Caddy/LiveKit/Redis | Driver Docker `none` | No se persisten porque pueden contener IP/ICE/JWT |
 
-Evidencia: `server/persistence.mjs`, `server/local-server.mjs`,
+Evidencia: `server/json-persistence.mjs`, `server/local-server.mjs`,
 `server/ws-server.mjs`, `server/livekit-server.mjs` y `docker-compose.yml`.
 
 ## 10. Red, IP y logs
 
 Caddy termina TLS pero elimina `X-Real-IP` y `X-Forwarded-For` antes de los
-upstream. Node no lee IP ni `User-Agent` en el código de producto. Compose
+upstream. La capa HTTP inspeccionada no registra IP ni `User-Agent`. Compose
 descarta completamente la salida de Caddy, LiveKit y Redis; solo conserva logs
-operativos allowlist de la aplicación mediante el driver `local` acotado.
+operativos de la aplicación mediante el driver `local` acotado. El modo opcional
+`SEFER_VOICE_SCRIPTURE_DEBUG=true` puede emitir transcripciones y aliases de
+frases privadas; debe permanecer desactivado en operación normal. El servicio
+STT configurado tiene su propia política de logs y almacenamiento que el gateway
+no puede garantizar. Audio y texto STT se procesan en RAM en el flujo normal.
 
 LiveKit puede detectar la IP pública de salida del **servidor**, no de Audience,
 cuando falta `LIVEKIT_NODE_IP`, pero solo si
@@ -219,8 +261,8 @@ Docker no ofrece retención por edad en sus drivers `local`/`json-file`. El scri
 contenedores. La antigüedad de un contenedor no demuestra la de sus registros.
 La tarea opcional del host ejecuta esta auditoría en modo no mutante.
 Los límites de tamaño y número de ficheros no garantizan un plazo de borrado;
-una política temporal estricta requiere una solución de logging revisada o
-mantenimiento explícito fuera de las sesiones.
+una política temporal estricta requiere una solución de logging revisada.
+El borrado soportado sin recrear contenedores está pendiente en [TODO.md](../../TODO.md).
 
 El vigilante opcional `watch-livekit-network.mjs` consulta la IP de salida del
 servidor, la confirmación de DDNS y DNS público. Solo actúa sobre el contenedor
@@ -314,6 +356,12 @@ presenta un error y la barrera de micrófono permanece cerrada.
 | Fuente legal versionada, renderizada y hash visible | Implementada y verificada en despliegue local |
 | Información básica tabular configurable antes de intervenir | Implementada y verificada en DOM/runtime |
 | Manifiesto no nominativo de grabación | Implementado, probado y verificado en volumen Compose |
+
+Las etiquetas de runtime/Compose/DOM de esta tabla conservan verificaciones
+históricas de las fases de privacidad; no son checks ejecutados nuevamente el
+2026-10-07 ni certificación del despliegue actual. Consulte el
+[informe de documentación](../audits/2026-10-07/documentation-audit.md) para
+evidencia y límites de la revisión actual.
 
 ## 14. Revisión
 
