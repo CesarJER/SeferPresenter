@@ -1,0 +1,53 @@
+name: Verify CLA Sync
+
+on:
+  pull_request:
+    paths:
+      - 'CLA.md'
+  push:
+    branches:
+      - main
+    paths:
+      - 'CLA.md'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  verify-cla:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          # Necesario para poder hacer push de vuelta a la rama
+          ref: ${{ github.head_ref || github.ref_name }}
+
+      - name: Fetch Remote Gist
+        run: |
+          curl -sL "https://gist.githubusercontent.com/CesarJER/db8e3850acb15d0747cede4a933043aa/raw" > remote_cla.md
+
+      - name: Build Expected CLA
+        run: |
+          echo '> **Nota:** Este documento se proporciona únicamente para su lectura. El proceso formal de firma se gestiona automáticamente mediante [CLA Assistant](https://cla-assistant.io/) durante el proceso de Pull Request. La fuente autorizada de este documento es [este Gist](https://gist.github.com/CesarJER/db8e3850acb15d0747cede4a933043aa).' > expected_cla.md
+          echo '' >> expected_cla.md
+          cat remote_cla.md >> expected_cla.md
+
+      - name: Verify and Sync
+        run: |
+          if ! diff -u --strip-trailing-cr CLA.md expected_cla.md; then
+            echo "Differences detected. Auto-syncing CLA.md with the authoritative Gist..."
+            cp expected_cla.md CLA.md
+            
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add CLA.md
+            git commit -m "chore: Sync CLA.md with authoritative Gist"
+            git push
+            
+            echo "::warning::⚠️ Advertencia: Se ha corregido el CLA.md. Por motivos legales de firma, este archivo es de solo lectura y debe ser idéntico al Gist oficial. Tus cambios en el CLA.md han sido revertidos. Si quieres proponer un cambio legal, por favor, abre un Issue para debatirlo."
+            echo "::warning::⚠️ Warning: CLA.md has been auto-corrected. For legal signing reasons, this file is read-only and must be identical to the official Gist. Your changes to CLA.md have been reverted. If you want to propose a legal change, please open an Issue to discuss it."
+          else
+            echo "CLA.md is in sync with the Gist."
+          fi
