@@ -42,6 +42,35 @@ física de audio.
 
 Para probar el recorrido completo, use [primera sesión](docs/guides/first-session.md).
 
+## Capturas de pantalla
+
+### Proyección en directo (`/presenter`)
+
+| Diapositivas sincronizadas | Cuestionarios interactivos (Quiz en vivo) |
+| :---: | :---: |
+| ![Proyección en directo](docs/screenshots/presenter-projection.png) | ![Quiz interactivo en directo](docs/screenshots/quiz-interactive.jpg) |
+
+### Modo Sefer y fidelidad masorética
+
+Maquetación poética especial para *Shirat HaYam* (Éxodo 15, Cántico del Mar) con disposición tradicional *"Ariaj al gabey leveina"* (ladrillo sobre medio ladrillo) y versículo activo resaltado:
+
+![Shirat HaYam - Cántico del Mar](docs/screenshots/sefer-shirat-hayam.png)
+
+Navegación textual y exégesis en doble columna (escritorio) y adaptable a dispositivos móviles para la audiencia (`/audience`):
+
+| Vista escritorio (doble columna) | Vista reducida / móvil |
+| :---: | :---: |
+| ![Lectura Sefer escritorio](docs/screenshots/sefer-desktop.png) | ![Lectura Sefer móvil](docs/screenshots/sefer-mobile.png) |
+
+### Consola de Operador (`/control`)
+
+Administración completa de la sesión: selección de textos, control de fondos y medios, previsualización en vivo y navegación por diapositivas:
+
+| Navegación de textos y diapositivas | Previsualización y catálogo |
+| :---: | :---: |
+| ![Control navegación](docs/screenshots/control-scripture-navigation.png) | ![Control previsualización](docs/screenshots/control-projection-preview.png) |
+
+
 ## Probarlo en desarrollo local
 
 Necesita Git, npm y una versión de Node compatible con el lockfile:
