@@ -7,6 +7,12 @@ Una casilla completada aquí no certifica un despliegue distinto.
 
 ## Corregido en la revisión previa a publicación
 
+- [x] 2026-10-12: actualizar dependencias vulnerables compatibles, sustituyendo
+  los cambios de las PR #2, #3, #5 y #6. Audit de producción: cero vulnerabilidades;
+  suite: 73 archivos y 590 tests; tipos app/node, compilación directa sin corpus
+  y lint de la prueba nueva pasan. Añadir regresión DOMPurify en jsdom y CI de
+  instalación, audit de producción, tipos, suite y build. Tailwind queda pendiente
+  abajo; estas comprobaciones no acreditan aceptación física ni lint global.
 - [x] Retirar las diez páginas antiguas de compatibilidad y los anchors del README.
   Conservar arquitectura, contratos, guías e historia en sus destinos canónicos.
 - [x] Preparar README para lectores externos y crear AGENTS.md enlazado a las
@@ -38,6 +44,12 @@ Una casilla completada aquí no certifica un despliegue distinto.
 
 ## Implementación y mantenimiento pendientes
 
+- [ ] Migrar Tailwind 3 a 4 en una rama independiente antes de integrar la PR #4.
+  El audit del 2026-10-12 conserva siete paquetes afectados en su cadena de
+  desarrollo (cinco high y dos moderate), por `braces` y `postcss-selector-parser`.
+  Revisar PostCSS, CSS, tema hebreo/RTL y compatibilidad de navegadores; validar
+  visualmente Control, Presenter, Audience y catálogo. No usar `audit fix --force`
+  como sustituto de esta migración ni descartar las alertas como resueltas.
 - [ ] Completar aceptación real de IMPL-DOC-01: varios Controls/Audience,
   PUBLIC/CONTROLLED, auth activa/desactivada, desconexión y cambio de presentación.
   Confirmar clear en agregado servidor, SSE y dispositivos, incluida recuperación
