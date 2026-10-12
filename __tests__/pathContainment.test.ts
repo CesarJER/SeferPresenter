@@ -17,7 +17,7 @@ describe('static path containment', () => {
 
     expect(isPathInsideRoot(root, siblingPrefix)).toBe(false);
     expect(resolvePathInsideRoot(root, '../dist-private/secret.json')).toBeNull();
-    expect(resolvePathInsideRoot(root, '..\\dist-private\\secret.json')).toBeNull();
+    expect(resolvePathInsideRoot(root, path.join('..', 'dist-private', 'secret.json'))).toBeNull();
   });
 
   it('rejects non-string request paths', () => {
