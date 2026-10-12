@@ -37,7 +37,7 @@ Las siguientes librerías de software de código abierto son utilizadas directam
 
 | Paquete | Versión | Licencia | Autor / Proyecto | Repositorio |
 | :--- | :--- | :--- | :--- | :--- |
-| **DOMPurify** | `^3.4.12` | Apache-2.0 / MPL-2.0 | Cure53 | [github.com/cure53/DOMPurify](https://github.com/cure53/DOMPurify) |
+| **DOMPurify** | `^3.4.16` | Apache-2.0 / MPL-2.0 | Cure53 | [github.com/cure53/DOMPurify](https://github.com/cure53/DOMPurify) |
 | **framer-motion** | `^12.38.0` | MIT | Matt Perry / Motion Division | [github.com/motiondivision/motion](https://github.com/motiondivision/motion) |
 | **livekit-client** | `^2.19.2` | Apache-2.0 | LiveKit | [github.com/livekit/client-sdk-js](https://github.com/livekit/client-sdk-js) |
 | **livekit-server-sdk** | `^2.19.1` | Apache-2.0 | David Zhao / LiveKit | [github.com/livekit/node-sdks](https://github.com/livekit/node-sdks) |
@@ -64,7 +64,7 @@ Las siguientes librerías de software de código abierto son utilizadas directam
 | **tailwindcss** / **@tailwindcss/postcss** | `^4.3.3` / `^4.3.3` | MIT | Utilidades CSS y plugin PostCSS; reemplazan el uso de Autoprefixer. |
 | **postcss** | `^8.5.23` | MIT | Transformación de CSS. |
 | **jsdom** | `^29.1.1` | MIT | Emulación de DOM para pruebas sin navegador. |
-| **@testing-library/react** | `^16.2.0` | MIT | Utilidades para pruebas de componentes React. |
+| **@testing-library/react** | `^16.3.3` | MIT | Utilidades para pruebas de componentes React. |
 
 ---
 

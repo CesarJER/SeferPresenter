@@ -34,6 +34,8 @@ Requisitos de estilos: Safari 16.4+, Chrome 111+, Firefox 128+.
   Se conservan estructura y texto RTL. Hay diferencias menores de tonos y
   espaciado; Tailwind 4 también reconoce opacidades numéricas que v3 no generaba.
   No se afirma equivalencia de píxeles ni cobertura de todas las vistas/estados.
+- CSS del build comparado: 81.89 → 128.68 kB; gzip 15.01 → 20.05 kB. El
+  incremento queda visible; no se midió su efecto en dispositivos físicos.
 - No se ejecutaron Docker, despliegue, corpus del operador, aceptación en
   Safari/Firefox físicos ni SFU/audio. La suite con mocks no verifica dispositivos.
 - Vite mantiene el aviso de `__dirname` para un futuro configLoader nativo;
@@ -62,3 +64,11 @@ son una instantánea y no implican que cada actualización sea necesaria.
 
 El resto de dependencias directas no aparece como outdated en esta consulta.
 No se añaden overrides ni se ejecuta `npm audit fix --force`.
+
+## Mantenimiento compatible separado
+
+Después del commit de migración se actualizan Testing Library a 16.3.3 y
+`@types/ws` a 8.18.2, y se elimina `@types/dompurify`. El registro npm declara
+que este último es un stub y que DOMPurify ya incluye sus tipos. Se revisan
+de nuevo tipos, suite y audit con estas dependencias. El resto de actualizaciones
+disponibles queda aplazado según la tabla, no descartado como innecesario para siempre.
