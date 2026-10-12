@@ -482,7 +482,7 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
             if (audioRef.current) audioRef.current.pause();
             onClose();
           }}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-red-900 bg-red-950/20 hover:bg-red-900 hover:text-white transition-all text-red-400 font-bold text-xs cursor-pointer shadow"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-red-900 bg-red-950/20 hover:bg-red-900 hover:text-white transition-all text-red-400 font-bold text-xs cursor-pointer shadow-sm"
           title="Cerrar ventana del editor"
         >
           <X size={14} />
@@ -498,7 +498,7 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
           <button
             type="button"
             onClick={() => setIsConfigCollapsed(!isConfigCollapsed)}
-            className="flex items-center justify-between w-full text-left text-xs font-extrabold uppercase text-gray-400 tracking-wider hover:text-white bg-gray-900 border border-gray-800 p-2 rounded transition-colors cursor-pointer"
+            className="flex items-center justify-between w-full text-left text-xs font-extrabold uppercase text-gray-400 tracking-wider hover:text-white bg-gray-900 border border-gray-800 p-2 rounded-sm transition-colors cursor-pointer"
           >
             <span>⚙️ Configuración y Pistas</span>
             <span className="text-yellow-500 font-mono text-[10px]">
@@ -526,7 +526,7 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
                         }
                       }
                     }}
-                    className="w-full text-xs bg-gray-900 border border-gray-800 rounded px-2.5 py-1.5 focus:border-yellow-500 outline-none text-white cursor-pointer shadow-sm"
+                    className="w-full text-xs bg-gray-900 border border-gray-800 rounded-sm px-2.5 py-1.5 focus:border-yellow-500 outline-hidden text-white cursor-pointer shadow-xs"
                   >
                     <option value="">-- Seleccionar Pista --</option>
                     {availableAudioFiles.map((file) => (
@@ -536,7 +536,7 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
                     ))}
                   </select>
                   {availableAudioFiles.length === 0 && (
-                    <div className="flex items-center gap-1.5 text-[9px] text-amber-500 bg-amber-500/10 p-1.5 rounded border border-amber-900/30 mt-1">
+                    <div className="flex items-center gap-1.5 text-[9px] text-amber-500 bg-amber-500/10 p-1.5 rounded-sm border border-amber-900/30 mt-1">
                       <AlertTriangle size={11} />
                       <span>Sin audios en public/audio/music</span>
                     </div>
@@ -553,7 +553,7 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
                       dirtyRef.current = false;
                       setSelectedPresentationId(e.target.value);
                     }}
-                    className="w-full text-xs bg-gray-900 border border-gray-800 rounded px-2.5 py-1.5 focus:border-yellow-500 outline-none text-white cursor-pointer shadow-sm"
+                    className="w-full text-xs bg-gray-900 border border-gray-800 rounded-sm px-2.5 py-1.5 focus:border-yellow-500 outline-hidden text-white cursor-pointer shadow-xs"
                   >
                     <option value="">-- Seleccionar Presentación --</option>
                     {presentations.map((p) => (
@@ -602,7 +602,7 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
                         }`}
                         title="Unilateral: La música avanza diapositivas"
                       >
-                        <ArrowUp size={12} className="stroke-[3]" />
+                        <ArrowUp size={12} className="stroke-3" />
                       </button>
                       <button
                         type="button"
@@ -614,7 +614,7 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
                         }`}
                         title="Bilateral: Sincronización bidireccional"
                       >
-                        <ArrowUpDown size={12} className="stroke-[3]" />
+                        <ArrowUpDown size={12} className="stroke-3" />
                       </button>
                     </div>
                   </div>
@@ -633,7 +633,7 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
                         step="0.05"
                         value={defaultVolume}
                         onChange={(e) => { dirtyRef.current = true; setDefaultVolume(parseFloat(e.target.value)); }}
-                        className="w-full h-1 bg-gray-800 rounded appearance-none cursor-pointer accent-yellow-500"
+                        className="w-full h-1 bg-gray-800 rounded-sm appearance-none cursor-pointer accent-yellow-500"
                       />
                     </div>
                   </div>
@@ -659,12 +659,12 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
                     step="0.05"
                     value={playbackRate}
                     onChange={(e) => setPlaybackRate(parseFloat(e.target.value))}
-                    className="flex-1 h-1 bg-gray-800 rounded appearance-none cursor-pointer accent-yellow-500"
+                    className="flex-1 h-1 bg-gray-800 rounded-sm appearance-none cursor-pointer accent-yellow-500"
                   />
                   <button
                     type="button"
                     onClick={() => setPlaybackRate(1.0)}
-                    className="px-1.5 py-0.5 rounded bg-gray-805 hover:bg-gray-750 text-gray-400 hover:text-white text-[9px] font-mono border border-gray-700 cursor-pointer"
+                    className="px-1.5 py-0.5 rounded-sm bg-gray-805 hover:bg-gray-750 text-gray-400 hover:text-white text-[9px] font-mono border border-gray-700 cursor-pointer"
                     title="Restablecer a 1.0x"
                   >
                     1x
@@ -677,13 +677,13 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
                 <button
                   type="button"
                   onClick={togglePlay}
-                  className="flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2.5 rounded bg-yellow-600 hover:bg-yellow-500 text-white font-bold text-xs transition-all cursor-pointer shadow"
+                  className="flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2.5 rounded-sm bg-yellow-600 hover:bg-yellow-500 text-white font-bold text-xs transition-all cursor-pointer shadow-sm"
                 >
                   {isPlaying ? <Pause size={12} /> : <Play size={12} />}
                   <span>{isPlaying ? 'Pausar' : 'Reproducir'}</span>
                 </button>
 
-                <div className="flex items-center gap-1.5 bg-gray-900 border border-gray-800 px-2 py-1.5 rounded shadow-sm">
+                <div className="flex items-center gap-1.5 bg-gray-900 border border-gray-800 px-2 py-1.5 rounded-sm shadow-xs">
                   <Volume2 size={12} className="text-gray-400" />
                   <input
                     type="range"
@@ -692,7 +692,7 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
                     step="0.05"
                     value={volume}
                     onChange={handleVolumeChange}
-                    className="w-14 h-1 bg-gray-800 rounded appearance-none cursor-pointer accent-yellow-500"
+                    className="w-14 h-1 bg-gray-800 rounded-sm appearance-none cursor-pointer accent-yellow-500"
                   />
                 </div>
               </div>
@@ -720,7 +720,7 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
                 type="button"
                 onClick={handleClearAll}
                 disabled={Object.keys(rowTimes).length === 0}
-                className="flex items-center gap-1 px-3 py-1.5 text-xs rounded border border-red-900 hover:bg-red-950/30 text-red-400 hover:text-red-300 disabled:opacity-40 disabled:hover:bg-transparent transition-colors cursor-pointer"
+                className="flex items-center gap-1 px-3 py-1.5 text-xs rounded-sm border border-red-900 hover:bg-red-950/30 text-red-400 hover:text-red-300 disabled:opacity-40 disabled:hover:bg-transparent transition-colors cursor-pointer"
                 title="Eliminar todas las marcas"
               >
                 <Trash2 size={12} />
@@ -826,7 +826,7 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
                                 }
                               }}
                               disabled={!selectedAudioFile || !timeValue || isNaN(parseFloat(timeValue)) || parseFloat(timeValue) < 0}
-                              className="flex items-center justify-center p-2 rounded bg-sky-650/20 hover:bg-sky-600 hover:text-white text-sky-400 border border-sky-650 transition-colors disabled:opacity-30 disabled:hover:bg-sky-650/20 disabled:hover:text-sky-400 cursor-pointer shadow-sm"
+                              className="flex items-center justify-center p-2 rounded-sm bg-sky-650/20 hover:bg-sky-600 hover:text-white text-sky-400 border border-sky-650 transition-colors disabled:opacity-30 disabled:hover:bg-sky-650/20 disabled:hover:text-sky-400 cursor-pointer shadow-xs"
                               title="Reproducir pista desde esta marca de tiempo"
                             >
                               <Play size={13} />
@@ -839,7 +839,7 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
                                 placeholder="0.0"
                                 value={timeValue}
                                 onChange={(e) => handleTimeInputChange(row.key, e.target.value)}
-                                className="w-16 text-right text-xs bg-gray-950 border border-gray-850 rounded px-2 py-1.5 focus:border-yellow-500 outline-none font-mono"
+                                className="w-16 text-right text-xs bg-gray-950 border border-gray-850 rounded-sm px-2 py-1.5 focus:border-yellow-500 outline-hidden font-mono"
                                 title="Segundos manuales"
                               />
                               {timeValue && (
@@ -852,7 +852,7 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
                               type="button"
                               onClick={() => handleCaptureTime(row.key)}
                               disabled={!selectedAudioFile}
-                              className="flex items-center justify-center p-2 rounded bg-yellow-600/20 hover:bg-yellow-600 hover:text-white text-yellow-500 border border-yellow-650 transition-colors disabled:opacity-30 disabled:hover:bg-yellow-600/20 disabled:hover:text-yellow-500 cursor-pointer shadow-sm"
+                              className="flex items-center justify-center p-2 rounded-sm bg-yellow-600/20 hover:bg-yellow-600 hover:text-white text-yellow-500 border border-yellow-650 transition-colors disabled:opacity-30 disabled:hover:bg-yellow-600/20 disabled:hover:text-yellow-500 cursor-pointer shadow-xs"
                               title="Capturar tiempo actual"
                             >
                               <Clock size={13} />
@@ -863,7 +863,7 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
                               type="button"
                               onClick={() => handleClearTime(row.key)}
                               disabled={!timeValue}
-                              className="flex items-center justify-center p-2 rounded bg-gray-800 hover:bg-red-950 hover:text-red-400 border border-gray-700 transition-colors disabled:opacity-20 disabled:hover:bg-gray-800 disabled:hover:text-gray-400 cursor-pointer"
+                              className="flex items-center justify-center p-2 rounded-sm bg-gray-800 hover:bg-red-950 hover:text-red-400 border border-gray-700 transition-colors disabled:opacity-20 disabled:hover:bg-gray-800 disabled:hover:text-gray-400 cursor-pointer"
                               title="Eliminar marca"
                             >
                               <X size={13} />
@@ -884,7 +884,7 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
           <div className="flex flex-col border-t border-gray-800 bg-gray-950 p-4 gap-4 shrink-0">
             {/* Full-width local progress bar */}
             {selectedAudioFile && (
-              <div className="w-full space-y-1 bg-gray-900/40 p-3 rounded border border-gray-850/60">
+              <div className="w-full space-y-1 bg-gray-900/40 p-3 rounded-sm border border-gray-850/60">
                 <div className="flex items-center justify-between text-[10px] font-bold uppercase text-gray-400 tracking-wider">
                   <span className="flex items-center gap-1.5 text-yellow-500">
                     <Clock size={12} className="animate-pulse" />
@@ -901,7 +901,7 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
                   step="0.1"
                   value={currentTime}
                   onChange={handleSeek}
-                  className="w-full h-1.5 bg-gray-800 rounded appearance-none cursor-pointer accent-yellow-500"
+                  className="w-full h-1.5 bg-gray-800 rounded-sm appearance-none cursor-pointer accent-yellow-500"
                 />
               </div>
             )}
@@ -913,7 +913,7 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
                 <button
                   type="button"
                   onClick={handleExport}
-                  className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded bg-gray-850 hover:bg-gray-800 text-gray-200 transition-colors cursor-pointer border border-gray-800"
+                  className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-sm bg-gray-850 hover:bg-gray-800 text-gray-200 transition-colors cursor-pointer border border-gray-800"
                   title="Exportar base de tiempos a JSON"
                 >
                   <Download size={13} />
@@ -924,7 +924,7 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
                 <button
                   type="button"
                   onClick={handleImportClick}
-                  className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded bg-gray-850 hover:bg-gray-800 text-gray-200 transition-colors cursor-pointer border border-gray-800"
+                  className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-sm bg-gray-850 hover:bg-gray-800 text-gray-200 transition-colors cursor-pointer border border-gray-800"
                   title="Importar base de tiempos desde JSON"
                 >
                   <Upload size={13} />

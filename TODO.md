@@ -44,12 +44,14 @@ Una casilla completada aquí no certifica un despliegue distinto.
 
 ## Implementación y mantenimiento pendientes
 
-- [ ] Migrar Tailwind 3 a 4 en una rama independiente antes de integrar la PR #4.
-  El audit del 2026-10-12 conserva siete paquetes afectados en su cadena de
-  desarrollo (cinco high y dos moderate), por `braces` y `postcss-selector-parser`.
-  Revisar PostCSS, CSS, tema hebreo/RTL y compatibilidad de navegadores; validar
-  visualmente Control, Presenter, Audience y catálogo. No usar `audit fix --force`
-  como sustituto de esta migración ni descartar las alertas como resueltas.
+- [x] Preparar Tailwind 4 en la rama `codex/tailwind-v4`, completando los cambios
+  que faltaban en la PR #4. PostCSS, tema CSS, clases y Dockerfile adaptados;
+  audit completo sin vulnerabilidades, tipos, 590 tests y build pasan.
+  Comparación visual sintética de Control/Presenter/Audience/catálogo realizada.
+  Evidencia y revisión de otras dependencias: [migración](docs/audits/2026-10-12/tailwind-v4-migration.md).
+- [ ] Integrar la migración de Tailwind tras aceptar sus diferencias visuales y
+  comprobar dispositivos físicos con Safari 16.4+, Chrome 111+ o Firefox 128+.
+  Una comprobación en Chromium local no acredita todos los navegadores soportados.
 - [ ] Completar aceptación real de IMPL-DOC-01: varios Controls/Audience,
   PUBLIC/CONTROLLED, auth activa/desactivada, desconexión y cambio de presentación.
   Confirmar clear en agregado servidor, SSE y dispositivos, incluida recuperación

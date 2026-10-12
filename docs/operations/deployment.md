@@ -4,7 +4,12 @@ Referencia self-hosted. Los comandos se ejecutan desde la raíz salvo indicació
 
 ## Aplicabilidad y prerrequisitos
 
-Node compatible con el lockfile (Vite 8.0.13: `^20.19.0 || >=22.12.0`) y npm. Dockerfile usa Node 20 Alpine; Compose añade proxy y perfiles opcionales. Instale dependencias con `npm ci` en un checkout revisado. Medios/corpus/secretos pertenecen al operador. Python/Pillow solo para optimización de imágenes; GPU/modelo/STT solo para Voice Scripture.
+Node compatible con el lockfile (Vite 8.3.4: `^20.19.0 || >=22.12.0`) y npm. Dockerfile usa Node 20 Alpine; Compose añade proxy y perfiles opcionales. Instale dependencias con `npm ci` en un checkout revisado. Medios/corpus/secretos pertenecen al operador. Python/Pillow solo para optimización de imágenes; GPU/modelo/STT solo para Voice Scripture.
+
+Los estilos de Tailwind CSS 4 requieren Safari 16.4+, Chrome 111+ o Firefox 128+.
+Las funciones multimedia y opcionales pueden imponer requisitos adicionales;
+compruebe la matriz de aceptación en los dispositivos utilizados. El tema y las
+utilidades propias viven en `src/index.css`, y PostCSS utiliza `@tailwindcss/postcss`.
 
 Antes de arrancar compruebe rama, HEAD, cambios, puertos y destino de `SEFER_DATA_DIR`. No sobrescriba un `.env` existente con el ejemplo. `.env.example` activa `COMPOSE_PROFILES=live-audio`: déjelo vacío para stack base y configure flags/secretos antes de activar una feature.
 

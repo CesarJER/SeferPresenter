@@ -269,7 +269,7 @@ const SlideVisualizer: React.FC<SlideVisualizerProps> = ({
           <Eye size={12} className="text-yellow-500" />
           <span>PREVISUALIZACIÓN DE PROYECCIÓN</span>
           {labelText && (
-            <span className="ml-2 px-1.5 py-0.5 rounded bg-gray-800 text-yellow-400 font-mono">
+            <span className="ml-2 px-1.5 py-0.5 rounded-sm bg-gray-800 text-yellow-400 font-mono">
               {labelText}
             </span>
           )}
@@ -277,7 +277,7 @@ const SlideVisualizer: React.FC<SlideVisualizerProps> = ({
         <button
           type="button"
           onClick={() => setIsCollapsed(!isCollapsed)}
-          className="p-1 rounded hover:bg-gray-800 hover:text-white transition-colors cursor-pointer"
+          className="p-1 rounded-sm hover:bg-gray-800 hover:text-white transition-colors cursor-pointer"
           title={isCollapsed ? "Expandir previsualización" : "Colapsar previsualización"}
         >
           {isCollapsed ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
@@ -286,7 +286,7 @@ const SlideVisualizer: React.FC<SlideVisualizerProps> = ({
 
       {/* Main View Area */}
       {!isCollapsed && (
-        <div className={`p-2.5 md:p-3 relative overflow-hidden ${slide?.type === 'media' && slide.mediaSrc ? 'min-h-[10rem]' : 'min-h-[60px]'}`}>
+        <div className={`p-2.5 md:p-3 relative overflow-hidden ${slide?.type === 'media' && slide.mediaSrc ? 'min-h-40' : 'min-h-[60px]'}`}>
           {slide?.type === 'media' && slide.mediaSrc && isImageMedia(slide.mediaSrc) && (
             <img src={slide.mediaSrc} className={`absolute inset-0 w-full h-full object-contain z-0`} alt="" />
           )}

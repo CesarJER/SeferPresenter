@@ -221,27 +221,27 @@ export const QuizSlideEditor: React.FC<QuizSlideEditorProps> = ({
                 onChange={e => updateProfile(rangeIdx, 'title', e.target.value)}
                 onBlur={commit}
                 placeholder="Título"
-                className="rounded border border-gray-800 bg-gray-900 px-2 py-1 text-[11px] text-white focus:outline-none focus:border-violet-500"
+                className="rounded-sm border border-gray-800 bg-gray-900 px-2 py-1 text-[11px] text-white focus:outline-hidden focus:border-violet-500"
               />
               <input
                 value={profile.description}
                 onChange={e => updateProfile(rangeIdx, 'description', e.target.value)}
                 onBlur={commit}
                 placeholder="Descripción"
-                className="rounded border border-gray-800 bg-gray-900 px-2 py-1 text-[11px] text-white focus:outline-none focus:border-violet-500"
+                className="rounded-sm border border-gray-800 bg-gray-900 px-2 py-1 text-[11px] text-white focus:outline-hidden focus:border-violet-500"
               />
               <input
                 value={profile.giftText}
                 onChange={e => updateProfile(rangeIdx, 'giftText', e.target.value)}
                 onBlur={commit}
                 placeholder="Versículo / regalo"
-                className="rounded border border-gray-800 bg-gray-900 px-2 py-1 text-[11px] text-white focus:outline-none focus:border-violet-500"
+                className="rounded-sm border border-gray-800 bg-gray-900 px-2 py-1 text-[11px] text-white focus:outline-hidden focus:border-violet-500"
               />
               <button
                 type="button"
                 onClick={() => removeProfile(rangeIdx)}
                 disabled={(local.resultProfiles?.length ?? 0) <= 1}
-                className="rounded border border-red-900/70 bg-red-950/30 px-2 py-1 text-[10px] font-bold text-red-300 disabled:opacity-30"
+                className="rounded-sm border border-red-900/70 bg-red-950/30 px-2 py-1 text-[10px] font-bold text-red-300 disabled:opacity-30"
               >
                 <Trash2 size={10} />
               </button>
@@ -251,7 +251,7 @@ export const QuizSlideEditor: React.FC<QuizSlideEditorProps> = ({
             type="button"
             onClick={addProfile}
             disabled={(local.resultProfiles?.length ?? 0) >= 9}
-            className="flex items-center gap-1 rounded border border-violet-800 bg-violet-950/30 px-3 py-1 text-[11px] font-bold text-violet-300 hover:bg-violet-900/40 disabled:opacity-40"
+            className="flex items-center gap-1 rounded-sm border border-violet-800 bg-violet-950/30 px-3 py-1 text-[11px] font-bold text-violet-300 hover:bg-violet-900/40 disabled:opacity-40"
           >
             <Plus size={11} /> Añadir Rango
           </button>
@@ -268,7 +268,7 @@ export const QuizSlideEditor: React.FC<QuizSlideEditorProps> = ({
             onBlur={commit}
             rows={2}
             placeholder="P: Escribe la pregunta aquí..."
-            className="w-full rounded border border-gray-800 bg-gray-900 px-2.5 py-2 text-xs text-white resize-none focus:outline-none focus:border-violet-500 placeholder-gray-600"
+            className="w-full rounded-sm border border-gray-800 bg-gray-900 px-2.5 py-2 text-xs text-white resize-none focus:outline-hidden focus:border-violet-500 placeholder-gray-600"
           />
 
           {/* Options */}
@@ -278,7 +278,7 @@ export const QuizSlideEditor: React.FC<QuizSlideEditorProps> = ({
               return (
                 <div
                   key={`${slideId}-${opt.id}`}
-                  className={`flex items-center gap-1.5 rounded border px-2 py-1.5 ${isCorrect ? 'border-emerald-700 bg-emerald-950/30' : 'border-gray-800 bg-gray-900/70'}`}
+                  className={`flex items-center gap-1.5 rounded-sm border px-2 py-1.5 ${isCorrect ? 'border-emerald-700 bg-emerald-950/30' : 'border-gray-800 bg-gray-900/70'}`}
                 >
                   <label className="flex items-center gap-1 font-black text-[11px] text-gray-300 cursor-pointer select-none shrink-0">
                     <input
@@ -295,7 +295,7 @@ export const QuizSlideEditor: React.FC<QuizSlideEditorProps> = ({
                     onChange={e => updateOptionText(optIdx, e.target.value)}
                     onBlur={commit}
                     placeholder={`Opción ${opt.id}`}
-                    className="min-w-0 flex-1 bg-transparent text-[11px] text-gray-100 outline-none placeholder-gray-600"
+                    className="min-w-0 flex-1 bg-transparent text-[11px] text-gray-100 outline-hidden placeholder-gray-600"
                   />
                   {(local.options?.length ?? 0) > 2 && (
                     <button
@@ -351,7 +351,7 @@ export const QuizSlideEditor: React.FC<QuizSlideEditorProps> = ({
                 value={local.timerSeconds ?? 30}
                 onChange={e => setLocal(prev => ({ ...prev, timerSeconds: Number(e.target.value) || 30 }))}
                 onBlur={commit}
-                className="w-14 rounded border border-gray-800 bg-gray-900 px-2 py-1 text-white focus:outline-none focus:border-violet-500"
+                className="w-14 rounded-sm border border-gray-800 bg-gray-900 px-2 py-1 text-white focus:outline-hidden focus:border-violet-500"
               />
               <span className="text-gray-600 font-normal">seg</span>
             </label>
@@ -367,14 +367,14 @@ export const QuizSlideEditor: React.FC<QuizSlideEditorProps> = ({
                     <button
                       type="button"
                       onClick={() => setCitaMode('eval')}
-                      className={`rounded px-2 py-0.5 text-[10px] font-bold transition-colors ${citaMode === 'eval' ? 'bg-yellow-600 text-black' : 'text-yellow-600 hover:text-yellow-400'}`}
+                      className={`rounded-sm px-2 py-0.5 text-[10px] font-bold transition-colors ${citaMode === 'eval' ? 'bg-yellow-600 text-black' : 'text-yellow-600 hover:text-yellow-400'}`}
                     >
                       CITA:
                     </button>
                     <button
                       type="button"
                       onClick={() => setCitaMode('review')}
-                      className={`rounded px-2 py-0.5 text-[10px] font-bold transition-colors ${citaMode === 'review' ? 'bg-violet-600 text-white' : 'text-violet-400 hover:text-violet-300'}`}
+                      className={`rounded-sm px-2 py-0.5 text-[10px] font-bold transition-colors ${citaMode === 'review' ? 'bg-violet-600 text-white' : 'text-violet-400 hover:text-violet-300'}`}
                     >
                       CITA!:
                     </button>

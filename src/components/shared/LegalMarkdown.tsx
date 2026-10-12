@@ -21,11 +21,11 @@ const componentStyles = (variant: 'light' | 'dark'): Components => {
     h2: ({ children }) => <h2 className={`mb-3 mt-10 border-b pb-2 text-2xl font-semibold ${heading} ${border}`}>{children}</h2>,
     h3: ({ children }) => <h3 className={`mb-2 mt-7 text-xl font-semibold ${heading}`}>{children}</h3>,
     h4: ({ children }) => <h4 className={`mb-2 mt-5 text-base font-semibold ${heading}`}>{children}</h4>,
-    p: ({ children }) => <p className={`my-3 break-words leading-7 ${text}`}>{children}</p>,
+    p: ({ children }) => <p className={`my-3 wrap-break-word leading-7 ${text}`}>{children}</p>,
     strong: ({ children }) => <strong className={`font-semibold ${heading}`}>{children}</strong>,
     ul: ({ children }) => <ul className={`my-4 list-disc space-y-2 pl-6 ${text}`}>{children}</ul>,
     ol: ({ children }) => <ol className={`my-4 list-decimal space-y-2 pl-6 ${text}`}>{children}</ol>,
-    li: ({ children }) => <li className="break-words pl-1 leading-7">{children}</li>,
+    li: ({ children }) => <li className="wrap-break-word pl-1 leading-7">{children}</li>,
     blockquote: ({ children }) => (
       <blockquote className={`my-5 border-l-4 px-4 py-2 ${border} ${mutedBackground}`}>{children}</blockquote>
     ),
@@ -38,14 +38,14 @@ const componentStyles = (variant: 'light' | 'dark'): Components => {
     thead: ({ children }) => <thead className={dark ? 'bg-gray-800' : 'bg-slate-100'}>{children}</thead>,
     tbody: ({ children }) => <tbody>{children}</tbody>,
     tr: ({ children }) => <tr className={`border-b last:border-b-0 ${border}`}>{children}</tr>,
-    th: ({ children }) => <th className={`break-words border-r p-3 align-top font-semibold last:border-r-0 ${border} ${heading}`}>{children}</th>,
-    td: ({ children }) => <td className={`break-words border-r p-3 align-top leading-6 last:border-r-0 ${border} ${text}`}>{children}</td>,
+    th: ({ children }) => <th className={`wrap-break-word border-r p-3 align-top font-semibold last:border-r-0 ${border} ${heading}`}>{children}</th>,
+    td: ({ children }) => <td className={`wrap-break-word border-r p-3 align-top leading-6 last:border-r-0 ${border} ${text}`}>{children}</td>,
     a: ({ href, children }) => {
       const external = Boolean(href && /^https?:\/\//i.test(href));
       return (
         <a
           href={href}
-          className={`break-words underline decoration-1 underline-offset-2 ${link}`}
+          className={`wrap-break-word underline decoration-1 underline-offset-2 ${link}`}
           target={external ? '_blank' : undefined}
           rel={external ? 'noopener noreferrer' : undefined}
         >
@@ -54,7 +54,7 @@ const componentStyles = (variant: 'light' | 'dark'): Components => {
       );
     },
     code: ({ children }) => (
-      <code className={`rounded px-1.5 py-0.5 font-mono text-[0.9em] ${dark ? 'bg-gray-800 text-gray-100' : 'bg-slate-100 text-slate-800'}`}>
+      <code className={`rounded-sm px-1.5 py-0.5 font-mono text-[0.9em] ${dark ? 'bg-gray-800 text-gray-100' : 'bg-slate-100 text-slate-800'}`}>
         {children}
       </code>
     ),

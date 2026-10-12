@@ -142,13 +142,13 @@ export const CustomSearchSelect: React.FC<CustomSearchSelectProps> = ({
 
       {/* Dropdown container */}
       {isOpen && (
-        <div className={`absolute left-0 z-[9999] rounded-md border border-gray-700 bg-gray-950/95 backdrop-blur-md shadow-2xl flex flex-col p-1.5 gap-1.5 ${directionClass} ${dropdownWidthClass}`}>
+        <div className={`absolute left-0 z-9999 rounded-md border border-gray-700 bg-gray-950/95 backdrop-blur-md shadow-2xl flex flex-col p-1.5 gap-1.5 ${directionClass} ${dropdownWidthClass}`}>
           {/* Search box inside dropdown */}
-          <div className="relative flex items-center bg-gray-900 border border-gray-750 rounded px-2.5 py-1.5">
+          <div className="relative flex items-center bg-gray-900 border border-gray-750 rounded-sm px-2.5 py-1.5">
             <input
               ref={searchInputRef}
               type="text"
-              className="w-full bg-transparent border-none outline-none text-xs text-white placeholder-gray-500"
+              className="w-full bg-transparent border-none outline-hidden text-xs text-white placeholder-gray-500"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Buscar..."
@@ -180,7 +180,7 @@ export const CustomSearchSelect: React.FC<CustomSearchSelectProps> = ({
             id={listboxId}
             role="listbox"
             aria-label={ariaLabel ?? placeholder}
-            className="max-h-[12rem] overflow-y-auto divide-y divide-gray-900 custom-scrollbar flex flex-col"
+            className="max-h-48 overflow-y-auto divide-y divide-gray-900 custom-scrollbar flex flex-col"
           >
             {filtered.length > 0 ? (
               filtered.map((opt, index) => (
@@ -192,7 +192,7 @@ export const CustomSearchSelect: React.FC<CustomSearchSelectProps> = ({
                   aria-selected={opt.value === value}
                   onClick={() => selectOption(opt.value)}
                   onKeyDown={(event) => handleOptionKeyDown(event, index)}
-                  className={`px-3 py-2 text-xs text-gray-200 hover:bg-yellow-600 hover:text-white transition-colors cursor-pointer rounded-sm ${opt.value === value ? 'bg-yellow-600/20 text-yellow-500 border-l-2 border-yellow-500 font-bold' : ''
+                  className={`px-3 py-2 text-xs text-gray-200 hover:bg-yellow-600 hover:text-white transition-colors cursor-pointer rounded-xs ${opt.value === value ? 'bg-yellow-600/20 text-yellow-500 border-l-2 border-yellow-500 font-bold' : ''
                     }`}
                 >
                   {opt.label}

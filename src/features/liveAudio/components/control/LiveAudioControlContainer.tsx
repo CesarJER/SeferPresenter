@@ -1167,7 +1167,7 @@ export default function LiveAudioControlContainer({
         type="button"
         onClick={handleAccessModeChange}
         disabled={controlState !== 'PRINCIPAL'}
-        className="rounded border border-slate-600 bg-slate-800 px-2 py-1.5 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"
+        className="rounded-sm border border-slate-600 bg-slate-800 px-2 py-1.5 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"
         title="Solo el Control principal puede cambiar el modo de acceso"
       >
         Acceso: {accessMode === 'PUBLIC' ? 'Público' : 'Controlado'}

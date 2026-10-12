@@ -109,18 +109,18 @@ export const LiveAudioControlPanel: React.FC<LiveAudioControlPanelProps> = ({
       >
         <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
           {moderationError && (
-            <div role="alert" className="rounded border border-red-700 bg-red-950/70 px-3 py-2 text-sm text-red-100">
+            <div role="alert" className="rounded-sm border border-red-700 bg-red-950/70 px-3 py-2 text-sm text-red-100">
               No se pudo aplicar la moderación: {moderationError}
             </div>
           )}
           {externalPermission !== 'NONE' && (
-            <label className="flex flex-col gap-1 rounded border border-gray-700 bg-gray-950/60 p-2 text-xs text-gray-300">
+            <label className="flex flex-col gap-1 rounded-sm border border-gray-700 bg-gray-950/60 p-2 text-xs text-gray-300">
               <span className="font-semibold">Estado externo declarado</span>
               <select
                 value={externalBroadcastState}
                 disabled={!isControlAuthorized}
                 onChange={(event) => onExternalBroadcastStateChange(event.target.value as LiveAudioExternalBroadcastState)}
-                className="rounded border border-gray-600 bg-gray-900 px-2 py-1.5 text-white disabled:opacity-50"
+                className="rounded-sm border border-gray-600 bg-gray-900 px-2 py-1.5 text-white disabled:opacity-50"
                 aria-label="Estado externo de retransmisión y grabación"
               >
                 <option value="off">Sin retransmisión</option>
@@ -139,20 +139,20 @@ export const LiveAudioControlPanel: React.FC<LiveAudioControlPanelProps> = ({
           <div className="flex gap-2 shrink-0">
             <button 
               onClick={onMuteAll}
-              className="flex-1 bg-red-900/50 hover:bg-red-800 text-red-200 py-2 rounded text-sm font-semibold transition-colors flex items-center justify-center gap-2"
+              className="flex-1 bg-red-900/50 hover:bg-red-800 text-red-200 py-2 rounded-sm text-sm font-semibold transition-colors flex items-center justify-center gap-2"
             >
               <MicOff size={16} /> Silenciar a Todos
             </button>
             <button 
               onClick={onGrantAllQueue}
-              className="flex-1 bg-green-900/50 hover:bg-green-800 text-green-200 py-2 rounded text-sm font-semibold transition-colors flex items-center justify-center gap-2"
+              className="flex-1 bg-green-900/50 hover:bg-green-800 text-green-200 py-2 rounded-sm text-sm font-semibold transition-colors flex items-center justify-center gap-2"
             >
               <UserCheck size={16} /> Permitir a Todos
             </button>
           </div>
 
           {!isControlAuthorized && (
-            <div className="bg-orange-900/30 border border-orange-800 p-2 rounded text-xs text-orange-300 flex items-start gap-2 shrink-0">
+            <div className="bg-orange-900/30 border border-orange-800 p-2 rounded-sm text-xs text-orange-300 flex items-start gap-2 shrink-0">
               <ShieldAlert size={16} className="shrink-0 mt-0.5" />
               <span>Modo seguro: Alias ocultos y acciones destructivas limitadas porque no eres un Control Autorizado.</span>
             </div>
@@ -172,7 +172,7 @@ export const LiveAudioControlPanel: React.FC<LiveAudioControlPanelProps> = ({
               onRemove={onRemove}
               onMicrophoneConfigChange={onMicrophoneConfigChange}
             />
-            {controllers.length > 0 && <details open className="mb-3 rounded border border-gray-800">
+            {controllers.length > 0 && <details open className="mb-3 rounded-sm border border-gray-800">
               <summary className="cursor-pointer px-2 py-1 text-xs text-gray-400">Controles ({controllers.length})</summary>
               {controllers.map(p => <LiveAudioParticipantRow key={p.participantId} participant={p}
                 isControlAuthorized={isControlAuthorized} onMicrophoneConfigChange={onControllerMicrophoneConfigChange}
@@ -252,7 +252,7 @@ export const LiveAudioControlPanel: React.FC<LiveAudioControlPanelProps> = ({
 
             {isListenVolOpen && (
               <div
-                className="absolute bottom-full mb-2 -left-6 bg-gray-800 border border-gray-700 p-3 rounded shadow-xl flex flex-col items-center gap-2 z-[100]"
+                className="absolute bottom-full mb-2 -left-6 bg-gray-800 border border-gray-700 p-3 rounded-sm shadow-xl flex flex-col items-center gap-2 z-100"
                 onClick={e => e.stopPropagation()}
               >
                 <span className="text-xs font-semibold text-gray-300">{listenVolume}%</span>
@@ -289,7 +289,7 @@ export const LiveAudioControlPanel: React.FC<LiveAudioControlPanelProps> = ({
               type="button"
               aria-label="Regular volumen de salida de tu micro"
               aria-expanded={isMicVolOpen}
-              className="flex items-center bg-gray-900 border border-gray-700 rounded px-2 h-10 cursor-pointer"
+              className="flex items-center bg-gray-900 border border-gray-700 rounded-sm px-2 h-10 cursor-pointer"
               onClick={() => setIsMicVolOpen(!isMicVolOpen)}
               title="Regular volumen de salida de tu micro"
             >
@@ -298,10 +298,10 @@ export const LiveAudioControlPanel: React.FC<LiveAudioControlPanelProps> = ({
 
             {isMicVolOpen && (
               <div
-                className="absolute bottom-full mb-2 -right-4 bg-gray-800 border border-gray-700 p-3 rounded shadow-xl flex flex-col items-center gap-2 z-[100]"
+                className="absolute bottom-full mb-2 -right-4 bg-gray-800 border border-gray-700 p-3 rounded-sm shadow-xl flex flex-col items-center gap-2 z-100"
               >
                 {onModeratorMusicModeChange && (
-                  <label className="flex items-center gap-1 cursor-pointer bg-gray-900 px-2 py-1 rounded w-full justify-center" title="Modo Música">
+                  <label className="flex items-center gap-1 cursor-pointer bg-gray-900 px-2 py-1 rounded-sm w-full justify-center" title="Modo Música">
                     <input 
                       type="checkbox" 
                       checked={isModeratorMusicMode} 
@@ -331,7 +331,7 @@ export const LiveAudioControlPanel: React.FC<LiveAudioControlPanelProps> = ({
         {/* Expand Toggle */}
         <button 
           onClick={() => setIsExpanded(!isExpanded)}
-          className="bg-gray-700 hover:bg-gray-600 text-white px-3 py-2 rounded transition-colors flex items-center gap-1 text-sm font-semibold"
+          className="bg-gray-700 hover:bg-gray-600 text-white px-3 py-2 rounded-sm transition-colors flex items-center gap-1 text-sm font-semibold"
           title="Ver panel de usuarios"
         >
           <Users size={16} />

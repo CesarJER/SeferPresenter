@@ -694,7 +694,7 @@ export default function LiveAudioAudienceContainer({
       />
 
       {(isMicrophoneActive || microphoneTrackState === 'publishing' || microphoneTrackState === 'error') && (
-        <div className={`fixed inset-0 z-40 pointer-events-none border-[6px] md:border-[10px] rounded-xl transition-all ${microphoneTrackState === 'publishing'
+        <div className={`fixed inset-0 z-40 pointer-events-none border-[6px] md:border-10 rounded-xl transition-all ${microphoneTrackState === 'publishing'
           ? 'border-orange-500/80 shadow-[inset_0_0_30px_rgba(249,115,22,0.6)]'
           : microphoneTrackState === 'error'
             ? 'border-red-500/80 shadow-[inset_0_0_30px_rgba(239,68,68,0.6)]'
@@ -738,7 +738,7 @@ export default function LiveAudioAudienceContainer({
                   <button
                     type="button"
                     onClick={() => setReceivedControlMessages((prev) => prev.filter((m) => m.id !== msg.id))}
-                    className="text-gray-400 hover:text-white p-0.5 rounded transition-colors"
+                    className="text-gray-400 hover:text-white p-0.5 rounded-sm transition-colors"
                     title="Cerrar mensaje"
                     aria-label="Cerrar mensaje"
                   >

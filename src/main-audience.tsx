@@ -346,7 +346,7 @@ function AudienceApp() {
         <button
           type="button"
           onClick={handleEnableAudienceMedia}
-          className="fixed bottom-20 left-1/2 z-[90] flex -translate-x-1/2 items-center gap-2 rounded-full border border-white/20 bg-blue-600/95 px-5 py-3 text-sm font-bold text-white shadow-2xl backdrop-blur-md transition-colors hover:bg-blue-500 pointer-events-auto"
+          className="fixed bottom-20 left-1/2 z-90 flex -translate-x-1/2 items-center gap-2 rounded-full border border-white/20 bg-blue-600/95 px-5 py-3 text-sm font-bold text-white shadow-2xl backdrop-blur-md transition-colors hover:bg-blue-500 pointer-events-auto"
         >
           <Play className="h-4 w-4" />
           <span>Activar audio y video</span>

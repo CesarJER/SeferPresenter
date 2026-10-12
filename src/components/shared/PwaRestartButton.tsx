@@ -132,8 +132,8 @@ export const PwaRestartButton = ({
         void restartPwaApp();
       }}
       className={`group inline-flex items-center justify-center transition-colors border cursor-pointer p-2 ${controlMenu
-        ? 'rounded bg-gray-800 border-gray-700 hover:bg-gray-700 text-gray-300 hover:text-white'
-        : 'rounded-md  border-white/15 bg-black/45 text-white/75 shadow-lg backdrop-blur-sm  hover:bg-black/65 hover:text-white focus:outline-none focus:ring-2 focus:ring-white/60'
+        ? 'rounded-sm bg-gray-800 border-gray-700 hover:bg-gray-700 text-gray-300 hover:text-white'
+        : 'rounded-md  border-white/15 bg-black/45 text-white/75 shadow-lg backdrop-blur-xs  hover:bg-black/65 hover:text-white focus:outline-hidden focus:ring-2 focus:ring-white/60'
         } ${className}`}
       title={presentation.title}
       aria-label={presentation.title}

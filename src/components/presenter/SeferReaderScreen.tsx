@@ -320,7 +320,7 @@ export const SeferReaderScreen: React.FC<SeferReaderScreenProps> = ({
       />
 
       <div className="flex-1 flex flex-col overflow-hidden min-w-0 relative">
-        <div className="flex-none h-12 md:h-16 border-b border-amber-900/20 bg-[#f7e7b6]/95 px-4 py-2 shadow-sm flex items-center justify-between gap-3">
+        <div className="flex-none h-12 md:h-16 border-b border-amber-900/20 bg-[#f7e7b6]/95 px-4 py-2 shadow-xs flex items-center justify-between gap-3">
           <div className="w-8" />
           <div className="flex-1 h-full min-w-0">
             <AutoResizeText
@@ -336,7 +336,7 @@ export const SeferReaderScreen: React.FC<SeferReaderScreenProps> = ({
             <button
               type="button"
               onClick={onLogoClick}
-              className="flex h-8 w-8 flex-none items-center justify-center rounded border border-amber-900/20 bg-[#fef3c7] hover:bg-amber-100 pointer-events-auto"
+              className="flex h-8 w-8 flex-none items-center justify-center rounded-sm border border-amber-900/20 bg-[#fef3c7] hover:bg-amber-100 pointer-events-auto"
               title="Abrir menú"
             >
               <img
@@ -363,7 +363,7 @@ export const SeferReaderScreen: React.FC<SeferReaderScreenProps> = ({
           />
         </div>
         {liveAudioPanel && (
-          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-[60] pointer-events-auto flex justify-center w-full max-w-full px-4">
+          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-60 pointer-events-auto flex justify-center w-full max-w-full px-4">
             {liveAudioPanel}
           </div>
         )}

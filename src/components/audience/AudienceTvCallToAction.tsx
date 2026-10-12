@@ -13,7 +13,7 @@ const AudienceTvCallToAction: React.FC<AudienceTvCallToActionProps> = ({ domain 
     <>
       {qrExpanded && (
         <div
-          className="fixed inset-0 z-[100] bg-black/80 flex flex-col items-center justify-center p-4 cursor-pointer"
+          className="fixed inset-0 z-100 bg-black/80 flex flex-col items-center justify-center p-4 cursor-pointer"
           onClick={() => setQrExpanded(false)}
           data-testid="tv-qr-overlay"
         >
@@ -32,7 +32,7 @@ const AudienceTvCallToAction: React.FC<AudienceTvCallToActionProps> = ({ domain 
           ¡Retransmisión en directo! No te quedes solo viendo. Participa con nosotros. Conéctate a <span className="font-bold text-yellow-400">{domain}</span>
         </div>
         <div
-          className="bg-white p-2 rounded cursor-pointer hover:scale-105 transition-transform self-end"
+          className="bg-white p-2 rounded-sm cursor-pointer hover:scale-105 transition-transform self-end"
           onClick={() => setQrExpanded(true)}
           data-testid="tv-qr-trigger"
         >

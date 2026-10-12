@@ -31,7 +31,7 @@ export const QuizSubslideNav: React.FC<QuizSubslideNavProps> = ({
   isInteractive = true,
 }) => {
   return (
-    <div className="flex flex-wrap items-center gap-1 rounded-lg bg-black/30 px-2 py-1.5 backdrop-blur-sm">
+    <div className="flex flex-wrap items-center gap-1 rounded-lg bg-black/30 px-2 py-1.5 backdrop-blur-xs">
       <button
         type="button"
         disabled={!isInteractive || currentIndex === 0}

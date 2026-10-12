@@ -26,7 +26,7 @@ export const SeferFlowView = ({
   <motion.div
     dir={bookDir}
     lang={bookDir === 'rtl' ? 'he' : undefined}
-    className="sefer-mode max-w-screen-xl mx-auto text-[3.5rem] leading-[1.8] text-justify break-keep"
+    className="sefer-mode max-w-(--breakpoint-xl) mx-auto text-[3.5rem] leading-[1.8] text-justify break-keep"
     style={{ fontSize: hebrewFontSize ? `${hebrewFontSize}px` : '42px' }}
     initial={{ opacity: 0 }}
     animate={{ opacity: 1 }}
@@ -47,7 +47,7 @@ export const SeferFlowView = ({
 
           const hasBricks = textToShow.includes('brick-');
           const classNameVerse = isSelected
-            ? `text-red-900 font-semibold verse-selected ${hasBricks ? 'verse-shira' : 'bg-yellow-100 px-2 rounded'}`
+            ? `text-red-900 font-semibold verse-selected ${hasBricks ? 'verse-shira' : 'bg-yellow-100 px-2 rounded-sm'}`
             : `${isWithinRange ? 'text-gray-800' : 'text-gray-500/70'} ${hasBricks ? 'verse-shira' : ''}`;
 
           const htmlString = sanitizeSlideHtml(`${textToShow} `.replace(/<br\s*\/?>\s+/gi, '<br/>'));
