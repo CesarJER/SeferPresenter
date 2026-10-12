@@ -29,7 +29,7 @@
         "test:watch": "vitest"
     },
     "dependencies": {
-        "dompurify": "^3.4.12",
+        "dompurify": "^3.4.16",
         "framer-motion": "^12.38.0",
         "livekit-client": "^2.19.2",
         "livekit-server-sdk": "^2.19.1",
