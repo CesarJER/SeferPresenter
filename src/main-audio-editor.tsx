@@ -96,7 +96,7 @@ export const AudioEditorApp = () => {
   return (
     <div className="w-dvw h-dvh bg-gray-900 overflow-hidden">
       {loadError && (
-        <div className="absolute left-4 right-4 top-4 z-50 rounded border border-red-800 bg-red-950 px-4 py-3 text-sm font-semibold text-red-100 shadow">
+        <div className="absolute left-4 right-4 top-4 z-50 rounded-sm border border-red-800 bg-red-950 px-4 py-3 text-sm font-semibold text-red-100 shadow-sm">
           {loadError}
           <button type="button" className="ml-3 underline" onClick={() => setReloadVersion(value => value + 1)}>Reintentar carga</button>
         </div>

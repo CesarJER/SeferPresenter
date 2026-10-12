@@ -52,7 +52,7 @@ const DataProtectionPage: React.FC = () => {
   }, []);
 
   return (
-    <main className="h-dvh overflow-x-hidden overflow-y-auto overscroll-y-contain bg-gradient-to-b from-slate-100 to-white px-4 py-8 font-sans text-slate-800 sm:px-8 sm:py-12">
+    <main className="h-dvh overflow-x-hidden overflow-y-auto overscroll-y-contain bg-linear-to-b from-slate-100 to-white px-4 py-8 font-sans text-slate-800 sm:px-8 sm:py-12">
       <div className="mx-auto w-[calc(100vw-2rem)] min-w-0 max-w-5xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl shadow-slate-200/60 sm:w-[calc(100vw-4rem)]">
         <header className="border-b border-slate-200 bg-slate-950 px-6 py-8 text-white sm:px-10">
           <div className="flex items-start gap-4">

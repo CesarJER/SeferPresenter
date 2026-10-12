@@ -106,9 +106,9 @@ export const CatalogViewer: React.FC<CatalogViewerProps> = ({ catalog, presentat
 
     return (
       <div className="h-dvh overflow-y-auto bg-[#fef3c7] text-amber-950">
-        <header className="bg-amber-100 border-b border-amber-200 p-4 sticky top-0 z-10 flex items-center justify-between gap-4 shadow-sm">
+        <header className="bg-amber-100 border-b border-amber-200 p-4 sticky top-0 z-10 flex items-center justify-between gap-4 shadow-xs">
           <div className="flex items-center gap-4 min-w-0">
-            <a href={catalog.path} className="p-2 rounded hover:bg-amber-200 text-amber-700 hover:text-amber-900 transition-colors" title="Volver">
+            <a href={catalog.path} className="p-2 rounded-sm hover:bg-amber-200 text-amber-700 hover:text-amber-900 transition-colors" title="Volver">
               <ArrowLeft size={20} />
             </a>
             <div className="min-w-0">
@@ -119,14 +119,14 @@ export const CatalogViewer: React.FC<CatalogViewerProps> = ({ catalog, presentat
           <div className="flex gap-1 bg-amber-50 rounded-lg p-1 border border-amber-200">
             <button
               onClick={() => setViewMode('continuous')}
-              className={`p-1.5 rounded ${viewMode === 'continuous' ? 'bg-amber-200 text-amber-900 shadow-sm' : 'text-amber-600 hover:bg-amber-100'} transition-all`}
+              className={`p-1.5 rounded-sm ${viewMode === 'continuous' ? 'bg-amber-200 text-amber-900 shadow-xs' : 'text-amber-600 hover:bg-amber-100'} transition-all`}
               title="Lectura Continua"
             >
               <AlignLeft size={18} />
             </button>
             <button
               onClick={() => setViewMode('grid')}
-              className={`p-1.5 rounded ${viewMode === 'grid' ? 'bg-amber-200 text-amber-900 shadow-sm' : 'text-amber-600 hover:bg-amber-100'} transition-all`}
+              className={`p-1.5 rounded-sm ${viewMode === 'grid' ? 'bg-amber-200 text-amber-900 shadow-xs' : 'text-amber-600 hover:bg-amber-100'} transition-all`}
               title="Vista de Tarjetas"
             >
               <LayoutGrid size={18} />
@@ -136,7 +136,7 @@ export const CatalogViewer: React.FC<CatalogViewerProps> = ({ catalog, presentat
         
         <main className={`p-4 sm:p-8 max-w-4xl mx-auto ${viewMode === 'grid' ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4' : 'space-y-6 pb-16'}`}>
           {slidesToRender.map((slide, i) => (
-            <div key={slide.id || i} className={`${viewMode === 'grid' ? 'bg-white/80 border border-amber-200 rounded p-4 sm:p-6 shadow-sm hover:shadow-md transition-shadow' : ''}`}>
+            <div key={slide.id || i} className={`${viewMode === 'grid' ? 'bg-white/80 border border-amber-200 rounded-sm p-4 sm:p-6 shadow-xs hover:shadow-md transition-shadow' : ''}`}>
               {slide.label && (
                 <div className={`flex justify-between items-start mb-2 ${viewMode === 'continuous' ? 'border-b border-amber-200 pb-1 mb-3' : ''}`}>
                   <div className="text-[10px] font-bold text-amber-600 uppercase tracking-wider">
@@ -147,7 +147,7 @@ export const CatalogViewer: React.FC<CatalogViewerProps> = ({ catalog, presentat
                       href={`/lector?book=${encodeURIComponent(slide.scriptureBook)}&chapter=${encodeURIComponent(slide.scriptureChapter)}&verse=${encodeURIComponent(slide.scriptureVerseStart || '')}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-[10px] font-bold text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-1 bg-blue-50 px-2 py-1 rounded border border-blue-100"
+                      className="text-[10px] font-bold text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-1 bg-blue-50 px-2 py-1 rounded-sm border border-blue-100"
                     >
                       <BookOpen size={12} />
                       Leer en contexto
@@ -155,7 +155,7 @@ export const CatalogViewer: React.FC<CatalogViewerProps> = ({ catalog, presentat
                   )}
                 </div>
               )}
-              <div className="leading-relaxed whitespace-pre-wrap break-words w-full">
+              <div className="leading-relaxed whitespace-pre-wrap wrap-break-word w-full">
                 {slide.scriptureVerses ? (
                   <div className="space-y-4">
                     {slide.scriptureVerses.map((verseLines, vIdx) => (
@@ -223,7 +223,7 @@ export const CatalogViewer: React.FC<CatalogViewerProps> = ({ catalog, presentat
 
   return (
     <div className="h-dvh overflow-y-auto bg-[#fef3c7] text-amber-950 flex flex-col">
-      <header className="bg-amber-100 border-b border-amber-200 p-4 sm:p-6 sticky top-0 z-10 shadow-sm">
+      <header className="bg-amber-100 border-b border-amber-200 p-4 sm:p-6 sticky top-0 z-10 shadow-xs">
         <div className="max-w-4xl mx-auto flex flex-col sm:flex-row gap-4 items-center justify-between">
           <div className="text-center sm:text-left min-w-0">
             <h1 className="text-2xl font-bold text-amber-900 truncate">{catalog.title}</h1>
@@ -238,7 +238,7 @@ export const CatalogViewer: React.FC<CatalogViewerProps> = ({ catalog, presentat
               placeholder="Buscar título o contenido..."
               value={search}
               onChange={e => setSearch(e.target.value)}
-              className="w-full bg-white/80 border border-amber-200 rounded-full py-2 pl-10 pr-4 text-sm focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400 transition-all text-amber-950 placeholder-amber-600/70"
+              className="w-full bg-white/80 border border-amber-200 rounded-full py-2 pl-10 pr-4 text-sm focus:outline-hidden focus:border-amber-400 focus:ring-1 focus:ring-amber-400 transition-all text-amber-950 placeholder-amber-600/70"
             />
           </div>
         </div>
@@ -308,7 +308,7 @@ interface PresentationCardProps {
 const PresentationCard: React.FC<PresentationCardProps> = ({ presentation, catalogPath, snippet }) => (
   <a
     href={`${catalogPath}/${presentation.id}`}
-    className="bg-white/80 border border-amber-200 hover:border-amber-400 hover:bg-white transition-colors p-4 rounded-lg flex items-start gap-4 group cursor-pointer shadow-sm hover:shadow-md"
+    className="bg-white/80 border border-amber-200 hover:border-amber-400 hover:bg-white transition-colors p-4 rounded-lg flex items-start gap-4 group cursor-pointer shadow-xs hover:shadow-md"
   >
     <div className="bg-amber-100 p-2.5 rounded-lg group-hover:bg-amber-200 transition-colors mt-0.5 shrink-0">
       <FileText size={20} className="text-amber-600 group-hover:text-amber-700 transition-colors" />

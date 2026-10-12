@@ -204,8 +204,8 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
   };
 
   const wrapperClass = variant === 'inline'
-    ? "flex items-center justify-center w-full pointer-events-none z-[60]"
-    : "flex items-end justify-center w-full h-full pointer-events-none z-[60]";
+    ? "flex items-center justify-center w-full pointer-events-none z-60"
+    : "flex items-end justify-center w-full h-full pointer-events-none z-60";
 
   if (!isVisible) return null;
 
@@ -262,14 +262,14 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
   ) : null;
   const reconnectStatus = state === 'reconnecting'
     ? (
-      <div className="flex items-center gap-2 h-full bg-orange-600/90 text-white px-3 rounded-full shadow-lg backdrop-blur-sm">
+      <div className="flex items-center gap-2 h-full bg-orange-600/90 text-white px-3 rounded-full shadow-lg backdrop-blur-xs">
         <Loader2 className="w-4 h-4 animate-spin" />
         <span className="text-xs font-semibold">Reconectando</span>
       </div>
     )
     : state === 'reconnected'
       ? (
-        <div className="flex items-center gap-2 h-full bg-emerald-600/90 text-white px-3 rounded-full shadow-lg backdrop-blur-sm">
+        <div className="flex items-center gap-2 h-full bg-emerald-600/90 text-white px-3 rounded-full shadow-lg backdrop-blur-xs">
           <CheckCircle2 className="w-4 h-4" />
           <span className="text-xs font-semibold">Reconectado</span>
         </div>
@@ -278,7 +278,7 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
         ? (
           <button
             onClick={onRetryAudio}
-            className="flex items-center gap-2 h-full bg-red-600/90 hover:bg-red-500/90 text-white px-3 rounded-full shadow-lg backdrop-blur-sm transition-all"
+            className="flex items-center gap-2 h-full bg-red-600/90 hover:bg-red-500/90 text-white px-3 rounded-full shadow-lg backdrop-blur-xs transition-all"
           >
             <RotateCcw className="w-4 h-4" />
             <span className="text-xs font-semibold">Reintentar audio</span>
@@ -308,7 +308,7 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
           {!hasAudioStarted && (
             <button
               onClick={onStartAudio}
-              className="flex items-center gap-2 h-full bg-blue-600/90 hover:bg-blue-500/90 text-white px-4 rounded-full shadow-lg backdrop-blur-sm transition-all"
+              className="flex items-center gap-2 h-full bg-blue-600/90 hover:bg-blue-500/90 text-white px-4 rounded-full shadow-lg backdrop-blur-xs transition-all"
             >
               <Play className="w-5 h-5" />
               <span className="text-sm font-medium">Escuchar en vivo</span>
@@ -352,7 +352,7 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
         {isWordGranted ? (
           <div className="relative">
             {microphoneTrackState === 'error' && (
-              <div role="alert" className="absolute bottom-full left-1/2 mb-2 w-64 -translate-x-1/2 rounded bg-red-950 px-3 py-2 text-xs text-red-100 shadow-lg">
+              <div role="alert" className="absolute bottom-full left-1/2 mb-2 w-64 -translate-x-1/2 rounded-sm bg-red-950 px-3 py-2 text-xs text-red-100 shadow-lg">
                 No se pudo activar el micrófono. Pulsa de nuevo para reintentar.
               </div>
             )}
@@ -415,7 +415,7 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
 
           {isVolumeOpen && (
             <div
-              className="absolute bottom-full mb-3 left-1/2 -translate-x-1/2 bg-gray-800 p-3 rounded-xl shadow-xl border border-gray-700 flex flex-col gap-3 min-w-[8rem]"
+              className="absolute bottom-full mb-3 left-1/2 -translate-x-1/2 bg-gray-800 p-3 rounded-xl shadow-xl border border-gray-700 flex flex-col gap-3 min-w-32"
               onClick={(event) => event.stopPropagation()}
             >
               <div className="flex flex-col gap-1 items-center">
@@ -442,7 +442,7 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
                     title="Volumen del micrófono (%)"
                   />
                   {isMusicMode !== undefined && onMusicModeChange && (
-                    <label className="flex items-center gap-2 mt-2 cursor-pointer hover:bg-gray-700 p-1 rounded transition-colors w-full justify-center" title="Modo Música (Desactiva filtro de ruido)">
+                    <label className="flex items-center gap-2 mt-2 cursor-pointer hover:bg-gray-700 p-1 rounded-sm transition-colors w-full justify-center" title="Modo Música (Desactiva filtro de ruido)">
                       <input
                         type="checkbox"
                         checked={isMusicMode}
@@ -458,7 +458,7 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
           )}
         </div>
 
-        <div className="w-[1px] h-8 bg-white/20 mx-1"></div>
+        <div className="w-px h-8 bg-white/20 mx-1"></div>
 
         <button
           onClick={onLeaveActive}

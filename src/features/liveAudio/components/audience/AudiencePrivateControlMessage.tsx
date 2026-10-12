@@ -71,7 +71,7 @@ export const AudiencePrivateControlMessage: React.FC<AudiencePrivateControlMessa
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 pointer-events-auto">
+    <div className="fixed inset-0 z-100 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 pointer-events-auto">
       <div
         ref={dialogRef}
         role="dialog"
@@ -108,7 +108,7 @@ export const AudiencePrivateControlMessage: React.FC<AudiencePrivateControlMessa
                 setError(null);
               }}
               placeholder="Escribe tu mensaje aquí..."
-              className="w-full h-32 px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+              className="w-full h-32 px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
               maxLength={500}
             />
             {error && <p role="alert" className="mt-2 text-xs text-red-300">{error}</p>}

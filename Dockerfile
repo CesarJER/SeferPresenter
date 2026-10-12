@@ -30,7 +30,7 @@ ENV VITE_SEFER_LIVE_AUDIO_BUILD=$VITE_SEFER_LIVE_AUDIO_BUILD \
 # Build from an explicit allowlist. User data, local env files, legacy assets,
 # tests, and agent metadata must never enter the builder context or cache.
 COPY tsconfig.json tsconfig.app.json tsconfig.node.json ./
-COPY vite.config.ts postcss.config.js tailwind.config.js ./
+COPY vite.config.ts postcss.config.js ./
 COPY index.html presenter.html audience.html control.html audio-editor.html catalog.html ./
 COPY src ./src
 COPY server ./server

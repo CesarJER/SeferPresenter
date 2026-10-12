@@ -77,7 +77,7 @@ export const AudienceInterventionModal: React.FC<AudienceInterventionModalProps>
   };
 
   return (
-    <div className={inline ? "w-full mt-4" : "fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 pointer-events-auto"}>
+    <div className={inline ? "w-full mt-4" : "fixed inset-0 z-100 flex items-center justify-center bg-black/80 backdrop-blur-xs p-4 pointer-events-auto"}>
       <div
         ref={dialogRef}
         role={inline ? "region" : "dialog"}
@@ -88,7 +88,7 @@ export const AudienceInterventionModal: React.FC<AudienceInterventionModalProps>
         
         {/* Header */}
         <div className="flex justify-between items-center p-4 border-b border-gray-800">
-          <h2 ref={titleRef} tabIndex={-1} id="audience-intervention-title" className="text-xl font-semibold text-white outline-none">{title}</h2>
+          <h2 ref={titleRef} tabIndex={-1} id="audience-intervention-title" className="text-xl font-semibold text-white outline-hidden">{title}</h2>
           {dismissible && (
             <button
               onClick={onClose}

@@ -12,7 +12,7 @@ export function VoiceScriptureSuggestions({ status, options, onProject }: {
     {options.length > 0 && <div aria-label="Referencias detectadas" className="mt-1 flex flex-wrap gap-1">
       {options.flatMap((candidate, index) => {
         const buttons = [
-          <button type="button" className="rounded bg-emerald-800 px-2 py-1"
+          <button type="button" className="rounded-sm bg-emerald-800 px-2 py-1"
             key={`${candidateLabel(candidate)}-${index}`} onClick={() => onProject(candidate)}>
             {candidateLabel(candidate)}
           </button>
@@ -22,7 +22,7 @@ export function VoiceScriptureSuggestions({ status, options, onProject }: {
         if (candidate.verseEnd > candidate.verseStart && candidate.verseEnd - candidate.verseStart < 50) {
           for (let i = candidate.verseStart; i <= candidate.verseEnd; i++) {
             buttons.push(
-              <button type="button" className="rounded bg-emerald-700/80 px-2 py-1"
+              <button type="button" className="rounded-sm bg-emerald-700/80 px-2 py-1"
                 key={`single-${index}-${i}`} 
                 onClick={() => onProject({ ...candidate, verse: i })}>
                 {i}

@@ -58,11 +58,11 @@ Las siguientes librerías de software de código abierto son utilizadas directam
 | :--- | :--- | :--- | :--- |
 | **ffmpeg-static** | `^5.3.0` | GPL-3.0-or-later | Binarios estáticos de FFmpeg utilizados por `scripts/make-pingpong.js` para generar bucles continuos de vídeo. Compatible con la licencia GPLv3 del proyecto. |
 | **typescript** | `~6.0.2` | Apache-2.0 | Compilador y comprobación estática de tipos. |
-| **vite** | `^8.0.12` | MIT | Servidor de desarrollo frontend y empaquetador de producción. |
-| **vitest** | `^4.1.8` | MIT | Suite de pruebas unitarias y de integración. |
+| **vite** | `^8.0.16` | MIT | Servidor de desarrollo frontend y empaquetador de producción. |
+| **vitest** | `^4.1.11` | MIT | Suite de pruebas unitarias y de integración. |
 | **eslint** | `^10.3.0` | MIT | Análisis estático y verificación de calidad de código. |
-| **tailwindcss** | `^3.4.19` | MIT | Framework de diseño y utilidades CSS. |
-| **postcss** / **autoprefixer** | `^8.5.14` / `^10.5.0` | MIT | Transformación y compatibilidad de CSS. |
+| **tailwindcss** / **@tailwindcss/postcss** | `^4.3.3` / `^4.3.3` | MIT | Utilidades CSS y plugin PostCSS; reemplazan el uso de Autoprefixer. |
+| **postcss** | `^8.5.23` | MIT | Transformación de CSS. |
 | **jsdom** | `^29.1.1` | MIT | Emulación de DOM para pruebas sin navegador. |
 | **@testing-library/react** | `^16.2.0` | MIT | Utilidades para pruebas de componentes React. |
 

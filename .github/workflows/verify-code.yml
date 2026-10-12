@@ -18,7 +18,7 @@ jobs:
           node-version: '24'
           cache: npm
       - run: npm ci --ignore-scripts
-      - run: npm audit --omit=dev --audit-level=low
+      - run: npm audit --audit-level=low
       - run: npx tsc -p tsconfig.app.json --noEmit
       - run: npx tsc -p tsconfig.node.json --noEmit
       - run: npm test -- --maxWorkers=4

@@ -1508,7 +1508,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
   };
 
   const textareaClass =
-    'w-full min-h-[20rem] md:min-h-[24rem] max-h-[78vh] resize-y overflow-auto bg-gray-900 border border-gray-700 rounded-md p-3 text-[0.92rem] leading-relaxed text-white shadow-inner focus:outline-none focus:ring-1 focus:ring-yellow-500';
+    'w-full min-h-80 md:min-h-96 max-h-[78vh] resize-y overflow-auto bg-gray-900 border border-gray-700 rounded-md p-3 text-[0.92rem] leading-relaxed text-white shadow-inner focus:outline-hidden focus:ring-1 focus:ring-yellow-500';
 
   const isScriptureRangeRoot = (slide: Slide) => (
     !!slide.scriptureBook &&
@@ -1604,12 +1604,12 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
             ) : audioState.syncMode === 'unilateral' && audioState.isPlaying ? (
               <div className="flex items-center gap-0.5">
                 <Music size={13} />
-                <ArrowUp size={10} className="stroke-[3]" />
+                <ArrowUp size={10} className="stroke-3" />
               </div>
             ) : audioState.syncMode === 'bilateral' && audioState.isPlaying ? (
               <div className="flex items-center gap-0.5">
                 <Music size={13} />
-                <ArrowUpDown size={10} className="stroke-[3]" />
+                <ArrowUpDown size={10} className="stroke-3" />
               </div>
             ) : (
               <Music size={14} />
@@ -1636,7 +1636,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
           <button
             type="button"
             onClick={toggleFullscreen}
-            className="flex items-center justify-center p-2 text-xs font-semibold rounded border border-gray-700 bg-gray-800 hover:bg-gray-700 hover:text-white transition-all cursor-pointer text-gray-300"
+            className="flex items-center justify-center p-2 text-xs font-semibold rounded-sm border border-gray-700 bg-gray-800 hover:bg-gray-700 hover:text-white transition-all cursor-pointer text-gray-300"
             title={isFullscreen ? "Salir de Pantalla Completa" : "Pantalla Completa"}
           >
             {isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
@@ -1768,7 +1768,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                           }, 50);
                         }}
                         disabled={currentSlideIndex <= 0}
-                        className="flex-none w-5 self-stretch rounded border border-gray-700 bg-gray-800 hover:bg-gray-700 disabled:opacity-30 disabled:hover:bg-gray-800 text-gray-400 hover:text-white transition-all cursor-pointer font-bold text-[11px] flex items-center justify-center min-h-[1.8rem]"
+                        className="flex-none w-5 self-stretch rounded-sm border border-gray-700 bg-gray-800 hover:bg-gray-700 disabled:opacity-30 disabled:hover:bg-gray-800 text-gray-400 hover:text-white transition-all cursor-pointer font-bold text-[11px] flex items-center justify-center min-h-[1.8rem]"
                         title="Anterior"
                       >
                         &lt;
@@ -1813,7 +1813,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                           }, 50);
                         }}
                         disabled={currentSlideIndex >= currentPresentation.slides.length - 1}
-                        className="flex-none w-5 self-stretch rounded border border-gray-700 bg-gray-800 hover:bg-gray-700 disabled:opacity-30 disabled:hover:bg-gray-800 text-gray-400 hover:text-white transition-all cursor-pointer font-bold text-[11px] flex items-center justify-center min-h-[1.8rem]"
+                        className="flex-none w-5 self-stretch rounded-sm border border-gray-700 bg-gray-800 hover:bg-gray-700 disabled:opacity-30 disabled:hover:bg-gray-800 text-gray-400 hover:text-white transition-all cursor-pointer font-bold text-[11px] flex items-center justify-center min-h-[1.8rem]"
                         title="Siguiente"
                       >
                         &gt;
@@ -2033,7 +2033,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
         </div>
       </div>
       {showResetConfirm && (
-        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/75 backdrop-blur-sm p-4">
+        <div className="fixed inset-0 z-10000 flex items-center justify-center bg-black/75 backdrop-blur-xs p-4">
           <div
             ref={resetDialogRef}
             role="dialog"
@@ -2053,7 +2053,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                 ref={resetCancelButtonRef}
                 type="button"
                 onClick={() => setShowResetConfirm(false)}
-                className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded border border-gray-700 font-semibold cursor-pointer"
+                className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-sm border border-gray-700 font-semibold cursor-pointer"
               >
                 Cancelar
               </button>
@@ -2066,7 +2066,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                     onResetState(true, hardRefresh);
                   }
                 }}
-                className="px-4 py-2 bg-red-900 hover:bg-red-800 text-white rounded font-bold cursor-pointer"
+                className="px-4 py-2 bg-red-900 hover:bg-red-800 text-white rounded-sm font-bold cursor-pointer"
                 title="Borrar id de sesión, desconectar PWA y restablecer todo"
               >
                 Cerrar sesión y reiniciar
@@ -2079,7 +2079,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                     onResetState();
                   }
                 }}
-                className="px-4 py-2 bg-red-650 hover:bg-red-600 text-white rounded font-bold cursor-pointer"
+                className="px-4 py-2 bg-red-650 hover:bg-red-600 text-white rounded-sm font-bold cursor-pointer"
               >
                 Sí, restablecer
               </button>

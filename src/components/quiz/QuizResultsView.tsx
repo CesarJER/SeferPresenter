@@ -159,7 +159,7 @@ export const QuizResultsDiploma: React.FC<QuizResultsDiplomaProps> = ({
         initial={{ scale: 0, rotate: -15 }}
         animate={{ scale: 1, rotate: 0 }}
         transition={{ delay: 0.2, type: 'spring', stiffness: 300 }}
-        className="flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-yellow-400 to-yellow-600 shadow-xl shadow-yellow-500/30"
+        className="flex h-16 w-16 items-center justify-center rounded-full bg-linear-to-br from-yellow-400 to-yellow-600 shadow-xl shadow-yellow-500/30"
       >
         <Trophy size={32} className="text-black" />
       </motion.div>

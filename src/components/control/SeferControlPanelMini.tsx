@@ -100,7 +100,7 @@ const SeferControlPanelMini: React.FC<SeferControlPanelMiniProps> = ({
                         key={verseNum}
                         type="button"
                         onClick={() => handleVerseSelect(verseNum, 'navigate')}
-                        className={`min-w-8 rounded px-2 py-1 text-[10px] font-bold transition-colors ${active ? 'bg-orange-500 text-white' : 'bg-gray-800 text-gray-300 hover:bg-gray-700'}`}
+                        className={`min-w-8 rounded-sm px-2 py-1 text-[10px] font-bold transition-colors ${active ? 'bg-orange-500 text-white' : 'bg-gray-800 text-gray-300 hover:bg-gray-700'}`}
                       >
                         {verseNum}
                       </button>

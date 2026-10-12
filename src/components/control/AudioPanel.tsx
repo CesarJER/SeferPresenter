@@ -118,7 +118,7 @@ export const AudioPanel: React.FC<AudioPanelProps> = ({
       window.removeEventListener('pointerup', commitDragPosition);
       window.removeEventListener('pointercancel', commitDragPosition);
       window.removeEventListener('touchend', commitDragPosition);
-      window.removeEventListener('blur', commitDragPosition);
+      window.removeEventListener('blur-sm', commitDragPosition);
     };
   }, [commitDragPosition, dispatchAction, dragPosition]);
 
@@ -227,7 +227,7 @@ export const AudioPanel: React.FC<AudioPanelProps> = ({
           <select
             value={audioState.audioSrc || ''}
             onChange={(e) => handleSelectAudioTrack(e.target.value)}
-            className="w-full rounded border border-gray-700 bg-gray-900 px-2.5 py-1.5 text-white outline-none focus:border-yellow-500 cursor-pointer"
+            className="w-full rounded-sm border border-gray-700 bg-gray-900 px-2.5 py-1.5 text-white outline-hidden focus:border-yellow-500 cursor-pointer"
           >
             <option value="">-- Sin Música / Silencio --</option>
             {availableAudioFiles.map((file) => {
@@ -447,7 +447,7 @@ export const AudioPanel: React.FC<AudioPanelProps> = ({
             </div>
           </div>
           
-          <div className="flex items-center bg-gray-900 border border-gray-700 rounded p-0.5 gap-0.5">
+          <div className="flex items-center bg-gray-900 border border-gray-700 rounded-sm p-0.5 gap-0.5">
             <button
               type="button"
               onClick={() => {
@@ -498,7 +498,7 @@ export const AudioPanel: React.FC<AudioPanelProps> = ({
               title="Sincronización Unilateral (Música cambia diapositivas)"
             >
               <Music size={11} />
-              <ArrowUp size={10} className="stroke-[3]" />
+              <ArrowUp size={10} className="stroke-3" />
             </button>
             <button
               type="button"
@@ -524,7 +524,7 @@ export const AudioPanel: React.FC<AudioPanelProps> = ({
               title="Sincronización Bilateral (Sincro Bidireccional)"
             >
               <Music size={11} />
-              <ArrowUpDown size={10} className="stroke-[3]" />
+              <ArrowUpDown size={10} className="stroke-3" />
             </button>
           </div>
         </div>
@@ -532,7 +532,7 @@ export const AudioPanel: React.FC<AudioPanelProps> = ({
         <button
           type="button"
           onClick={handleOpenAudioEditor}
-          className="flex items-center gap-1 py-1.5 px-3 rounded bg-gray-900 border border-gray-700 hover:bg-gray-800 text-yellow-500 font-bold transition-all cursor-pointer shadow-sm shrink-0 whitespace-nowrap h-[28px]"
+          className="flex items-center gap-1 py-1.5 px-3 rounded-sm bg-gray-900 border border-gray-700 hover:bg-gray-800 text-yellow-500 font-bold transition-all cursor-pointer shadow-xs shrink-0 whitespace-nowrap h-[28px]"
           title="Abrir Editor de Sincronización en ventana externa (🎼)"
         >
           <Settings size={13} />
