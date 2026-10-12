@@ -1,7 +1,8 @@
 {
     "name": "sefer-presenter",
     "private": true,
-    "version": "0.0.0",
+    "version": "0.1.0-alpha",
+    "license": "GPL-3.0-or-later",
     "type": "module",
     "scripts": {
         "generate:scripture": "node scripts/generate-verses.js",

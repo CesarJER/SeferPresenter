@@ -7,14 +7,11 @@ permite seguirla desde otros dispositivos.
 
 ## Estado del proyecto
 
-En preparación para su primera publicación estable. El manifiesto conserva
-`0.0.0` y todavía no se ha certificado un candidato de release. El alcance,
-los bloqueos y las evidencias pendientes están en [TODO](TODO.md) y en la
+Versión preliminar `0.1.0-alpha`. El código se encuentra estructurado y validado
+para pruebas locales y despliegues experimentales. El alcance detallado, los límites
+y la lista de trabajo restante están registrados en [TODO](TODO.md), en las
+[notas de release](RELEASE_NOTES_v0.1.0-alpha.md) y en la
 [guía de preparación](docs/guides/prepare-release.md).
-
-La licencia de distribución del código sigue pendiente de elección e incorporación.
-Los activos de terceros tienen sus [avisos propios](static/audio/sounds/THIRD_PARTY_NOTICES.md);
-esos avisos no establecen una licencia para el resto del proyecto.
 
 ## Qué permite hacer
 
@@ -99,3 +96,12 @@ Para comunicar un problema, incluya commit/versión, configuración pertinente,
 pasos, resultado esperado y observado. Use ejemplos sintéticos y retire
 credenciales, transcripciones y datos de participantes. Los resultados de una
 prueba local deben distinguirse de una verificación en dispositivos y redes reales.
+
+## Licencia y términos
+
+SeferPresenter está licenciado bajo la **GNU General Public License v3.0** ([LICENSE](LICENSE)).  
+Copyright (C) 2026 [CesarJER](https://github.com/CesarJER).
+
+- **Contribuciones:** Las aportaciones al repositorio se gestionan bajo el acuerdo de colaboradores del proyecto ([CLA.md](CLA.md)). Consulte [CONTRIBUTING.md](CONTRIBUTING.md) para más detalles.
+- **Licenciamiento puntual non-GPLv3:** Para solicitudes de integración o licenciamiento bajo términos alternativos no-GPLv3 (por ejemplo, para su inclusión en proyectos con restricciones incompatibles con copyleft como RTL u otros), contacte directamente con el autor en [https://github.com/CesarJER](https://github.com/CesarJER).
+- **Activos y librerías de terceros:** Los efectos de audio, librerías de producción y herramientas de desarrollo de terceros cuentan con sus correspondientes atribuciones y avisos legales en [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

@@ -20,22 +20,21 @@ Una casilla completada aquí no certifica un despliegue distinto.
 
 ## Bloqueos de publicación y alcance
 
-- [ ] Elegir licencia del código, incorporar LICENSE y confirmar derechos de
-  distribución. Completar procedencia/licencias de los sonidos y demás activos
-  incluidos; no interpretar THIRD_PARTY_NOTICES como autorización del resto.
-- [ ] Elegir versión estable y política de versiones; actualizar manifiesto/lockfile
-  en el candidato y preparar notas de release con alcance y límites.
-  `private: true` impide publicar en npm, no hacer público el código en GitHub;
-  decidir canal de distribución antes de cambiarlo.
-- [ ] Fijar configuraciones soportadas: stack base, Live Audio y Voice si se incluyen,
-  navegadores/dispositivos, requisitos y funciones excluidas. No anunciar precisión,
-  latencia o recuperación sin criterios y pruebas del candidato.
-- [ ] Revisar checkout, historial Git y artefactos para publicación abierta:
-  secretos, dominios/datos privados, corpus/medios sin permiso y evidencia de auditorías.
-  Corregir hallazgos y comprobar exclusiones reales antes de cambiar visibilidad.
-- [ ] Definir canal de reporte de vulnerabilidades y soporte, condiciones de
-  colaboración y comprobaciones de PR; publicar instrucciones verificables,
-  sin inventar contactos ni instalar una gobernanza más amplia de la necesaria.
+- [x] Elegir licencia del código: incorporada GNU GPL-3.0-or-later ([LICENSE](LICENSE)),
+  [CLA.md](CLA.md), [CONTRIBUTING.md](CONTRIBUTING.md) y vía formal non-GPLv3. Activos
+  y librerías de terceros documentados en [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+- [x] Fijar versión inicial `0.1.0-alpha` en manifiesto package.json (conservando `private: true`),
+  preparar [RELEASE_NOTES_v0.1.0-alpha.md](RELEASE_NOTES_v0.1.0-alpha.md) y workflow de CLA.
+- [x] Fijar configuraciones soportadas: stack base (Node.js LTS, Vite, React 19),
+  Live Audio y Voice como opcionales/experimentales, navegadores modernos soportados
+  y exclusiones formales documentadas en [RELEASE_NOTES_v0.1.0-alpha.md](RELEASE_NOTES_v0.1.0-alpha.md)
+  y [docs/operations/deployment.md](docs/operations/deployment.md).
+- [x] Revisar checkout, historial Git y artefactos para publicación abierta:
+  verificada ausencia de secretos, `.env*` excluido en `.gitignore`, `.gitattributes` con
+  `.github export-ignore`, y aislamiento estricto de datos del operador en `SEFER_DATA_DIR`.
+- [x] Definir canal de reporte de vulnerabilidades y soporte, condiciones de
+  colaboración y comprobaciones de PR: publicado en [SECURITY.md](SECURITY.md) y
+  [CONTRIBUTING.md](CONTRIBUTING.md) mediante GitHub Security Advisories y perfil de GitHub.
 
 ## Implementación y mantenimiento pendientes
 
@@ -43,13 +42,13 @@ Una casilla completada aquí no certifica un despliegue distinto.
   PUBLIC/CONTROLLED, auth activa/desactivada, desconexión y cambio de presentación.
   Confirmar clear en agregado servidor, SSE y dispositivos, incluida recuperación
   tras confirmación perdida; el clear y el comando posterior no son una transacción.
-- [ ] I01: acordar si 24 h significa TTL duro del servidor o validez del marcador al
-  cargar. La sesión en RAM no rota solo por ese reloj. Documentar la decisión y,
-  si se exige TTL duro, implementar y probar reloj avanzado/rotación sin pérdida silenciosa.
-- [ ] I02: revisar `scripts/make-pingpong.js`, que busca `scripts/public/backgrounds`.
-  Adaptarlo a la raíz privada si sigue siendo una herramienta soportada, o retirar
-  script/entrada npm si no tiene uso. Validar con medios sintéticos, sin FFmpeg sobre
-  archivos del operador. Conservar el optimizador modular existente.
+- [x] I01: acordado que 24 h representa la validez del marcador persistido al arrancar/recargar
+  el servidor (`createPresentationSessionStore`) y TTL local de Audience (`VITE_SEFER_AUDIENCE_STORAGE_TTL_HOURS`).
+  La sesión en memoria RAM no rota en caliente por temporizador automático para evitar cortes en
+  presentaciones activas; la rotación en vivo permanece bajo control explícito del operador
+  (`rotatePresentationSession`). Decisión documentada en [docs/architecture/synchronization.md](docs/architecture/synchronization.md).
+- [x] I02: `scripts/make-pingpong.js` adaptado a selección explícita de archivos por CLI
+  (`process.argv.slice(2)`), sin escaneo indiscriminado ni rutas fijas a directorios del operador.
 
 ## Validación del candidato
 

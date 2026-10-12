@@ -83,13 +83,18 @@ El contenido de perfiles públicos no incluye alias. Véanse
   Sin autorizados se rota la clave/frontera privada y puede promocionarse el
   pendiente más antiguo. Los clientes renegocian claves y reenvían estado privado
   vigente; no recuperan historial cifrado.
-- La identidad de sesión de presentación tiene un marcador privado con duración
-  de 24 horas. Reiniciar el proceso puede conservar esa sesión, aunque proyección,
-  temporizador, timeline y agregados servidor sean volátiles.
+- La identidad de sesión de presentación (`presentationSessionId`) utiliza un
+  marcador privado en disco (`presentation-session.json`) con una validez de 24 horas
+  al arrancar o reiniciar el proceso (`createPresentationSessionStore`). Si el servidor
+  se reinicia dentro de esa ventana de 24 horas, reutiliza el mismo identificador de sesión;
+  si se reinicia habiendo expirado el TTL, genera automáticamente un nuevo límite de sesión (`rotate()`).
+  Durante la ejecución continua en caliente, la sesión en memoria RAM no rota de forma automática
+  por reloj para evitar cortes o desconexiones imprevistas en presentaciones activas; la rotación
+  en caliente se realiza bajo control explícito del operador (`rotatePresentationSession`).
 - Después del reinicio, Control vuelve a seleccionar la presentación. Los
   dispositivos Audience que regresan con contribuciones locales pueden reconstruir
-  agregados sin duplicar IDs. Los que no vuelven, expiraron o borraron datos no
-  aportan recuperación; no existe backup servidor individual.
+  agregados sin duplicar IDs. Los que no vuelven, expiraron por su TTL local independiente
+  o borraron datos no aportan recuperación; no existe backup servidor individual.
 - RESET_STATE con clearSession, logout, rotación y expiración limpian los estados correspondientes.
   La persistencia del límite de sesión debe completar antes de aceptar el reset.
 - La gracia de rejoin de Live Audio conserva estado técnico temporal, no permite
