@@ -102,9 +102,9 @@ prueba local deben distinguirse de una verificación en dispositivos y redes rea
 SeferPresenter está licenciado bajo la **GNU General Public License v3.0** ([LICENSE](LICENSE)).  
 Copyright (C) 2026 [CesarJER](https://github.com/CesarJER).
 
-## Contributors:
-This project is tested with BrowserStack
-
 - **Contribuciones:** Las aportaciones al repositorio se gestionan bajo el acuerdo de colaboradores del proyecto ([CLA.md](CLA.md)). Consulte [CONTRIBUTING.md](CONTRIBUTING.md) para más detalles.
 - **Licenciamiento puntual non-GPLv3:** Para solicitudes de integración o licenciamiento bajo términos alternativos no-GPLv3 (por ejemplo, para su inclusión en proyectos con restricciones incompatibles con copyleft como RTL u otros), contacte directamente con el autor en [https://github.com/CesarJER](https://github.com/CesarJER).
+
+## Contributors:
+This project is tested with BrowserStack
 - **Activos y librerías de terceros:** Los efectos de audio, librerías de producción y herramientas de desarrollo de terceros cuentan con sus correspondientes atribuciones y avisos legales en [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
