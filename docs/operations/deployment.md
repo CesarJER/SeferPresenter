@@ -4,7 +4,11 @@ Referencia self-hosted. Los comandos se ejecutan desde la raíz salvo indicació
 
 ## Aplicabilidad y prerrequisitos
 
-Node compatible con el lockfile (Vite 8.3.4: `^20.19.0 || >=22.12.0`) y npm. Dockerfile usa Node 20 Alpine; Compose añade proxy y perfiles opcionales. Instale dependencias con `npm ci` en un checkout revisado. Medios/corpus/secretos pertenecen al operador. Python/Pillow solo para optimización de imágenes; GPU/modelo/STT solo para Voice Scripture.
+Node.js 24 LTS (`24.x`) y npm. Dockerfile usa Node 24 Alpine fijado por digest
+en compilación y producción; la CI también utiliza Node 24. Compose añade proxy
+y perfiles opcionales. Instale dependencias con `npm ci` en un checkout revisado.
+Medios/corpus/secretos pertenecen al operador. Python/Pillow solo para optimización
+de imágenes; GPU/modelo/STT solo para Voice Scripture.
 
 Los estilos de Tailwind CSS 4 requieren Safari 16.4+, Chrome 111+ o Firefox 128+.
 Las funciones multimedia y opcionales pueden imponer requisitos adicionales;
