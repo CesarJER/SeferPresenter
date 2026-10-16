@@ -8,6 +8,7 @@ Empiece por la tarea; las páginas enlazadas permiten profundizar sin cargar tod
 | Entender el sistema y sus límites | [Arquitectura](architecture/overview.md) |
 | Entender autoridad, sincronización y recuperación | [Sincronización](architecture/synchronization.md) |
 | Modificar el código | [Desarrollo](development/guide.md) |
+| Traducir la interfaz o configurar su idioma | [Internationalization](development/i18n.md) |
 | Consultar interfaces exactas | [Contratos HTTP y realtime](api/README.md) |
 | Realizar mi primera sesión | [Primera sesión](guides/first-session.md) |
 | Preparar una sesión con voz en vivo | [Sesión con Live Audio](guides/live-audio-session.md) |

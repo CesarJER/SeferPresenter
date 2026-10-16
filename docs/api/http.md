@@ -29,6 +29,14 @@ El lector general de bodies limita a 5 MiB; LiveKit utiliza 64 KiB. Esto no
 implica idéntico status de error para todas las rutas. Los errores suelen ser
 `{ error }`; otras respuestas añaden `code`. No hay un envelope de error único.
 
+## Configuración pública de idioma
+
+`GET /api/public-config` es público y responde con `Cache-Control: no-store` y
+`{ "i18n": { "defaultLocale": "es", "supportedLocales": ["es", "en", "fr", "he"] } }`.
+Solo expone campos validados de idioma. No devuelve rutas, secretos ni otros
+campos del archivo local. Configuración inválida o ausente devuelve el respaldo
+español. Véanse [configuración y prioridad de preferencias](../development/i18n.md#runtime-and-configuration).
+
 ## Estado, comandos y telemetría
 
 | Método y ruta | Entrada / acceso | Respuesta y efectos |

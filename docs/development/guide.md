@@ -4,6 +4,9 @@ Guía común para colaboradores y agentes de IA. Empiece por
 [arquitectura](../architecture/overview.md), y abra solo las referencias relevantes
 para la modificación. Las tareas de operación están en [despliegue](../operations/deployment.md).
 
+La interfaz dispone de [catálogos i18n y guía de contribución](i18n.md). El idioma
+local no se sincroniza con la presentación ni modifica el corpus de sefer.
+
 ## Antes de cambiar código
 
 Desde la raíz del checkout:

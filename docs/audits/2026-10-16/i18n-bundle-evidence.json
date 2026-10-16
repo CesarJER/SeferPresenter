@@ -1,0 +1,229 @@
+{
+  "before": {
+    "initial": {
+      "presenter": {
+        "files": 9,
+        "bytes": 818664,
+        "gzip": 235240
+      },
+      "control": {
+        "files": 13,
+        "bytes": 805208,
+        "gzip": 225249
+      },
+      "audience": {
+        "files": 11,
+        "bytes": 894495,
+        "gzip": 259353
+      },
+      "catalog": {
+        "files": 5,
+        "bytes": 363901,
+        "gzip": 95726
+      },
+      "audio-editor": {
+        "files": 8,
+        "bytes": 454454,
+        "gzip": 121703
+      }
+    },
+    "localeChunks": {}
+  },
+  "after": {
+    "initial": {
+      "presenter": {
+        "files": 10,
+        "bytes": 880166,
+        "gzip": 255078
+      },
+      "control": {
+        "files": 14,
+        "bytes": 882503,
+        "gzip": 248584
+      },
+      "audience": {
+        "files": 12,
+        "bytes": 963633,
+        "gzip": 280945
+      },
+      "catalog": {
+        "files": 6,
+        "bytes": 424549,
+        "gzip": 115360
+      },
+      "audio-editor": {
+        "files": 9,
+        "bytes": 519236,
+        "gzip": 142357
+      }
+    },
+    "localeChunks": {
+      "en/audience.json": {
+        "bytes": 1148,
+        "gzip": 513
+      },
+      "en/audioEditor.json": {
+        "bytes": 3997,
+        "gzip": 1302
+      },
+      "en/catalog.json": {
+        "bytes": 1079,
+        "gzip": 427
+      },
+      "en/common.json": {
+        "bytes": 6631,
+        "gzip": 2319
+      },
+      "en/control.json": {
+        "bytes": 14824,
+        "gzip": 4371
+      },
+      "en/liveAudio.json": {
+        "bytes": 17677,
+        "gzip": 4722
+      },
+      "en/presenter.json": {
+        "bytes": 769,
+        "gzip": 427
+      },
+      "en/quiz.json": {
+        "bytes": 4576,
+        "gzip": 1460
+      },
+      "en/voiceScripture.json": {
+        "bytes": 872,
+        "gzip": 372
+      },
+      "es/audience.json": {
+        "bytes": 1231,
+        "gzip": 597
+      },
+      "es/audioEditor.json": {
+        "bytes": 4329,
+        "gzip": 1524
+      },
+      "es/catalog.json": {
+        "bytes": 1175,
+        "gzip": 497
+      },
+      "es/common.json": {
+        "bytes": 7213,
+        "gzip": 2638
+      },
+      "es/control.json": {
+        "bytes": 16138,
+        "gzip": 4986
+      },
+      "es/liveAudio.json": {
+        "bytes": 18440,
+        "gzip": 5297
+      },
+      "es/presenter.json": {
+        "bytes": 854,
+        "gzip": 494
+      },
+      "es/quiz.json": {
+        "bytes": 4718,
+        "gzip": 1615
+      },
+      "es/voiceScripture.json": {
+        "bytes": 911,
+        "gzip": 441
+      },
+      "fr/audience.json": {
+        "bytes": 1238,
+        "gzip": 602
+      },
+      "fr/audioEditor.json": {
+        "bytes": 4426,
+        "gzip": 1531
+      },
+      "fr/catalog.json": {
+        "bytes": 1223,
+        "gzip": 504
+      },
+      "fr/common.json": {
+        "bytes": 7589,
+        "gzip": 2763
+      },
+      "fr/control.json": {
+        "bytes": 16471,
+        "gzip": 4933
+      },
+      "fr/liveAudio.json": {
+        "bytes": 19098,
+        "gzip": 5405
+      },
+      "fr/presenter.json": {
+        "bytes": 889,
+        "gzip": 517
+      },
+      "fr/quiz.json": {
+        "bytes": 4919,
+        "gzip": 1669
+      },
+      "fr/voiceScripture.json": {
+        "bytes": 924,
+        "gzip": 448
+      },
+      "he/audience.json": {
+        "bytes": 1305,
+        "gzip": 634
+      },
+      "he/audioEditor.json": {
+        "bytes": 4613,
+        "gzip": 1583
+      },
+      "he/catalog.json": {
+        "bytes": 1274,
+        "gzip": 534
+      },
+      "he/common.json": {
+        "bytes": 8059,
+        "gzip": 2861
+      },
+      "he/control.json": {
+        "bytes": 17294,
+        "gzip": 5066
+      },
+      "he/liveAudio.json": {
+        "bytes": 20535,
+        "gzip": 5508
+      },
+      "he/presenter.json": {
+        "bytes": 918,
+        "gzip": 541
+      },
+      "he/quiz.json": {
+        "bytes": 5259,
+        "gzip": 1732
+      },
+      "he/voiceScripture.json": {
+        "bytes": 969,
+        "gzip": 482
+      }
+    }
+  },
+  "delta": {
+    "presenter": {
+      "bytes": 61502,
+      "gzip": 19838
+    },
+    "control": {
+      "bytes": 77295,
+      "gzip": 23335
+    },
+    "audience": {
+      "bytes": 69138,
+      "gzip": 21592
+    },
+    "catalog": {
+      "bytes": 60648,
+      "gzip": 19634
+    },
+    "audio-editor": {
+      "bytes": 64782,
+      "gzip": 20654
+    }
+  }
+}
