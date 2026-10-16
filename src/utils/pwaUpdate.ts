@@ -1,3 +1,4 @@
+import { translate } from '../i18n/runtime';
 export const PWA_RESTART_CONFIRM_MESSAGE = 'Quieres reiniciar la app?';
 
 interface RestartPwaOptions {
@@ -57,7 +58,7 @@ export const registerScopedServiceWorker = async (
 };
 
 export const restartPwaApp = async ({
-  confirmMessage = PWA_RESTART_CONFIRM_MESSAGE,
+  confirmMessage = translate('common:pwaRestartConfirm', PWA_RESTART_CONFIRM_MESSAGE),
   win = window,
   nav = navigator,
   timeoutMs = 1500,

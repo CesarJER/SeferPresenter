@@ -1,3 +1,4 @@
+import { translate } from '../../i18n/runtime';
 import { Loader2, RotateCcw, WifiOff } from 'lucide-react';
 import { restartPwaApp } from '../../utils/pwaUpdate';
 import type { LiveAudioConnectionQuality, LiveAudioConnectionState } from '../../types/liveAudio';
@@ -18,27 +19,27 @@ const qualityMeta: Record<
   excellent: {
     bars: 3,
     toneClassName: 'text-blue-400',
-    label: 'Conexión excelente',
+    get label() { return translate("common:PwaRestartButton.excellentConnection", "Conexión excelente"); },
   },
   good: {
     bars: 2,
     toneClassName: 'text-green-400',
-    label: 'Conexión buena',
+    get label() { return translate("common:PwaRestartButton.goodConnection", "Conexión buena"); },
   },
   poor: {
     bars: 1,
     toneClassName: 'text-orange-400',
-    label: 'Conexión pobre',
+    get label() { return translate("common:PwaRestartButton.poorConnection", "Conexión pobre"); },
   },
   lost: {
     bars: 0 as WifiBars,
     toneClassName: 'text-red-400',
-    label: 'Conexión perdida',
+    get label() { return translate("common:PwaRestartButton.connectionLost", "Conexión perdida"); },
   },
   unknown: {
     bars: 3,
     toneClassName: 'text-gray-300',
-    label: 'Conexión desconocida',
+    get label() { return translate("common:PwaRestartButton.unknownConnection", "Conexión desconocida"); },
   },
 };
 
@@ -72,16 +73,16 @@ const getButtonPresentation = (
 ) => {
   if (connectionState === 'reconnecting') {
     return {
-      label: 'Reconectando audio',
-      title: 'Reconectando audio. Reiniciar app',
+      label: translate("common:PwaRestartButton.reconnectingAudio", "Reconectando audio"),
+      title: translate("common:PwaRestartButton.reconnectingAudioRestartApp", "Reconectando audio. Reiniciar app"),
       icon: <Loader2 size={15} className="animate-spin text-orange-400" aria-hidden="true" />,
     };
   }
 
   if (connectionState === 'connecting') {
     return {
-      label: 'Conectando audio',
-      title: 'Conectando audio. Reiniciar app',
+      label: translate("common:PwaRestartButton.connectingAudio", "Conectando audio"),
+      title: translate("common:PwaRestartButton.connectingAudioRestartApp", "Conectando audio. Reiniciar app"),
       icon: <WifiQualityIcon bars={3} className="text-orange-400 animate-pulse" />,
     };
   }
@@ -93,16 +94,16 @@ const getButtonPresentation = (
     connectionState === 'unavailable'
   ) {
     return {
-      label: 'Audio desconectado',
-      title: 'Audio desconectado. Reiniciar app',
+      label: translate("common:PwaRestartButton.audioDisconnected", "Audio desconectado"),
+      title: translate("common:PwaRestartButton.audioDisconnectedRestartApp", "Audio desconectado. Reiniciar app"),
       icon: <WifiOff size={15} className="text-red-400" aria-hidden="true" />,
     };
   }
 
   if (connectionState === 'reconnected') {
     return {
-      label: 'Audio reconectado',
-      title: 'Audio reconectado. Reiniciar app',
+      label: translate("common:PwaRestartButton.audioReconnected", "Audio reconectado"),
+      title: translate("common:PwaRestartButton.audioReconnectedRestartApp", "Audio reconectado. Reiniciar app"),
       icon: <WifiQualityIcon bars={3} className="text-emerald-400 animate-pulse" />,
     };
   }
@@ -112,7 +113,7 @@ const getButtonPresentation = (
 
   return {
     label: meta.label,
-    title: `${meta.label}. Reiniciar app`,
+    title: translate('common:connectionRestart', '{{status}}. Reiniciar app', { status: meta.label }),
     icon: <WifiQualityIcon bars={meta.bars} className={meta.toneClassName} />,
   };
 };

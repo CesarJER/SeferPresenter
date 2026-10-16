@@ -1,0 +1,33 @@
+name: Prepare incremental translations
+
+on:
+  workflow_dispatch:
+    inputs:
+      max_characters:
+        description: Maximum source characters in this plan (not a monetary estimate)
+        default: '10000'
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run i18n:check
+      # No translation provider is configured. This workflow produces a pending-message plan only.
+      # A future trusted provider must use Actions secrets, --apply, and return reviewed artifacts; never commit from a PR.
+      - run: npm run i18n:plan
+        env:
+          SEFER_TRANSLATION_MAX_CHARACTERS: ${{ inputs.max_characters }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: i18n-translation-plan
+          path: tmp/i18n-translation/

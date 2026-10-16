@@ -1,3 +1,5 @@
+import { translate } from '../../i18n/runtime';
+import { useUiTranslation } from '../../i18n/useUiTranslation';
 import React from 'react';
 
 interface ControlVerificationCodeProps {
@@ -11,6 +13,7 @@ export const ControlVerificationCode: React.FC<ControlVerificationCodeProps> = (
   secondsRemaining,
   compact = false,
 }) => {
+  useUiTranslation('common');
   const isExpired = !code || secondsRemaining <= 0;
 
   return (
@@ -19,7 +22,7 @@ export const ControlVerificationCode: React.FC<ControlVerificationCodeProps> = (
         {code ?? '--- ---'}
       </span>
       <span className={`tabular-nums ${isExpired ? 'text-red-300' : 'text-gray-300'}`}>
-        {isExpired ? 'caducado' : `${secondsRemaining}s`}
+        {isExpired ? translate("common:ControlVerificationCode.expired", "caducado") : translate("common:ControlVerificationCode.s", "{{value1}}s", { value1: secondsRemaining })}
       </span>
     </div>
   );

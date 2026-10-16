@@ -1,0 +1,22 @@
+{
+  "CatalogApp.loadingCatalog": "Chargement du catalogue…",
+  "CatalogApp.error": "Erreur",
+  "CatalogIndex.publicCatalogs": "Catalogues publics",
+  "CatalogIndex.selectACatalogToViewItsContent": "Sélectionnez un catalogue pour consulter son contenu",
+  "CatalogIndex.noPublicCatalogsAreAvailableRightNow": "Aucun catalogue public n’est disponible pour le moment.",
+  "CatalogViewer.loading": "Chargement",
+  "CatalogViewer.error": "Erreur",
+  "CatalogViewer.backToCatalog": "Retour au catalogue",
+  "CatalogViewer.presentationNotFound": "Présentation introuvable",
+  "CatalogViewer.back": "Retour",
+  "CatalogViewer.continuousReading": "Lecture continue",
+  "CatalogViewer.cardView": "Vue en cartes",
+  "CatalogViewer.readInContext": "Lire dans le contexte",
+  "CatalogViewer.publicCatalog": "Catalogue public •",
+  "CatalogViewer.searchTitleOrContent": "Rechercher dans les titres ou le contenu…",
+  "CatalogViewer.noResultsFoundFor": "Aucun résultat pour « ",
+  "CatalogViewer.titleMatches": "Correspondances dans les titres",
+  "CatalogViewer.contentMatches": "Correspondances dans le contenu",
+  "CatalogApp.errorLoadingCatalogs": "Erreur de chargement des catalogues",
+  "CatalogViewer.errorLoadingPresentations": "Erreur de chargement des présentations"
+}

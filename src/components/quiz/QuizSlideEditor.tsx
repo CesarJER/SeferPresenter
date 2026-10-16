@@ -1,3 +1,5 @@
+import { translate } from '../../i18n/runtime';
+import { useUiTranslation } from '../../i18n/useUiTranslation';
 /**
  * QuizSlideEditor — Visual editor panel for quiz slides inside SlideRow.
  *
@@ -35,6 +37,7 @@ export const QuizSlideEditor: React.FC<QuizSlideEditorProps> = ({
   backgrounds,
   onChange,
 }) => {
+  useUiTranslation('quiz');
   const [local, setLocal] = useState<QuizData>({ ...quizData });
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
@@ -193,8 +196,8 @@ export const QuizSlideEditor: React.FC<QuizSlideEditorProps> = ({
       {/* Header */}
       <div className="flex items-center gap-3 border-b border-gray-800 pb-2">
         <HelpCircle size={13} className="text-violet-400 shrink-0" />
-        <span className="text-[10px] font-black uppercase tracking-wider text-gray-300">Editor de Quiz</span>
-        <span className="text-[9px] text-gray-600 italic">• auto-guardado</span>
+        <span className="text-[10px] font-black uppercase tracking-wider text-gray-300">{translate("quiz:QuizSlideEditor.quizEditor", "Editor de Quiz")}</span>
+        <span className="text-[9px] text-gray-600 italic">{translate("quiz:QuizSlideEditor.autoSaved", "• auto-guardado")}</span>
         <label className="ml-auto flex items-center gap-1.5 text-[10px] font-bold text-gray-400 cursor-pointer select-none">
           <input
             type="checkbox"
@@ -203,38 +206,36 @@ export const QuizSlideEditor: React.FC<QuizSlideEditorProps> = ({
             className="accent-violet-500"
           />
           <Trophy size={10} className="text-violet-400" />
-          Modo Resultados
-        </label>
+          {translate("quiz:QuizSlideEditor.resultsMode", "Modo Resultados")}</label>
       </div>
 
       {/* ── Results mode ── */}
       {isResultsMode && (
         <div className="space-y-2">
           <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wide block">
-            Rangos de Resultados (R1 = mejor)
-          </span>
+            {translate("quiz:QuizSlideEditor.resultRangesR1Best", "Rangos de Resultados (R1 = mejor)")}</span>
           {(local.resultProfiles ?? []).map((profile, rangeIdx) => (
             <div key={`${slideId}-profile-${rangeIdx}`} className="grid grid-cols-[36px_minmax(0,1fr)_minmax(0,1.5fr)_minmax(0,1.2fr)_auto] gap-1.5 items-center">
-              <span className="text-center text-[10px] font-black text-violet-400">R{profile.rank}</span>
+              <span className="text-center text-[10px] font-black text-violet-400">{translate("quiz:QuizSlideEditor.r", "R")}{profile.rank}</span>
               <input
                 value={profile.title}
                 onChange={e => updateProfile(rangeIdx, 'title', e.target.value)}
                 onBlur={commit}
-                placeholder="Título"
+                placeholder={translate("quiz:QuizSlideEditor.title", "Título")}
                 className="rounded-sm border border-gray-800 bg-gray-900 px-2 py-1 text-[11px] text-white focus:outline-hidden focus:border-violet-500"
               />
               <input
                 value={profile.description}
                 onChange={e => updateProfile(rangeIdx, 'description', e.target.value)}
                 onBlur={commit}
-                placeholder="Descripción"
+                placeholder={translate("quiz:QuizSlideEditor.description", "Descripción")}
                 className="rounded-sm border border-gray-800 bg-gray-900 px-2 py-1 text-[11px] text-white focus:outline-hidden focus:border-violet-500"
               />
               <input
                 value={profile.giftText}
                 onChange={e => updateProfile(rangeIdx, 'giftText', e.target.value)}
                 onBlur={commit}
-                placeholder="Versículo / regalo"
+                placeholder={translate("quiz:QuizSlideEditor.verseGift", "Versículo / regalo")}
                 className="rounded-sm border border-gray-800 bg-gray-900 px-2 py-1 text-[11px] text-white focus:outline-hidden focus:border-violet-500"
               />
               <button
@@ -253,8 +254,7 @@ export const QuizSlideEditor: React.FC<QuizSlideEditorProps> = ({
             disabled={(local.resultProfiles?.length ?? 0) >= 9}
             className="flex items-center gap-1 rounded-sm border border-violet-800 bg-violet-950/30 px-3 py-1 text-[11px] font-bold text-violet-300 hover:bg-violet-900/40 disabled:opacity-40"
           >
-            <Plus size={11} /> Añadir Rango
-          </button>
+            <Plus size={11} />  {translate("quiz:QuizSlideEditor.addRange", "Añadir Rango")}</button>
         </div>
       )}
 
@@ -267,7 +267,7 @@ export const QuizSlideEditor: React.FC<QuizSlideEditorProps> = ({
             onChange={e => setLocal(prev => ({ ...prev, question: e.target.value }))}
             onBlur={commit}
             rows={2}
-            placeholder="P: Escribe la pregunta aquí..."
+            placeholder={translate("quiz:QuizSlideEditor.qEnterTheQuestionHere", "P: Escribe la pregunta aquí...")}
             className="w-full rounded-sm border border-gray-800 bg-gray-900 px-2.5 py-2 text-xs text-white resize-none focus:outline-hidden focus:border-violet-500 placeholder-gray-600"
           />
 
@@ -286,7 +286,7 @@ export const QuizSlideEditor: React.FC<QuizSlideEditorProps> = ({
                       checked={isCorrect}
                       onChange={e => toggleCorrect(opt.id, e.target.checked)}
                       className="accent-emerald-500"
-                      title="Marcar como correcta"
+                      title={translate("quiz:QuizSlideEditor.markAsCorrect", "Marcar como correcta")}
                     />
                     <span className={isCorrect ? 'text-emerald-300' : ''}>{opt.id})</span>
                   </label>
@@ -294,7 +294,7 @@ export const QuizSlideEditor: React.FC<QuizSlideEditorProps> = ({
                     value={opt.text}
                     onChange={e => updateOptionText(optIdx, e.target.value)}
                     onBlur={commit}
-                    placeholder={`Opción ${opt.id}`}
+                    placeholder={translate("quiz:QuizSlideEditor.option", "Opción {{value1}}", { value1: opt.id })}
                     className="min-w-0 flex-1 bg-transparent text-[11px] text-gray-100 outline-hidden placeholder-gray-600"
                   />
                   {(local.options?.length ?? 0) > 2 && (
@@ -302,7 +302,7 @@ export const QuizSlideEditor: React.FC<QuizSlideEditorProps> = ({
                       type="button"
                       onClick={() => removeOption(optIdx)}
                       className="shrink-0 text-red-400 hover:text-red-300"
-                      title="Eliminar opción"
+                      title={translate("quiz:QuizSlideEditor.deleteOption", "Eliminar opción")}
                     >
                       <Trash2 size={10} />
                     </button>
@@ -318,8 +318,7 @@ export const QuizSlideEditor: React.FC<QuizSlideEditorProps> = ({
               onClick={addOption}
               className="flex items-center gap-1 text-[11px] font-bold text-violet-400 hover:text-violet-300 transition-colors"
             >
-              <Plus size={11} /> Añadir Opción
-            </button>
+              <Plus size={11} />  {translate("quiz:QuizSlideEditor.addOption", "Añadir Opción")}</button>
           )}
 
           {/* Config row */}
@@ -331,8 +330,7 @@ export const QuizSlideEditor: React.FC<QuizSlideEditorProps> = ({
                 onChange={e => update({ ...local, randomize: e.target.checked })}
                 className="accent-violet-500"
               />
-              Aleatorio
-            </label>
+              {translate("quiz:QuizSlideEditor.random", "Aleatorio")}</label>
             <label className="flex items-center gap-1.5 cursor-pointer">
               <input
                 type="checkbox"
@@ -340,8 +338,7 @@ export const QuizSlideEditor: React.FC<QuizSlideEditorProps> = ({
                 onChange={e => update({ ...local, multiSelect: e.target.checked })}
                 className="accent-violet-500"
               />
-              Multi-selección
-            </label>
+              {translate("quiz:QuizSlideEditor.multipleSelection", "Multi-selección")}</label>
             <label className="flex items-center gap-1.5">
               <span className="text-gray-500">⏱</span>
               <input
@@ -353,14 +350,14 @@ export const QuizSlideEditor: React.FC<QuizSlideEditorProps> = ({
                 onBlur={commit}
                 className="w-14 rounded-sm border border-gray-800 bg-gray-900 px-2 py-1 text-white focus:outline-hidden focus:border-violet-500"
               />
-              <span className="text-gray-600 font-normal">seg</span>
+              <span className="text-gray-600 font-normal">{translate("quiz:QuizSlideEditor.sec", "seg")}</span>
             </label>
           </div>
 
           {/* Cita section */}
           <div className="border-t border-gray-800 pt-2.5">
             <div className="flex items-center justify-between mb-1.5">
-              <span className="text-[10px] font-black uppercase tracking-wider text-gray-500">Referencia Bíblica</span>
+              <span className="text-[10px] font-black uppercase tracking-wider text-gray-500">{translate("quiz:QuizSlideEditor.biblicalReference", "Referencia Bíblica")}</span>
               <div className="flex items-center gap-1.5">
                 {hasAnyCita && (
                   <>
@@ -369,22 +366,19 @@ export const QuizSlideEditor: React.FC<QuizSlideEditorProps> = ({
                       onClick={() => setCitaMode('eval')}
                       className={`rounded-sm px-2 py-0.5 text-[10px] font-bold transition-colors ${citaMode === 'eval' ? 'bg-yellow-600 text-black' : 'text-yellow-600 hover:text-yellow-400'}`}
                     >
-                      CITA:
-                    </button>
+                      {translate("quiz:QuizSlideEditor.reference", "CITA:")}</button>
                     <button
                       type="button"
                       onClick={() => setCitaMode('review')}
                       className={`rounded-sm px-2 py-0.5 text-[10px] font-bold transition-colors ${citaMode === 'review' ? 'bg-violet-600 text-white' : 'text-violet-400 hover:text-violet-300'}`}
                     >
-                      CITA!:
-                    </button>
+                      {translate("quiz:QuizSlideEditor.reference_c0d109", "CITA!:")}</button>
                     <button
                       type="button"
                       onClick={clearCita}
                       className="text-[10px] text-red-400 hover:text-red-300"
                     >
-                      Quitar
-                    </button>
+                      {translate("quiz:QuizSlideEditor.remove", "Quitar")}</button>
                   </>
                 )}
                 {!hasAnyCita && (
@@ -393,8 +387,7 @@ export const QuizSlideEditor: React.FC<QuizSlideEditorProps> = ({
                     onClick={() => update({ ...local, citaRef: 'Gn 1:1' })}
                     className="flex items-center gap-1 text-[10px] text-violet-400 hover:text-violet-300"
                   >
-                    <BookOpen size={10} /> + Añadir Ref
-                  </button>
+                    <BookOpen size={10} />  {translate("quiz:QuizSlideEditor.addRef", "+ Añadir Ref")}</button>
                 )}
               </div>
             </div>
@@ -403,8 +396,8 @@ export const QuizSlideEditor: React.FC<QuizSlideEditorProps> = ({
               <div className="space-y-1">
                 <p className="text-[9px] text-gray-600">
                   {citaMode === 'eval'
-                    ? 'CITA: — La audiencia debe identificar este versículo (+0.5 pts)'
-                    : 'CITA!: — Solo para lectura, no evaluada'}
+                    ? translate("quiz:QuizSlideEditor.referenceTheAudienceMustIdentifyThisVerse05", "CITA: — La audiencia debe identificar este versículo (+0.5 pts)")
+                    : translate("quiz:QuizSlideEditor.referenceForReadingOnlyNotScored", "CITA!: — Solo para lectura, no evaluada")}
                 </p>
                 <ScriptureRangeEditor
                   slide={getDummySlideForCita()}

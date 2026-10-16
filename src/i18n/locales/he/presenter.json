@@ -1,0 +1,12 @@
+{
+  "App.presentationsWereNotSavedBecauseTheyContainInvalidData": "המצגות לא נשמרו כי הן מכילות נתונים לא תקינים:\n{{value1}}",
+  "App.clickHereToEnableAudioPlaybackInThisTab": "לחצו כאן כדי לאפשר השמעת שמע בלשונית זו",
+  "App.clickToEnableSound": "לחצו להפעלת הצליל",
+  "PresenterScreen.mediaSlide": "שקופית מדיה",
+  "PresenterScreen.openMenu": "פתיחת תפריט",
+  "PresenterScreen.organizationLogo": "סמל הארגון",
+  "SeferReaderScreen.loading": "טוענים…",
+  "SeferReaderScreen.openMenu": "פתיחת תפריט",
+  "useSyncState.couldNotSendTheCommandWaitForControlTo": "לא ניתן לשלוח את הפקודה. המתינו לחיבור מחדש של הבקרה ונסו שוב.",
+  "App.couldNotSavePresentationsYourDraftIsPreserved": "לא ניתן לשמור את המצגות. הטיוטה נשמרת."
+}

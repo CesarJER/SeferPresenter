@@ -1,3 +1,5 @@
+import { translate } from '../../i18n/runtime';
+import { useUiTranslation } from '../../i18n/useUiTranslation';
 import React from 'react';
 import type { CatalogDef } from './CatalogApp';
 import { BookOpen } from 'lucide-react';
@@ -7,18 +9,18 @@ interface CatalogIndexProps {
 }
 
 export const CatalogIndex: React.FC<CatalogIndexProps> = ({ catalogs }) => {
+  useUiTranslation('catalog');
   return (
     <div className="h-dvh overflow-y-auto bg-[#fef3c7] text-amber-950 p-4 sm:p-8 flex flex-col items-center">
       <div className="max-w-4xl w-full">
         <header className="mb-10 text-center">
-          <h1 className="text-3xl sm:text-4xl font-bold text-amber-700 mb-2">Catálogos Públicos</h1>
-          <p className="text-amber-900/70">Selecciona un catálogo para ver su contenido</p>
+          <h1 className="text-3xl sm:text-4xl font-bold text-amber-700 mb-2">{translate("catalog:CatalogIndex.publicCatalogs", "Catálogos Públicos")}</h1>
+          <p className="text-amber-900/70">{translate("catalog:CatalogIndex.selectACatalogToViewItsContent", "Selecciona un catálogo para ver su contenido")}</p>
         </header>
 
         {catalogs.length === 0 ? (
           <div className="text-center p-8 bg-amber-100/50 border border-amber-200 rounded-lg text-amber-800">
-            No hay catálogos públicos disponibles en este momento.
-          </div>
+            {translate("catalog:CatalogIndex.noPublicCatalogsAreAvailableRightNow", "No hay catálogos públicos disponibles en este momento.")}</div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {catalogs.map(cat => (

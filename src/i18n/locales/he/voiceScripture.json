@@ -1,0 +1,17 @@
+{
+  "VoiceScriptureSuggestions.voiceAssistant": "עוזר קולי",
+  "VoiceScriptureSuggestions.detectedReferences": "הפניות שזוהו",
+  "VoiceScriptureControl.ready": "מוכן",
+  "VoiceScriptureControl.connecting": "מתחברים…",
+  "VoiceScriptureControl.receivingAudio": "מקבלים שמע",
+  "VoiceScriptureControl.transcribing": "מתמללים…",
+  "VoiceScriptureControl.speechReceived": "הדיבור התקבל",
+  "VoiceScriptureControl.stopping": "עוצרים…",
+  "VoiceScriptureControl.error": "שגיאה",
+  "VoiceScriptureControl.sharedSourceTranscriptionOnMainControl": "מקור משותף · תמלול בבקרה הראשית",
+  "VoiceScriptureControl.voiceDisabledSelectAMicrophone": "קול כבוי · בחרו מיקרופון",
+  "reconnectingDetail": "{{detail}} · מתחברים מחדש…",
+  "checking": "בודקים קול…",
+  "disabled": "הקול לא הופעל",
+  "unavailable": "מנוע הקול אינו זמין · מנסים שוב…"
+}

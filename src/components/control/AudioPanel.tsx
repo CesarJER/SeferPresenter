@@ -1,3 +1,5 @@
+import { translate } from '../../i18n/runtime';
+import { useUiTranslation } from '../../i18n/useUiTranslation';
 import React from 'react';
 import { Play, Pause, Music, Volume2, Repeat2, ArrowUp, ArrowUpDown, Settings, Mic, MicOff } from 'lucide-react';
 import type { Presentation } from '../../types/presentation';
@@ -64,6 +66,7 @@ export const AudioPanel: React.FC<AudioPanelProps> = ({
   autoduckState,
   onAutoduckStateChange,
 }) => {
+  useUiTranslation('control');
   const [dragPosition, setDragPosition] = React.useState<number | null>(null);
   const [optimisticSeek, setOptimisticSeek] = React.useState<OptimisticSeekState | null>(null);
   const [optimisticNowMs, setOptimisticNowMs] = React.useState(() => Date.now());
@@ -223,13 +226,13 @@ export const AudioPanel: React.FC<AudioPanelProps> = ({
       {/* Left: Track Select & Playback control */}
       <div className="flex flex-wrap items-end gap-3 flex-1 md:flex-none">
         <div className="flex flex-col gap-1 w-full sm:w-56">
-          <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">Pista de Audio</label>
+          <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">{translate("control:AudioPanel.audioTrack", "Pista de Audio")}</label>
           <select
             value={audioState.audioSrc || ''}
             onChange={(e) => handleSelectAudioTrack(e.target.value)}
             className="w-full rounded-sm border border-gray-700 bg-gray-900 px-2.5 py-1.5 text-white outline-hidden focus:border-yellow-500 cursor-pointer"
           >
-            <option value="">-- Sin Música / Silencio --</option>
+            <option value="">{translate("control:AudioPanel.noMusicSilence", "-- Sin Música / Silencio --")}</option>
             {availableAudioFiles.map((file) => {
               const hasSync = audioSyncMaps.some(m => m.audioSrc === file);
               return (
@@ -279,7 +282,7 @@ export const AudioPanel: React.FC<AudioPanelProps> = ({
                   ? 'animate-pulse hover:animate-none'
                   : ''
               }`}
-              title={`Abrir presentación vinculada "${presentations.find(p => p.id === matchedSyncMap.presentationId)?.title || ''}" y activar sincronización`}
+              title={translate("control:AudioPanel.openLinkedPresentationAndEnableSynchronization", "Abrir presentación vinculada \"{{value1}}\" y activar sincronización", { value1: presentations.find(p => p.id === matchedSyncMap.presentationId)?.title || '' })}
             >
               <span>🎼</span>
             </button>
@@ -291,7 +294,7 @@ export const AudioPanel: React.FC<AudioPanelProps> = ({
             onClick={togglePlayback}
             disabled={!audioState.audioSrc}
             className="audio-panel-btn bg-yellow-600 hover:bg-yellow-500 disabled:hover:bg-yellow-600"
-            title={audioState.isPlaying ? "Pausar" : "Reproducir"}
+            title={audioState.isPlaying ? translate("control:AudioPanel.pause", "Pausar") : translate("control:AudioPanel.play", "Reproducir")}
           >
             {audioState.isPlaying ? <Pause size={14} /> : <Play size={14} />}
           </button>
@@ -305,7 +308,7 @@ export const AudioPanel: React.FC<AudioPanelProps> = ({
                 ? 'bg-red-650 text-white animate-pulse border border-red-500'
                 : 'bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700'
               }`}
-            title={audioState.volume === 0 ? "Activar Sonido" : "Silenciar"}
+            title={audioState.volume === 0 ? translate("control:AudioPanel.enableSound", "Activar Sonido") : translate("control:AudioPanel.mute", "Silenciar")}
           >
             {audioState.volume === 0 ? (
               <div className="relative">
@@ -333,7 +336,7 @@ export const AudioPanel: React.FC<AudioPanelProps> = ({
                   ? 'bg-blue-600 hover:bg-blue-500 text-white border border-blue-500'
                   : 'bg-gray-800 hover:bg-gray-700 text-gray-400 border border-gray-700'
               }`}
-              title={autoduckState?.enabled ? 'Autoduck Activado (Baja volumen al hablar)' : 'Activar Autoduck'}
+              title={autoduckState?.enabled ? translate("control:AudioPanel.autoduckEnabledReducesVolumeWhileSpeaking", "Autoduck Activado (Baja volumen al hablar)") : translate("control:AudioPanel.enableAutoduck", "Activar Autoduck")}
             >
               {autoduckState?.enabled ? <Mic size={14} /> : <MicOff size={14} />}
             </button>
@@ -346,7 +349,7 @@ export const AudioPanel: React.FC<AudioPanelProps> = ({
             max="1"
             step="0.05"
             value={audioState.volume}
-            aria-label="Volumen de audio"
+            aria-label={translate("control:AudioPanel.audioVolume", "Volumen de audio")}
             onChange={(e) => {
               const val = parseFloat(e.target.value);
               if (dispatchAction) {
@@ -378,8 +381,8 @@ export const AudioPanel: React.FC<AudioPanelProps> = ({
                 ? 'bg-emerald-600 hover:bg-emerald-500 text-white border border-emerald-500'
                 : 'bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700'
             }`}
-            title={loop ? 'Bucle activado' : 'Activar bucle'}
-            aria-label={loop ? 'Desactivar bucle de audio' : 'Activar bucle de audio'}
+            title={loop ? translate("control:AudioPanel.loopEnabled", "Bucle activado") : translate("control:AudioPanel.enableLoop", "Activar bucle")}
+            aria-label={loop ? translate("control:AudioPanel.disableAudioLoop", "Desactivar bucle de audio") : translate("control:AudioPanel.enableAudioLoop", "Activar bucle de audio")}
           >
             <Repeat2 size={14} />
           </button>
@@ -395,7 +398,7 @@ export const AudioPanel: React.FC<AudioPanelProps> = ({
           max={audioState.duration || 100}
           step="0.1"
           value={currentPosition}
-          aria-label="Posicion de audio"
+          aria-label={translate("control:AudioPanel.audioPosition", "Posicion de audio")}
           onChange={(e) => {
             const val = parseFloat(e.target.value);
             if (dispatchAction) {
@@ -426,7 +429,7 @@ export const AudioPanel: React.FC<AudioPanelProps> = ({
       <div className="flex items-end gap-3 w-full md:w-auto">
         <div className="flex flex-col gap-1 w-full sm:w-52">
           <div className="flex items-center justify-between">
-            <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">Sincronización</label>
+            <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">{translate("control:AudioPanel.synchronization", "Sincronización")}</label>
             <div className="relative group/tooltip">
               <button
                 type="button"
@@ -434,14 +437,14 @@ export const AudioPanel: React.FC<AudioPanelProps> = ({
               >
                 ?
               </button>
-              <div className="absolute right-0 bottom-full mb-2 w-64 bg-gray-900 border border-gray-700 text-gray-200 text-xs p-3 rounded-lg shadow-xl opacity-0 invisible group-hover/tooltip:opacity-100 group-hover/tooltip:visible transition-all duration-200 z-50 pointer-events-none">
-                <p className="font-bold text-yellow-500 mb-1">Sincronización de Audio:</p>
-                <p className="mb-2 text-gray-300">Una melodía solo puede estar sincronizada a una única presentación, pero una presentación puede tener asociadas varias melodías.</p>
+              <div className="absolute end-0 bottom-full mb-2 w-64 bg-gray-900 border border-gray-700 text-gray-200 text-xs p-3 rounded-lg shadow-xl opacity-0 invisible group-hover/tooltip:opacity-100 group-hover/tooltip:visible transition-all duration-200 z-50 pointer-events-none">
+                <p className="font-bold text-yellow-500 mb-1">{translate("control:AudioPanel.audioSynchronization", "Sincronización de Audio:")}</p>
+                <p className="mb-2 text-gray-300">{translate("control:AudioPanel.aTrackCanOnlyBeSynchronizedWithOnePresentation", "Una melodía solo puede estar sincronizada a una única presentación, pero una presentación puede tener asociadas varias melodías.")}</p>
                 <hr className="border-gray-800 my-1.5" />
                 <div className="flex flex-col gap-1 text-[11px] text-gray-300">
-                  <div><strong className="text-white">Fondo (🎼):</strong> Música de fondo normal sin sincronizar.</div>
-                  <div><strong className="text-sky-400">Unilateral (🎼 ⬆️):</strong> La música avanza automáticamente las diapositivas.</div>
-                  <div><strong className="text-emerald-400">Bilateral (🎼 ↕️):</strong> Sincronización bidireccional de diapositivas y audio.</div>
+                  <div><strong className="text-white">{translate("control:AudioPanel.background", "Fondo (🎼):")}</strong>  {translate("control:AudioPanel.normalBackgroundMusicWithoutSynchronization", "Música de fondo normal sin sincronizar.")}</div>
+                  <div><strong className="text-sky-400">{translate("control:AudioPanel.oneWay", "Unilateral (🎼 ⬆️):")}</strong>  {translate("control:AudioPanel.musicAutomaticallyAdvancesSlides", "La música avanza automáticamente las diapositivas.")}</div>
+                  <div><strong className="text-emerald-400">{translate("control:AudioPanel.twoWay", "Bilateral (🎼 ↕️):")}</strong>  {translate("control:AudioPanel.bidirectionalSlideAndAudioSynchronization", "Sincronización bidireccional de diapositivas y audio.")}</div>
                 </div>
               </div>
             </div>
@@ -469,10 +472,10 @@ export const AudioPanel: React.FC<AudioPanelProps> = ({
                   ? 'bg-gray-700 text-white font-bold'
                   : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800'
               }`}
-              title="Música de Fondo (Sin sincronización)"
+              title={translate("control:AudioPanel.backgroundMusicNoSynchronization", "Música de Fondo (Sin sincronización)")}
             >
               <Music size={11} />
-              <span>Fondo</span>
+              <span>{translate("control:AudioPanel.background_8c069b", "Fondo")}</span>
             </button>
             <button
               type="button"
@@ -495,7 +498,7 @@ export const AudioPanel: React.FC<AudioPanelProps> = ({
                   ? 'bg-sky-600 text-white font-bold'
                   : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800'
               }`}
-              title="Sincronización Unilateral (Música cambia diapositivas)"
+              title={translate("control:AudioPanel.oneWaySynchronizationMusicChangesSlides", "Sincronización Unilateral (Música cambia diapositivas)")}
             >
               <Music size={11} />
               <ArrowUp size={10} className="stroke-3" />
@@ -521,7 +524,7 @@ export const AudioPanel: React.FC<AudioPanelProps> = ({
                   ? 'bg-emerald-600 text-white font-bold'
                   : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800'
               }`}
-              title="Sincronización Bilateral (Sincro Bidireccional)"
+              title={translate("control:AudioPanel.twoWaySynchronization", "Sincronización Bilateral (Sincro Bidireccional)")}
             >
               <Music size={11} />
               <ArrowUpDown size={10} className="stroke-3" />
@@ -533,7 +536,7 @@ export const AudioPanel: React.FC<AudioPanelProps> = ({
           type="button"
           onClick={handleOpenAudioEditor}
           className="flex items-center gap-1 py-1.5 px-3 rounded-sm bg-gray-900 border border-gray-700 hover:bg-gray-800 text-yellow-500 font-bold transition-all cursor-pointer shadow-xs shrink-0 whitespace-nowrap h-[28px]"
-          title="Abrir Editor de Sincronización en ventana externa (🎼)"
+          title={translate("control:AudioPanel.openSynchronizationEditorInAnExternalWindow", "Abrir Editor de Sincronización en ventana externa (🎼)")}
         >
           <Settings size={13} />
           <span>🎼</span>

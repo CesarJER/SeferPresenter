@@ -1,3 +1,5 @@
+import { translate } from '../i18n/runtime';
+import { useUiTranslation } from '../i18n/useUiTranslation';
 import React, { useState, useEffect, useRef } from 'react';
 import { Play, Pause, Save, Download, Upload, X, Clock, Trash2, Volume2, Music, AlertTriangle, ArrowUp, ArrowUpDown } from 'lucide-react';
 import type { Presentation } from '../types/presentation';
@@ -36,6 +38,7 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
   audioSyncMaps,
   onAudioSyncMapsChange,
 }) => {
+  useUiTranslation('audioEditor');
   const [selectedPresentationId, setSelectedPresentationId] = useState<string>('');
   const [selectedAudioFile, setSelectedAudioFile] = useState<string>('');
   
@@ -334,7 +337,7 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
 
   // Clear all cues
   const handleClearAll = () => {
-    if (window.confirm('¿Está seguro de que desea eliminar todas las marcas de tiempo?')) {
+    if (window.confirm(translate("audioEditor:AudioSyncEditor.areYouSureYouWantToDeleteAllTimestamps", "¿Está seguro de que desea eliminar todas las marcas de tiempo?"))) {
       dirtyRef.current = true;
       setRowTimes({});
     }
@@ -344,11 +347,11 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
   const handleSave = async () => {
     if (isSaving) return;
     if (!selectedPresentationId) {
-      alert('Por favor seleccione una presentación.');
+      alert(translate("audioEditor:AudioSyncEditor.pleaseSelectAPresentation", "Por favor seleccione una presentación."));
       return;
     }
     if (!selectedAudioFile) {
-      alert('Por favor seleccione un archivo de audio.');
+      alert(translate("audioEditor:AudioSyncEditor.pleaseSelectAnAudioFile", "Por favor seleccione un archivo de audio."));
       return;
     }
 
@@ -381,7 +384,7 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
     const mapId = existingIndex >= 0 ? baseMaps[existingIndex].id : `sync-${Date.now()}`;
     
     // Automatically determine name from clean audio filename (without extension)
-    const filename = selectedAudioFile.split('/').pop()?.split('.')[0] || 'Sincronización';
+    const filename = selectedAudioFile.split('/').pop()?.split('.')[0] || translate("audioEditor:AudioSyncEditor.synchronization", "Sincronización");
     const mapName = decodeURIComponent(filename);
 
     const newMap: AudioSyncMap = {
@@ -406,9 +409,9 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
       await onAudioSyncMapsChange(updatedMaps, baseMaps);
       dirtyRef.current = false;
       editBaseMapsRef.current = updatedMaps;
-      alert('Sincronización guardada correctamente.');
+      alert(translate("audioEditor:AudioSyncEditor.synchronizationSavedSuccessfully", "Sincronización guardada correctamente."));
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'No se pudo guardar. Tu borrador se conserva.');
+      alert(err instanceof Error ? err.message : translate("audioEditor:AudioSyncEditor.couldNotSaveYourDraftIsPreserved", "No se pudo guardar. Tu borrador se conserva."));
     } finally { setIsSaving(false); }
   };
 
@@ -444,21 +447,21 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
           if (isValid) {
             const validation = validateAudioSyncMaps(parsed);
             if (!validation.ok || !validation.value) {
-              alert(`El formato del archivo JSON no es valido:\n${validation.errors.slice(0, 8).join('\n')}`);
+              alert(translate("audioEditor:AudioSyncEditor.theJsonFileFormatIsInvalid", "El formato del archivo JSON no es valido:\n{{value1}}", { value1: validation.errors.slice(0, 8).join('\n') }));
               return;
             }
             await onAudioSyncMapsChange(validation.value, editBaseMapsRef.current);
             dirtyRef.current = false;
             editBaseMapsRef.current = validation.value;
-            alert('Mapas de sincronización importados correctamente.');
+            alert(translate("audioEditor:AudioSyncEditor.synchronizationMapsImportedSuccessfully", "Mapas de sincronización importados correctamente."));
           } else {
-            alert('El formato del archivo JSON no es válido.');
+            alert(translate("audioEditor:AudioSyncEditor.theJsonFileFormatIsInvalid_492f41", "El formato del archivo JSON no es válido."));
           }
         } else {
-          alert('El archivo JSON debe contener un arreglo de mapas.');
+          alert(translate("audioEditor:AudioSyncEditor.theJsonFileMustContainAnArrayOfMaps", "El archivo JSON debe contener un arreglo de mapas."));
         }
       } catch (err) {
-        alert(err instanceof Error ? err.message : 'No se pudo importar. Tu borrador se conserva.');
+        alert(err instanceof Error ? err.message : translate("audioEditor:AudioSyncEditor.couldNotImportYourDraftIsPreserved", "No se pudo importar. Tu borrador se conserva."));
       }
     };
     reader.readAsText(file);
@@ -474,7 +477,7 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
       <div className="flex items-center justify-between border-b border-gray-800 bg-gray-950 px-6 py-4 shrink-0 shadow-md">
         <h2 className="flex items-center gap-3 text-xl font-extrabold text-yellow-500">
           <Music className="h-6 w-6 text-yellow-500 animate-pulse" />
-          <span>Editor de Sincronización de Música (🎼)</span>
+          <span>{translate("audioEditor:AudioSyncEditor.musicSynchronizationEditor", "Editor de Sincronización de Música (🎼)")}</span>
         </h2>
         <button
           type="button"
@@ -483,10 +486,10 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
             onClose();
           }}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-red-900 bg-red-950/20 hover:bg-red-900 hover:text-white transition-all text-red-400 font-bold text-xs cursor-pointer shadow-sm"
-          title="Cerrar ventana del editor"
+          title={translate("audioEditor:AudioSyncEditor.closeEditorWindow", "Cerrar ventana del editor")}
         >
           <X size={14} />
-          <span>Cerrar Editor</span>
+          <span>{translate("audioEditor:AudioSyncEditor.closeEditor", "Cerrar Editor")}</span>
         </button>
       </div>
 
@@ -498,11 +501,11 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
           <button
             type="button"
             onClick={() => setIsConfigCollapsed(!isConfigCollapsed)}
-            className="flex items-center justify-between w-full text-left text-xs font-extrabold uppercase text-gray-400 tracking-wider hover:text-white bg-gray-900 border border-gray-800 p-2 rounded-sm transition-colors cursor-pointer"
+            className="flex items-center justify-between w-full text-start text-xs font-extrabold uppercase text-gray-400 tracking-wider hover:text-white bg-gray-900 border border-gray-800 p-2 rounded-sm transition-colors cursor-pointer"
           >
-            <span>⚙️ Configuración y Pistas</span>
+            <span>{translate("audioEditor:AudioSyncEditor.settingsAndTracks", "⚙️ Configuración y Pistas")}</span>
             <span className="text-yellow-500 font-mono text-[10px]">
-              {isConfigCollapsed ? 'MOSTRAR ▽' : 'OCULTAR △'}
+              {isConfigCollapsed ? translate("audioEditor:AudioSyncEditor.show", "MOSTRAR ▽") : translate("audioEditor:AudioSyncEditor.hide", "OCULTAR △")}
             </span>
           </button>
 
@@ -511,11 +514,11 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-1 gap-3">
                 {/* Audio File Selector */}
                 <div className="space-y-1">
-                  <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">Pista de Audio</label>
+                  <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">{translate("audioEditor:AudioSyncEditor.audioTrack", "Pista de Audio")}</label>
                   <select
                     value={selectedAudioFile}
                     onChange={(e) => {
-                      if (dirtyRef.current && !window.confirm('¿Descartar el borrador para cambiar de pista?')) return;
+                      if (dirtyRef.current && !window.confirm(translate("audioEditor:AudioSyncEditor.discardTheDraftToChangeTracks", "¿Descartar el borrador para cambiar de pista?"))) return;
                       dirtyRef.current = false;
                       const audioFile = e.target.value;
                       setSelectedAudioFile(audioFile);
@@ -528,7 +531,7 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
                     }}
                     className="w-full text-xs bg-gray-900 border border-gray-800 rounded-sm px-2.5 py-1.5 focus:border-yellow-500 outline-hidden text-white cursor-pointer shadow-xs"
                   >
-                    <option value="">-- Seleccionar Pista --</option>
+                    <option value="">{translate("audioEditor:AudioSyncEditor.selectTrack", "-- Seleccionar Pista --")}</option>
                     {availableAudioFiles.map((file) => (
                       <option key={file} value={file}>
                         {decodeURIComponent(file.split('/').pop() || '')}
@@ -538,24 +541,24 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
                   {availableAudioFiles.length === 0 && (
                     <div className="flex items-center gap-1.5 text-[9px] text-amber-500 bg-amber-500/10 p-1.5 rounded-sm border border-amber-900/30 mt-1">
                       <AlertTriangle size={11} />
-                      <span>Sin audios en public/audio/music</span>
+                      <span>{translate("audioEditor:AudioSyncEditor.noAudioInPublicAudioMusic", "Sin audios en public/audio/music")}</span>
                     </div>
                   )}
                 </div>
 
                 {/* Presentation Selector */}
                 <div className="space-y-1">
-                  <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">Presentación</label>
+                  <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">{translate("audioEditor:AudioSyncEditor.presentation", "Presentación")}</label>
                   <select
                     value={selectedPresentationId}
                     onChange={(e) => {
-                      if (dirtyRef.current && !window.confirm('¿Descartar el borrador para cambiar de presentación?')) return;
+                      if (dirtyRef.current && !window.confirm(translate("audioEditor:AudioSyncEditor.discardTheDraftToChangePresentations", "¿Descartar el borrador para cambiar de presentación?"))) return;
                       dirtyRef.current = false;
                       setSelectedPresentationId(e.target.value);
                     }}
                     className="w-full text-xs bg-gray-900 border border-gray-800 rounded-sm px-2.5 py-1.5 focus:border-yellow-500 outline-hidden text-white cursor-pointer shadow-xs"
                   >
-                    <option value="">-- Seleccionar Presentación --</option>
+                    <option value="">{translate("audioEditor:AudioSyncEditor.selectPresentation", "-- Seleccionar Presentación --")}</option>
                     {presentations.map((p) => (
                       <option key={p.id} value={p.id}>
                         {p.title}
@@ -571,10 +574,10 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
                   {/* Default Sync Mode buttons */}
                   <div className="space-y-1">
                     <div className="flex items-center gap-1">
-                      <span className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">Sincro</span>
+                      <span className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">{translate("audioEditor:AudioSyncEditor.sync", "Sincro")}</span>
                       <span 
                         className="text-[10px] text-gray-500 hover:text-yellow-500 cursor-help"
-                        title="Modos de Sincronización:&#10;• Fondo (Música de fondo)&#10;• Uni (La música cambia las diapositivas)&#10;• Bi (Bidireccional: cambio manual también busca tiempo)"
+                        title={translate("audioEditor:AudioSyncEditor.synchronizationModesBackgroundBackgroundMusicOneWayMusicChanges", "Modos de Sincronización:\n• Fondo (Música de fondo)\n• Uni (La música cambia las diapositivas)\n• Bi (Bidireccional: cambio manual también busca tiempo)")}
                       >
                         ❓
                       </span>
@@ -588,7 +591,7 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
                             ? 'bg-orange-650 border-orange-500 text-white'
                             : 'bg-gray-900 border-gray-800 text-gray-400 hover:bg-gray-850'
                         }`}
-                        title="Fondo: Sin sincronizar (Música de fondo)"
+                        title={translate("audioEditor:AudioSyncEditor.backgroundNoSynchronizationBackgroundMusic", "Fondo: Sin sincronizar (Música de fondo)")}
                       >
                         <Music size={12} />
                       </button>
@@ -600,7 +603,7 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
                             ? 'bg-sky-650 border-sky-500 text-white'
                             : 'bg-gray-900 border-gray-800 text-gray-400 hover:bg-gray-850'
                         }`}
-                        title="Unilateral: La música avanza diapositivas"
+                        title={translate("audioEditor:AudioSyncEditor.oneWayMusicAdvancesSlides", "Unilateral: La música avanza diapositivas")}
                       >
                         <ArrowUp size={12} className="stroke-3" />
                       </button>
@@ -612,7 +615,7 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
                             ? 'bg-emerald-650 border-emerald-500 text-white'
                             : 'bg-gray-900 border-gray-800 text-gray-400 hover:bg-gray-850'
                         }`}
-                        title="Bilateral: Sincronización bidireccional"
+                        title={translate("audioEditor:AudioSyncEditor.twoWayBidirectionalSynchronization", "Bilateral: Sincronización bidireccional")}
                       >
                         <ArrowUpDown size={12} className="stroke-3" />
                       </button>
@@ -622,7 +625,7 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
                   {/* Initial Volume */}
                   <div className="space-y-1">
                     <div className="flex justify-between text-[10px] font-bold uppercase text-gray-400 tracking-wider">
-                      <span>Vol. Inicial</span>
+                      <span>{translate("audioEditor:AudioSyncEditor.initialVol", "Vol. Inicial")}</span>
                       <span className="text-yellow-500 font-mono">{Math.round(defaultVolume * 100)}%</span>
                     </div>
                     <div className="flex items-center h-9">
@@ -648,8 +651,8 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
               {/* Dynamic Speed Controller */}
               <div className="space-y-1">
                 <div className="flex justify-between text-[10px] font-bold uppercase text-gray-400 tracking-wider">
-                  <span>Velocidad</span>
-                  <span className="text-yellow-500 font-mono">{playbackRate.toFixed(2)}x</span>
+                  <span>{translate("audioEditor:AudioSyncEditor.speed", "Velocidad")}</span>
+                  <span className="text-yellow-500 font-mono">{playbackRate.toFixed(2)}{translate("audioEditor:AudioSyncEditor.x", "x")}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <input
@@ -665,10 +668,9 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
                     type="button"
                     onClick={() => setPlaybackRate(1.0)}
                     className="px-1.5 py-0.5 rounded-sm bg-gray-805 hover:bg-gray-750 text-gray-400 hover:text-white text-[9px] font-mono border border-gray-700 cursor-pointer"
-                    title="Restablecer a 1.0x"
+                    title={translate("audioEditor:AudioSyncEditor.resetTo10x", "Restablecer a 1.0x")}
                   >
-                    1x
-                  </button>
+                    {translate("audioEditor:AudioSyncEditor.1x", "1x")}</button>
                 </div>
               </div>
 
@@ -680,7 +682,7 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
                   className="flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2.5 rounded-sm bg-yellow-600 hover:bg-yellow-500 text-white font-bold text-xs transition-all cursor-pointer shadow-sm"
                 >
                   {isPlaying ? <Pause size={12} /> : <Play size={12} />}
-                  <span>{isPlaying ? 'Pausar' : 'Reproducir'}</span>
+                  <span>{isPlaying ? translate("audioEditor:AudioSyncEditor.pause", "Pausar") : translate("audioEditor:AudioSyncEditor.play", "Reproducir")}</span>
                 </button>
 
                 <div className="flex items-center gap-1.5 bg-gray-900 border border-gray-800 px-2 py-1.5 rounded-sm shadow-xs">
@@ -713,18 +715,17 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
           {/* Table Header toolbar */}
           <div className="flex items-center justify-between px-6 py-3 border-b border-gray-800 shrink-0 bg-gray-950/20">
             <span className="text-xs font-bold text-gray-400">
-              {displayRows.length} {displayRows.length === 1 ? 'elemento' : 'elementos'} en la presentación
-            </span>
+              {translate('common:items', '{{count}} elementos', { count: displayRows.length })} {translate("audioEditor:AudioSyncEditor.inThePresentation", "en la presentación")}</span>
             <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={handleClearAll}
                 disabled={Object.keys(rowTimes).length === 0}
                 className="flex items-center gap-1 px-3 py-1.5 text-xs rounded-sm border border-red-900 hover:bg-red-950/30 text-red-400 hover:text-red-300 disabled:opacity-40 disabled:hover:bg-transparent transition-colors cursor-pointer"
-                title="Eliminar todas las marcas"
+                title={translate("audioEditor:AudioSyncEditor.deleteAllTimestamps", "Eliminar todas las marcas")}
               >
                 <Trash2 size={12} />
-                <span>Limpiar Todo</span>
+                <span>{translate("audioEditor:AudioSyncEditor.clearAll", "Limpiar Todo")}</span>
               </button>
             </div>
           </div>
@@ -734,20 +735,19 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
             {loadingRows ? (
               <div className="h-full flex flex-col items-center justify-center text-gray-500 gap-2.5">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-yellow-500"></div>
-                <span className="text-sm">Analizando presentación y estructurando versículos...</span>
+                <span className="text-sm">{translate("audioEditor:AudioSyncEditor.analyzingPresentationAndStructuringVerses", "Analizando presentación y estructurando versículos...")}</span>
               </div>
             ) : displayRows.length === 0 ? (
               <div className="h-full flex items-center justify-center text-gray-550 italic text-sm text-center">
-                Seleccione una presentación a la izquierda para comenzar a mapear tiempos.
-              </div>
+                {translate("audioEditor:AudioSyncEditor.selectAPresentationOnTheLeftToStartMapping", "Seleccione una presentación a la izquierda para comenzar a mapear tiempos.")}</div>
             ) : (
               <table className="w-full border-collapse">
                 <thead>
-                  <tr className="border-b border-gray-800 text-left text-[10px] uppercase font-bold text-gray-400 tracking-wider">
-                    <th className="py-2.5 px-3 w-16">Nro</th>
-                    <th className="py-2.5 px-3 w-36">Identificador</th>
-                    <th className="py-2.5 px-3">Contenido de la Diapositiva</th>
-                    <th className="py-2.5 px-3 w-48 text-right">Marca de Tiempo</th>
+                  <tr className="border-b border-gray-800 text-start text-[10px] uppercase font-bold text-gray-400 tracking-wider">
+                    <th className="py-2.5 px-3 w-16">{translate("audioEditor:AudioSyncEditor.no", "Nro")}</th>
+                    <th className="py-2.5 px-3 w-36">{translate("audioEditor:AudioSyncEditor.identifier", "Identificador")}</th>
+                    <th className="py-2.5 px-3">{translate("audioEditor:AudioSyncEditor.slideContent", "Contenido de la Diapositiva")}</th>
+                    <th className="py-2.5 px-3 w-48 text-end">{translate("audioEditor:AudioSyncEditor.timestamp", "Marca de Tiempo")}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-850/40">
@@ -780,7 +780,7 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
                           <span className={`text-xs px-2 py-0.5 rounded font-mono ${
                             isVerse ? 'bg-yellow-500/10 text-yellow-400 font-bold' : 'bg-gray-800 text-gray-300'
                           }`}>
-                            {isVerse ? `v${row.verse}` : 'Slide'}
+                            {isVerse ? translate("audioEditor:AudioSyncEditor.v", "v{{value1}}", { value1: row.verse }) : translate("audioEditor:AudioSyncEditor.slide", "Slide")}
                           </span>
                           <div className="text-[10px] text-gray-400 mt-1 font-semibold truncate max-w-[130px]" title={row.label}>
                             {row.label}
@@ -792,7 +792,7 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
                           {isTrilingual ? (
                             <div className="space-y-0.5">
                               <p 
-                                className="text-[#f3c96a] font-bold text-right leading-relaxed" 
+                                className="text-[#f3c96a] font-bold text-end leading-relaxed"
                                 dir="rtl"
                                 dangerouslySetInnerHTML={{ __html: safeLine0 }}
                               />
@@ -808,7 +808,7 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
                         </td>
 
                         {/* 4. Controls / Input */}
-                        <td className="py-3 px-3 text-right">
+                        <td className="py-3 px-3 text-end">
                           <div className="flex items-center justify-end gap-1.5">
                             
                             {/* Play/Verify cue time */}
@@ -827,7 +827,7 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
                               }}
                               disabled={!selectedAudioFile || !timeValue || isNaN(parseFloat(timeValue)) || parseFloat(timeValue) < 0}
                               className="flex items-center justify-center p-2 rounded-sm bg-sky-650/20 hover:bg-sky-600 hover:text-white text-sky-400 border border-sky-650 transition-colors disabled:opacity-30 disabled:hover:bg-sky-650/20 disabled:hover:text-sky-400 cursor-pointer shadow-xs"
-                              title="Reproducir pista desde esta marca de tiempo"
+                              title={translate("audioEditor:AudioSyncEditor.playTrackFromThisTimestamp", "Reproducir pista desde esta marca de tiempo")}
                             >
                               <Play size={13} />
                             </button>
@@ -839,11 +839,11 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
                                 placeholder="0.0"
                                 value={timeValue}
                                 onChange={(e) => handleTimeInputChange(row.key, e.target.value)}
-                                className="w-16 text-right text-xs bg-gray-950 border border-gray-850 rounded-sm px-2 py-1.5 focus:border-yellow-500 outline-hidden font-mono"
-                                title="Segundos manuales"
+                                className="w-16 text-end text-xs bg-gray-950 border border-gray-850 rounded-sm px-2 py-1.5 focus:border-yellow-500 outline-hidden font-mono"
+                                title={translate("audioEditor:AudioSyncEditor.manualSeconds", "Segundos manuales")}
                               />
                               {timeValue && (
-                                <span className="absolute right-1 top-2 text-[8px] text-gray-500 font-bold select-none pointer-events-none">s</span>
+                                <span className="absolute end-1 top-2 text-[8px] text-gray-500 font-bold select-none pointer-events-none">{translate("audioEditor:AudioSyncEditor.s", "s")}</span>
                               )}
                             </div>
 
@@ -853,7 +853,7 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
                               onClick={() => handleCaptureTime(row.key)}
                               disabled={!selectedAudioFile}
                               className="flex items-center justify-center p-2 rounded-sm bg-yellow-600/20 hover:bg-yellow-600 hover:text-white text-yellow-500 border border-yellow-650 transition-colors disabled:opacity-30 disabled:hover:bg-yellow-600/20 disabled:hover:text-yellow-500 cursor-pointer shadow-xs"
-                              title="Capturar tiempo actual"
+                              title={translate("audioEditor:AudioSyncEditor.captureCurrentTime", "Capturar tiempo actual")}
                             >
                               <Clock size={13} />
                             </button>
@@ -864,7 +864,7 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
                               onClick={() => handleClearTime(row.key)}
                               disabled={!timeValue}
                               className="flex items-center justify-center p-2 rounded-sm bg-gray-800 hover:bg-red-950 hover:text-red-400 border border-gray-700 transition-colors disabled:opacity-20 disabled:hover:bg-gray-800 disabled:hover:text-gray-400 cursor-pointer"
-                              title="Eliminar marca"
+                              title={translate("audioEditor:AudioSyncEditor.deleteTimestamp", "Eliminar marca")}
                             >
                               <X size={13} />
                             </button>
@@ -914,10 +914,10 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
                   type="button"
                   onClick={handleExport}
                   className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-sm bg-gray-850 hover:bg-gray-800 text-gray-200 transition-colors cursor-pointer border border-gray-800"
-                  title="Exportar base de tiempos a JSON"
+                  title={translate("audioEditor:AudioSyncEditor.exportTimingDataToJson", "Exportar base de tiempos a JSON")}
                 >
                   <Download size={13} />
-                  <span>Exportar JSON</span>
+                  <span>{translate("audioEditor:AudioSyncEditor.exportJson", "Exportar JSON")}</span>
                 </button>
 
                 {/* Import button */}
@@ -925,10 +925,10 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
                   type="button"
                   onClick={handleImportClick}
                   className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-sm bg-gray-850 hover:bg-gray-800 text-gray-200 transition-colors cursor-pointer border border-gray-800"
-                  title="Importar base de tiempos desde JSON"
+                  title={translate("audioEditor:AudioSyncEditor.importTimingDataFromJson", "Importar base de tiempos desde JSON")}
                 >
                   <Upload size={13} />
-                  <span>Importar JSON</span>
+                  <span>{translate("audioEditor:AudioSyncEditor.importJson", "Importar JSON")}</span>
                 </button>
                 <input
                   ref={fileInputRef}
@@ -947,7 +947,7 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
                 className="flex items-center justify-center gap-2 px-6 py-2.5 rounded-lg bg-yellow-600 hover:bg-yellow-500 text-white font-extrabold text-xs tracking-wider transition-all shadow-md shadow-yellow-950/20 disabled:opacity-40 disabled:hover:bg-yellow-600 cursor-pointer"
               >
                 <Save size={14} />
-                <span>GUARDAR CONFIGURACIÓN</span>
+                <span>{translate("audioEditor:AudioSyncEditor.saveConfiguration", "GUARDAR CONFIGURACIÓN")}</span>
               </button>
             </div>
           </div>

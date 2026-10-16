@@ -1,3 +1,5 @@
+import { translate } from '../../i18n/runtime';
+import { useUiTranslation } from '../../i18n/useUiTranslation';
 import React, { useState, useRef, useEffect, useId } from 'react';
 
 export interface CustomSearchSelectProps {
@@ -15,12 +17,13 @@ export const CustomSearchSelect: React.FC<CustomSearchSelectProps> = ({
   value,
   onChange,
   options,
-  placeholder = 'Seleccionar...',
+  placeholder = translate("common:CustomSearchSelect.select", "Seleccionar..."),
   className = '',
   dropdownWidthClass = 'w-full',
   openDirection = 'down',
   ariaLabel
 }) => {
+  useUiTranslation('common');
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState('');
   const containerRef = useRef<HTMLDivElement>(null);
@@ -137,12 +140,12 @@ export const CustomSearchSelect: React.FC<CustomSearchSelectProps> = ({
         <span className={selectedOption ? 'text-white' : 'text-gray-500 font-medium'}>
           {selectedOption ? selectedOption.label : placeholder}
         </span>
-        <span className="text-gray-400 text-xs ml-2 select-none pointer-events-none">▼</span>
+        <span className="text-gray-400 text-xs ms-2 select-none pointer-events-none">▼</span>
       </button>
 
       {/* Dropdown container */}
       {isOpen && (
-        <div className={`absolute left-0 z-9999 rounded-md border border-gray-700 bg-gray-950/95 backdrop-blur-md shadow-2xl flex flex-col p-1.5 gap-1.5 ${directionClass} ${dropdownWidthClass}`}>
+        <div className={`absolute start-0 z-9999 rounded-md border border-gray-700 bg-gray-950/95 backdrop-blur-md shadow-2xl flex flex-col p-1.5 gap-1.5 ${directionClass} ${dropdownWidthClass}`}>
           {/* Search box inside dropdown */}
           <div className="relative flex items-center bg-gray-900 border border-gray-750 rounded-sm px-2.5 py-1.5">
             <input
@@ -151,8 +154,8 @@ export const CustomSearchSelect: React.FC<CustomSearchSelectProps> = ({
               className="w-full bg-transparent border-none outline-hidden text-xs text-white placeholder-gray-500"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Buscar..."
-              aria-label={`Buscar en ${ariaLabel ?? placeholder}`}
+              placeholder={translate("common:CustomSearchSelect.search", "Buscar...")}
+              aria-label={translate("common:CustomSearchSelect.searchIn", "Buscar en {{value1}}", { value1: ariaLabel ?? placeholder })}
               aria-controls={listboxId}
               onKeyDown={handleSearchKeyDown}
               onClick={(e) => e.stopPropagation()} // Prevent clicking search from closing dropdown
@@ -168,7 +171,7 @@ export const CustomSearchSelect: React.FC<CustomSearchSelectProps> = ({
                   }
                 }}
                 className="text-gray-500 hover:text-white text-xs px-1 select-none cursor-pointer"
-                aria-label="Limpiar busqueda"
+                aria-label={translate("common:CustomSearchSelect.clearSearch", "Limpiar busqueda")}
               >
                 ✕
               </button>
@@ -200,8 +203,7 @@ export const CustomSearchSelect: React.FC<CustomSearchSelectProps> = ({
               ))
             ) : (
               <div className="px-3 py-2 text-xs text-gray-500 text-center">
-                Sin resultados
-              </div>
+                {translate("common:CustomSearchSelect.noResults", "Sin resultados")}</div>
             )}
           </div>
         </div>

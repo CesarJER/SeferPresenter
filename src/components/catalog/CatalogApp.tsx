@@ -1,3 +1,5 @@
+import { translate } from '../../i18n/runtime';
+import { useUiTranslation } from '../../i18n/useUiTranslation';
 import React, { useEffect, useState } from 'react';
 import { CatalogIndex } from './CatalogIndex.tsx';
 import { CatalogViewer } from './CatalogViewer.tsx';
@@ -10,6 +12,7 @@ export interface CatalogDef {
 }
 
 export const CatalogApp: React.FC = () => {
+  useUiTranslation('catalog');
   const [catalogs, setCatalogs] = useState<CatalogDef[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -17,7 +20,7 @@ export const CatalogApp: React.FC = () => {
   useEffect(() => {
     fetch('/api/public-catalogs')
       .then(r => {
-        if (!r.ok) throw new Error('Error cargando catálogos');
+        if (!r.ok) throw new Error(translate("catalog:CatalogApp.errorLoadingCatalogs", "Error cargando catálogos"));
         return r.json();
       })
       .then(data => {
@@ -33,7 +36,7 @@ export const CatalogApp: React.FC = () => {
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-50 text-slate-600 flex items-center justify-center">
-        <p>Cargando catálogo...</p>
+        <p>{translate("catalog:CatalogApp.loadingCatalog", "Cargando catálogo...")}</p>
       </div>
     );
   }
@@ -41,7 +44,7 @@ export const CatalogApp: React.FC = () => {
   if (error) {
     return (
       <div className="min-h-screen bg-slate-50 text-red-500 flex flex-col items-center justify-center p-4">
-        <h1 className="text-2xl font-bold mb-2">Error</h1>
+        <h1 className="text-2xl font-bold mb-2">{translate("catalog:CatalogApp.error", "Error")}</h1>
         <p>{error}</p>
       </div>
     );

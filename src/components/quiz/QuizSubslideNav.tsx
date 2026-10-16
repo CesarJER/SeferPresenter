@@ -1,3 +1,5 @@
+import { translate } from '../../i18n/runtime';
+import { useUiTranslation } from '../../i18n/useUiTranslation';
 /**
  * QuizSubslideNav — Contextual subnav for quiz subslides.
  *
@@ -30,6 +32,7 @@ export const QuizSubslideNav: React.FC<QuizSubslideNavProps> = ({
   onSelect,
   isInteractive = true,
 }) => {
+  useUiTranslation('quiz');
   return (
     <div className="flex flex-wrap items-center gap-1 rounded-lg bg-black/30 px-2 py-1.5 backdrop-blur-xs">
       <button
@@ -42,7 +45,7 @@ export const QuizSubslideNav: React.FC<QuizSubslideNavProps> = ({
             ? 'opacity-30 cursor-not-allowed'
             : 'hover:bg-white/10 hover:text-white cursor-pointer'
         ].join(' ')}
-        title="Anterior"
+        title={translate("quiz:QuizSubslideNav.previous", "Anterior")}
       >
         <ChevronLeft size={12} />
       </button>
@@ -50,6 +53,10 @@ export const QuizSubslideNav: React.FC<QuizSubslideNavProps> = ({
       {subslides.map((sub, idx) => {
         const isActive = idx === currentIndex;
         const isPast = idx < currentIndex;
+        const label = sub.kind === 'lectura' ? translate('quiz:reading', 'Lectura')
+          : sub.kind === 'pregunta' ? translate('quiz:question', 'Pregunta')
+            : sub.kind === 'respuesta' ? translate('quiz:answer', 'Respuesta')
+              : sub.kind === 'results' ? translate('quiz:results', 'Resultados') : sub.label;
 
         return (
           <button
@@ -67,10 +74,10 @@ export const QuizSubslideNav: React.FC<QuizSubslideNavProps> = ({
                     ? 'bg-white/5 text-white/40 hover:bg-white/10 hover:text-white/60 cursor-pointer'
                     : 'bg-white/5 text-white/40 cursor-default',
             ].join(' ')}
-            title={sub.label}
+            title={label}
           >
             {SUBSLIDE_ICONS[sub.kind]}
-            <span>{sub.label}</span>
+            <bdi>{label}</bdi>
           </button>
         );
       })}
@@ -85,7 +92,7 @@ export const QuizSubslideNav: React.FC<QuizSubslideNavProps> = ({
             ? 'opacity-30 cursor-not-allowed'
             : 'hover:bg-white/10 hover:text-white cursor-pointer'
         ].join(' ')}
-        title="Siguiente"
+        title={translate("quiz:QuizSubslideNav.next", "Siguiente")}
       >
         <ChevronRight size={12} />
       </button>

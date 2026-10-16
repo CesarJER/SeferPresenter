@@ -1,3 +1,5 @@
+import { translate } from '../../i18n/runtime';
+import { useUiTranslation } from '../../i18n/useUiTranslation';
 /**
  * QuizResultsView — Results slide display.
  *
@@ -33,6 +35,7 @@ export const QuizResultsController: React.FC<QuizResultsControllerProps> = ({
   registeredQuestionCount,
   onRecalculateResults,
 }) => {
+  useUiTranslation('quiz');
   const sorted = [...profiles].sort((a, b) => a.rank - b.rank);
   const ranges = calcResultRanges(sorted, maxBaseCentipunts);
 
@@ -40,7 +43,7 @@ export const QuizResultsController: React.FC<QuizResultsControllerProps> = ({
     <div className="flex flex-col gap-2">
       <div className="flex items-center gap-2 text-xs font-bold text-gray-400 mb-1">
         <Users size={12} />
-        <span>{totalSessions} participantes</span>
+        <span>{translate('common:participantCount', '{{count}} participantes', { count: totalSessions })}</span>
       </div>
 
       <button
@@ -48,19 +51,18 @@ export const QuizResultsController: React.FC<QuizResultsControllerProps> = ({
         onClick={onRecalculateResults}
         disabled={registeredQuestionCount === 0}
         className="flex items-center justify-center gap-1.5 rounded-md border border-violet-700 bg-violet-950/50 px-2.5 py-1.5 text-[10px] font-bold text-violet-200 transition-colors hover:bg-violet-900/60 disabled:cursor-not-allowed disabled:opacity-40"
-        title="Recalcular usando las preguntas marcadas en verde"
+        title={translate("quiz:QuizResultsView.recalculateUsingTheQuestionsMarkedInGreen", "Recalcular usando las preguntas marcadas en verde")}
       >
         <RefreshCw size={11} />
-        Recalcular
-      </button>
+        {translate("quiz:QuizResultsView.recalculate", "Recalcular")}</button>
 
       <div className="overflow-hidden rounded-lg border border-gray-800 bg-gray-900/50">
         <table className="w-full text-left border-collapse">
           <thead>
             <tr className="border-b border-gray-800 text-[9px] uppercase tracking-wider text-gray-500">
-              <th className="px-2 py-1.5 text-center w-14">Pts</th>
-              <th className="px-2 py-1.5 w-1/2">Perfil</th>
-              <th className="px-2 py-1.5 w-1/2">Cita</th>
+              <th className="px-2 py-1.5 text-center w-14">{translate("quiz:QuizResultsView.pts", "Pts")}</th>
+              <th className="px-2 py-1.5 w-1/2">{translate("quiz:QuizResultsView.profile", "Perfil")}</th>
+              <th className="px-2 py-1.5 w-1/2">{translate("quiz:QuizResultsView.reference", "Cita")}</th>
               <th className="px-2 py-1.5 text-right w-16 whitespace-nowrap"># (%)</th>
             </tr>
           </thead>
@@ -129,10 +131,11 @@ export const QuizResultsDiploma: React.FC<QuizResultsDiplomaProps> = ({
   totalScore,
   isLoading = false,
 }) => {
+  useUiTranslation('quiz');
   if (isLoading) {
     return (
       <div className="flex items-center justify-center p-8">
-        <p className="text-white/40 text-sm animate-pulse">Calculando resultado...</p>
+        <p className="text-white/40 text-sm animate-pulse">{translate("quiz:QuizResultsView.calculatingResult", "Calculando resultado...")}</p>
       </div>
     );
   }
@@ -141,8 +144,8 @@ export const QuizResultsDiploma: React.FC<QuizResultsDiplomaProps> = ({
     return (
       <div className="flex flex-col items-center gap-3 p-8 text-center">
         <Star size={32} className="text-yellow-400/40" />
-        <p className="text-white/50 text-sm">No hay resultado disponible todavía.</p>
-        <p className="text-white/30 text-xs">Responde las preguntas del quiz para ver tu resultado.</p>
+        <p className="text-white/50 text-sm">{translate("quiz:QuizResultsView.noResultAvailableYet", "No hay resultado disponible todavía.")}</p>
+        <p className="text-white/30 text-xs">{translate("quiz:QuizResultsView.answerTheQuizQuestionsToSeeYourResult", "Responde las preguntas del quiz para ver tu resultado.")}</p>
       </div>
     );
   }
@@ -168,7 +171,7 @@ export const QuizResultsDiploma: React.FC<QuizResultsDiplomaProps> = ({
       {profile && (
         <div className="rounded-full border border-violet-500/50 bg-violet-950/50 px-4 py-1">
           <span className="text-xs font-black text-violet-300 uppercase tracking-widest">
-            Perfil R{profile.rank}
+            {translate("quiz:QuizResultsView.profileR", "Perfil R")}{profile.rank}
           </span>
         </div>
       )}
@@ -194,7 +197,7 @@ export const QuizResultsDiploma: React.FC<QuizResultsDiplomaProps> = ({
           transition={{ delay: 0.5 }}
           className="rounded-xl border border-yellow-500/30 bg-yellow-950/30 px-4 py-3 max-w-xs"
         >
-          <p className="text-xs font-bold text-yellow-400 uppercase tracking-wider mb-1">📖 Versículo</p>
+          <p className="text-xs font-bold text-yellow-400 uppercase tracking-wider mb-1">{translate("quiz:QuizResultsView.verse", "📖 Versículo")}</p>
           <p className="text-sm text-yellow-200 leading-relaxed italic">{profile.giftText}</p>
         </motion.div>
       )}
@@ -207,10 +210,10 @@ export const QuizResultsDiploma: React.FC<QuizResultsDiplomaProps> = ({
           transition={{ delay: 0.6 }}
           className="text-center"
         >
-          <p className="text-xs text-white/30 uppercase tracking-wider">Puntuación</p>
+          <p className="text-xs text-white/30 uppercase tracking-wider">{translate("quiz:QuizResultsView.score", "Puntuación")}</p>
           <p className="text-2xl font-black text-white">
             {formatCentipunts(totalScore.totalCentipunts)}
-            <span className="text-sm font-normal text-white/40 ml-1">pts</span>
+            <span className="text-sm font-normal text-white/40 ml-1">{translate("quiz:QuizResultsView.pts_8c32e6", "pts")}</span>
           </p>
         </motion.div>
       )}

@@ -192,7 +192,7 @@ const AudienceScreen = ({
           serverNow={serverNow}
         />
       </div>
-      <div className="fixed bottom-2 left-2 z-50 pointer-events-auto opacity-60 hover:opacity-100 transition-opacity">
+      <div className="fixed bottom-2 start-2 z-50 pointer-events-auto opacity-60 hover:opacity-100 transition-opacity">
         <PwaRestartButton
           connectionState={liveAudio?.state}
           connectionQuality={liveAudio?.connectionQuality}

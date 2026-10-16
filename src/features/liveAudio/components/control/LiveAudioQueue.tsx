@@ -1,3 +1,5 @@
+import { translate } from '../../../../i18n/runtime';
+import { useUiTranslation } from '../../../../i18n/useUiTranslation';
 import React from 'react';
 import { LiveAudioParticipantRow, type LiveAudioParticipant } from './LiveAudioParticipantRow';
 import { Users } from 'lucide-react';
@@ -27,6 +29,7 @@ export const LiveAudioQueue: React.FC<LiveAudioQueueProps> = ({
   onRemove,
   onMicrophoneConfigChange
 }) => {
+  useUiTranslation('liveAudio');
   const queue = participants.filter(p => p.speakerState === 'REQUESTED' && !p.isKicked);
 
   if (queue.length === 0) {
@@ -36,7 +39,7 @@ export const LiveAudioQueue: React.FC<LiveAudioQueueProps> = ({
   return (
     <div className="mb-4">
       <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2 px-2 flex items-center gap-1">
-        <Users size={12} /> Cola de espera ({queue.length})
+        <Users size={12} />  {translate("liveAudio:LiveAudioQueue.waitingQueue", "Cola de espera (")}{queue.length})
       </h3>
       <div className="bg-gray-900 rounded-lg overflow-hidden border border-gray-800">
         {queue.map(p => (

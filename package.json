@@ -29,11 +29,14 @@
         "pingpong": "node scripts/make-pingpong.js",
         "index:memory": "npx codebase-memory-mcp cli index_repository --repo-path . --mode fast",
         "test": "vitest run",
-        "test:watch": "vitest"
+        "test:watch": "vitest",
+        "i18n:check": "node scripts/i18n-check.mjs",
+        "i18n:plan": "node scripts/i18n-translate.mjs"
     },
     "dependencies": {
         "dompurify": "^3.4.16",
         "framer-motion": "^12.38.0",
+        "i18next": "^26.4.7",
         "livekit-client": "^2.19.2",
         "livekit-server-sdk": "^2.19.1",
         "lucide-react": "^1.16.0",
@@ -41,6 +44,7 @@
         "qrcode.react": "^4.2.0",
         "react": "^19.2.6",
         "react-dom": "^19.2.6",
+        "react-i18next": "^17.0.20",
         "react-markdown": "^10.1.0",
         "remark-gfm": "^4.0.1",
         "ws": "^8.21.0"

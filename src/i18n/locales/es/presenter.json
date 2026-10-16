@@ -1,0 +1,12 @@
+{
+  "App.presentationsWereNotSavedBecauseTheyContainInvalidData": "No se guardaron las presentaciones porque contienen datos inválidos:\n{{value1}}",
+  "App.clickHereToEnableAudioPlaybackInThisTab": "Haga clic aquí para habilitar la reproducción de audio en esta pestaña",
+  "App.clickToEnableSound": "Haga clic para habilitar sonido",
+  "PresenterScreen.mediaSlide": "Slide Media",
+  "PresenterScreen.openMenu": "Abrir Menú",
+  "PresenterScreen.organizationLogo": "Logotipo de la organización",
+  "SeferReaderScreen.loading": "Cargando...",
+  "SeferReaderScreen.openMenu": "Abrir menú",
+  "useSyncState.couldNotSendTheCommandWaitForControlTo": "No se pudo enviar el comando. Espera a que Control se reconecte y vuelve a intentarlo.",
+  "App.couldNotSavePresentationsYourDraftIsPreserved": "No se pudieron guardar las presentaciones. El borrador se conserva."
+}

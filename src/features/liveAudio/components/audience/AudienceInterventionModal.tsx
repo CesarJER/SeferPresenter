@@ -1,3 +1,5 @@
+import { translate } from '../../../../i18n/runtime';
+import { useUiTranslation } from '../../../../i18n/useUiTranslation';
 import React, { useEffect, useRef, useState } from 'react';
 import { CollapsiblePrivacyNotice } from '../shared/CollapsiblePrivacyNotice';
 import { LiveAudioAliasInput } from '../shared/LiveAudioAliasInput';
@@ -24,10 +26,11 @@ export const AudienceInterventionModal: React.FC<AudienceInterventionModalProps>
   onSubmit,
   dismissible = true,
   inline = false,
-  title = 'Participar en la sesión',
+  title = translate("liveAudio:AudienceInterventionModal.participateInTheSession", "Participar en la sesión"),
   submitLabel = 'Continuar',
   submitDisabled = false,
 }) => {
+  useUiTranslation('liveAudio');
   const [alias, setAlias] = useState('');
   const [isAgreed, setIsAgreed] = useState(false);
   const [isAliasVisible, setIsAliasVisible] = useState(defaultAliasVisible ?? false);
@@ -92,7 +95,7 @@ export const AudienceInterventionModal: React.FC<AudienceInterventionModalProps>
           {dismissible && (
             <button
               onClick={onClose}
-              aria-label="Cerrar dialogo de intervencion"
+              aria-label={translate("liveAudio:AudienceInterventionModal.closeParticipationDialog", "Cerrar dialogo de intervencion")}
               className="p-2 text-gray-400 hover:text-white rounded-full hover:bg-gray-800 transition-colors"
             >
               <X className="w-5 h-5" />
@@ -118,8 +121,7 @@ export const AudienceInterventionModal: React.FC<AudienceInterventionModalProps>
                   className="w-4 h-4 accent-blue-500 cursor-pointer"
                 />
                 <span className="text-sm text-gray-300">
-                  Mostrar mi alias a otros participantes activos
-                </span>
+                  {translate("liveAudio:AudienceInterventionModal.showMyAliasToOtherActiveParticipants", "Mostrar mi alias a otros participantes activos")}</span>
               </label>
             </form>
           )}
@@ -132,8 +134,7 @@ export const AudienceInterventionModal: React.FC<AudienceInterventionModalProps>
               onClick={onClose}
               className="px-4 py-2 text-sm font-medium text-gray-300 hover:text-white hover:bg-gray-800 rounded-lg transition-colors"
             >
-              Cancelar
-            </button>
+              {translate("liveAudio:AudienceInterventionModal.cancel", "Cancelar")}</button>
           )}
           <button
             type="submit"

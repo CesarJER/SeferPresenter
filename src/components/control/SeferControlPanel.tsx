@@ -1,3 +1,5 @@
+import { translate } from '../../i18n/runtime';
+import { useUiTranslation } from '../../i18n/useUiTranslation';
 import React from 'react';
 import { ChevronLeft, ChevronRight, Play, Sliders } from 'lucide-react';
 import type { ScriptureNavState } from '../../types/presentation';
@@ -28,6 +30,7 @@ const SeferControlPanel: React.FC<SeferControlPanelProps> = ({
   onUpdateFontSizes,
   onVerseResolved,
 }) => {
+  useUiTranslation('control');
   const {
     metadata,
     currentVerse,
@@ -81,8 +84,7 @@ const SeferControlPanel: React.FC<SeferControlPanelProps> = ({
   if (Object.keys(metadata).length === 0) {
     return (
       <div className="flex items-center justify-center h-full text-gray-500 text-sm">
-        Cargando datos bíblicos...
-      </div>
+        {translate("control:SeferControlPanel.loadingBiblicalData", "Cargando datos bíblicos...")}</div>
     );
   }
 
@@ -138,7 +140,7 @@ const SeferControlPanel: React.FC<SeferControlPanelProps> = ({
               id="sefer-activate-btn"
               onClick={handleActivate}
               disabled={isLoading || !currentVerse}
-              title={isActive ? 'Detener Proyección' : 'Proyectar'}
+              title={isActive ? translate("control:SeferControlPanel.stopProjection", "Detener Proyección") : translate("control:SeferControlPanel.project", "Proyectar")}
               className={`control-icon-btn p-2 ${isActive
                 ? 'bg-orange-500 text-white hover:bg-orange-600 shadow-[0_0_10px_rgba(249,115,22,0.5)]'
                 : 'bg-gray-700 text-gray-300 hover:bg-gray-600 hover:text-white'
@@ -150,7 +152,7 @@ const SeferControlPanel: React.FC<SeferControlPanelProps> = ({
             <button
               type="button"
               onClick={() => setShowFontSettings(!showFontSettings)}
-              title="Ajustar tamaños de letra"
+              title={translate("control:SeferControlPanel.adjustFontSizes", "Ajustar tamaños de letra")}
               className={`control-icon-btn p-2 ${showFontSettings
                 ? 'bg-yellow-600 text-white'
                 : 'control-icon-btn-neutral'
@@ -169,8 +171,7 @@ const SeferControlPanel: React.FC<SeferControlPanelProps> = ({
               disabled={!currentVerse || currentVerse.verseIdx === 0}
               className="control-nav-btn flex-1"
             >
-              <ChevronLeft size={14} /> Anterior
-            </button>
+              <ChevronLeft data-ui-directional="true" size={14} />  {translate("control:SeferControlPanel.previous", "Anterior")}</button>
 
             {/* Add slide ➕ */}
             <div className="flex items-center gap-1">
@@ -178,7 +179,7 @@ const SeferControlPanel: React.FC<SeferControlPanelProps> = ({
                 id="sefer-add-slide-btn"
                 onClick={() => handleAddSlide('sefer')}
                 disabled={!currentVerse}
-                title="Presentar y añadir como slide Sefer a la presentación actual"
+                title={translate("control:SeferControlPanel.presentAndAddAsASeferSlideToThe", "Presentar y añadir como slide Sefer a la presentación actual")}
                 className="control-action-btn bg-green-700 hover:bg-green-600"
               >
                 <span>+📜</span>
@@ -188,7 +189,7 @@ const SeferControlPanel: React.FC<SeferControlPanelProps> = ({
                   <select
                     value={currentVerse.verseStart}
                     onChange={(e) => handleActiveRangeChange(e.target.value, currentVerse.verseEnd!)}
-                    title="Versículo inicial del rango proyectado"
+                    title={translate("control:SeferControlPanel.firstVerseOfTheProjectedRange", "Versículo inicial del rango proyectado")}
                     className="h-8 rounded-md border border-gray-700 bg-gray-800 px-1.5 text-[10px] font-bold text-gray-200 focus:outline-hidden focus:ring-1 focus:ring-yellow-500 disabled:opacity-40"
                   >
                     {verses
@@ -201,7 +202,7 @@ const SeferControlPanel: React.FC<SeferControlPanelProps> = ({
                   <select
                     value={currentVerse.verseEnd}
                     onChange={(e) => handleActiveRangeChange(currentVerse.verseStart!, e.target.value)}
-                    title="Versículo final del rango proyectado"
+                    title={translate("control:SeferControlPanel.lastVerseOfTheProjectedRange", "Versículo final del rango proyectado")}
                     className="h-8 rounded-md border border-gray-700 bg-gray-800 px-1.5 text-[10px] font-bold text-gray-200 focus:outline-hidden focus:ring-1 focus:ring-yellow-500 disabled:opacity-40"
                   >
                     {verses
@@ -216,7 +217,7 @@ const SeferControlPanel: React.FC<SeferControlPanelProps> = ({
                   value={endVerse}
                   onChange={(e) => setEndVerse(e.target.value)}
                   disabled={!currentVerse}
-                  title="Versículo final opcional"
+                  title={translate("control:SeferControlPanel.optionalLastVerse", "Versículo final opcional")}
                   className="h-8 rounded-md border border-gray-700 bg-gray-800 px-1.5 text-[10px] font-bold text-gray-200 focus:outline-hidden focus:ring-1 focus:ring-yellow-500 disabled:opacity-40"
                 >
                   <option value=""></option>
@@ -231,7 +232,7 @@ const SeferControlPanel: React.FC<SeferControlPanelProps> = ({
                 id="tanaj-add-slide-btn"
                 onClick={() => handleAddSlide('tanaj')}
                 disabled={!currentVerse}
-                title="Presentar y añadir como slide Tanaj a la presentación actual"
+                title={translate("control:SeferControlPanel.presentAndAddAsATanajSlideToThe", "Presentar y añadir como slide Tanaj a la presentación actual")}
                 className="control-action-btn bg-blue-700 hover:bg-blue-600"
               >
                 <span>+📖</span>
@@ -245,13 +246,13 @@ const SeferControlPanel: React.FC<SeferControlPanelProps> = ({
               disabled={!currentVerse || currentVerse.verseIdx >= currentVerse.totalVerses - 1}
               className="control-nav-btn flex-1"
             >
-              Siguiente <ChevronRight size={14} />
+              {translate("control:SeferControlPanel.next", "Siguiente")} <ChevronRight data-ui-directional="true" size={14} />
             </button>
           </div>
 
 
           <div className="flex items-center gap-2">
-            {isLoading && <span className="text-[10px] text-gray-500">Cargando...</span>}
+            {isLoading && <span className="text-[10px] text-gray-500">{translate("control:SeferControlPanel.loading", "Cargando...")}</span>}
             <span className="text-[10px] text-gray-500 font-mono"></span>
           </div>
         </div>
@@ -260,7 +261,7 @@ const SeferControlPanel: React.FC<SeferControlPanelProps> = ({
         {showFontSettings && (
           <div className="control-font-drawer">
             <div className="flex items-center justify-between gap-2">
-              <span className="control-font-label">Hebreo: {hebrewFontSize}px</span>
+              <span className="control-font-label">{translate("control:SeferControlPanel.hebrew", "Hebreo:")} {hebrewFontSize}{translate("control:SeferControlPanel.px", "px")}</span>
               <input
                 type="range"
                 min="20"
@@ -273,7 +274,7 @@ const SeferControlPanel: React.FC<SeferControlPanelProps> = ({
               />
             </div>
             <div className="flex items-center justify-between gap-2">
-              <span className="control-font-label">Texto combinado: {combinedTextBaseSize}px</span>
+              <span className="control-font-label">{translate("control:SeferControlPanel.combinedText", "Texto combinado:")} {combinedTextBaseSize}{translate("control:SeferControlPanel.px", "px")}</span>
               <input
                 type="range"
                 min="12"
@@ -297,7 +298,7 @@ const SeferControlPanel: React.FC<SeferControlPanelProps> = ({
             <div
               dir={/[\u0590-\u05FF]/.test(currentVerse.verseNikud || '') ? "rtl" : "ltr"}
               lang={/[\u0590-\u05FF]/.test(currentVerse.verseNikud || '') ? 'he' : undefined}
-              className={`text-sm leading-relaxed text-[#f3c96a] font-bold ${/[\u0590-\u05FF]/.test(currentVerse.verseNikud || '') ? "text-right" : "text-left"}`}
+              className={`text-sm leading-relaxed text-[#f3c96a] font-bold ${/[\u0590-\u05FF]/.test(currentVerse.verseNikud || '') ? "text-end" : "text-start"}`}
               style={{ fontFamily: /[\u0590-\u05FF]/.test(currentVerse.verseNikud || '') ? "'Frank Ruhl Libre', 'SBL Hebrew', serif" : 'inherit' }}
               dangerouslySetInnerHTML={{ __html: sanitizeSlideHtml(currentVerse.verseNikudSanitized ?? currentVerse.verseNikud) }}
             />
@@ -318,8 +319,7 @@ const SeferControlPanel: React.FC<SeferControlPanelProps> = ({
           </div>
         ) : (
           <div className="flex items-center justify-center h-full text-gray-600 text-xs">
-            Selecciona un versículo
-          </div>
+            {translate("control:SeferControlPanel.selectAVerse", "Selecciona un versículo")}</div>
         )}
       </div>
 

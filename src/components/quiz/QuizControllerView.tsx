@@ -1,3 +1,5 @@
+import { translate } from '../../i18n/runtime';
+import { useUiTranslation } from '../../i18n/useUiTranslation';
 /**
  * QuizControllerView — Controller panel overlay for quiz slides.
  *
@@ -85,6 +87,7 @@ export const QuizControllerView: React.FC<QuizControllerViewProps> = ({
   renderMode = 'both',
   onAdjustTimer,
 }) => {
+  useUiTranslation('quiz');
   const displayOptions = getDisplayOptions(quizData, slide.id);
   const remaining = calcRemainingMs(timerState);
   const status = timerState.status;
@@ -101,10 +104,10 @@ export const QuizControllerView: React.FC<QuizControllerViewProps> = ({
       {/* Header */}
       {(renderMode === 'both' || renderMode === 'top') && (
         <div className="flex items-center gap-2 border-b border-gray-800 pb-2">
-        <span className="text-[10px] font-black uppercase tracking-widest text-violet-400">Quiz</span>
-        <div className="ml-auto flex items-center gap-1.5 text-[10px] text-gray-500">
+        <span className="text-[10px] font-black uppercase tracking-widest text-violet-400">{translate("quiz:QuizControllerView.quiz", "Quiz")}</span>
+        <div className="ms-auto flex items-center gap-1.5 text-[10px] text-gray-500">
           <Users size={10} />
-          <span>{submittedCount} respuestas</span>
+          <span>{translate('common:answerCount', '{{count}} respuestas', { count: submittedCount })}</span>
         </div>
       </div>
       )}
@@ -140,8 +143,7 @@ export const QuizControllerView: React.FC<QuizControllerViewProps> = ({
               onClick={onStartTimer}
               className="flex items-center gap-1.5 rounded-lg border border-emerald-700/60 bg-emerald-950/40 px-3 py-1.5 text-[11px] font-bold text-emerald-300 hover:bg-emerald-900/50 transition-colors"
             >
-              <Play size={11} fill="currentColor" /> Iniciar
-            </button>
+              <Play size={11} fill="currentColor" />  {translate("quiz:QuizControllerView.start", "Iniciar")}</button>
           )}
           {isRunning && isPregunta && (
             <button
@@ -149,8 +151,7 @@ export const QuizControllerView: React.FC<QuizControllerViewProps> = ({
               onClick={onPauseTimer}
               className="flex items-center gap-1.5 rounded-lg border border-yellow-700/60 bg-yellow-950/40 px-3 py-1.5 text-[11px] font-bold text-yellow-300 hover:bg-yellow-900/50 transition-colors"
             >
-              <Pause size={11} /> Pausar
-            </button>
+              <Pause size={11} />  {translate("quiz:QuizControllerView.pause", "Pausar")}</button>
           )}
           {isPaused && isPregunta && (
             <button
@@ -158,8 +159,7 @@ export const QuizControllerView: React.FC<QuizControllerViewProps> = ({
               onClick={onResumeTimer}
               className="flex items-center gap-1.5 rounded-lg border border-emerald-700/60 bg-emerald-950/40 px-3 py-1.5 text-[11px] font-bold text-emerald-300 hover:bg-emerald-900/50 transition-colors"
             >
-              <Play size={11} fill="currentColor" /> Reanudar
-            </button>
+              <Play size={11} fill="currentColor" />  {translate("quiz:QuizControllerView.resume", "Reanudar")}</button>
           )}
           {!isIdle && isPregunta && (
             <button
@@ -167,18 +167,16 @@ export const QuizControllerView: React.FC<QuizControllerViewProps> = ({
               onClick={onResetTimer}
               className="flex items-center gap-1.5 rounded-lg border border-gray-700 bg-gray-900/50 px-3 py-1.5 text-[11px] font-bold text-gray-400 hover:text-white transition-colors"
             >
-              <RotateCcw size={11} /> Reset Timer
-            </button>
+              <RotateCcw size={11} />  {translate("quiz:QuizControllerView.resetTimer", "Reset Timer")}</button>
           )}
           {!isIdle && (
             <button
               type="button"
               onClick={onClearAnswers}
               className="flex items-center gap-1.5 rounded-lg border border-red-900/60 bg-red-950/40 px-3 py-1.5 text-[11px] font-bold text-red-400 hover:bg-red-900/50 transition-colors"
-              title="Borrar respuestas de la audiencia"
+              title={translate("quiz:QuizControllerView.clearAudienceAnswers", "Borrar respuestas de la audiencia")}
             >
-              <Eraser size={11} /> Borrar Resp.
-            </button>
+              <Eraser size={11} />  {translate("quiz:QuizControllerView.clearAnswers", "Borrar Resp.")}</button>
           )}
           {!isExpired && !isIdle && (
             <button
@@ -186,13 +184,12 @@ export const QuizControllerView: React.FC<QuizControllerViewProps> = ({
               onClick={onComplete}
               className="flex items-center gap-1.5 rounded-lg border border-violet-700/60 bg-violet-950/40 px-3 py-1.5 text-[11px] font-bold text-violet-300 hover:bg-violet-900/50 transition-colors"
             >
-              Revelar →
-            </button>
+              {translate("quiz:QuizControllerView.reveal", "Revelar →")}</button>
           )}
           {isPregunta && (
-            <div className="text-[11px] text-gray-500 self-center ml-auto">
+            <div className="text-[11px] text-gray-500 self-center ms-auto">
               {isExpired ? (
-                '¡Tiempo!'
+                translate("quiz:QuizControllerView.timeSUp", "¡Tiempo!")
               ) : (isIdle || isPaused) && onAdjustTimer ? (
                 <div className="flex items-center gap-1">
                   <input
@@ -205,12 +202,12 @@ export const QuizControllerView: React.FC<QuizControllerViewProps> = ({
                       if (!isNaN(val) && val > 0) onAdjustTimer(val);
                     }}
                     className="w-12 rounded-sm border border-gray-700 bg-gray-900 px-1 py-0.5 text-center text-white focus:outline-hidden focus:ring-1 focus:ring-yellow-500 font-mono text-[11px]"
-                    title="Editar segundos"
+                    title={translate("quiz:QuizControllerView.editSeconds", "Editar segundos")}
                   />
-                  <span>s</span>
+                  <span>{translate("quiz:QuizControllerView.s", "s")}</span>
                 </div>
               ) : isIdle ? (
-                `${quizData.timerSeconds}s`
+                translate("quiz:QuizControllerView.s_e46818", "{{value1}}s", { value1: quizData.timerSeconds })
               ) : (
                 formatRemainingTime(remaining)
               )}
@@ -224,7 +221,7 @@ export const QuizControllerView: React.FC<QuizControllerViewProps> = ({
             type="button"
             onClick={onToggleMute}
             className="shrink-0 rounded-lg border border-gray-700 bg-gray-900/50 p-1.5 text-gray-400 hover:text-white transition-colors"
-            title={audioMuted ? 'Activar sonido' : 'Silenciar'}
+            title={audioMuted ? translate("quiz:QuizControllerView.enableSound", "Activar sonido") : translate("quiz:QuizControllerView.mute", "Silenciar")}
           >
             {audioMuted ? <VolumeX size={13} /> : <Volume2 size={13} />}
           </button>
@@ -235,7 +232,7 @@ export const QuizControllerView: React.FC<QuizControllerViewProps> = ({
       {/* Options — always shows correct answers */}
       {(renderMode === 'both' || renderMode === 'bottom') && !isResults && (
         <div className="flex flex-col gap-1.5">
-          <p className="text-[9px] font-black uppercase tracking-wider text-gray-500">Opciones (respuesta correcta visible)</p>
+          <p className="text-[9px] font-black uppercase tracking-wider text-gray-500">{translate("quiz:QuizControllerView.optionsCorrectAnswerVisible", "Opciones (respuesta correcta visible)")}</p>
         {displayOptions.map((opt, idx) => {
           const letter = OPTION_LETTERS[idx] ?? opt.id;
 
@@ -251,10 +248,10 @@ export const QuizControllerView: React.FC<QuizControllerViewProps> = ({
                 {letter}
               </span>
               <div className="flex-1 flex items-center justify-between min-w-0 py-0.5">
-                <span className={`text-[11px] leading-snug pr-2 ${opt.isCorrect ? 'text-emerald-200' : 'text-gray-400'}`}>
+                <span className={`text-[11px] leading-snug pe-2 ${opt.isCorrect ? 'text-emerald-200' : 'text-gray-400'}`}>
                   {opt.text}
                 </span>
-                <div className="flex flex-col items-center shrink-0 ml-2 min-w-[20px]">
+                <div className="flex flex-col items-center shrink-0 ms-2 min-w-[20px]">
                   {opt.isCorrect && <CheckCircle size={11} className="text-emerald-500 mb-0.5" />}
                   <span className={`text-[9px] font-bold ${optionCounts[opt.id] > 0 ? 'text-white' : 'text-gray-600'}`}>
                     {optionCounts[opt.id] ?? 0}
@@ -270,7 +267,7 @@ export const QuizControllerView: React.FC<QuizControllerViewProps> = ({
       {/* Demo selection — only after timer expires */}
       {(renderMode === 'both' || renderMode === 'top') && !isResults && isExpired && (
         <div className="rounded-lg border border-gray-800 bg-gray-900/40 p-2">
-          <p className="text-[9px] font-black uppercase tracking-wider text-gray-500 mb-1.5">Demo / Corrección pública</p>
+          <p className="text-[9px] font-black uppercase tracking-wider text-gray-500 mb-1.5">{translate("quiz:QuizControllerView.demoPublicCorrection", "Demo / Corrección pública")}</p>
           <div className="flex flex-wrap gap-1">
             {displayOptions.map((opt, idx) => {
               const letter = OPTION_LETTERS[idx] ?? opt.id;
@@ -302,15 +299,13 @@ export const QuizControllerView: React.FC<QuizControllerViewProps> = ({
               onClick={onPlayApplause}
               className="flex items-center gap-1 rounded-sm border border-emerald-800 bg-emerald-950/40 px-2 py-1 text-[10px] font-bold text-emerald-400 hover:bg-emerald-900/50"
             >
-              <CheckCircle size={10} /> Aplausos
-            </button>
+              <CheckCircle size={10} />  {translate("quiz:QuizControllerView.applause", "Aplausos")}</button>
             <button
               type="button"
               onClick={onPlayMal}
               className="flex items-center gap-1 rounded-sm border border-red-800 bg-red-950/40 px-2 py-1 text-[10px] font-bold text-red-400 hover:bg-red-900/50"
             >
-              <XCircle size={10} /> Mal
-            </button>
+              <XCircle size={10} />  {translate("quiz:QuizControllerView.wrong", "Mal")}</button>
           </div>
         </div>
       )}
@@ -320,12 +315,12 @@ export const QuizControllerView: React.FC<QuizControllerViewProps> = ({
         <div className="rounded-lg border border-yellow-900/40 bg-yellow-950/20 px-2.5 py-2">
           <div className="flex items-center justify-between">
             <p className="text-[9px] font-black uppercase tracking-wider text-yellow-600 mb-0.5">
-              {quizData.citaRef ? 'CITA: (evaluable)' : 'CITA!: (revisión)'}
+              {quizData.citaRef ? translate("quiz:QuizControllerView.referenceScored", "CITA: (evaluable)") : translate("quiz:QuizControllerView.referenceReview", "CITA!: (revisión)")}
             </p>
             {quizData.citaRef && citaHits !== undefined && citaMisses !== undefined && (
               <div className="flex gap-2 text-[10px] font-bold">
-                <span className="text-emerald-400 flex items-center gap-0.5" title="Aciertos de la cita"><CheckCircle size={10} /> {citaHits}</span>
-                <span className="text-red-400 flex items-center gap-0.5" title="Fallos de la cita"><XCircle size={10} /> {citaMisses}</span>
+                <span className="text-emerald-400 flex items-center gap-0.5" title={translate("quiz:QuizControllerView.correctReferences", "Aciertos de la cita")}><CheckCircle size={10} /> {citaHits}</span>
+                <span className="text-red-400 flex items-center gap-0.5" title={translate("quiz:QuizControllerView.incorrectReferences", "Fallos de la cita")}><XCircle size={10} /> {citaMisses}</span>
               </div>
             )}
           </div>

@@ -1,3 +1,5 @@
+import { translate } from '../../i18n/runtime';
+import { useUiTranslation } from '../../i18n/useUiTranslation';
 import React, { useEffect, useState, useRef } from 'react';
 import { isImageMedia } from '../../utils/mediaUtils';
 import type { Slide, VideoState } from '../../types/presentation';
@@ -51,6 +53,7 @@ const PresenterScreen: React.FC<PresenterScreenProps> = ({
   enableDriftCorrection,
   serverNow,
 }) => {
+  useUiTranslation('presenter');
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
   // Custom ref setter to keep state and ref in sync for videoElement
@@ -373,7 +376,7 @@ const PresenterScreen: React.FC<PresenterScreenProps> = ({
               <img
                 src={slide.mediaSrc}
                 className={`absolute inset-0 h-full w-full object-${slide.mediaFit || 'cover'} z-10`}
-                alt="Slide Media"
+                alt={translate("presenter:PresenterScreen.mediaSlide", "Slide Media")}
               />
             ) : (
               <video
@@ -402,11 +405,11 @@ const PresenterScreen: React.FC<PresenterScreenProps> = ({
           <button
             onClick={onLogoClick}
             className="rounded-full bg-white/12 p-8 shadow-2xl backdrop-blur-md transition-transform hover:scale-105 focus:outline-hidden focus:ring-2 focus:ring-white/70 cursor-pointer"
-            title="Abrir Menú"
+            title={translate("presenter:PresenterScreen.openMenu", "Abrir Menú")}
           >
             <img
               src="/api/branding/logo.svg"
-              alt="Logotipo de la organización"
+              alt={translate("presenter:PresenterScreen.organizationLogo", "Logotipo de la organización")}
               className="h-48 w-auto md:h-64"
               onError={applyNeutralBrandingFallback}
             />
@@ -439,7 +442,7 @@ const PresenterScreen: React.FC<PresenterScreenProps> = ({
                                   text={line}
                                   html={true}
                                   lang={idx === 0 && /[\u0590-\u05FF]/.test(line) ? 'he' : undefined}
-                                  dir={idx === 0 && /[\u0590-\u05FF]/.test(line) ? 'rtl' : undefined}
+                                  dir={/[\u0590-\u05FF]/.test(line) ? 'rtl' : 'ltr'}
                                   fontScale={fontScale}
                                   className={`drop-shadow-2xl font-semibold ${idx === 0
                                     ? 'hebrew-text text-[#f3c96a] text-[calc(clamp(1.8rem,4vw,5.8rem)*var(--font-scale))]'
@@ -459,7 +462,7 @@ const PresenterScreen: React.FC<PresenterScreenProps> = ({
                               text={slide.lines[0]}
                               html={true}
                               lang={/[\u0590-\u05FF]/.test(slide.lines[0] || '') ? 'he' : undefined}
-                              dir={/[\u0590-\u05FF]/.test(slide.lines[0] || '') ? 'rtl' : undefined}
+                              dir={/[\u0590-\u05FF]/.test(slide.lines[0] || '') ? 'rtl' : 'ltr'}
                               fontScale={fontScale}
                               className="font-bold text-white drop-shadow-2xl text-[calc(clamp(2rem,4.8vw,7rem)*var(--font-scale))]"
                             />
@@ -516,11 +519,11 @@ const PresenterScreen: React.FC<PresenterScreenProps> = ({
                 <button
                   onClick={onLogoClick}
                   className="glass-panel-button flex aspect-square h-full min-w-0 cursor-pointer items-center justify-center p-2 pointer-events-auto"
-                  title="Abrir Menú"
+                  title={translate("presenter:PresenterScreen.openMenu", "Abrir Menú")}
                 >
                   <img
                     src="/api/branding/logo.svg"
-                    alt="Logotipo de la organización"
+                    alt={translate("presenter:PresenterScreen.organizationLogo", "Logotipo de la organización")}
                     className="object-contain h-full w-full max-h-full max-w-full"
                     onError={applyNeutralBrandingFallback}
                   />

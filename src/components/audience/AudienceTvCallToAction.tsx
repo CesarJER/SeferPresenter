@@ -1,3 +1,5 @@
+import { translate } from '../../i18n/runtime';
+import { useUiTranslation } from '../../i18n/useUiTranslation';
 import React, { useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 
@@ -6,6 +8,7 @@ interface AudienceTvCallToActionProps {
 }
 
 const AudienceTvCallToAction: React.FC<AudienceTvCallToActionProps> = ({ domain }) => {
+  useUiTranslation('audience');
   const [qrExpanded, setQrExpanded] = useState(false);
   const url = `https://${domain}`;
 
@@ -28,8 +31,8 @@ const AudienceTvCallToAction: React.FC<AudienceTvCallToActionProps> = ({ domain 
         className="w-full shrink-0 max-h-[50px] bg-black/90 text-white p-3 z-50 flex items-center justify-between border-t border-white/10 pointer-events-auto"
         data-testid="tv-cta-banner"
       >
-        <div className="text-[clamp(1rem,3vw,1.4rem)] font-medium flex-1 text-center md:text-left px-4">
-          ¡Retransmisión en directo! No te quedes solo viendo. Participa con nosotros. Conéctate a <span className="font-bold text-yellow-400">{domain}</span>
+        <div className="text-[clamp(1rem,3vw,1.4rem)] font-medium flex-1 text-center md:text-start px-4">
+          {translate("audience:AudienceTvCallToAction.liveBroadcastJoinUsAndTakePartConnectTo", "¡Retransmisión en directo! No te quedes solo viendo. Participa con nosotros. Conéctate a")} <span className="font-bold text-yellow-400">{domain}</span>
         </div>
         <div
           className="bg-white p-2 rounded-sm cursor-pointer hover:scale-105 transition-transform self-end"

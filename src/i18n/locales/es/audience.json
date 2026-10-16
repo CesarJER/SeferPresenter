@@ -1,0 +1,18 @@
+{
+  "AudienceAccessGate.organizationLogo": "Logotipo de la organización",
+  "AudienceAccessGate.requestPending": "Solicitud en espera",
+  "AudienceAccessGate.theMainControlMustAdmitYouBeforeTheSession": "El Control principal debe admitirla antes de mostrar la sesión.",
+  "AudienceAccessGate.sendAMessageToTheModerators": "Enviar mensaje a los moderadores",
+  "AudienceAccessGate.messageFrom": "Mensaje de",
+  "AudienceAccessGate.closeMessage": "Cerrar mensaje",
+  "AudienceAccessGate.accessBlocked": "Acceso bloqueado",
+  "AudienceAccessGate.requestRejectedYouCanTryAgainIn": "Solicitud rechazada. Podrá intentarlo de nuevo en",
+  "AudienceAccessGate.seconds": "segundos.",
+  "AudienceAccessGate.preparingSecureAccess": "Preparando acceso seguro…",
+  "AudienceAccessGate.requestAccessToTheSession": "Solicitar acceso a la sesión",
+  "AudienceTvCallToAction.liveBroadcastJoinUsAndTakePartConnectTo": "¡Retransmisión en directo! No te quedes solo viendo. Participa con nosotros. Conéctate a",
+  "main_audience.enableAudioAndVideo": "Activar audio y video",
+  "AudienceAccessGate.couldNotSendTheAlias": "No se pudo enviar el alias.",
+  "AudienceAccessGate.couldNotSendTheRequest": "No se pudo enviar la solicitud.",
+  "AudienceAccessGate.waiting": "En espera"
+}

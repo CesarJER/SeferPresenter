@@ -1,3 +1,5 @@
+import { translate } from '../../i18n/runtime';
+import { useUiTranslation } from '../../i18n/useUiTranslation';
 import React from 'react';
 import { Download, Upload } from 'lucide-react';
 import type { Presentation } from '../../types/presentation';
@@ -12,6 +14,7 @@ export const ImportExportPanel: React.FC<ImportExportPanelProps> = ({
   presentations,
   onImport,
 }) => {
+  useUiTranslation('control');
   const handleExport = () => {
     try {
       const dataStr = JSON.stringify(presentations, null, 2);
@@ -21,7 +24,7 @@ export const ImportExportPanel: React.FC<ImportExportPanelProps> = ({
       linkElement.setAttribute('download', 'sefer_presenter_presentations.json');
       linkElement.click();
     } catch (err) {
-      alert('Error al exportar las presentaciones: ' + (err as Error).message);
+      alert(translate("control:ImportExportPanel.errorExportingPresentations", "Error al exportar las presentaciones: ") + (err as Error).message);
     }
   };
 
@@ -38,11 +41,11 @@ export const ImportExportPanel: React.FC<ImportExportPanelProps> = ({
           throw new Error(`Formato de presentación inválido:\n${validation.errors.slice(0, 8).join('\n')}`);
         }
 
-        if (window.confirm(`¿Estás seguro de que deseas importar ${validation.value.length} presentaciones? Esto reemplazará tu lista actual.`)) {
+        if (window.confirm(translate("control:ImportExportPanel.importPresentationsThisWillReplaceYourCurrentList", "¿Estás seguro de que deseas importar {{value1}} presentaciones? Esto reemplazará tu lista actual.", { value1: validation.value.length }))) {
           onImport(validation.value);
         }
       } catch (err) {
-        alert('Error al importar: ' + (err as Error).message);
+        alert(translate("control:ImportExportPanel.importError", "Error al importar: ") + (err as Error).message);
       }
     };
     reader.readAsText(file);
@@ -55,17 +58,17 @@ export const ImportExportPanel: React.FC<ImportExportPanelProps> = ({
         type="button"
         onClick={handleExport}
         className="px-3 py-1.5 rounded-md border border-gray-600 bg-gray-700 text-xs font-bold text-white hover:bg-gray-650 transition-colors flex items-center gap-1 cursor-pointer"
-        title="Exportar base de datos JSON"
+        title={translate("control:ImportExportPanel.exportJsonDatabase", "Exportar base de datos JSON")}
       >
         <Download size={13} />
-        <span>Exportar</span>
+        <span>{translate("control:ImportExportPanel.export", "Exportar")}</span>
       </button>
       <label
         className="px-3 py-1.5 rounded-md border border-gray-600 bg-gray-700 text-xs font-bold text-white hover:bg-gray-650 transition-colors flex items-center gap-1 cursor-pointer"
-        title="Importar base de datos JSON"
+        title={translate("control:ImportExportPanel.importJsonDatabase", "Importar base de datos JSON")}
       >
         <Upload size={13} />
-        <span>Importar</span>
+        <span>{translate("control:ImportExportPanel.import", "Importar")}</span>
         <input type="file" accept=".json" onChange={handleImport} className="hidden" />
       </label>
     </div>

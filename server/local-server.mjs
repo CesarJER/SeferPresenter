@@ -4,6 +4,7 @@ import path from 'node:path'
 import { createHash, randomUUID } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import { loadProjectEnvironment } from './env-utils.mjs'
+import { loadI18nConfig } from './i18n-config.mjs'
 import { createLiveKitApi } from './livekit-server.mjs'
 import {
   createWsServer,
@@ -73,6 +74,8 @@ const exampleDataDir = path.join(rootDir, 'examples', 'SeferPrivateData')
 const seferDataDir = resolveSeferDataDir({ rootDir })
 const dataInitialization = initializeSeferDataDir({ dataDir: seferDataDir, exampleDir: exampleDataDir })
 const seferDataPaths = getSeferDataPaths(seferDataDir)
+const publicI18nConfig = loadI18nConfig(process.env.SEFER_I18N_CONFIG_PATH?.trim()
+  ? path.resolve(rootDir, process.env.SEFER_I18N_CONFIG_PATH.trim()) : seferDataPaths.i18n)
 const presentationSessionStore = createPresentationSessionStore({ filePath: seferDataPaths.presentationSession })
 const legalRepository = loadLegalRepository({ dataDir: seferDataDir })
 const legalDocuments = legalRepository.status === 'ACTIVE'
@@ -775,6 +778,11 @@ const invalidateAudienceStreams = () => {
 }
 
 const handleApi = async (req, res, url) => {
+  if (url.pathname === '/api/public-config' && req.method === 'GET') {
+    res.setHeader('Cache-Control', 'no-store')
+    sendJson(res, 200, publicI18nConfig)
+    return true
+  }
   if (url.pathname === '/api/health' && req.method === 'GET') {
     res.setHeader('Cache-Control', 'no-store')
     sendJson(res, 200, { healthy: true })

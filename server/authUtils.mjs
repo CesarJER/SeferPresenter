@@ -2,6 +2,7 @@
 export const isAuthRequired = () => process.env.SEFER_REQUIRE_AUTH !== 'false'
 
 const publicApiGetPaths = new Set([
+  '/api/public-config',
   '/api/health',
   '/api/audience/state',
   '/api/audience/events',

@@ -1,0 +1,12 @@
+{
+  "App.presentationsWereNotSavedBecauseTheyContainInvalidData": "Presentations were not saved because they contain invalid data:\n{{value1}}",
+  "App.clickHereToEnableAudioPlaybackInThisTab": "Click here to enable audio playback in this tab",
+  "App.clickToEnableSound": "Click to enable sound",
+  "PresenterScreen.mediaSlide": "Media Slide",
+  "PresenterScreen.openMenu": "Open Menu",
+  "PresenterScreen.organizationLogo": "Organization logo",
+  "SeferReaderScreen.loading": "Loading…",
+  "SeferReaderScreen.openMenu": "Open menu",
+  "useSyncState.couldNotSendTheCommandWaitForControlTo": "Could not send the command. Wait for Control to reconnect and try again.",
+  "App.couldNotSavePresentationsYourDraftIsPreserved": "Could not save presentations. Your draft is preserved."
+}

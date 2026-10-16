@@ -24,7 +24,7 @@ const AutoResizeText: React.FC<AutoResizeTextProps> = ({
   html = false,
   allowGrow = false,
   lang,
-  dir,
+  dir = 'auto',
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const textRef = useRef<HTMLDivElement>(null);

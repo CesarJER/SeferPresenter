@@ -1,3 +1,5 @@
+import { translate } from '../../i18n/runtime';
+import { useUiTranslation } from '../../i18n/useUiTranslation';
 import React, { useEffect, useState, useMemo } from 'react';
 import type { CatalogDef } from './CatalogApp';
 import type { Presentation } from '../../types/presentation';
@@ -13,6 +15,7 @@ const normalizeSearch = (value: string) =>
   value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 
 export const CatalogViewer: React.FC<CatalogViewerProps> = ({ catalog, presentationId }) => {
+  useUiTranslation('catalog');
   const [presentations, setPresentations] = useState<Presentation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -22,7 +25,7 @@ export const CatalogViewer: React.FC<CatalogViewerProps> = ({ catalog, presentat
   useEffect(() => {
     fetch(`/api/public-catalogs/${catalog.id}/presentations`)
       .then(r => {
-        if (!r.ok) throw new Error('Error cargando presentaciones');
+        if (!r.ok) throw new Error(translate("catalog:CatalogViewer.errorLoadingPresentations", "Error cargando presentaciones"));
         return r.json();
       })
       .then(data => {
@@ -68,7 +71,7 @@ export const CatalogViewer: React.FC<CatalogViewerProps> = ({ catalog, presentat
   if (loading) {
     return (
       <div className="h-dvh overflow-y-auto bg-[#fef3c7] text-amber-950 flex items-center justify-center">
-        <p>Cargando {catalog.title}...</p>
+        <p>{translate("catalog:CatalogViewer.loading", "Cargando")} {catalog.title}...</p>
       </div>
     );
   }
@@ -76,9 +79,9 @@ export const CatalogViewer: React.FC<CatalogViewerProps> = ({ catalog, presentat
   if (error) {
     return (
       <div className="h-dvh overflow-y-auto bg-[#fef3c7] text-red-600 flex flex-col items-center justify-center p-4">
-        <h1 className="text-2xl font-bold mb-2">Error</h1>
+        <h1 className="text-2xl font-bold mb-2">{translate("catalog:CatalogViewer.error", "Error")}</h1>
         <p>{error}</p>
-        <a href={catalog.path} className="mt-4 text-amber-700 hover:underline">Volver al catálogo</a>
+        <a href={catalog.path} className="mt-4 text-amber-700 hover:underline">{translate("catalog:CatalogViewer.backToCatalog", "Volver al catálogo")}</a>
       </div>
     );
   }
@@ -88,8 +91,8 @@ export const CatalogViewer: React.FC<CatalogViewerProps> = ({ catalog, presentat
     if (!pres) {
       return (
         <div className="h-dvh overflow-y-auto bg-[#fef3c7] text-amber-950 flex flex-col items-center justify-center p-4">
-          <p>Presentación no encontrada</p>
-          <a href={catalog.path} className="mt-4 text-amber-700 hover:underline">Volver al catálogo</a>
+          <p>{translate("catalog:CatalogViewer.presentationNotFound", "Presentación no encontrada")}</p>
+          <a href={catalog.path} className="mt-4 text-amber-700 hover:underline">{translate("catalog:CatalogViewer.backToCatalog", "Volver al catálogo")}</a>
         </div>
       );
     }
@@ -108,8 +111,8 @@ export const CatalogViewer: React.FC<CatalogViewerProps> = ({ catalog, presentat
       <div className="h-dvh overflow-y-auto bg-[#fef3c7] text-amber-950">
         <header className="bg-amber-100 border-b border-amber-200 p-4 sticky top-0 z-10 flex items-center justify-between gap-4 shadow-xs">
           <div className="flex items-center gap-4 min-w-0">
-            <a href={catalog.path} className="p-2 rounded-sm hover:bg-amber-200 text-amber-700 hover:text-amber-900 transition-colors" title="Volver">
-              <ArrowLeft size={20} />
+            <a href={catalog.path} className="p-2 rounded-sm hover:bg-amber-200 text-amber-700 hover:text-amber-900 transition-colors" title={translate("catalog:CatalogViewer.back", "Volver")}>
+              <ArrowLeft data-ui-directional="true" size={20} />
             </a>
             <div className="min-w-0">
               <h1 className="text-xl font-bold text-amber-900 truncate">{pres.title}</h1>
@@ -120,14 +123,14 @@ export const CatalogViewer: React.FC<CatalogViewerProps> = ({ catalog, presentat
             <button
               onClick={() => setViewMode('continuous')}
               className={`p-1.5 rounded-sm ${viewMode === 'continuous' ? 'bg-amber-200 text-amber-900 shadow-xs' : 'text-amber-600 hover:bg-amber-100'} transition-all`}
-              title="Lectura Continua"
+              title={translate("catalog:CatalogViewer.continuousReading", "Lectura Continua")}
             >
               <AlignLeft size={18} />
             </button>
             <button
               onClick={() => setViewMode('grid')}
               className={`p-1.5 rounded-sm ${viewMode === 'grid' ? 'bg-amber-200 text-amber-900 shadow-xs' : 'text-amber-600 hover:bg-amber-100'} transition-all`}
-              title="Vista de Tarjetas"
+              title={translate("catalog:CatalogViewer.cardView", "Vista de Tarjetas")}
             >
               <LayoutGrid size={18} />
             </button>
@@ -150,8 +153,7 @@ export const CatalogViewer: React.FC<CatalogViewerProps> = ({ catalog, presentat
                       className="text-[10px] font-bold text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-1 bg-blue-50 px-2 py-1 rounded-sm border border-blue-100"
                     >
                       <BookOpen size={12} />
-                      Leer en contexto
-                    </a>
+                      {translate("catalog:CatalogViewer.readInContext", "Leer en contexto")}</a>
                   )}
                 </div>
               )}
@@ -225,20 +227,19 @@ export const CatalogViewer: React.FC<CatalogViewerProps> = ({ catalog, presentat
     <div className="h-dvh overflow-y-auto bg-[#fef3c7] text-amber-950 flex flex-col">
       <header className="bg-amber-100 border-b border-amber-200 p-4 sm:p-6 sticky top-0 z-10 shadow-xs">
         <div className="max-w-4xl mx-auto flex flex-col sm:flex-row gap-4 items-center justify-between">
-          <div className="text-center sm:text-left min-w-0">
+          <div className="text-center sm:text-start min-w-0">
             <h1 className="text-2xl font-bold text-amber-900 truncate">{catalog.title}</h1>
             <p className="text-xs text-amber-700 mt-1">
-              Catálogo público • {presentations.length} canciones
-            </p>
+              {translate("catalog:CatalogViewer.publicCatalog", "Catálogo público •")} {translate('common:songCount', '{{count}} canciones', { count: presentations.length })}</p>
           </div>
           <div className="relative w-full sm:w-auto min-w-[250px]">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-amber-600" size={16} />
+            <Search className="absolute start-3 top-1/2 -translate-y-1/2 text-amber-600" size={16} />
             <input
               type="text"
-              placeholder="Buscar título o contenido..."
+              placeholder={translate("catalog:CatalogViewer.searchTitleOrContent", "Buscar título o contenido...")}
               value={search}
               onChange={e => setSearch(e.target.value)}
-              className="w-full bg-white/80 border border-amber-200 rounded-full py-2 pl-10 pr-4 text-sm focus:outline-hidden focus:border-amber-400 focus:ring-1 focus:ring-amber-400 transition-all text-amber-950 placeholder-amber-600/70"
+              className="w-full bg-white/80 border border-amber-200 rounded-full py-2 ps-10 pe-4 text-sm focus:outline-hidden focus:border-amber-400 focus:ring-1 focus:ring-amber-400 transition-all text-amber-950 placeholder-amber-600/70"
             />
           </div>
         </div>
@@ -255,15 +256,14 @@ export const CatalogViewer: React.FC<CatalogViewerProps> = ({ catalog, presentat
           <>
             {titleMatches.length === 0 && contentMatches.length === 0 && (
               <div className="text-center p-8 bg-amber-100/50 border border-amber-200 rounded-lg text-amber-800">
-                No se encontraron resultados para "{search}".
+                {translate("catalog:CatalogViewer.noResultsFoundFor", "No se encontraron resultados para \"")}{search}".
               </div>
             )}
 
             {titleMatches.length > 0 && (
               <div>
                 <h2 className="text-sm font-bold text-amber-800 uppercase tracking-wider mb-4 border-b border-amber-200/50 pb-2">
-                  Coincidencias en Título
-                </h2>
+                  {translate("catalog:CatalogViewer.titleMatches", "Coincidencias en Título")}</h2>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {titleMatches.map(p => (
                     <PresentationCard key={p.id} presentation={p} catalogPath={catalog.path} />
@@ -275,8 +275,7 @@ export const CatalogViewer: React.FC<CatalogViewerProps> = ({ catalog, presentat
             {contentMatches.length > 0 && (
               <div>
                 <h2 className="text-sm font-bold text-amber-800 uppercase tracking-wider mb-4 border-b border-amber-200/50 pb-2">
-                  Coincidencias en Contenido
-                </h2>
+                  {translate("catalog:CatalogViewer.contentMatches", "Coincidencias en Contenido")}</h2>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {contentMatches.map(p => {
                     const matchedLine = p.slides?.flatMap(s => s.lines || []).find(l => l && normalizeSearch(l).includes(cleanQuery));
@@ -305,7 +304,7 @@ interface PresentationCardProps {
   snippet?: string;
 }
 
-const PresentationCard: React.FC<PresentationCardProps> = ({ presentation, catalogPath, snippet }) => (
+const PresentationCard: React.FC<PresentationCardProps> = ({ presentation, catalogPath, snippet }) => { useUiTranslation('catalog'); return ((
   <a
     href={`${catalogPath}/${presentation.id}`}
     className="bg-white/80 border border-amber-200 hover:border-amber-400 hover:bg-white transition-colors p-4 rounded-lg flex items-start gap-4 group cursor-pointer shadow-xs hover:shadow-md"
@@ -316,15 +315,15 @@ const PresentationCard: React.FC<PresentationCardProps> = ({ presentation, catal
     <div className="flex-1 min-w-0">
       <h3 className="font-bold text-amber-900 group-hover:text-amber-950 truncate mb-1">{presentation.title}</h3>
       <p className="text-xs text-amber-700 truncate">
-        {presentation.slides.length} diapositiva{presentation.slides.length !== 1 ? 's' : ''}
+        {translate('common:slideCount', '{{count}} diapositivas', { count: presentation.slides.length })}
       </p>
       {snippet && (
         <div 
-          className="text-xs text-amber-600/80 mt-2 italic border-l-2 border-amber-300 pl-2 line-clamp-2"
+          className="text-xs text-amber-600/80 mt-2 italic border-l-2 border-amber-300 ps-2 line-clamp-2"
           dangerouslySetInnerHTML={{ __html: sanitizeSlideHtml(snippet) }}
         />
       )}
     </div>
   </a>
-);
+)); };
 

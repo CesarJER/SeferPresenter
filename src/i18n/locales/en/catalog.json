@@ -1,0 +1,22 @@
+{
+  "CatalogApp.loadingCatalog": "Loading catalog…",
+  "CatalogApp.error": "Error",
+  "CatalogIndex.publicCatalogs": "Public Catalogs",
+  "CatalogIndex.selectACatalogToViewItsContent": "Select a catalog to view its content",
+  "CatalogIndex.noPublicCatalogsAreAvailableRightNow": "No public catalogs are available right now.",
+  "CatalogViewer.loading": "Loading",
+  "CatalogViewer.error": "Error",
+  "CatalogViewer.backToCatalog": "Back to catalog",
+  "CatalogViewer.presentationNotFound": "Presentation not found",
+  "CatalogViewer.back": "Back",
+  "CatalogViewer.continuousReading": "Continuous Reading",
+  "CatalogViewer.cardView": "Card View",
+  "CatalogViewer.readInContext": "Read in context",
+  "CatalogViewer.publicCatalog": "Public catalog •",
+  "CatalogViewer.searchTitleOrContent": "Search title or content…",
+  "CatalogViewer.noResultsFoundFor": "No results found for \"",
+  "CatalogViewer.titleMatches": "Title Matches",
+  "CatalogViewer.contentMatches": "Content Matches",
+  "CatalogApp.errorLoadingCatalogs": "Error loading catalogs",
+  "CatalogViewer.errorLoadingPresentations": "Error loading presentations"
+}
