@@ -1,7 +1,8 @@
 import { UiLocaleProvider } from './i18n/UiLocaleProvider';
 import { translate } from './i18n/runtime';
 import { useUiTranslation } from './i18n/useUiTranslation';
-import { loadCatalog, saveCatalog } from './utils/catalogApi';
+import { loadCatalog, audioSyncCatalogOptions } from './utils/catalogApi';
+import { useCatalogSave } from './hooks/useCatalogSave';
 import { StrictMode, useCallback, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import './index.css';
@@ -23,6 +24,7 @@ export const AudioEditorApp = () => {
   useUiTranslation('audioEditor');
   const [presentations, setPresentations] = useState<Presentation[]>([]);
   const [audioSyncMaps, setAudioSyncMaps] = useState<AudioSyncMap[]>([]);
+  const { save: saveAudioCatalog, dialog: audioConflicts } = useCatalogSave('/api/audio-sync', audioSyncCatalogOptions);
   const [availableAudioFiles, setAvailableAudioFiles] = useState<string[]>([]);
   const [reloadVersion, setReloadVersion] = useState(0);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -93,12 +95,14 @@ export const AudioEditorApp = () => {
   const handleAudioSyncMapsChange = useCallback(async (maps: AudioSyncMap[], baseMaps = audioSyncMaps) => {
     const validation = validateAudioSyncMaps(maps);
     if (!validation.ok || !validation.value) throw new Error(translate("audioEditor:main_audio_editor.invalidAudioMaps", "Mapas de audio inválidos"));
-    await saveCatalog('/api/audio-sync', maps, baseMaps);
-    setAudioSyncMaps(maps);
-  }, [audioSyncMaps]);
+    const saved = await saveAudioCatalog(maps, baseMaps);
+    setAudioSyncMaps(saved);
+    return saved;
+  }, [audioSyncMaps, saveAudioCatalog]);
 
   return (
     <div className="w-dvw h-dvh bg-gray-900 overflow-hidden">
+      {audioConflicts}
       {loadError && (
         <div className="absolute left-4 right-4 top-4 z-50 rounded-sm border border-red-800 bg-red-950 px-4 py-3 text-sm font-semibold text-red-100 shadow-sm">
           {loadError}

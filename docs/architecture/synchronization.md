@@ -188,3 +188,11 @@ credencial de operador activo de proyección. El estado vivo continúa siendo
 transitorio. Respuesta HTTP y recepción SSE no tienen un orden común garantizado.
 Los límites del filesystem y del fallback de persistencia están
 en [operación](../operations/deployment.md#persistencia-y-actualización).
+
+El `412` del diagrama inicia una comparación cliente de tres versiones: base del
+borrador, edición local y catálogo recién cargado. Los cambios en registros
+distintos se combinan; los solapamientos requieren decisión en el comparador.
+La revisión y el borrador permanecen locales, y el POST siguiente vuelve a usar
+la revisión del servidor. No se omite el guard ni se sobrescribe todo el catálogo
+con un borrador antiguo tras recargar. Algoritmo y límites, incluida la revisión
+de diapositivas durante edición de audio: [contrato HTTP](../api/http.md#catálogos-medios-y-caché).

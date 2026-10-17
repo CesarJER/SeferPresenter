@@ -59,5 +59,18 @@
   "AudioSyncEditor.couldNotSaveYourDraftIsPreserved": "Could not save. Your draft is preserved.",
   "AudioSyncEditor.couldNotImportYourDraftIsPreserved": "Could not import. Your draft is preserved.",
   "main_audio_editor.couldNotUpdateAudioMaps": "Could not update audio maps.",
-  "main_audio_editor.invalidAudioMaps": "Invalid audio maps"
+  "main_audio_editor.invalidAudioMaps": "Invalid audio maps",
+  "syncReview.title": "The presentation has changed",
+  "syncReview.explanation": "Your marks remain on the previous version. Review the slides before saving. Marks on deleted slides will no longer apply.",
+  "syncReview.compare": "Compare slides and marks",
+  "syncReview.before": "Before / mark",
+  "syncReview.after": "Now",
+  "syncReview.removed": "Deleted: its marks will not be kept",
+  "syncReview.review": "Update slides and review marks",
+  "syncReview.deleted": "This presentation was deleted. Select another to continue; your draft remains available.",
+  "syncReview.failed": "The presentation could not be checked. Your marks are preserved; check the connection before saving.",
+  "syncReview.retry": "Check again",
+  "syncReview.seconds": "{{time}} s",
+  "syncReview.added": "New slide: no marks",
+  "syncReview.verses": "Verse marks outside the new range will also no longer apply."
 }

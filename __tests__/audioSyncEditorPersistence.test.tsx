@@ -10,6 +10,7 @@ it('retains an edited cue and its original revision when another device updates 
   const alert = vi.fn(); vi.stubGlobal('alert', alert);
   const presentations: Presentation[] = [{ id: 'p', title: 'Synthetic', mode: 'standard', background: '', slides: [{ id: 's', label: 'First', lines: ['Text'] }] }];
   const maps: AudioSyncMap[] = [{ id: 'm', name: 'Original', presentationId: 'p', audioSrc: '/audio/test.mp3', defaultVolume: 0.7, defaultSyncMode: 'unilateral', cues: [{ slideIndex: 0, timeSec: 1 }] }];
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(presentations), { headers: { ETag: '"presentations"' } })));
   const save = vi.fn().mockRejectedValue(new Error('Conflict: draft retained'));
   const props = { isOpen: true, onClose: vi.fn(), presentations, activePresentationId: 'p', activeAudioSrc: '/audio/test.mp3', availableAudioFiles: ['/audio/test.mp3'], audioSyncMaps: maps, onAudioSyncMapsChange: save };
   const view = render(<AudioSyncEditor {...props} />);

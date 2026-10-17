@@ -59,5 +59,18 @@
   "AudioSyncEditor.couldNotSaveYourDraftIsPreserved": "לא ניתן לשמור. הטיוטה נשמרת.",
   "AudioSyncEditor.couldNotImportYourDraftIsPreserved": "לא ניתן לייבא. הטיוטה נשמרת.",
   "main_audio_editor.couldNotUpdateAudioMaps": "לא ניתן לעדכן את מפות השמע.",
-  "main_audio_editor.invalidAudioMaps": "מפות שמע לא תקינות"
+  "main_audio_editor.invalidAudioMaps": "מפות שמע לא תקינות",
+  "syncReview.title": "המצגת השתנתה",
+  "syncReview.explanation": "הסימונים שלך נשארים בגרסה הקודמת. יש לבדוק את השקופיות לפני השמירה. סימונים של שקופיות שנמחקו לא יחולו עוד.",
+  "syncReview.compare": "השוואת שקופיות וסימונים",
+  "syncReview.before": "קודם / סימון",
+  "syncReview.after": "כעת",
+  "syncReview.removed": "נמחקה: הסימונים שלה לא יישמרו",
+  "syncReview.review": "עדכון השקופיות ובדיקת הסימונים",
+  "syncReview.deleted": "מצגת זו נמחקה. יש לבחור מצגת אחרת כדי להמשיך; הטיוטה שלך עדיין זמינה.",
+  "syncReview.failed": "לא ניתן לבדוק את המצגת. הסימונים שלך נשמרים; יש לבדוק את החיבור לפני השמירה.",
+  "syncReview.retry": "בדיקה חוזרת",
+  "syncReview.seconds": "{{time}} שנ׳",
+  "syncReview.added": "שקופית חדשה: ללא סימונים",
+  "syncReview.verses": "גם סימונים של פסוקים מחוץ לטווח החדש לא יחולו עוד."
 }

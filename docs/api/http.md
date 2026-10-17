@@ -83,8 +83,29 @@ actual: `428` sin If-Match, `412` si es obsoleta; `400` por JSON/schema, `500`
 si no puede persistir. Se aceptan tanto el ETag fuerte original como sus variantes
 con sufijo `-gzip` o `-zstd` que añade Caddy al comprimir; ambas deben corresponder
 al hash actual. No se aceptan ETags débiles, comodines ni listas de revisiones.
-El cliente conserva el draft ante error. No se garantiza
-una transacción distribuida entre procesos ni se fusionan cambios concurrentes.
+El cliente conserva el draft ante error. El backend no fusiona cambios y no
+garantiza una transacción distribuida entre procesos.
+
+Ante `412`, los editores comparan la base inmutable de su borrador, el borrador
+y una carga nueva validada. Cambios en presentaciones con ID distinto se combinan;
+dos cambios del mismo registro, o edición frente a eliminación, requieren elegir
+una versión en el comparador. En audio, el registro se identifica por presentación
+y pista, también si dos editores crean mapas con IDs diferentes. El orden relativo
+de registros existentes se compara por separado; reordenaciones incompatibles
+también requieren elección. Las altas concurrentes se conservan en orden servidor/local.
+El resultado confirmado, incluidos los cambios ajenos, sustituye la lista local.
+Cada intento mantiene `If-Match`; si el servidor cambia durante la revisión se
+vuelve a comparar, con un máximo de tres POST por operación. Cancelar o fallar
+no confirma el guardado ni sustituye el borrador.
+
+El sincronizador consulta las presentaciones al abrir, cada 15 segundos, al
+recuperar foco y antes de guardar. Conserva las filas anteriores si cambian las
+diapositivas y exige revisarlas; al aceptar, mueve las marcas por ID estable de
+slide, conservando el identificador de versículo. No guarda automáticamente tras
+esa revisión. Un fallo de comprobación bloquea el guardado hasta recuperarse.
+Esto no constituye una transacción entre ambos catálogos: una presentación puede
+cambiar después de la comprobación y antes del POST del mapa. No se persiste un
+historial de versiones de las diapositivas dentro de cada mapa.
 
 Para payloads exactos consulte Presentation/Slide en
 [presentation.ts](../../src/types/presentation.ts) y AudioSyncMap/AudioSyncCue en

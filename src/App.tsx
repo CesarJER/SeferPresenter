@@ -1,6 +1,7 @@
 import { translate } from './i18n/runtime';
 import { useUiTranslation } from './i18n/useUiTranslation';
-import { loadCatalog, saveCatalog } from './utils/catalogApi';
+import { loadCatalog, presentationCatalogOptions } from './utils/catalogApi';
+import { useCatalogSave } from './hooks/useCatalogSave';
 import { useState, useEffect, useCallback, useMemo, useRef, Suspense, lazy } from 'react';
 import PresenterScreen from './components/presenter/PresenterScreen';
 import SeferReaderScreen from './components/presenter/SeferReaderScreen';
@@ -50,6 +51,7 @@ function App() {
   const isMediaMasterRef = useRef(false);
 
   const [presentations, setPresentations] = useState<Presentation[]>([]);
+  const { save: savePresentationCatalog, dialog: presentationConflicts } = useCatalogSave('/api/presentations', presentationCatalogOptions);
   const [currentPresentation, setCurrentPresentation] = useState<Presentation | null>(storedPresenterState?.presentation ?? null);
   const [currentSlideIndex, setCurrentSlideIndex] = useState<number>(storedPresenterState?.slideIndex ?? -1);
 
@@ -617,17 +619,17 @@ function App() {
       return;
     }
     try {
-      await saveCatalog('/api/presentations', normalized, presentations);
-      setPresentations(normalized);
-      return true;
+      const saved = await savePresentationCatalog(normalized, presentations);
+      setPresentations(saved);
+      return saved;
     } catch (err) {
       alert(err instanceof Error ? err.message : translate("presenter:App.couldNotSavePresentationsYourDraftIsPreserved", "No se pudieron guardar las presentaciones. El borrador se conserva."));
       return false;
     }
-  }, [presentations]);
+  }, [presentations, savePresentationCatalog]);
 
   const handleSave = useCallback(async (presentation: Presentation) => {
-    const normalizedPresentation = normalizePresentation(presentation);
+    let normalizedPresentation = normalizePresentation(presentation);
     const existing = presentations.findIndex(p => p.id === normalizedPresentation.id);
     const updated = [...presentations];
     if (existing >= 0) {
@@ -635,7 +637,11 @@ function App() {
     } else {
       updated.push(normalizedPresentation);
     }
-    if (!await savePresentations(updated)) return;
+    const saved = await savePresentations(updated);
+    if (!saved) return;
+    const selected = saved.find(item => item.id === normalizedPresentation.id);
+    if (!selected) return null;
+    normalizedPresentation = selected;
     const nextIndex = existing >= 0
       ? Math.min(currentSlideIndexRef.current, normalizedPresentation.slides.length - 1)
       : normalizedPresentation.slides.length > 0 ? 0 : -1;
@@ -649,6 +655,7 @@ function App() {
     } else {
       handleSelectPresentationAndSlide(normalizedPresentation, nextIndex);
     }
+    return normalizedPresentation;
   }, [presentations, handleSelectPresentationAndSlide, isControlMode, emitCommand, savePresentations]);
   handleSaveRef.current = handleSave;
 
@@ -844,6 +851,7 @@ function App() {
   // Presenter (big screen) mode
   return (
     <div className="w-full h-dvh overflow-hidden bg-black relative">
+      {presentationConflicts}
       {quizScriptureState ? (
         <div id="section-app-scripture-reader-view" className="w-full h-full overflow-hidden">
           <SeferReaderScreen
