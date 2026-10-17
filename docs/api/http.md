@@ -80,7 +80,10 @@ comandos mediante [projection-state-reducer](../../server/projection-state-reduc
 Los catálogos administrativos utilizan [validadores backend](../../server/content-validation.mjs)
 y persistencia de los archivos del operador. El guard ETag compara la revisión
 actual: `428` sin If-Match, `412` si es obsoleta; `400` por JSON/schema, `500`
-si no puede persistir. El cliente conserva el draft ante error. No se garantiza
+si no puede persistir. Se aceptan tanto el ETag fuerte original como sus variantes
+con sufijo `-gzip` o `-zstd` que añade Caddy al comprimir; ambas deben corresponder
+al hash actual. No se aceptan ETags débiles, comodines ni listas de revisiones.
+El cliente conserva el draft ante error. No se garantiza
 una transacción distribuida entre procesos ni se fusionan cambios concurrentes.
 
 Para payloads exactos consulte Presentation/Slide en

@@ -127,3 +127,31 @@ it('rejects stale catalog replacements and emits audio-map invalidation only aft
   while (!received.includes('AUDIO_SYNC_MAPS_UPDATE')) received += new TextDecoder().decode((await reader.read()).value);
   expect(received).toContain('Synthetic map'); await reader.cancel();
 }, 10000);
+
+it.each(['', '-gzip', '-zstd'])('accepts current catalog revisions through Caddy encoding %s and rejects stale ones', async (suffix) => {
+  const { base, post } = await start();
+  const presentation = { id: 'encoded', title: 'First save', mode: 'standard', background: '', slides: [{ id: 's', label: 's', lines: ['a'] }] };
+  const map = { id: 'encoded', name: 'First save', defaultSyncMode: 'unilateral', defaultVolume: 0.7, audioSrc: '/audio/test.mp3', presentationId: presentation.id, cues: [{ slideIndex: 0, timeSec: 1 }] };
+  for (const [route, item, field] of [
+    ['/api/presentations', presentation, 'title'],
+    ['/api/audio-sync', map, 'name'],
+  ] as const) {
+    const initial = await fetch(`${base}${route}`, { headers });
+    const revision = initial.headers.get('ETag')!;
+    await initial.body!.cancel();
+    const encoded = revision.slice(0, -1) + suffix + '"';
+    const first = await post(route, [item], undefined, encoded);
+    expect(first.status).toBe(200);
+    const next = first.headers.get('ETag')!;
+    expect(next).not.toBe(revision);
+    const edited = [{ ...item, [field]: 'Second save' }];
+    const second = await post(route, edited, undefined, next.slice(0, -1) + suffix + '"');
+    expect(second.status).toBe(200);
+    const current = second.headers.get('ETag')!;
+    for (const invalid of [encoded, '*', `W/${current}`, current.slice(0, -1) + '-unknown"', `${current}, ${revision}`]) {
+      expect((await post(route, [item], undefined, invalid)).status).toBe(412);
+    }
+    expect((await post(route, [item])).status).toBe(428);
+    expect(await (await fetch(`${base}${route}`, { headers })).json()).toEqual(edited);
+  }
+}, 10000);
