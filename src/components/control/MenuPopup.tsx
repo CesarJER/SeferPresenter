@@ -1,4 +1,5 @@
 import { translate } from '../../i18n/runtime';
+import { sameValue } from '../../utils/catalogMerge';
 import { useUiTranslation } from '../../i18n/useUiTranslation';
 import React, { useCallback, useEffect, useState, useRef, Suspense, lazy } from 'react';
 import type { Presentation, QuizData, Slide, VideoState, AppMode, ScriptureNavState } from '../../types/presentation';
@@ -54,7 +55,7 @@ interface MenuPopupProps {
   backgroundLock: boolean;
   onToggleBackgroundLock: (locked: boolean) => void;
   onSelectBackgroundOverride: (bg: string) => void;
-  onSave: (p: Presentation) => void | Promise<void>;
+  onSave: (p: Presentation) => void | Presentation | null | Promise<void | Presentation | null>;
   onSelectPresentation: (p: Presentation, slideIdx?: number, targetVerse?: string) => void;
   onSelectSlide: (idx: number) => void;
   onImport: (imported: Presentation[]) => void;
@@ -79,7 +80,7 @@ interface MenuPopupProps {
   audioDispatchAction?: (action: AudioTimelineAction) => void;
   audioEstimatedPositionSec?: number;
   audioLoop?: boolean;
-  onAudioSyncMapsChange: (maps: AudioSyncMap[], baseMaps?: AudioSyncMap[]) => void | Promise<void>;
+  onAudioSyncMapsChange: (maps: AudioSyncMap[], baseMaps?: AudioSyncMap[]) => void | AudioSyncMap[] | Promise<void | AudioSyncMap[]>;
   autoduckState?: import('../../types/sync').AutoduckState;
   onAutoduckStateChange?: (state: import('../../types/sync').AutoduckState) => void;
   onResetState?: (clearSession?: boolean, hardRefresh?: boolean) => void;
@@ -341,6 +342,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
 
   // NUEVOS estados para visor/reproducción reestructurado
   const [editorMode, setEditorMode] = useState<'list' | 'edit'>('list');
+  const [isSavingPresentation, setIsSavingPresentation] = useState(false);
   const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
@@ -1473,6 +1475,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
   };
 
   const handleSave = async () => {
+    if (isSavingPresentation) return;
     if (!title.trim()) {
       alert(translate("control:MenuPopup.pleaseEnterATitle", "Por favor, introduce un título."));
       return;
@@ -1499,7 +1502,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
       return;
     }
 
-    await onSave({
+    const draft = {
       id: id || currentPresentation?.id || Date.now().toString(),
       title,
       background: finalBg,
@@ -1507,7 +1510,13 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
       mode: parsed.mode,
       fontScale,
       slides: parsed.slides
-    });
+    };
+    setIsSavingPresentation(true);
+    try {
+    const saved = await onSave(draft);
+    if (saved === null) setEditorMode('list');
+    else if (saved && !sameValue(saved, draft)) handleStartEditing(saved);
+    } finally { setIsSavingPresentation(false); }
   };
 
   const textareaClass =
@@ -1561,7 +1570,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
   };
 
   return (
-    <div id="section-menu-popup-container" className="flex h-full w-full flex-col bg-gray-800 text-white">
+    <div inert={isSavingPresentation} id="section-menu-popup-container" className="flex h-full w-full flex-col bg-gray-800 text-white">
       {/* ── Menu Header ───────────────────────────────── */}
       <div id="section-menu-header" className={`flex flex-wrap items-center justify-between gap-2 border-b px-4 py-3 md:flex-nowrap md:px-5 md:py-4 transition-colors ${isMediaMaster ? 'bg-red-950 border-red-800' : 'bg-gray-900 border-gray-700'}`}>
         <h2 className="flex w-full items-center gap-2 text-lg font-bold md:w-auto md:text-xl">

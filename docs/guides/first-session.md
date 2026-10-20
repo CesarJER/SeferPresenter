@@ -31,6 +31,23 @@ Control → Presenter/Audience con una presentación sencilla.
 7. Cerrar la sesión de prueba conforme al procedimiento del operador y comprobar
    el efecto esperado en Audience; no borrar datos del operador para diagnosticar.
 
+## Editar desde dos equipos
+
+Si un equipo modifica Sal 2 y otro Sal 6, sus cambios se combinan al guardar.
+Si ambos modifican la misma presentación, aparece **Revisar cambios antes de
+guardar** con la versión inicial, el borrador y la versión del servidor. Elija
+qué versión conservar para cada registro en conflicto, o cancele para seguir
+editando su borrador. La elección se aplica al registro completo; no fusiona
+automáticamente líneas de dos versiones de una misma presentación.
+
+En el editor de sincronización, **La presentación ha cambiado** conserva las
+marcas sobre las diapositivas anteriores. Compare los textos y las posiciones,
+pulse **Actualizar diapositivas y revisar marcas**, ajuste los tiempos y guarde.
+Las marcas siguen a los IDs de las diapositivas reordenadas; las de diapositivas
+eliminadas y versículos fuera del nuevo rango dejan de aplicarse. Una slide
+recreada con otro ID se considera nueva. El aviso cubre cambios detectados con el
+editor abierto; no reconstruye versiones anteriores de un mapa ya guardado.
+
 ## Fallos y condiciones de parada
 
 Sin catálogo o media/corpus requerido, volver a preparación. Si Control queda

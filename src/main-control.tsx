@@ -1,7 +1,8 @@
 import { UiLocaleProvider } from './i18n/UiLocaleProvider';
 import { translate } from './i18n/runtime';
 import { useUiTranslation } from './i18n/useUiTranslation';
-import { loadCatalog, saveCatalog } from './utils/catalogApi';
+import { loadCatalog, presentationCatalogOptions, audioSyncCatalogOptions } from './utils/catalogApi';
+import { useCatalogSave } from './hooks/useCatalogSave';
 import { StrictMode, useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { createRoot } from 'react-dom/client';
 import './index.css';
@@ -41,6 +42,7 @@ import { registerScopedServiceWorker } from './utils/pwaUpdate';
 function ControlApp() {
   useUiTranslation('control');
   const [presentations, setPresentations] = useState<Presentation[]>([]);
+  const { save: savePresentationCatalog, dialog: presentationConflicts } = useCatalogSave('/api/presentations', presentationCatalogOptions);
   const [currentPresentation, setCurrentPresentation] = useState<Presentation | null>(null);
   const [currentSlideIndex, setCurrentSlideIndex] = useState<number>(-1);
   const [backgrounds, setBackgrounds] = useState<string[]>([]);
@@ -58,6 +60,7 @@ function ControlApp() {
   const [audioTimeline, setAudioTimeline] = useState<AudioTimelineState | null>(null);
   const [audioTimelineDuration, setAudioTimelineDuration] = useState(0);
   const [audioSyncMaps, setAudioSyncMaps] = useState<AudioSyncMap[]>([]);
+  const { save: saveAudioCatalog, dialog: audioConflicts } = useCatalogSave('/api/audio-sync', audioSyncCatalogOptions);
   const [availableAudioFiles, setAvailableAudioFiles] = useState<string[]>([]);
 
   const [appMode, setAppMode] = useState<AppMode>('slides');
@@ -333,17 +336,17 @@ function ControlApp() {
       return;
     }
     try {
-      await saveCatalog('/api/presentations', normalized, presentations);
-      setPresentations(normalized);
-      return true;
+      const saved = await savePresentationCatalog(normalized, presentations);
+      setPresentations(saved);
+      return saved;
     } catch (err) {
       alert(err instanceof Error ? err.message : translate("control:main_control.couldNotSavePresentationsYourDraftIsPreserved", "No se pudieron guardar las presentaciones. El borrador se conserva."));
       return false;
     }
-  }, [presentations]);
+  }, [presentations, savePresentationCatalog]);
 
   const handleSave = useCallback(async (presentation: Presentation) => {
-    const normalizedPresentation = normalizePresentation(presentation);
+    let normalizedPresentation = normalizePresentation(presentation);
     const existing = presentations.findIndex(p => p.id === normalizedPresentation.id);
     const updated = [...presentations];
     if (existing >= 0) {
@@ -351,7 +354,11 @@ function ControlApp() {
     } else {
       updated.push(normalizedPresentation);
     }
-    if (!await savePresentations(updated)) return;
+    const saved = await savePresentations(updated);
+    if (!saved) return;
+    const selected = saved.find(item => item.id === normalizedPresentation.id);
+    if (!selected) return null;
+    normalizedPresentation = selected;
     const nextIndex = existing >= 0
       ? Math.min(currentSlideIndexRef.current, normalizedPresentation.slides.length - 1)
       : normalizedPresentation.slides.length > 0 ? 0 : -1;
@@ -362,6 +369,7 @@ function ControlApp() {
       slideIndex: nextIndex,
       direction: 'forward'
     });
+    return normalizedPresentation;
   }, [presentations, emitCommand, savePresentations]);
 
   const handleAddScriptureSlide = useCallback((state: SeferReaderState, kind: 'sefer' | 'tanaj' = 'sefer') => {
@@ -402,6 +410,7 @@ function ControlApp() {
 
   return (
     <div id="section-app-control-mode" className="w-full h-dvh bg-gray-900 overflow-hidden relative">
+      {presentationConflicts}{audioConflicts}
       <MenuPopup
         isMediaMaster={isMediaMaster}
         programAudioEnabled={programAudioEnabled}
@@ -428,7 +437,9 @@ function ControlApp() {
           emitCommand({ command: 'SELECT_PRESENTATION_AND_SLIDE', presentation: currentPresentation, slideIndex: idx, direction: idx < currentSlideIndex ? 'backward' : 'forward' });
         }}
         onImport={async (imported) => {
-          if (!await savePresentations(imported)) return;
+          const saved = await savePresentations(imported);
+          if (!saved) return;
+          imported = saved;
           if (imported.length > 0) {
             emitCommand({ command: 'SELECT_PRESENTATION_AND_SLIDE', presentation: imported[0], slideIndex: imported[0].slides.length > 0 ? 0 : -1, direction: 'forward' });
           } else {
@@ -468,8 +479,9 @@ function ControlApp() {
         onAudioSyncMapsChange={async (maps, baseMaps = audioSyncMaps) => {
           const validation = validateAudioSyncMaps(maps);
           if (!validation.ok || !validation.value) throw new Error(translate("control:main_control.invalidAudioMaps", "Mapas de audio inválidos"));
-          await saveCatalog('/api/audio-sync', maps, baseMaps);
-          setAudioSyncMaps(maps);
+          const saved = await saveAudioCatalog(maps, baseMaps);
+          setAudioSyncMaps(saved);
+          return saved;
         }}
         appMode={appMode}
         scriptureState={scriptureState}

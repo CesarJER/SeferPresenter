@@ -311,7 +311,8 @@ const catalogEtag = (data) => '"' + createHash('sha256').update(JSON.stringify(d
 const requireCatalogRevision = (req, res, current) => {
   const expected = req.headers['if-match']
   if (!expected) { sendJson(res, 428, { error: 'Reload the catalog before saving' }); return false }
-  if (expected !== catalogEtag(current)) { sendJson(res, 412, { error: 'Catalog changed in another editor; your draft was not saved' }); return false }
+  // Caddy encode appends the representation's encoding to strong ETags, but not to If-Match upstream.
+  if (expected.replace(/-(?:gzip|zstd)"$/, '"') !== catalogEtag(current)) { sendJson(res, 412, { error: 'Catalog changed in another editor; your draft was not saved' }); return false }
   return true
 }
 const persistJson = (filePath, value) => {

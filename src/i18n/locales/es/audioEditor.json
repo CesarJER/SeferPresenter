@@ -59,5 +59,18 @@
   "AudioSyncEditor.couldNotSaveYourDraftIsPreserved": "No se pudo guardar. Tu borrador se conserva.",
   "AudioSyncEditor.couldNotImportYourDraftIsPreserved": "No se pudo importar. Tu borrador se conserva.",
   "main_audio_editor.couldNotUpdateAudioMaps": "No se pudieron actualizar los mapas de audio.",
-  "main_audio_editor.invalidAudioMaps": "Mapas de audio inválidos"
+  "main_audio_editor.invalidAudioMaps": "Mapas de audio inválidos",
+  "syncReview.title": "La presentación ha cambiado",
+  "syncReview.explanation": "Tus marcas se conservan sobre la versión anterior. Revisa las diapositivas antes de guardar. Las marcas de diapositivas eliminadas dejarán de aplicarse.",
+  "syncReview.compare": "Comparar diapositivas y marcas",
+  "syncReview.before": "Antes / marca",
+  "syncReview.after": "Ahora",
+  "syncReview.removed": "Eliminada: sus marcas no se conservarán",
+  "syncReview.review": "Actualizar diapositivas y revisar marcas",
+  "syncReview.deleted": "Esta presentación se eliminó. Selecciona otra para continuar; tu borrador sigue disponible.",
+  "syncReview.failed": "No se pudo comprobar la presentación. Tus marcas se conservan; comprueba la conexión antes de guardar.",
+  "syncReview.retry": "Comprobar de nuevo",
+  "syncReview.seconds": "{{time}} s",
+  "syncReview.added": "Nueva diapositiva: sin marcas",
+  "syncReview.verses": "Las marcas de versículos fuera del nuevo rango también dejarán de aplicarse."
 }

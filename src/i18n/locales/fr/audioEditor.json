@@ -59,5 +59,18 @@
   "AudioSyncEditor.couldNotSaveYourDraftIsPreserved": "Enregistrement impossible. Votre brouillon est conservé.",
   "AudioSyncEditor.couldNotImportYourDraftIsPreserved": "Importation impossible. Votre brouillon est conservé.",
   "main_audio_editor.couldNotUpdateAudioMaps": "Impossible de mettre à jour les cartes audio.",
-  "main_audio_editor.invalidAudioMaps": "Cartes audio invalides"
+  "main_audio_editor.invalidAudioMaps": "Cartes audio invalides",
+  "syncReview.title": "La présentation a changé",
+  "syncReview.explanation": "Vos repères restent sur la version précédente. Vérifiez les diapositives avant d’enregistrer. Les repères de diapositives supprimées ne seront plus appliqués.",
+  "syncReview.compare": "Comparer les diapositives et les repères",
+  "syncReview.before": "Avant / repère",
+  "syncReview.after": "Maintenant",
+  "syncReview.removed": "Supprimée : ses repères ne seront pas conservés",
+  "syncReview.review": "Actualiser les diapositives et vérifier les repères",
+  "syncReview.deleted": "Cette présentation a été supprimée. Sélectionnez-en une autre pour continuer ; votre brouillon reste disponible.",
+  "syncReview.failed": "La présentation n’a pas pu être vérifiée. Vos repères sont conservés ; vérifiez la connexion avant d’enregistrer.",
+  "syncReview.retry": "Vérifier à nouveau",
+  "syncReview.seconds": "{{time}} s",
+  "syncReview.added": "Nouvelle diapositive : sans repères",
+  "syncReview.verses": "Les repères de versets hors de la nouvelle plage ne seront plus appliqués non plus."
 }

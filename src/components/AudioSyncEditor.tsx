@@ -7,6 +7,9 @@ import type { AudioSyncMap, AudioSyncCue, AudioSyncMode } from '../types/audio';
 import { findScriptureRange } from '../utils/scriptureLookup';
 import { sanitizeSlideHtml } from '../utils/hebrewText';
 import { validateAudioSyncMaps } from '../utils/validation';
+import { sameValue } from '../utils/catalogMerge';
+import { remapSyncTimes, useSyncPresentationReview } from '../hooks/useSyncPresentationReview';
+import { SyncPresentationReview } from './SyncPresentationReview';
 
 interface AudioSyncEditorProps {
   isOpen: boolean;
@@ -16,7 +19,7 @@ interface AudioSyncEditorProps {
   activeAudioSrc?: string | null;
   availableAudioFiles: string[];
   audioSyncMaps: AudioSyncMap[];
-  onAudioSyncMapsChange: (maps: AudioSyncMap[], baseMaps?: AudioSyncMap[]) => void | Promise<void>;
+  onAudioSyncMapsChange: (maps: AudioSyncMap[], baseMaps?: AudioSyncMap[]) => void | AudioSyncMap[] | Promise<void | AudioSyncMap[]>;
 }
 
 interface DisplayRow {
@@ -67,6 +70,8 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
   const [isSaving, setIsSaving] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const sourceReview = useSyncPresentationReview(selectedPresentationId, isOpen, presentations);
+  const [savedVersion, setSavedVersion] = useState(0);
 
   // Initialize selected presentation and audio
   useEffect(() => {
@@ -124,11 +129,11 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
       setDefaultVolume(0.7);
       setDefaultSyncMode('unilateral');
     }
-  }, [selectedPresentationId, selectedAudioFile, audioSyncMaps]);
+  }, [selectedPresentationId, selectedAudioFile, audioSyncMaps, savedVersion]);
 
   // Expand slides (standard vs scripture verses)
   useEffect(() => {
-    const presentation = presentations.find((p) => p.id === selectedPresentationId);
+    const presentation = sourceReview.reviewed;
     if (!presentation) {
       setDisplayRows([]);
       return;
@@ -217,7 +222,7 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
     return () => {
       active = false;
     };
-  }, [selectedPresentationId, presentations]);
+  }, [selectedPresentationId, sourceReview.reviewed]);
 
   // Audio Playback Listeners
   useEffect(() => {
@@ -346,6 +351,17 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
   // Save changes
   const handleSave = async () => {
     if (isSaving) return;
+    setIsSaving(true);
+    try {
+      const latest = await sourceReview.refresh();
+      if (!latest || !sameValue(sourceReview.reviewed?.slides, latest.slides)) return;
+      await saveMap();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : String(err));
+    } finally { setIsSaving(false); }
+  };
+
+  const saveMap = async () => {
     if (!selectedPresentationId) {
       alert(translate("audioEditor:AudioSyncEditor.pleaseSelectAPresentation", "Por favor seleccione una presentación."));
       return;
@@ -406,9 +422,10 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
 
     setIsSaving(true);
     try {
-      await onAudioSyncMapsChange(updatedMaps, baseMaps);
+      const saved = await onAudioSyncMapsChange(updatedMaps, baseMaps);
       dirtyRef.current = false;
-      editBaseMapsRef.current = updatedMaps;
+      editBaseMapsRef.current = saved || updatedMaps;
+      setSavedVersion(version => version + 1);
       alert(translate("audioEditor:AudioSyncEditor.synchronizationSavedSuccessfully", "Sincronización guardada correctamente."));
     } catch (err) {
       alert(err instanceof Error ? err.message : translate("audioEditor:AudioSyncEditor.couldNotSaveYourDraftIsPreserved", "No se pudo guardar. Tu borrador se conserva."));
@@ -450,9 +467,10 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
               alert(translate("audioEditor:AudioSyncEditor.theJsonFileFormatIsInvalid", "El formato del archivo JSON no es valido:\n{{value1}}", { value1: validation.errors.slice(0, 8).join('\n') }));
               return;
             }
-            await onAudioSyncMapsChange(validation.value, editBaseMapsRef.current);
+            const saved = await onAudioSyncMapsChange(validation.value, editBaseMapsRef.current);
             dirtyRef.current = false;
-            editBaseMapsRef.current = validation.value;
+            editBaseMapsRef.current = saved || validation.value;
+            setSavedVersion(version => version + 1);
             alert(translate("audioEditor:AudioSyncEditor.synchronizationMapsImportedSuccessfully", "Mapas de sincronización importados correctamente."));
           } else {
             alert(translate("audioEditor:AudioSyncEditor.theJsonFileFormatIsInvalid_492f41", "El formato del archivo JSON no es válido."));
@@ -494,7 +512,20 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
       </div>
 
       {/* Main Body Layout */}
-      <div className="flex-1 min-h-0 flex flex-col md:flex-row">
+      {sourceReview.changed && sourceReview.reviewed && <SyncPresentationReview before={sourceReview.reviewed} after={sourceReview.latest} times={rowTimes} onReview={() => {
+        if (!sourceReview.latest || !sourceReview.reviewed) return;
+        try {
+          const mapped = remapSyncTimes(sourceReview.reviewed, sourceReview.latest, rowTimes);
+          dirtyRef.current = true;
+          setRowTimes(mapped);
+          sourceReview.accept();
+        } catch (err) { alert(err instanceof Error ? err.message : String(err)); }
+      }} />}
+      {sourceReview.error && <div role="alert" className="m-3 shrink-0 rounded border border-red-700 p-3">
+        {translate('audioEditor:syncReview.failed', 'No se pudo comprobar la presentación. Tus marcas se conservan; comprueba la conexión antes de guardar.')}
+        <button type="button" onClick={() => { void sourceReview.refresh().catch(() => {}); }} className="ms-3 underline">{translate('audioEditor:syncReview.retry', 'Comprobar de nuevo')}</button>
+      </div>}
+      <fieldset disabled={isSaving} className="flex-1 min-h-0 min-w-0 flex flex-col md:flex-row">
         
         {/* Sidebar / Controls Panel */}
         <div className="w-full md:w-80 border-r border-gray-800 bg-gray-950/40 p-3.5 shrink-0 flex flex-col gap-3.5 overflow-y-auto">          {/* Collapsible Header */}
@@ -943,7 +974,7 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
               <button
                 type="button"
                 onClick={handleSave}
-                disabled={isSaving || !selectedPresentationId || !selectedAudioFile}
+                disabled={isSaving || loadingRows || sourceReview.changed || !!sourceReview.error || !selectedPresentationId || !selectedAudioFile}
                 className="flex items-center justify-center gap-2 px-6 py-2.5 rounded-lg bg-yellow-600 hover:bg-yellow-500 text-white font-extrabold text-xs tracking-wider transition-all shadow-md shadow-yellow-950/20 disabled:opacity-40 disabled:hover:bg-yellow-600 cursor-pointer"
               >
                 <Save size={14} />
@@ -954,7 +985,7 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
 
         </div>
 
-      </div>
+      </fieldset>
     </div>
   );
 };
