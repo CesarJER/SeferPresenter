@@ -23,6 +23,8 @@ Todas las contribuciones que se incorporen al repositorio deben estar cubiertas 
 3. Asegúrate de tener los derechos sobre el código que envías.
 4. El proceso de firma del [CLA](CLA.md) se realiza automáticamente a través de [CLA Assistant](https://cla-assistant.io/) al enviar un Pull Request.
 
+> **Importante**: Para la política de ramas, formato de commits y PRs, consulta [Flujo Git](docs/development/git-workflow.md).
+
 ---
 
 ## Principios y calidad técnica

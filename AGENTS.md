@@ -12,6 +12,7 @@ No mantener un catálogo paralelo de símbolos ni otra arquitectura en este arch
 - No ejecutar despliegues, reinicios, migraciones, generadores de corpus ni
   operaciones sobre datos de instancia como validación incidental.
 - Mantener ejemplos sintéticos y datos/secretos del operador fuera del producto.
+- Operaciones de Git y límites de autorización: seguir estrictamente [docs/development/git-workflow.md](docs/development/git-workflow.md).
 
 ## Descubrimiento del código
 
