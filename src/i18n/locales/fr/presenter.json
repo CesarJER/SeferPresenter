@@ -1,0 +1,12 @@
+{
+  "App.presentationsWereNotSavedBecauseTheyContainInvalidData": "Les présentations n’ont pas été enregistrées car elles contiennent des données invalides :\n{{value1}}",
+  "App.clickHereToEnableAudioPlaybackInThisTab": "Cliquez ici pour autoriser la lecture audio dans cet onglet",
+  "App.clickToEnableSound": "Cliquez pour activer le son",
+  "PresenterScreen.mediaSlide": "Diapositive multimédia",
+  "PresenterScreen.openMenu": "Ouvrir le menu",
+  "PresenterScreen.organizationLogo": "Logo de l’organisation",
+  "SeferReaderScreen.loading": "Chargement…",
+  "SeferReaderScreen.openMenu": "Ouvrir le menu",
+  "useSyncState.couldNotSendTheCommandWaitForControlTo": "Impossible d’envoyer la commande. Attendez que Control se reconnecte et réessayez.",
+  "App.couldNotSavePresentationsYourDraftIsPreserved": "Impossible d’enregistrer les présentations. Votre brouillon est conservé."
+}

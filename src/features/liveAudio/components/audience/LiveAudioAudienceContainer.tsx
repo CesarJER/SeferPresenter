@@ -1,3 +1,5 @@
+import { translate } from '../../../../i18n/runtime';
+import { useUiTranslation } from '../../../../i18n/useUiTranslation';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { ReactNode } from 'react';
 import { MessageSquare, X } from 'lucide-react';
@@ -47,6 +49,7 @@ export default function LiveAudioAudienceContainer({
   audienceSession,
   children
 }: LiveAudioAudienceContainerProps) {
+  useUiTranslation('liveAudio');
   const [isActive, setIsActive] = useState(false);
   const [isPendingWord, setIsPendingWord] = useState(false);
   const [isWordGranted, setIsWordGranted] = useState(false);
@@ -582,8 +585,8 @@ export default function LiveAudioAudienceContainer({
       ) {
         const accepted = window.confirm(
           externalBroadcastState === 'recording'
-            ? 'La sesión está en directo y grabándose. Confirma que autorizas que tu voz se emita y quede grabada. Evita identificarte y comprueba que no haya voces de fondo; pueden generarse subtítulos automáticos.'
-            : 'La sesión está en directo. Confirma que autorizas que tu voz se emita públicamente. Evita identificarte y comprueba que no haya voces de fondo.',
+            ? translate("liveAudio:LiveAudioAudienceContainer.theSessionIsLiveAndRecordingConfirmThatYouAuthorize", "La sesión está en directo y grabándose. Confirma que autorizas que tu voz se emita y quede grabada. Evita identificarte y comprueba que no haya voces de fondo; pueden generarse subtítulos automáticos.")
+            : translate("liveAudio:LiveAudioAudienceContainer.theSessionIsLiveConfirmThatYouAuthorizePubliclyBroadcasting", "La sesión está en directo. Confirma que autorizas que tu voz se emita públicamente. Evita identificarte y comprueba que no haya voces de fondo."),
         );
         if (!accepted) return;
         microphoneConsentRevisionRef.current = externalBroadcastRevision;
@@ -720,7 +723,7 @@ export default function LiveAudioAudienceContainer({
 
       {/* Control Responses floating overlay */}
       {receivedControlMessages.length > 0 && (
-        <div className="fixed top-4 right-4 left-4 md:left-auto md:w-96 z-50 space-y-2 pointer-events-auto">
+        <div className="fixed top-4 end-4 start-4 md:start-auto md:w-96 z-50 space-y-2 pointer-events-auto">
           {receivedControlMessages.map((msg) => (
             <div
               key={msg.id}
@@ -729,7 +732,7 @@ export default function LiveAudioAudienceContainer({
               <div className="flex items-center justify-between gap-2 mb-1">
                 <div className="flex items-center gap-1.5 text-xs font-semibold text-blue-300">
                   <MessageSquare className="h-4 w-4 text-blue-400 shrink-0" />
-                  <span>Mensaje de {msg.senderNick}</span>
+                  <span>{translate("liveAudio:LiveAudioAudienceContainer.messageFrom", "Mensaje de")} {msg.senderNick}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-[10px] text-gray-400 font-mono">
@@ -739,14 +742,14 @@ export default function LiveAudioAudienceContainer({
                     type="button"
                     onClick={() => setReceivedControlMessages((prev) => prev.filter((m) => m.id !== msg.id))}
                     className="text-gray-400 hover:text-white p-0.5 rounded-sm transition-colors"
-                    title="Cerrar mensaje"
-                    aria-label="Cerrar mensaje"
+                    title={translate("liveAudio:LiveAudioAudienceContainer.closeMessage", "Cerrar mensaje")}
+                    aria-label={translate("liveAudio:LiveAudioAudienceContainer.closeMessage", "Cerrar mensaje")}
                   >
                     <X className="h-4 w-4" />
                   </button>
                 </div>
               </div>
-              <p className="text-xs text-gray-100 leading-relaxed pl-5">
+              <p className="text-xs text-gray-100 leading-relaxed ps-5">
                 "{msg.text}"
               </p>
             </div>

@@ -1,3 +1,5 @@
+import { translate } from '../../../../i18n/runtime';
+import { useUiTranslation } from '../../../../i18n/useUiTranslation';
 import React from 'react';
 import { X } from 'lucide-react';
 
@@ -15,14 +17,14 @@ export const ActiveParticipantsPanel: React.FC<ActiveParticipantsPanelProps> = (
   isAliasVisible,
   onAliasVisibilityChange,
   onClose,
-}) => (
+}) => { useUiTranslation('liveAudio'); return ((
   <div className="w-full rounded-lg border border-white/10 bg-gray-900/95 p-4 text-gray-100 shadow-2xl backdrop-blur-md">
     <div className="flex items-center justify-between gap-3">
-      <h2 className="text-sm font-semibold">Participantes</h2>
+      <h2 className="text-sm font-semibold">{translate("liveAudio:ActiveParticipantsPanel.participants", "Participantes")}</h2>
       <button
         onClick={onClose}
         className="rounded-sm p-1 text-gray-400 transition-colors hover:bg-gray-800 hover:text-white"
-        title="Cerrar"
+        title={translate("liveAudio:ActiveParticipantsPanel.close", "Cerrar")}
       >
         <X className="h-4 w-4" />
       </button>
@@ -35,13 +37,13 @@ export const ActiveParticipantsPanel: React.FC<ActiveParticipantsPanelProps> = (
         onChange={(event) => onAliasVisibilityChange(event.target.checked)}
         className="mt-0.5 h-4 w-4 cursor-pointer accent-blue-500"
       />
-      <span>Mostrar mi alias a otros participantes</span>
+      <span>{translate("liveAudio:ActiveParticipantsPanel.showMyAliasToOtherParticipants", "Mostrar mi alias a otros participantes")}</span>
     </label>
 
     {isAuthorized && (
       <div className="mt-4 max-h-[calc(100vh-200px)] overflow-y-auto border-t border-white/10 pt-3">
         {participants.length === 0 ? (
-          <p className="text-sm text-gray-400">No hay participantes visibles ahora.</p>
+          <p className="text-sm text-gray-400">{translate("liveAudio:ActiveParticipantsPanel.noVisibleParticipantsRightNow", "No hay participantes visibles ahora.")}</p>
         ) : (
           <ul className="space-y-1 text-sm text-gray-200">
             {participants.map((participant, index) => (
@@ -54,4 +56,4 @@ export const ActiveParticipantsPanel: React.FC<ActiveParticipantsPanelProps> = (
       </div>
     )}
   </div>
-);
+)); };

@@ -1,3 +1,5 @@
+import { translate } from '../../i18n/runtime';
+import { useUiTranslation } from '../../i18n/useUiTranslation';
 import React, { useState, useEffect } from 'react';
 import { ChevronDown, ChevronUp, Eye } from 'lucide-react';
 import type { Slide, ScriptureNavState, AppMode, VideoState } from '../../types/presentation';
@@ -41,6 +43,7 @@ const SlideVisualizer: React.FC<SlideVisualizerProps> = ({
   autoduckState,
   audioOutputId,
 }) => {
+  useUiTranslation('common');
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [quizVerseLines, setQuizVerseLines] = useState<string[]>([]);
   const videoRef = React.useRef<HTMLVideoElement>(null);
@@ -243,8 +246,7 @@ const SlideVisualizer: React.FC<SlideVisualizerProps> = ({
   if (!hasContent) {
     return (
       <div className="px-4 py-2 text-xs text-gray-500 italic bg-gray-950/40 border-b border-gray-800 text-center">
-        No hay diapositiva o versículo proyectado
-      </div>
+        {translate("common:SlideVisualizer.noSlideOrVerseIsProjected", "No hay diapositiva o versículo proyectado")}</div>
     );
   }
 
@@ -267,9 +269,9 @@ const SlideVisualizer: React.FC<SlideVisualizerProps> = ({
       <div className="flex items-center justify-between px-3 py-1.5 bg-gray-900/40 text-[11px] font-bold text-gray-400 border-b border-gray-800/40 select-none">
         <div className="flex items-center gap-1.5">
           <Eye size={12} className="text-yellow-500" />
-          <span>PREVISUALIZACIÓN DE PROYECCIÓN</span>
+          <span>{translate("common:SlideVisualizer.projectionPreview", "PREVISUALIZACIÓN DE PROYECCIÓN")}</span>
           {labelText && (
-            <span className="ml-2 px-1.5 py-0.5 rounded-sm bg-gray-800 text-yellow-400 font-mono">
+            <span className="ms-2 px-1.5 py-0.5 rounded-sm bg-gray-800 text-yellow-400 font-mono">
               {labelText}
             </span>
           )}
@@ -278,7 +280,7 @@ const SlideVisualizer: React.FC<SlideVisualizerProps> = ({
           type="button"
           onClick={() => setIsCollapsed(!isCollapsed)}
           className="p-1 rounded-sm hover:bg-gray-800 hover:text-white transition-colors cursor-pointer"
-          title={isCollapsed ? "Expandir previsualización" : "Colapsar previsualización"}
+          title={isCollapsed ? translate("common:SlideVisualizer.expandPreview", "Expandir previsualización") : translate("common:SlideVisualizer.collapsePreview", "Colapsar previsualización")}
         >
           {isCollapsed ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
         </button>
@@ -322,12 +324,12 @@ const SlideVisualizer: React.FC<SlideVisualizerProps> = ({
                   {/* Transliteration & Translation */}
                   <div className="flex flex-col gap-1 mt-1.5 pt-1.5 border-t border-gray-800/60 text-xs">
                     {line1 && line1 !== '-' && (
-                      <p className="text-sky-300 leading-relaxed">
+                      <p dir={containsHebrew(line1) ? 'rtl' : 'ltr'} className="text-sky-300 leading-relaxed">
                         {line1}
                       </p>
                     )}
                     {line2 && line2 !== '-' && (
-                      <p className="text-gray-300 leading-relaxed">
+                      <p dir={containsHebrew(line2) ? 'rtl' : 'ltr'} className="text-gray-300 leading-relaxed">
                         {line2}
                       </p>
                     )}

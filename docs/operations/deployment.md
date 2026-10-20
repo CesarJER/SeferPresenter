@@ -2,6 +2,10 @@
 
 Referencia self-hosted. Los comandos se ejecutan desde la raíz salvo indicación contraria. Trabaje con datos y entorno autorizados y una copia recuperable. Contratos: [API](../api/README.md); uso: [primera sesión](../guides/first-session.md); tratamiento: [privacidad](../privacy/README.md).
 
+El [idioma predeterminado de interfaz](../development/i18n.md#runtime-and-configuration)
+se configura mediante JSON opcional, sin recompilar Vite. Su cambio se lee al
+iniciar Node; la implementación i18n no reinicia servicios ni modifica Docker.
+
 ## Aplicabilidad y prerrequisitos
 
 Node.js 24 LTS (`24.x`) y npm. Dockerfile usa Node 24 Alpine fijado por digest

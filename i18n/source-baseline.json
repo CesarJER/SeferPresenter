@@ -1,0 +1,182 @@
+[
+  {
+    "file": "src/App.tsx",
+    "line": 729,
+    "text": "{{value1}} {{value2}}:{{value3}}",
+    "reason": "Content-derived biblical reference; preserves its original format."
+  },
+  {
+    "file": "src/components/AudioSyncEditor.tsx",
+    "line": 164,
+    "text": "{{value1}} {{value2}}:{{value3}}",
+    "reason": "Content-derived biblical reference; preserves its original format."
+  },
+  {
+    "file": "src/components/control/MenuPopup.tsx",
+    "line": 434,
+    "text": "Título",
+    "reason": "Presentation content or shared subslide metadata; language must not rewrite stored/synchronized data."
+  },
+  {
+    "file": "src/components/control/MenuPopup.tsx",
+    "line": 509,
+    "text": "Título",
+    "reason": "Presentation content or shared subslide metadata; language must not rewrite stored/synchronized data."
+  },
+  {
+    "file": "src/components/control/MenuPopup.tsx",
+    "line": 1032,
+    "text": "Título",
+    "reason": "Presentation content or shared subslide metadata; language must not rewrite stored/synchronized data."
+  },
+  {
+    "file": "src/components/control/MenuPopup.tsx",
+    "line": 1138,
+    "text": "Título",
+    "reason": "Presentation content or shared subslide metadata; language must not rewrite stored/synchronized data."
+  },
+  {
+    "file": "src/components/control/MenuPopup.tsx",
+    "line": 1271,
+    "text": "Título",
+    "reason": "Presentation content or shared subslide metadata; language must not rewrite stored/synchronized data."
+  },
+  {
+    "file": "src/components/control/MenuPopup.tsx",
+    "line": 1385,
+    "text": "Título",
+    "reason": "Presentation content or shared subslide metadata; language must not rewrite stored/synchronized data."
+  },
+  {
+    "file": "src/components/control/ScriptureRangeEditor.tsx",
+    "line": 98,
+    "text": "{{value1}} {{value2}}:{{value3}}",
+    "reason": "Content-derived biblical reference; preserves its original format."
+  },
+  {
+    "file": "src/components/control/ScriptureRangeEditor.tsx",
+    "line": 188,
+    "text": "No cambiar",
+    "reason": "Persisted background sentinel; its visible label is translated separately."
+  },
+  {
+    "file": "src/features/liveAudio/components/audience/AudienceLiveAudioPanel.tsx",
+    "line": 245,
+    "text": "secureContext",
+    "reason": "Technical browser diagnostic identifier or Boolean; intentionally unchanged."
+  },
+  {
+    "file": "src/features/liveAudio/components/audience/AudienceLiveAudioPanel.tsx",
+    "line": 246,
+    "text": "true",
+    "reason": "Technical browser diagnostic identifier or Boolean; intentionally unchanged."
+  },
+  {
+    "file": "src/features/liveAudio/components/audience/AudienceLiveAudioPanel.tsx",
+    "line": 246,
+    "text": "false",
+    "reason": "Technical browser diagnostic identifier or Boolean; intentionally unchanged."
+  },
+  {
+    "file": "src/features/liveAudio/components/audience/AudienceLiveAudioPanel.tsx",
+    "line": 247,
+    "text": "mediaDevices",
+    "reason": "Technical browser diagnostic identifier or Boolean; intentionally unchanged."
+  },
+  {
+    "file": "src/features/liveAudio/components/audience/AudienceLiveAudioPanel.tsx",
+    "line": 249,
+    "text": "permission",
+    "reason": "Technical browser diagnostic identifier or Boolean; intentionally unchanged."
+  },
+  {
+    "file": "src/features/liveAudio/components/audience/AudienceLiveAudioPanel.tsx",
+    "line": 253,
+    "text": "error.name",
+    "reason": "Technical browser diagnostic identifier or Boolean; intentionally unchanged."
+  },
+  {
+    "file": "src/features/liveAudio/components/audience/AudienceLiveAudioPanel.tsx",
+    "line": 259,
+    "text": "error.message",
+    "reason": "Technical browser diagnostic identifier or Boolean; intentionally unchanged."
+  },
+  {
+    "file": "src/hooks/useScriptureNavigation.ts",
+    "line": 269,
+    "text": "{{value1}} {{value2}}:{{value3}}",
+    "reason": "Content-derived biblical reference; preserves its original format."
+  },
+  {
+    "file": "src/main-audience.tsx",
+    "line": 212,
+    "text": "{{value1}} {{value2}}:{{value3}}",
+    "reason": "Content-derived biblical reference; preserves its original format."
+  },
+  {
+    "file": "src/main-control.tsx",
+    "line": 380,
+    "text": "{{value1}} {{value2}}:{{value3}}",
+    "reason": "Content-derived biblical reference; preserves its original format."
+  },
+  {
+    "file": "src/utils/quizUtils.ts",
+    "line": 327,
+    "text": "Resultados",
+    "reason": "Presentation content or shared subslide metadata; language must not rewrite stored/synchronized data."
+  },
+  {
+    "file": "src/utils/quizUtils.ts",
+    "line": 332,
+    "text": "Lectura",
+    "reason": "Presentation content or shared subslide metadata; language must not rewrite stored/synchronized data."
+  },
+  {
+    "file": "src/utils/quizUtils.ts",
+    "line": 334,
+    "text": "Pregunta",
+    "reason": "Presentation content or shared subslide metadata; language must not rewrite stored/synchronized data."
+  },
+  {
+    "file": "src/utils/quizUtils.ts",
+    "line": 357,
+    "text": "Respuesta",
+    "reason": "Presentation content or shared subslide metadata; language must not rewrite stored/synchronized data."
+  },
+  {
+    "file": "src/utils/quizUtils.ts",
+    "line": 503,
+    "text": "Excelente",
+    "reason": "Presentation content or shared subslide metadata; language must not rewrite stored/synchronized data."
+  },
+  {
+    "file": "src/utils/quizUtils.ts",
+    "line": 503,
+    "text": "Has respondido brillantemente.",
+    "reason": "Presentation content or shared subslide metadata; language must not rewrite stored/synchronized data."
+  },
+  {
+    "file": "src/utils/quizUtils.ts",
+    "line": 504,
+    "text": "Muy bien",
+    "reason": "Presentation content or shared subslide metadata; language must not rewrite stored/synchronized data."
+  },
+  {
+    "file": "src/utils/quizUtils.ts",
+    "line": 504,
+    "text": "Buen conocimiento.",
+    "reason": "Presentation content or shared subslide metadata; language must not rewrite stored/synchronized data."
+  },
+  {
+    "file": "src/utils/quizUtils.ts",
+    "line": 505,
+    "text": "Bien",
+    "reason": "Presentation content or shared subslide metadata; language must not rewrite stored/synchronized data."
+  },
+  {
+    "file": "src/utils/quizUtils.ts",
+    "line": 505,
+    "text": "Sigue estudiando.",
+    "reason": "Presentation content or shared subslide metadata; language must not rewrite stored/synchronized data."
+  }
+]

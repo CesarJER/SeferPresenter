@@ -1,3 +1,5 @@
+import { translate } from '../../../../i18n/runtime';
+import { useUiTranslation } from '../../../../i18n/useUiTranslation';
 import React, { useEffect, useRef, useState } from 'react';
 import { X, Send } from 'lucide-react';
 
@@ -10,6 +12,7 @@ export const AudiencePrivateControlMessage: React.FC<AudiencePrivateControlMessa
   onClose,
   onSend,
 }) => {
+  useUiTranslation('liveAudio');
   const [message, setMessage] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
@@ -60,7 +63,7 @@ export const AudiencePrivateControlMessage: React.FC<AudiencePrivateControlMessa
     try {
       const sent = await onSend(trimmed);
       if (!sent) {
-        setError('No se pudo enviar todavia. Espera unos segundos y vuelve a intentarlo.');
+        setError(translate("liveAudio:AudiencePrivateControlMessage.couldNotSendYetWaitAFewSecondsAnd", "No se pudo enviar todavia. Espera unos segundos y vuelve a intentarlo."));
         return;
       }
       setMessage('');
@@ -83,10 +86,10 @@ export const AudiencePrivateControlMessage: React.FC<AudiencePrivateControlMessa
         
         {/* Header */}
         <div className="flex justify-between items-center p-4 border-b border-gray-800">
-          <h2 id="private-control-message-title" className="text-lg font-medium text-white">Mensaje a Control</h2>
+          <h2 id="private-control-message-title" className="text-lg font-medium text-white">{translate("liveAudio:AudiencePrivateControlMessage.messageToControl", "Mensaje a Control")}</h2>
           <button 
             onClick={onClose}
-            aria-label="Cerrar mensaje privado"
+            aria-label={translate("liveAudio:AudiencePrivateControlMessage.closePrivateMessage", "Cerrar mensaje privado")}
             className="p-1.5 text-gray-400 hover:text-white rounded-lg hover:bg-gray-800 transition-colors"
           >
             <X className="w-5 h-5" />
@@ -96,18 +99,17 @@ export const AudiencePrivateControlMessage: React.FC<AudiencePrivateControlMessa
         {/* Body */}
         <div className="p-4">
           <p id="private-control-message-description" className="text-xs text-gray-400 mb-3">
-            Este mensaje es privado y solo será visible para el equipo de moderación autorizado. No es un chat público.
-          </p>
+            {translate("liveAudio:AudiencePrivateControlMessage.thisMessageIsPrivateAndVisibleOnlyToThe", "Este mensaje es privado y solo será visible para el equipo de moderación autorizado. No es un chat público.")}</p>
           <form id="message-form" onSubmit={handleSubmit}>
             <textarea
               ref={messageRef}
-              aria-label="Mensaje privado para Control"
+              aria-label={translate("liveAudio:AudiencePrivateControlMessage.privateMessageForControl", "Mensaje privado para Control")}
               value={message}
               onChange={(e) => {
                 setMessage(e.target.value);
                 setError(null);
               }}
-              placeholder="Escribe tu mensaje aquí..."
+              placeholder={translate("liveAudio:AudiencePrivateControlMessage.writeYourMessageHere", "Escribe tu mensaje aquí...")}
               className="w-full h-32 px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
               maxLength={500}
             />
@@ -121,8 +123,7 @@ export const AudiencePrivateControlMessage: React.FC<AudiencePrivateControlMessa
             onClick={onClose}
             className="px-4 py-2 text-sm font-medium text-gray-300 hover:text-white hover:bg-gray-800 rounded-lg transition-colors"
           >
-            Cancelar
-          </button>
+            {translate("liveAudio:AudiencePrivateControlMessage.cancel", "Cancelar")}</button>
           <button
             type="submit"
             form="message-form"
@@ -130,7 +131,7 @@ export const AudiencePrivateControlMessage: React.FC<AudiencePrivateControlMessa
             className="flex items-center gap-2 px-5 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-700 disabled:text-gray-500 text-white text-sm font-medium rounded-lg shadow-md transition-all"
           >
             <Send className="w-4 h-4" />
-            {isSending ? 'Enviando' : 'Enviar'}
+            {isSending ? translate("liveAudio:AudiencePrivateControlMessage.sending", "Enviando") : translate("liveAudio:AudiencePrivateControlMessage.send", "Enviar")}
           </button>
         </div>
       </div>

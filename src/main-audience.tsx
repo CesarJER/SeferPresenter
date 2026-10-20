@@ -1,3 +1,6 @@
+import { UiLocaleProvider } from './i18n/UiLocaleProvider';
+import { translate } from './i18n/runtime';
+import { useUiTranslation } from './i18n/useUiTranslation';
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Play } from 'lucide-react';
@@ -32,6 +35,7 @@ const LiveAudioContainer = import.meta.env.VITE_SEFER_LIVE_AUDIO_BUILD !== 'fals
   : null;
 
 function AudienceApp() {
+  useUiTranslation('audience');
   const isTvMode = new URLSearchParams(window.location.search).get('tv') === '1';
   const audienceAccess = useAudienceAccess();
   const [currentPresentation, setCurrentPresentation] = useState<Presentation | null>(null);
@@ -349,7 +353,7 @@ function AudienceApp() {
           className="fixed bottom-20 left-1/2 z-90 flex -translate-x-1/2 items-center gap-2 rounded-full border border-white/20 bg-blue-600/95 px-5 py-3 text-sm font-bold text-white shadow-2xl backdrop-blur-md transition-colors hover:bg-blue-500 pointer-events-auto"
         >
           <Play className="h-4 w-4" />
-          <span>Activar audio y video</span>
+          <span>{translate("audience:main_audience.enableAudioAndVideo", "Activar audio y video")}</span>
         </button>
       )}
       
@@ -357,7 +361,7 @@ function AudienceApp() {
       <audio ref={audioRef} preload="none" style={{ display: 'none' }} />
       <audio ref={audioTimelineRef} preload="none" style={{ display: 'none' }} />
 
-      <div className="fixed bottom-2 right-2 z-50 opacity-50 hover:opacity-100 transition-opacity">
+      <div className="fixed bottom-2 end-2 z-50 opacity-50 hover:opacity-100 transition-opacity">
         <DataProtectionLink className="text-[10px] text-white/70 hover:text-white flex items-center gap-1" />
       </div>
     </>
@@ -370,15 +374,15 @@ const rootElement = document.getElementById('root');
 if (rootElement) {
   if (window.location.pathname === '/proteccion-datos') {
     createRoot(rootElement).render(
-      <React.StrictMode>
+      <React.StrictMode><UiLocaleProvider role="audience">
         <DataProtectionPage />
-      </React.StrictMode>
+      </UiLocaleProvider></React.StrictMode>
     );
   } else {
     createRoot(rootElement).render(
-      <React.StrictMode>
+      <React.StrictMode><UiLocaleProvider role="audience">
         <AudienceApp />
-      </React.StrictMode>
+      </UiLocaleProvider></React.StrictMode>
     );
   }
 }

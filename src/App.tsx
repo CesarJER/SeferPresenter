@@ -1,3 +1,5 @@
+import { translate } from './i18n/runtime';
+import { useUiTranslation } from './i18n/useUiTranslation';
 import { loadCatalog, saveCatalog } from './utils/catalogApi';
 import { useState, useEffect, useCallback, useMemo, useRef, Suspense, lazy } from 'react';
 import PresenterScreen from './components/presenter/PresenterScreen';
@@ -39,6 +41,7 @@ import { generatePresentationSteps } from './utils/navigationUtils';
 import type { PresentationStep } from './types/presentation';
 
 function App() {
+  useUiTranslation('presenter');
   const isControlMode = false;
   const isAudioEditorMode = false;
   const isAudienceMode = false;
@@ -610,7 +613,7 @@ function App() {
     const validation = validatePresentationList(normalized);
     if (!validation.ok || !validation.value) {
       console.error("Refusing to save invalid presentations", validation.errors);
-      alert(`No se guardaron las presentaciones porque contienen datos inv\u00e1lidos:\n${validation.errors.slice(0, 5).join('\n')}`);
+      alert(translate("presenter:App.presentationsWereNotSavedBecauseTheyContainInvalidData", "No se guardaron las presentaciones porque contienen datos inválidos:\n{{value1}}", { value1: validation.errors.slice(0, 5).join('\n') }));
       return;
     }
     try {
@@ -618,7 +621,7 @@ function App() {
       setPresentations(normalized);
       return true;
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'No se pudieron guardar las presentaciones. El borrador se conserva.');
+      alert(err instanceof Error ? err.message : translate("presenter:App.couldNotSavePresentationsYourDraftIsPreserved", "No se pudieron guardar las presentaciones. El borrador se conserva."));
       return false;
     }
   }, [presentations]);
@@ -904,10 +907,10 @@ function App() {
             }
           }}
           className="absolute bottom-6 left-1/2 -translate-x-1/2 z-50 bg-yellow-600 hover:bg-yellow-500 text-white font-bold text-xs px-5 py-2.5 rounded-full shadow-xl cursor-pointer flex items-center gap-2 animate-bounce transition-all border border-yellow-400 shadow-yellow-950/30"
-          title="Haga clic aquí para habilitar la reproducción de audio en esta pestaña"
+          title={translate("presenter:App.clickHereToEnableAudioPlaybackInThisTab", "Haga clic aquí para habilitar la reproducción de audio en esta pestaña")}
         >
           <Music size={13} className="animate-pulse text-white" />
-          <span>Haga clic para habilitar sonido</span>
+          <span>{translate("presenter:App.clickToEnableSound", "Haga clic para habilitar sonido")}</span>
         </div>
       )}
       {LiveAudioPresenter && (

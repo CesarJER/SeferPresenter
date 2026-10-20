@@ -1,3 +1,5 @@
+import { translate } from '../../i18n/runtime';
+import { useUiTranslation } from '../../i18n/useUiTranslation';
 import React, { useEffect, useState } from 'react';
 import { ShieldCheck, ShieldQuestion } from 'lucide-react';
 import type { ControlAuthorizationState } from '../../hooks/useControlAuthorization';
@@ -11,19 +13,20 @@ interface LiveAudioControlAuthorizationProps {
 const getStateLabel = (state: ControlAuthorizationState['controlState']) => {
   switch (state) {
     case 'PRINCIPAL':
-      return 'Control principal';
+      return translate("control:LiveAudioControlAuthorization.mainControl", "Control principal");
     case 'AUTHORIZED':
-      return 'Control autorizado';
+      return translate("control:LiveAudioControlAuthorization.authorizedControl", "Control autorizado");
     case 'PENDING':
-      return 'Control pendiente';
+      return translate("control:LiveAudioControlAuthorization.pendingControl", "Control pendiente");
     default:
-      return 'Conectando Control';
+      return translate("control:LiveAudioControlAuthorization.connectingControl", "Conectando Control");
   }
 };
 
 // getSecondsRemaining removido
 
 export const LiveAudioControlAuthorization: React.FC<LiveAudioControlAuthorizationProps> = ({ authorization }) => {
+  useUiTranslation('control');
   const {
     controlState,
     verificationCode,
@@ -57,16 +60,14 @@ export const LiveAudioControlAuthorization: React.FC<LiveAudioControlAuthorizati
           </span>
         </div>
         <span className="text-[10px] text-gray-500 font-mono truncate">
-          Live Audio
-        </span>
+          {translate("control:LiveAudioControlAuthorization.liveAudio", "Live Audio")}</span>
       </div>
 
       <div className="p-3 space-y-3">
         {isPending && (
           <div className="space-y-2">
             <p className="text-xs text-gray-300">
-              Muestra este codigo al Control que autoriza.
-            </p>
+              {translate("control:LiveAudioControlAuthorization.showThisCodeToTheAuthorizingControl", "Muestra este codigo al Control que autoriza.")}</p>
             <ControlVerificationCode code={verificationCode} secondsRemaining={secondsRemaining} />
           </div>
         )}

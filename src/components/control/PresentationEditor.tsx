@@ -1,3 +1,5 @@
+import { translate } from '../../i18n/runtime';
+import { useUiTranslation } from '../../i18n/useUiTranslation';
 import React from 'react';
 import { FileText, HelpCircle, Image as ImageIcon, Languages, Layers, Plus, Save, Table, Video, X } from 'lucide-react';
 import type { Presentation, QuizData, Slide, VideoState } from '../../types/presentation';
@@ -146,7 +148,7 @@ export const PresentationEditor: React.FC<PresentationEditorProps> = ({
   handleAddMediaSlide,
   handleAddQuizSlide,
   handleTransliterate,
-}) => (              <div id="section-presentation-editor">
+}) => { useUiTranslation('control'); return ((              <div id="section-presentation-editor">
                 {/* Header del Editor */}
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between rounded-md bg-gray-900 border border-gray-700 p-3 mb-3">
                   <div className="flex items-center gap-2.5 flex-1 min-w-0">
@@ -155,7 +157,7 @@ export const PresentationEditor: React.FC<PresentationEditorProps> = ({
                       type="button"
                       onClick={() => setEditorMode('list')}
                       className="p-1.5 rounded-full hover:bg-gray-800 text-gray-400 hover:text-white transition-colors cursor-pointer"
-                      title="Salir del editor"
+                      title={translate("control:PresentationEditor.exitEditor", "Salir del editor")}
                     >
                       <X size={18} />
                     </button>
@@ -165,27 +167,27 @@ export const PresentationEditor: React.FC<PresentationEditorProps> = ({
                       type="text"
                       value={title}
                       onChange={e => setTitle(e.target.value)}
-                      placeholder="Escribe el título..."
+                      placeholder={translate("control:PresentationEditor.enterTheTitle", "Escribe el título...")}
                       className="bg-transparent border-b border-transparent hover:border-gray-700 focus:border-yellow-500 outline-hidden text-base font-bold text-white px-2 py-1 flex-1 min-w-0 transition-colors"
                     />
                   </div>
                   <div className="flex flex-wrap items-center gap-3 justify-end">
                     {/* Selector Fondo Principal del Editor y botón aplicar a todo */}
                     <div className="flex items-center gap-2 bg-gray-800 border border-gray-750 px-2.5 py-1 rounded-md min-w-[210px]">
-                      <label className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Principal</label>
+                      <label className="text-[10px] font-bold uppercase tracking-wider text-gray-400">{translate("control:PresentationEditor.main", "Principal")}</label>
                       <CustomSearchSelect
-                        value={bg || 'Principal'}
+                        value={bg || "Principal"}
                         onChange={(val) => setBg(val)}
                         options={[
-                          { label: 'Principal', value: 'Principal' },
-                          { label: 'Ignorar', value: 'Ignorar' },
-                          { label: 'Anterior', value: 'Anterior' },
+                          { label: translate("control:PresentationEditor.main", "Principal"), value: "Principal" },
+                          { label: translate("control:PresentationEditor.ignore", "Ignorar"), value: "Ignorar" },
+                          { label: translate("control:PresentationEditor.previous", "Anterior"), value: "Anterior" },
                           ...backgrounds.map(background => ({
                             label: background.split('/').pop() || background,
                             value: background
                           }))
                         ]}
-                        placeholder="Fondo principal..."
+                        placeholder={translate("control:PresentationEditor.mainBackground", "Fondo principal...")}
                         dropdownWidthClass="w-[200px]"
                       />
                       <button
@@ -197,11 +199,11 @@ export const PresentationEditor: React.FC<PresentationEditorProps> = ({
                               background: bg
                             }));
                             setSlides(updatedSlides);
-                            alert('Se han configurado todos los fondos de las diapositivas al seleccionado.');
+                            alert(translate("control:PresentationEditor.allSlideBackgroundsHaveBeenSetToTheSelected", "Se han configurado todos los fondos de las diapositivas al seleccionado."));
                           }
                         }}
                         className="p-1.5 rounded-sm bg-yellow-600 hover:bg-yellow-500 text-white transition-all cursor-pointer flex items-center justify-center"
-                        title="Aplicar este fondo a todas las diapositivas"
+                        title={translate("control:PresentationEditor.applyThisBackgroundToAllSlides", "Aplicar este fondo a todas las diapositivas")}
                       >
                         <Layers size={13} />
                       </button>
@@ -210,7 +212,7 @@ export const PresentationEditor: React.FC<PresentationEditorProps> = ({
                     {/* Selector de Tags Públicos */}
                     {availableTags.length > 0 && (
                       <div className="flex items-center gap-2 bg-gray-800 border border-gray-750 px-2.5 py-1 rounded-md max-w-full overflow-x-auto">
-                        <label className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Público</label>
+                        <label className="text-[10px] font-bold uppercase tracking-wider text-gray-400">{translate("control:PresentationEditor.public", "Público")}</label>
                         <div className="flex flex-wrap gap-1">
                           {availableTags.map(tag => {
                             const active = tags.includes(tag);
@@ -227,7 +229,7 @@ export const PresentationEditor: React.FC<PresentationEditorProps> = ({
                                     ? 'bg-yellow-600 text-white shadow-xs'
                                     : 'bg-gray-700 text-gray-400 hover:text-white hover:bg-gray-600'
                                 }`}
-                                title={`Asignar tag '${tag}' para publicación en catálogo`}
+                                title={translate("control:PresentationEditor.assignTagForCatalogPublication", "Asignar tag '{{value1}}' para publicación en catálogo", { value1: tag })}
                               >
                                 {tag}
                               </button>
@@ -246,10 +248,9 @@ export const PresentationEditor: React.FC<PresentationEditorProps> = ({
                           ? 'bg-yellow-600 text-white shadow-md'
                           : 'text-gray-400 hover:text-white'
                           }`}
-                        title="Modo Estándar (1 línea por diapositiva)"
+                        title={translate("control:PresentationEditor.standardMode1LinePerSlide", "Modo Estándar (1 línea por diapositiva)")}
                       >
-                        1x
-                      </button>
+                        {translate("control:PresentationEditor.1x", "1x")}</button>
                       <button
                         type="button"
                         onClick={() => handleModeChange('trilingual')}
@@ -257,15 +258,14 @@ export const PresentationEditor: React.FC<PresentationEditorProps> = ({
                           ? 'bg-yellow-600 text-white shadow-md'
                           : 'text-gray-400 hover:text-white'
                           }`}
-                        title="Modo Trilingüe (3 líneas por diapositiva)"
+                        title={translate("control:PresentationEditor.trilingualMode3LinesPerSlide", "Modo Trilingüe (3 líneas por diapositiva)")}
                       >
-                        3x
-                      </button>
+                        {translate("control:PresentationEditor.3x", "3x")}</button>
                     </div>
 
                     {/* Font Scale slider */}
                     <div className="flex items-center gap-2 bg-gray-800 border border-gray-750 px-2.5 py-1 rounded-md">
-                      <label className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Letra</label>
+                      <label className="text-[10px] font-bold uppercase tracking-wider text-gray-400">{translate("control:PresentationEditor.lyrics", "Letra")}</label>
                       <input
                         type="range"
                         min="0.75"
@@ -275,7 +275,7 @@ export const PresentationEditor: React.FC<PresentationEditorProps> = ({
                         onChange={e => setFontScale(Number(e.target.value))}
                         className="w-16 sm:w-20 accent-yellow-500"
                       />
-                      <span className="text-[10px] text-gray-400 font-bold min-w-[28px] text-right">
+                      <span className="text-[10px] text-gray-400 font-bold min-w-[28px] text-end">
                         {Math.round(fontScale * 100)}%
                       </span>
                     </div>
@@ -291,7 +291,7 @@ export const PresentationEditor: React.FC<PresentationEditorProps> = ({
                           }`}
                       >
                         <Table size={12} />
-                        <span className="hidden sm:inline">Tabla</span>
+                        <span className="hidden sm:inline">{translate("control:PresentationEditor.table", "Tabla")}</span>
                       </button>
                       <button
                         type="button"
@@ -302,7 +302,7 @@ export const PresentationEditor: React.FC<PresentationEditorProps> = ({
                           }`}
                       >
                         <FileText size={12} />
-                        <span className="hidden sm:inline">Rápida</span>
+                        <span className="hidden sm:inline">{translate("control:PresentationEditor.quick", "Rápida")}</span>
                       </button>
                     </div>
 
@@ -311,7 +311,7 @@ export const PresentationEditor: React.FC<PresentationEditorProps> = ({
                       type="button"
                       onClick={handleSave}
                       className="p-2 rounded-md bg-yellow-600 hover:bg-yellow-500 text-white shadow-md cursor-pointer transition-all hover:scale-105"
-                      title="Guardar presentación de forma permanente"
+                      title={translate("control:PresentationEditor.savePresentationPermanently", "Guardar presentación de forma permanente")}
                     >
                       <Save size={15} />
                     </button>
@@ -323,28 +323,28 @@ export const PresentationEditor: React.FC<PresentationEditorProps> = ({
                   <div className="space-y-4">
                     {/* Visual Editor Table */}
                     <div className="overflow-x-auto rounded-lg border border-gray-700 bg-gray-900/40 backdrop-blur-md shadow-lg">
-                      <table className="w-full text-left border-collapse">
+                      <table className="w-full text-start border-collapse">
                         <thead>
                           <tr className="border-b border-gray-700 bg-gray-900/80 text-xs font-semibold uppercase tracking-wider text-gray-400">
-                            <th className="px-3 py-3 w-[80px] text-center">Etiqueta</th>
+                            <th className="px-3 py-3 w-[80px] text-center">{translate("control:PresentationEditor.label", "Etiqueta")}</th>
                             <th className="px-3 py-3">
                               <div className="flex items-center justify-between">
-                                <span>Contenido de la Diapositiva</span>
+                                <span>{translate("control:PresentationEditor.slideContent", "Contenido de la Diapositiva")}</span>
                                 {mode === 'trilingual' && (
                                   <button
                                     type="button"
                                     onClick={handleTransliterateAllTable}
                                     className="inline-flex items-center gap-1 bg-blue-600 hover:bg-blue-500 text-white text-[10px] px-2.5 py-1 rounded-sm transition-all cursor-pointer shadow-xs"
-                                    title="Generar transliteración para todas las diapositivas"
+                                    title={translate("control:PresentationEditor.generateTransliterationForAllSlides", "Generar transliteración para todas las diapositivas")}
                                   >
                                     <Languages size={10} />
-                                    <span>Transliterar todas</span>
+                                    <span>{translate("control:PresentationEditor.transliterateAll", "Transliterar todas")}</span>
                                   </button>
                                 )}
                               </div>
                             </th>
-                            <th className="px-3 py-3 w-[150px] text-center">Fondo</th>
-                            <th className="px-3 py-3 w-[120px] text-center font-bold">Orden / Acción</th>
+                            <th className="px-3 py-3 w-[150px] text-center">{translate("control:PresentationEditor.background", "Fondo")}</th>
+                            <th className="px-3 py-3 w-[120px] text-center font-bold">{translate("control:PresentationEditor.orderAction", "Orden / Acción")}</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-800 text-sm">
@@ -396,8 +396,8 @@ export const PresentationEditor: React.FC<PresentationEditorProps> = ({
                       <button
                         type="button"
                         onClick={handleAddMediaSlide}
-                        className="flex items-center gap-1 text-gray-500 hover:text-white transition-colors cursor-pointer pr-2 border-r border-gray-800"
-                        title="Añadir Diapositiva de Imagen Pura (+ 🖼️)"
+                        className="flex items-center gap-1 text-gray-500 hover:text-white transition-colors cursor-pointer pe-2 border-r border-gray-800"
+                        title={translate("control:PresentationEditor.addImageOnlySlide", "Añadir Diapositiva de Imagen Pura (+ 🖼️)")}
                       >
                         <span className="text-[11px] font-black text-gray-400">+</span>
                         <ImageIcon size={14} className="text-gray-400" />
@@ -410,15 +410,15 @@ export const PresentationEditor: React.FC<PresentationEditorProps> = ({
                         className="flex-1 flex items-center justify-center gap-1.5 text-gray-300 hover:text-white transition-all cursor-pointer py-0.5"
                       >
                         <Plus size={14} />
-                        <span>Añadir Nueva Diapositiva</span>
+                        <span>{translate("control:PresentationEditor.addNewSlide", "Añadir Nueva Diapositiva")}</span>
                       </button>
 
                       {/* Right: + Video Shortcut */}
                       <button
                         type="button"
                         onClick={handleAddMediaSlide}
-                        className="flex items-center gap-1 text-gray-500 hover:text-white transition-colors cursor-pointer pl-2 border-l border-gray-800"
-                        title="Añadir Diapositiva de Video (+ 🎥)"
+                        className="flex items-center gap-1 text-gray-500 hover:text-white transition-colors cursor-pointer ps-2 border-l border-gray-800"
+                        title={translate("control:PresentationEditor.addVideoSlide", "Añadir Diapositiva de Video (+ 🎥)")}
                       >
                         <span className="text-[11px] font-black text-gray-400">+</span>
                         <Video size={14} className="text-gray-400" />
@@ -426,8 +426,8 @@ export const PresentationEditor: React.FC<PresentationEditorProps> = ({
                       <button
                         type="button"
                         onClick={handleAddQuizSlide}
-                        className="flex items-center gap-1 text-gray-500 hover:text-white transition-colors cursor-pointer pl-2 border-l border-gray-800"
-                        title="Añadir Diapositiva de Quiz"
+                        className="flex items-center gap-1 text-gray-500 hover:text-white transition-colors cursor-pointer ps-2 border-l border-gray-800"
+                        title={translate("control:PresentationEditor.addQuizSlide", "Añadir Diapositiva de Quiz")}
                       >
                         <span className="text-[11px] font-black text-gray-400">+</span>
                         <HelpCircle size={14} className="text-gray-400" />
@@ -442,7 +442,7 @@ export const PresentationEditor: React.FC<PresentationEditorProps> = ({
                         className={`${textareaClass} min-h-80 md:min-h-104`}
                         value={standardText}
                         onChange={e => setStandardText(e.target.value)}
-                        placeholder={'#Coro\nEste es un ejemplo de coro.\n\nEste es el párrafo 1.'}
+                        placeholder={translate("control:PresentationEditor.chorusThisIsASampleChorusThisIsParagraph", "#Coro\nEste es un ejemplo de coro.\n\nEste es el párrafo 1.")}
                       />
                       <FormatLegend />
                     </div>
@@ -450,15 +450,15 @@ export const PresentationEditor: React.FC<PresentationEditorProps> = ({
                     <div className="flex flex-col gap-4">
                       <div className="flex flex-col gap-1.5">
                         <div className="flex items-center justify-between">
-                          <label className="text-xs font-semibold uppercase tracking-wide text-gray-400">Hebreo</label>
+                          <label className="text-xs font-semibold uppercase tracking-wide text-gray-400">{translate("control:PresentationEditor.hebrew", "Hebreo")}</label>
                           <button
                             type="button"
                             onClick={handleTransliterate}
                             className="inline-flex items-center gap-1 rounded-md bg-blue-600 px-2.5 py-1.5 text-xs font-bold text-white hover:bg-blue-500"
-                            title="Generar transliteración del texto en hebreo"
+                            title={translate("control:PresentationEditor.generateTransliterationOfHebrewText", "Generar transliteración del texto en hebreo")}
                           >
                             <Languages size={13} />
-                            <span>Transliterar</span>
+                            <span>{translate("control:PresentationEditor.transliterate", "Transliterar")}</span>
                           </button>
                         </div>
                         <textarea
@@ -466,27 +466,27 @@ export const PresentationEditor: React.FC<PresentationEditorProps> = ({
                           value={hebText}
                           onChange={e => setHebText(e.target.value)}
                           dir="rtl"
-                          placeholder={'> Mi título\n#1\nשְׁמַע יִשְׂרָאֵל'}
+                          placeholder={translate("control:PresentationEditor.myTitle1", "> Mi título\n#1\nשְׁמַע יִשְׂרָאֵל")}
                         />
                       </div>
 
                       <div className="flex flex-col gap-1.5">
-                        <label className="text-xs font-semibold uppercase tracking-wide text-gray-400">Transliteración</label>
+                        <label className="text-xs font-semibold uppercase tracking-wide text-gray-400">{translate("control:PresentationEditor.transliteration", "Transliteración")}</label>
                         <textarea
                           className={`${textareaClass} min-h-80 md:min-h-96`}
                           value={transText}
                           onChange={e => setTransText(e.target.value)}
-                          placeholder={'> Mi título\nShemá Israel'}
+                          placeholder={translate("control:PresentationEditor.myTitleShemIsrael", "> Mi título\nShemá Israel")}
                         />
                       </div>
 
                       <div className="flex flex-col gap-1.5">
-                        <label className="text-xs font-semibold uppercase tracking-wide text-gray-400">Traducción</label>
+                        <label className="text-xs font-semibold uppercase tracking-wide text-gray-400">{translate("control:PresentationEditor.translation", "Traducción")}</label>
                         <textarea
                           className={`${textareaClass} min-h-80 md:min-h-96`}
                           value={traText}
                           onChange={e => setTraText(e.target.value)}
-                          placeholder={'> Mi título\nEscucha Israel'}
+                          placeholder={translate("control:PresentationEditor.myTitleListenIsrael", "> Mi título\nEscucha Israel")}
                         />
                       </div>
 
@@ -496,4 +496,4 @@ export const PresentationEditor: React.FC<PresentationEditorProps> = ({
                 )}
               </div>
 
-);
+)); };

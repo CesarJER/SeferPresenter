@@ -2,6 +2,15 @@
 @source './';
 @source '../index.html';
 
+[dir='rtl'] [data-ui-directional] {
+  transform: scaleX(-1);
+}
+
+/* Isolate user content, identifiers and numbers from the surrounding UI. */
+bdi, [dir='auto'] {
+  unicode-bidi: isolate;
+}
+
 @theme {
   --font-hebrew:
     Taamey D Web, Frank Ruehl CLM, David CLM, Times New Roman, serif;

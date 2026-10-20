@@ -1,0 +1,18 @@
+{
+  "AudienceAccessGate.organizationLogo": "Organization logo",
+  "AudienceAccessGate.requestPending": "Request pending",
+  "AudienceAccessGate.theMainControlMustAdmitYouBeforeTheSession": "The main Control must admit you before the session is shown.",
+  "AudienceAccessGate.sendAMessageToTheModerators": "Send a message to the moderators",
+  "AudienceAccessGate.messageFrom": "Message from",
+  "AudienceAccessGate.closeMessage": "Close message",
+  "AudienceAccessGate.accessBlocked": "Access blocked",
+  "AudienceAccessGate.requestRejectedYouCanTryAgainIn": "Request rejected. You can try again in",
+  "AudienceAccessGate.seconds": "seconds.",
+  "AudienceAccessGate.preparingSecureAccess": "Preparing secure access…",
+  "AudienceAccessGate.requestAccessToTheSession": "Request access to the session",
+  "AudienceTvCallToAction.liveBroadcastJoinUsAndTakePartConnectTo": "Live broadcast! Join us and take part. Connect to",
+  "main_audience.enableAudioAndVideo": "Enable audio and video",
+  "AudienceAccessGate.couldNotSendTheAlias": "Could not send the alias.",
+  "AudienceAccessGate.couldNotSendTheRequest": "Could not send the request.",
+  "AudienceAccessGate.waiting": "Waiting"
+}

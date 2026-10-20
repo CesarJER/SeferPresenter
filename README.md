@@ -26,6 +26,10 @@ y la lista de trabajo restante están registrados en [TODO](TODO.md), en las
   local. Su reconocimiento depende del corpus, motor, hardware y entorno.
 
 Live Audio y Voice Scripture son opcionales y requieren configuración propia.
+La interfaz puede seleccionarse en español, inglés, francés y hebreo; el idioma
+es independiente del contenido proyectado. Las traducciones nuevas son borradores
+pendientes de revisión lingüística. Consulte [i18n](docs/development/i18n.md).
+
 La reproducción y captura también dependen de permisos, interacción del usuario
 y restricciones del navegador; el estado sincronizado no garantiza recepción
 física de audio.

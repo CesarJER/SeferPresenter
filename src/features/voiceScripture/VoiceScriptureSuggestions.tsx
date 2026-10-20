@@ -1,3 +1,5 @@
+import { translate } from '../../i18n/runtime';
+import { useUiTranslation } from '../../i18n/useUiTranslation';
 import type { VoiceScriptureCandidate } from './voiceScriptureParser';
 import { candidateLabel } from './voiceScriptureProjection';
 
@@ -7,9 +9,10 @@ export function VoiceScriptureSuggestions({ status, options, onProject }: {
   options: VoiceScriptureCandidate[];
   onProject: (candidate: VoiceScriptureCandidate) => void;
 }) {
-  return <div aria-label="Asistente de voz" className="max-h-28 overflow-auto p-2 text-xs text-gray-300">
+  useUiTranslation('voiceScripture');
+  return <div aria-label={translate("voiceScripture:VoiceScriptureSuggestions.voiceAssistant", "Asistente de voz")} className="max-h-28 overflow-auto p-2 text-xs text-gray-300">
     <div role="status">{status}</div>
-    {options.length > 0 && <div aria-label="Referencias detectadas" className="mt-1 flex flex-wrap gap-1">
+    {options.length > 0 && <div aria-label={translate("voiceScripture:VoiceScriptureSuggestions.detectedReferences", "Referencias detectadas")} className="mt-1 flex flex-wrap gap-1">
       {options.flatMap((candidate, index) => {
         const buttons = [
           <button type="button" className="rounded-sm bg-emerald-800 px-2 py-1"

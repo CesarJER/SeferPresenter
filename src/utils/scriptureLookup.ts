@@ -1,3 +1,4 @@
+import { translate } from '../i18n/runtime';
 import type { Slide } from '../types/presentation';
 import { parseCitaRef } from './quizUtils';
 import { getMetadata, loadBookData, resolveBookName, type AppMetadata } from './metadataCache';
@@ -117,7 +118,7 @@ export const auditQuickScriptureReferences = async (
       if (!spec) {
         issues.push({
           location,
-          message: `La referencia "${line}" no tiene el formato [Sefer Libro capítulo:versículo] o [Tanaj Libro capítulo:inicio-fin].`,
+          message: translate("common:diagnostic.referenceValue1DoesNotFollowSeferBookChapterVerseOrTanajBook", "La referencia \"{{value1}}\" no tiene el formato [Sefer Libro capítulo:versículo] o [Tanaj Libro capítulo:inicio-fin].", { value1: line }),
         });
         return;
       }
@@ -133,7 +134,7 @@ export const auditQuickScriptureReferences = async (
     if (!parsed) {
       issues.push({
         location,
-        message: `La referencia ${citationMatch[1] ? 'CITA!' : 'CITA'} "${citation || '(vacía)'}" no tiene el formato Libro capítulo:versículo o Libro capítulo:inicio-fin.`,
+        message: translate("common:diagnostic.referenceValue1Value2DoesNotFollowBookChapterVerseOrBookChapter", "La referencia {{value1}} \"{{value2}}\" no tiene el formato Libro capítulo:versículo o Libro capítulo:inicio-fin.", { value1: citationMatch[1] ? 'CITA!' : 'CITA', value2: citation || '(vacía)' }),
       });
       return;
     }
@@ -162,7 +163,7 @@ export const auditSlideScriptureReferences = async (
         if (!citation) return;
         const parsed = parseCitaRef(citation);
         if (!parsed) {
-          issues.push({ location, message: `${kind} "${citation}" no tiene un formato reconocible.` });
+          issues.push({ location, message: translate("common:diagnostic.value1Value2DoesNotHaveARecognizableFormat", "{{value1}} \"{{value2}}\" no tiene un formato reconocible.", { value1: kind, value2: citation }) });
           return;
         }
         const issue = auditParsedSpec({ kind: 'sefer', ...parsed }, metadata, `${location}, ${kind}`);
@@ -174,7 +175,7 @@ export const auditSlideScriptureReferences = async (
     if (!slide.scriptureBook || !slide.scriptureChapter || !slide.scriptureVerseStart) {
       issues.push({
         location,
-        message: 'La diapositiva de texto sagrado no tiene libro, capítulo y versículo inicial completos.',
+        message: translate("common:diagnostic.theSacredTextSlideIsMissingACompleteBookChapterAndFirst", "La diapositiva de texto sagrado no tiene libro, capítulo y versículo inicial completos."),
       });
       return;
     }

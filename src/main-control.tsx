@@ -1,3 +1,6 @@
+import { UiLocaleProvider } from './i18n/UiLocaleProvider';
+import { translate } from './i18n/runtime';
+import { useUiTranslation } from './i18n/useUiTranslation';
 import { loadCatalog, saveCatalog } from './utils/catalogApi';
 import { StrictMode, useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -36,6 +39,7 @@ import { generatePresentationSteps } from './utils/navigationUtils';
 import { registerScopedServiceWorker } from './utils/pwaUpdate';
 
 function ControlApp() {
+  useUiTranslation('control');
   const [presentations, setPresentations] = useState<Presentation[]>([]);
   const [currentPresentation, setCurrentPresentation] = useState<Presentation | null>(null);
   const [currentSlideIndex, setCurrentSlideIndex] = useState<number>(-1);
@@ -325,7 +329,7 @@ function ControlApp() {
     const validation = validatePresentationList(normalized);
     if (!validation.ok || !validation.value) {
       console.error("Refusing to save invalid presentations", validation.errors);
-      alert(`No se guardaron las presentaciones porque contienen datos inválidos:\n${validation.errors.slice(0, 5).join('\n')}`);
+      alert(translate("control:main_control.presentationsWereNotSavedBecauseTheyContainInvalidData", "No se guardaron las presentaciones porque contienen datos inválidos:\n{{value1}}", { value1: validation.errors.slice(0, 5).join('\n') }));
       return;
     }
     try {
@@ -333,7 +337,7 @@ function ControlApp() {
       setPresentations(normalized);
       return true;
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'No se pudieron guardar las presentaciones. El borrador se conserva.');
+      alert(err instanceof Error ? err.message : translate("control:main_control.couldNotSavePresentationsYourDraftIsPreserved", "No se pudieron guardar las presentaciones. El borrador se conserva."));
       return false;
     }
   }, [presentations]);
@@ -363,7 +367,7 @@ function ControlApp() {
   const handleAddScriptureSlide = useCallback((state: SeferReaderState, kind: 'sefer' | 'tanaj' = 'sefer') => {
     const presentation = currentPresentationRef.current;
     if (!presentation) {
-      alert('Selecciona una presentación antes de añadir una diapositiva de texto sagrado.');
+      alert(translate("control:main_control.selectAPresentationBeforeAddingASacredTextSlide", "Selecciona una presentación antes de añadir una diapositiva de texto sagrado."));
       return;
     }
 
@@ -463,7 +467,7 @@ function ControlApp() {
         }}
         onAudioSyncMapsChange={async (maps, baseMaps = audioSyncMaps) => {
           const validation = validateAudioSyncMaps(maps);
-          if (!validation.ok || !validation.value) throw new Error('Mapas de audio inválidos');
+          if (!validation.ok || !validation.value) throw new Error(translate("control:main_control.invalidAudioMaps", "Mapas de audio inválidos"));
           await saveCatalog('/api/audio-sync', maps, baseMaps);
           setAudioSyncMaps(maps);
         }}
@@ -529,15 +533,15 @@ function ControlApp() {
         wsStatus={wsStatus}
         controlSessionId={controlAuthorization.controlSessionId}
       />
-      <div className="absolute bottom-2 left-2 z-50">
+      <div className="absolute bottom-2 start-2 z-50">
         <DataProtectionLink />
       </div>
       {liveAudioAvailability.availability !== 'enabled' && (
-        <div className="absolute bottom-2 right-2 z-50">
+        <div className="absolute bottom-2 end-2 z-50">
           <PwaRestartButton className="border-gray-700 bg-gray-950/70 text-gray-300 hover:bg-gray-900 hover:text-white" />
         </div>
       )}
-      <div className="absolute top-2 right-2 z-50">
+      <div className="absolute top-2 end-2 z-50">
         <LiveAudioControlAuthorization authorization={controlAuthorization} />
       </div>
 
@@ -557,7 +561,7 @@ function applySinkId(ref: React.RefObject<HTMLAudioElement | null>, sinkId: stri
 }
 
 createRoot(document.getElementById('root')!).render(
-  <StrictMode>
+  <StrictMode><UiLocaleProvider role="control">
     <ControlApp />
-  </StrictMode>,
+  </UiLocaleProvider></StrictMode>,
 );

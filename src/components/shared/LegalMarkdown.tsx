@@ -23,15 +23,15 @@ const componentStyles = (variant: 'light' | 'dark'): Components => {
     h4: ({ children }) => <h4 className={`mb-2 mt-5 text-base font-semibold ${heading}`}>{children}</h4>,
     p: ({ children }) => <p className={`my-3 wrap-break-word leading-7 ${text}`}>{children}</p>,
     strong: ({ children }) => <strong className={`font-semibold ${heading}`}>{children}</strong>,
-    ul: ({ children }) => <ul className={`my-4 list-disc space-y-2 pl-6 ${text}`}>{children}</ul>,
-    ol: ({ children }) => <ol className={`my-4 list-decimal space-y-2 pl-6 ${text}`}>{children}</ol>,
-    li: ({ children }) => <li className="wrap-break-word pl-1 leading-7">{children}</li>,
+    ul: ({ children }) => <ul className={`my-4 list-disc space-y-2 ps-6 ${text}`}>{children}</ul>,
+    ol: ({ children }) => <ol className={`my-4 list-decimal space-y-2 ps-6 ${text}`}>{children}</ol>,
+    li: ({ children }) => <li className="wrap-break-word ps-1 leading-7">{children}</li>,
     blockquote: ({ children }) => (
       <blockquote className={`my-5 border-l-4 px-4 py-2 ${border} ${mutedBackground}`}>{children}</blockquote>
     ),
     hr: () => <hr className={`my-8 ${border}`} />,
     table: ({ children }) => (
-      <table className={`my-5 w-full table-auto border-collapse overflow-hidden rounded-lg border text-left text-inherit ${border}`}>
+      <table className={`my-5 w-full table-auto border-collapse overflow-hidden rounded-lg border text-start text-inherit ${border}`}>
         {children}
       </table>
     ),

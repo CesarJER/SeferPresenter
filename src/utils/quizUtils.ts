@@ -1,3 +1,4 @@
+import { translate } from '../i18n/runtime';
 /**
  * Quiz Utilities - Pure Functions
  *
@@ -87,34 +88,34 @@ export function parseQuizBlock(text: string): QuizParseResult {
     const configMatch = rest.match(/^(.*?)\s*\[([^\]]+)\]\s*$/);
 
     if (rest.startsWith('[')) {
-      errors.push({ line: i, message: 'La configuracion del quiz debe ir al final de la pregunta: P: Pregunta [seg, aleatorio, multi].' });
+      errors.push({ line: i, message: translate("common:diagnostic.quizSettingsMustFollowTheQuestionPQuestionSecondsRandomMulti", "La configuracion del quiz debe ir al final de la pregunta: P: Pregunta [seg, aleatorio, multi].") });
       question = '';
     } else if (configMatch) {
       question = configMatch[1].trim();
       const parts = configMatch[2].split(',').map(p => p.trim());
 
       if (parts.length !== 3) {
-        errors.push({ line: i, message: 'El bloque de configuracion P: [seg, aleatorio, multi] debe tener exactamente 3 parametros.' });
+        errors.push({ line: i, message: translate("common:diagnostic.thePSecondsRandomMultiSettingsBlockMustContainExactly3Parameters", "El bloque de configuracion P: [seg, aleatorio, multi] debe tener exactamente 3 parametros.") });
       } else {
         if (!/^\d+$/.test(parts[0])) {
-          errors.push({ line: i, message: `Tiempo invalido: "${parts[0]}". Debe ser un numero entero >= 1.` });
+          errors.push({ line: i, message: translate("common:diagnostic.invalidTimeValue1MustBeAnInteger1", "Tiempo invalido: \"{{value1}}\". Debe ser un numero entero >= 1.", { value1: parts[0] }) });
         } else {
           const secs = Number(parts[0]);
           if (secs < 1) {
-            errors.push({ line: i, message: `Tiempo invalido: "${parts[0]}". Debe ser un numero entero >= 1.` });
+            errors.push({ line: i, message: translate("common:diagnostic.invalidTimeValue1MustBeAnInteger1", "Tiempo invalido: \"{{value1}}\". Debe ser un numero entero >= 1.", { value1: parts[0] }) });
           } else {
             timerSeconds = secs;
           }
         }
 
         if (parts[1] !== '0' && parts[1] !== '1') {
-          errors.push({ line: i, message: `Valor aleatorio invalido: "${parts[1]}". Debe ser 0 o 1.` });
+          errors.push({ line: i, message: translate("common:diagnostic.invalidRandomValueValue1MustBe0Or1", "Valor aleatorio invalido: \"{{value1}}\". Debe ser 0 o 1.", { value1: parts[1] }) });
         } else {
           randomize = parts[1] === '1';
         }
 
         if (parts[2] !== '0' && parts[2] !== '1') {
-          errors.push({ line: i, message: `Valor multi invalido: "${parts[2]}". Debe ser 0 o 1.` });
+          errors.push({ line: i, message: translate("common:diagnostic.invalidMultiValueValue1MustBe0Or1", "Valor multi invalido: \"{{value1}}\". Debe ser 0 o 1.", { value1: parts[2] }) });
         } else {
           multiSelect = parts[2] === '1';
         }
@@ -126,11 +127,11 @@ export function parseQuizBlock(text: string): QuizParseResult {
   }
 
   if (questionLine === -1) {
-    return { ok: false, errors: [{ line: 0, message: 'El bloque no empieza con "P:". No es un quiz.' }], warnings };
+    return { ok: false, errors: [{ line: 0, message: translate("common:diagnostic.theBlockDoesNotStartWithPItIsNotAQuiz", "El bloque no empieza con \"P:\". No es un quiz.") }], warnings };
   }
 
   if (!question) {
-    errors.push({ line: questionLine, message: 'La pregunta P: esta vacia.' });
+    errors.push({ line: questionLine, message: translate("common:diagnostic.thePQuestionIsEmpty", "La pregunta P: esta vacia.") });
   }
 
   const options: QuizOption[] = [];
@@ -149,11 +150,11 @@ export function parseQuizBlock(text: string): QuizParseResult {
       const optText = optionMatch[3].trim();
 
       if (!QUIZ_OPTION_IDS.includes(rawId)) {
-        errors.push({ line: i, message: `ID de opcion invalido: "${rawId}". Solo se permiten A, B, C, D.` });
+        errors.push({ line: i, message: translate("common:diagnostic.invalidOptionIdValue1OnlyABCDAreAllowed", "ID de opcion invalido: \"{{value1}}\". Solo se permiten A, B, C, D.", { value1: rawId }) });
         continue;
       }
       if (seenIds.has(rawId)) {
-        errors.push({ line: i, message: `Opcion "${rawId}" duplicada.` });
+        errors.push({ line: i, message: translate("common:diagnostic.duplicateOptionValue1", "Opcion \"{{value1}}\" duplicada.", { value1: rawId }) });
         continue;
       }
 
@@ -165,11 +166,11 @@ export function parseQuizBlock(text: string): QuizParseResult {
     const citaEvalMatch = line.match(/^CITA:\s*([\s\S]+)$/i);
     if (citaEvalMatch) {
       if (citaReviewRef) {
-        errors.push({ line: i, message: 'No se puede tener CITA: y CITA!: a la vez.' });
+        errors.push({ line: i, message: translate("common:diagnostic.citaAndCitaCannotBeUsedTogether", "No se puede tener CITA: y CITA!: a la vez.") });
       } else {
         citaRef = citaEvalMatch[1].trim();
         if (!parseCitaRef(citaRef)) {
-          warnings.push({ line: i, message: `La referencia CITA no se pudo interpretar: "${citaRef}".` });
+          warnings.push({ line: i, message: translate("common:diagnostic.couldNotInterpretCitaReferenceValue1", "La referencia CITA no se pudo interpretar: \"{{value1}}\".", { value1: citaRef }) });
         }
       }
       continue;
@@ -178,24 +179,24 @@ export function parseQuizBlock(text: string): QuizParseResult {
     const citaReviewMatch = line.match(/^CITA!:\s*([\s\S]+)$/i);
     if (citaReviewMatch) {
       if (citaRef) {
-        errors.push({ line: i, message: 'No se puede tener CITA: y CITA!: a la vez.' });
+        errors.push({ line: i, message: translate("common:diagnostic.citaAndCitaCannotBeUsedTogether", "No se puede tener CITA: y CITA!: a la vez.") });
       } else {
         citaReviewRef = citaReviewMatch[1].trim();
         if (!parseCitaRef(citaReviewRef)) {
-          warnings.push({ line: i, message: `La referencia CITA! no se pudo interpretar: "${citaReviewRef}".` });
+          warnings.push({ line: i, message: translate("common:diagnostic.couldNotInterpretCitaReferenceValue1", "La referencia CITA! no se pudo interpretar: \"{{value1}}\".", { value1: citaReviewRef }) });
         }
       }
     }
   }
 
   if (options.length < 2) {
-    errors.push({ line: questionLine, message: `Se necesitan al menos 2 opciones. Solo se encontraron ${options.length}.` });
+    errors.push({ line: questionLine, message: translate("common:diagnostic.atLeast2OptionsAreRequiredFoundOnlyValue1", "Se necesitan al menos 2 opciones. Solo se encontraron {{value1}}.", { value1: options.length }) });
   }
   if (options.length > 4) {
-    errors.push({ line: questionLine, message: `Maximo 4 opciones permitidas. Se encontraron ${options.length}.` });
+    errors.push({ line: questionLine, message: translate("common:diagnostic.atMost4OptionsAreAllowedFoundValue1", "Maximo 4 opciones permitidas. Se encontraron {{value1}}.", { value1: options.length }) });
   }
   if (options.length >= 2 && !options.some(o => o.isCorrect)) {
-    errors.push({ line: questionLine, message: 'Al menos una opcion debe ser correcta (usar *).' });
+    errors.push({ line: questionLine, message: translate("common:diagnostic.atLeastOneOptionMustBeCorrectUse", "Al menos una opcion debe ser correcta (usar *).") });
   }
 
   if (errors.length > 0) return { ok: false, errors, warnings };

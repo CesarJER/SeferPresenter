@@ -82,6 +82,7 @@ export const initializeSeferDataDir = ({ dataDir, exampleDir }) => {
 }
 
 export const getSeferDataPaths = (dataDir) => Object.freeze({
+  i18n: path.join(dataDir, 'config', 'i18n.json'),
   presentationSession: path.join(dataDir, 'presentation-session.json'),
   presentations: path.join(dataDir, 'presentations.json'),
   audioSync: path.join(dataDir, 'audio_sync.json'),

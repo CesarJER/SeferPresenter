@@ -1,0 +1,18 @@
+{
+  "AudienceAccessGate.organizationLogo": "סמל הארגון",
+  "AudienceAccessGate.requestPending": "הבקשה ממתינה",
+  "AudienceAccessGate.theMainControlMustAdmitYouBeforeTheSession": "נדרש אישור מהבקרה הראשית כדי להציג את המפגש.",
+  "AudienceAccessGate.sendAMessageToTheModerators": "שליחת הודעה למנחים",
+  "AudienceAccessGate.messageFrom": "הודעה מאת",
+  "AudienceAccessGate.closeMessage": "סגירת ההודעה",
+  "AudienceAccessGate.accessBlocked": "הגישה חסומה",
+  "AudienceAccessGate.requestRejectedYouCanTryAgainIn": "הבקשה נדחתה. ניתן לנסות שוב בעוד",
+  "AudienceAccessGate.seconds": "שניות.",
+  "AudienceAccessGate.preparingSecureAccess": "מכינים גישה מאובטחת…",
+  "AudienceAccessGate.requestAccessToTheSession": "בקשת גישה למפגש",
+  "AudienceTvCallToAction.liveBroadcastJoinUsAndTakePartConnectTo": "שידור חי! הצטרפו והשתתפו איתנו. התחברו אל",
+  "main_audience.enableAudioAndVideo": "הפעלת שמע ווידאו",
+  "AudienceAccessGate.couldNotSendTheAlias": "לא ניתן לשלוח את הכינוי.",
+  "AudienceAccessGate.couldNotSendTheRequest": "לא ניתן לשלוח את הבקשה.",
+  "AudienceAccessGate.waiting": "ממתין"
+}

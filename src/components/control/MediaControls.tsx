@@ -1,3 +1,5 @@
+import { translate } from '../../i18n/runtime';
+import { useUiTranslation } from '../../i18n/useUiTranslation';
 import React, { useState, useEffect } from 'react';
 import type { Slide, VideoState } from '../../types/presentation';
 import type { AutoduckState } from '../../types/sync';
@@ -26,6 +28,7 @@ export const MediaControls: React.FC<MediaControlsProps> = ({
   autoduckState,
   onAutoduckStateChange,
 }) => {
+  useUiTranslation('control');
   const [localTime, setLocalTime] = useState<number>(0);
   const [isScrubbing, setIsScrubbing] = useState<boolean>(false);
 
@@ -46,10 +49,10 @@ export const MediaControls: React.FC<MediaControlsProps> = ({
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 min-w-0">
           <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-          <span className="text-[10px] font-black text-yellow-500 uppercase tracking-wider">Video</span>
+          <span className="text-[10px] font-black text-yellow-500 uppercase tracking-wider">{translate("control:MediaControls.video", "Video")}</span>
         </div>
         <span className="text-[10px] font-black text-gray-400 truncate">
-          {activeSlide.mediaSrc?.split('/').pop() || 'Video'}
+          {activeSlide.mediaSrc?.split('/').pop() || translate("control:MediaControls.video", "Video")}
         </span>
       </div>
 
@@ -71,12 +74,12 @@ export const MediaControls: React.FC<MediaControlsProps> = ({
             });
           }}
           className="control-icon-btn h-8 w-8 rounded-full bg-yellow-600 text-white shadow-md hover:bg-yellow-500"
-          title={videoState?.isPlaying ? 'Pausar video' : 'Reproducir video'}
+          title={videoState?.isPlaying ? translate("control:MediaControls.pauseVideo", "Pausar video") : translate("control:MediaControls.playVideo", "Reproducir video")}
         >
           {videoState?.isPlaying ? (
             <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" /></svg>
           ) : (
-            <svg className="w-4 h-4 ml-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
+            <svg className="w-4 h-4 ms-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
           )}
         </button>
 
@@ -92,14 +95,14 @@ export const MediaControls: React.FC<MediaControlsProps> = ({
                 ? 'bg-blue-600 hover:bg-blue-500 text-white'
                 : 'bg-gray-800 hover:bg-gray-700 text-gray-400 border border-gray-700'
             }`}
-            title={autoduckState?.enabled ? 'Autoduck Activado (Baja volumen al hablar)' : 'Activar Autoduck'}
+            title={autoduckState?.enabled ? translate("control:MediaControls.autoduckEnabledReducesVolumeWhileSpeaking", "Autoduck Activado (Baja volumen al hablar)") : translate("control:MediaControls.enableAutoduck", "Activar Autoduck")}
           >
             {autoduckState?.enabled ? <Mic size={14} /> : <MicOff size={14} />}
           </button>
         )}
 
         <div className="flex items-center gap-2 rounded-sm border border-gray-800 bg-gray-950/60 px-2 py-1">
-          <span className="text-[9px] font-black text-gray-500">VOL</span>
+          <span className="text-[9px] font-black text-gray-500">{translate("control:MediaControls.vol", "VOL")}</span>
           <input
             type="range"
             min="0"
@@ -145,8 +148,7 @@ export const MediaControls: React.FC<MediaControlsProps> = ({
               }}
               className={`rounded-sm px-1.5 py-1 text-[9px] font-black ${((videoState?.speed ?? 1) === speedVal) ? 'bg-yellow-600 text-white' : 'text-gray-400 hover:text-gray-200'} cursor-pointer`}
             >
-              {speedVal}x
-            </button>
+              {speedVal}{translate("control:MediaControls.x", "x")}</button>
           ))}
         </div>
 
@@ -171,8 +173,7 @@ export const MediaControls: React.FC<MediaControlsProps> = ({
             : 'bg-gray-950/60 border-gray-800 text-gray-500 hover:text-gray-300'
             }`}
         >
-          BUCLE
-        </button>
+          {translate("control:MediaControls.loop", "BUCLE")}</button>
 
         <div className="flex-1 flex items-center gap-2.5 min-w-[160px]">
           <span className="font-mono text-gray-400 text-[10px] shrink-0">

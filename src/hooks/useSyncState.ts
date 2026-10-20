@@ -1,3 +1,4 @@
+import { translate } from '../i18n/runtime';
 import { loadCatalog } from '../utils/catalogApi';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { AudioState, AudioSyncMap, AudioTimelineState } from '../types/audio';
@@ -382,7 +383,7 @@ export function useSyncState(props: UseSyncStateProps) {
     } else {
       postOperatorUpdate('/api/command', message).catch(err => {
         console.error('Error syncing command to network', err);
-        window.alert('No se pudo enviar el comando. Espera a que Control se reconecte y vuelve a intentarlo.');
+        window.alert(translate("presenter:useSyncState.couldNotSendTheCommandWaitForControlTo", "No se pudo enviar el comando. Espera a que Control se reconecte y vuelve a intentarlo."));
       });
     }
   }, [channel, clientIdRef, wsStatus]);

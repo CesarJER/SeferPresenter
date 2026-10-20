@@ -1,3 +1,5 @@
+import { translate } from '../../i18n/runtime';
+import { useUiTranslation } from '../../i18n/useUiTranslation';
 import React, { useCallback, useEffect, useState, useRef, Suspense, lazy } from 'react';
 import type { Presentation, QuizData, Slide, VideoState, AppMode, ScriptureNavState } from '../../types/presentation';
 import type { SeferReaderState } from '../../hooks/useSeferReader';
@@ -193,6 +195,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
   controlSessionId,
   audioOutputId,
 }) => {
+  useUiTranslation('control');
   const controllerAnswers = useControllerAnswers(currentPresentation?.id ?? null);
   // ────────────────────────────────────────────────────────────────
   // States
@@ -218,7 +221,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
         emitCommand?.({ command: 'QUIZ_CLEAR_QUESTION_RESULTS', slideId });
       }
     } catch {
-      alert('No se pudo confirmar el borrado de respuestas. Comprueba la conexión, la autorización de Control y el estado del servidor antes de reintentar.');
+      alert(translate("control:MenuPopup.couldNotConfirmAnswerDeletionCheckTheConnectionControl", "No se pudo confirmar el borrado de respuestas. Comprueba la conexión, la autorización de Control y el estado del servidor antes de reintentar."));
     }
   };
   const isActiveScriptureSlide = !!activeSlide && (activeSlide.type === 'sefer' || activeSlide.type === 'tanaj' || !!activeSlide.scriptureBook);
@@ -319,7 +322,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
 
   const showScriptureAudit = (action: string, issues: ScriptureAuditIssue[]) => {
     const details = issues.map((issue, index) => `${index + 1}. ${issue.location}: ${issue.message}`).join('\n');
-    alert(`No se puede ${action}. Se encontraron ${issues.length} posible${issues.length === 1 ? '' : 's'} error${issues.length === 1 ? '' : 'es'} en citas bíblicas:\n\n${details}\n\nCorrige las referencias y vuelve a intentarlo.`);
+    alert(translate('control:scriptureAudit', 'No se puede {{action}}. Se encontraron {{count}} errores en citas bíblicas:\n\n{{details}}\n\nCorrige las referencias y vuelve a intentarlo.', { action, count: issues.length, details }));
   };
 
   const auditQuickEditor = async (action: string) => {
@@ -331,7 +334,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
       return false;
     } catch (error) {
       console.error('Error auditing scripture references', error);
-      alert(`No se puede ${action} porque no fue posible comprobar las citas bíblicas. Verifica que metadata.json esté disponible y vuelve a intentarlo.`);
+      alert(translate("control:MenuPopup.cannotBecauseBiblicalReferencesCouldNotBeCheckedVerify", "No se puede {{value1}} porque no fue posible comprobar las citas bíblicas. Verifica que metadata.json esté disponible y vuelve a intentarlo.", { value1: action }));
       return false;
     }
   };
@@ -611,7 +614,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
       setIsTableMode(false);
     } else {
       // De Texto Rápido a Tabla:
-      if (!await auditQuickEditor('cambiar a la vista de tabla')) return;
+      if (!await auditQuickEditor(translate('control:switchToTable', 'cambiar a la vista de tabla'))) return;
       const parsed = await buildSlidesForSave();
       const merged = parsed.slides.map((pSlide, idx) => {
         const existing = slides[idx] || slides.find(s => s.id === pSlide.id);
@@ -629,7 +632,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
   const handleModeChange = async (newMode: 'standard' | 'trilingual') => {
     if (newMode === mode) return;
 
-    if (!isTableMode && !await auditQuickEditor(`cambiar al modo ${newMode === 'trilingual' ? '3x' : '1x'}`)) return;
+    if (!isTableMode && !await auditQuickEditor(translate('control:switchMode', 'cambiar al modo {{mode}}', { mode: newMode === 'trilingual' ? '3x' : '1x' }))) return;
 
     setMode(newMode);
 
@@ -956,7 +959,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
 
   const handleDeletePresentation = (idx: number) => {
     const p = presentations[idx];
-    if (window.confirm(`¿Estás seguro de que deseas eliminar permanentemente la presentación "${p.title}"?`)) {
+    if (window.confirm(translate("control:MenuPopup.permanentlyDeleteThePresentation", "¿Estás seguro de que deseas eliminar permanentemente la presentación \"{{value1}}\"?", { value1: p.title }))) {
       const updated = presentations.filter((_, i) => i !== idx);
       onImport(updated);
     }
@@ -1471,7 +1474,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
 
   const handleSave = async () => {
     if (!title.trim()) {
-      alert('Por favor, introduce un título.');
+      alert(translate("control:MenuPopup.pleaseEnterATitle", "Por favor, introduce un título."));
       return;
     }
 
@@ -1480,7 +1483,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
       ? (currentPresentation?.background || backgrounds[0])
       : bg;
 
-    if (!isTableMode && !await auditQuickEditor('guardar la presentación')) return;
+    if (!isTableMode && !await auditQuickEditor(translate('control:savePresentation', 'guardar la presentación'))) return;
 
     const parsed = await buildSlidesForSave();
     let slideIssues: ScriptureAuditIssue[];
@@ -1488,11 +1491,11 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
       slideIssues = await auditSlideScriptureReferences(parsed.slides);
     } catch (error) {
       console.error('Error auditing saved scripture references', error);
-      alert('No se puede guardar la presentación porque no fue posible comprobar sus citas bíblicas. Verifica que metadata.json esté disponible y vuelve a intentarlo.');
+      alert(translate("control:MenuPopup.cannotSaveThePresentationBecauseItsBiblicalReferencesCould", "No se puede guardar la presentación porque no fue posible comprobar sus citas bíblicas. Verifica que metadata.json esté disponible y vuelve a intentarlo."));
       return;
     }
     if (slideIssues.length > 0) {
-      showScriptureAudit('guardar la presentación', slideIssues);
+      showScriptureAudit(translate('control:savePresentation', 'guardar la presentación'), slideIssues);
       return;
     }
 
@@ -1564,13 +1567,13 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
         <h2 className="flex w-full items-center gap-2 text-lg font-bold md:w-auto md:text-xl">
           <img
             src="/api/branding/logo.svg"
-            alt="Logo"
+            alt={translate("control:MenuPopup.logo", "Logo")}
             className="h-7 w-7 cursor-pointer hover:opacity-85 active:scale-95 transition-all"
             onError={applyNeutralBrandingFallback}
-            title="Restablecer estado del presentador"
+            title={translate("control:MenuPopup.resetPresenterState", "Restablecer estado del presentador")}
             onClick={() => setShowResetConfirm(true)}
           />
-          <span>Panel de Control</span>
+          <span>{translate("control:MenuPopup.controlPanel", "Panel de Control")}</span>
         </h2>
         <div className="flex items-center gap-2">
           {/* Live Audio Inbox Portal Target */}
@@ -1592,7 +1595,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                       ? 'bg-emerald-600 border-emerald-500 text-white font-bold'
                       : 'bg-orange-600 border-orange-500 text-white font-bold'
               }`}
-            title={isMusicPanelOpen ? "Cerrar panel de música" : "Abrir panel de música y sincronización"}
+            title={isMusicPanelOpen ? translate("control:MenuPopup.closeMusicPanel", "Cerrar panel de música") : translate("control:MenuPopup.openMusicAndSynchronizationPanel", "Abrir panel de música y sincronización")}
           >
             {audioState.volume === 0 ? (
               <div className="relative">
@@ -1628,7 +1631,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
               ? 'bg-yellow-600 border-yellow-500 text-white font-bold'
               : 'bg-gray-800 border-gray-700 hover:bg-gray-700 text-gray-300 hover:text-white'
               }`}
-            title={appMode === 'seferManual' ? "Cerrar Sefer manual" : "Abrir Sefer manual"}
+            title={appMode === 'seferManual' ? translate("control:MenuPopup.closeManualSefer", "Cerrar Sefer manual") : translate("control:MenuPopup.openManualSefer", "Abrir Sefer manual")}
           >
             <span className="text-sm leading-none">📜</span>
           </button>
@@ -1637,7 +1640,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
             type="button"
             onClick={toggleFullscreen}
             className="flex items-center justify-center p-2 text-xs font-semibold rounded-sm border border-gray-700 bg-gray-800 hover:bg-gray-700 hover:text-white transition-all cursor-pointer text-gray-300"
-            title={isFullscreen ? "Salir de Pantalla Completa" : "Pantalla Completa"}
+            title={isFullscreen ? translate("control:MenuPopup.exitFullScreen", "Salir de Pantalla Completa") : translate("control:MenuPopup.fullScreen", "Pantalla Completa")}
           >
             {isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
           </button>
@@ -1694,7 +1697,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
               <div id="section-viewer-controls-left" className="flex flex-col gap-3 sm:flex-row sm:items-end lg:w-[420px] lg:flex-none">
                 {/* Seleccionar Presentación */}
                 <div className="flex-1 space-y-1.5 min-w-0">
-                  <label className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">Seleccionar Presentación</label>
+                  <label className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">{translate("control:MenuPopup.selectPresentation", "Seleccionar Presentación")}</label>
                   <div className="flex gap-1.5">
                     <CustomSearchSelect
                       value={currentPresentation ? currentPresentation.id : 'new'}
@@ -1709,13 +1712,13 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                         }
                       }}
                       options={[
-                        { label: '-- Nueva Presentación --', value: 'new' },
+                        { label: translate("control:MenuPopup.newPresentation", "-- Nueva Presentación --"), value: 'new' },
                         ...presentations.map(presentation => ({
-                          label: presentation.title || 'Sin Título',
+                          label: presentation.title || translate("control:MenuPopup.untitled", "Sin Título"),
                           value: presentation.id
                         }))
                       ]}
-                      placeholder="Busca o selecciona presentación..."
+                      placeholder={translate("control:MenuPopup.searchOrSelectAPresentation", "Busca o selecciona presentación...")}
                       className="flex-1"
                       dropdownWidthClass="w-[280px] md:w-[320px]"
                     />
@@ -1724,7 +1727,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                         type="button"
                         onClick={() => handleStartEditing(currentPresentation)}
                         className="px-3 rounded-md border flex items-center justify-center bg-gray-700 border-gray-600 text-gray-300 hover:bg-gray-600 hover:text-white transition-colors cursor-pointer"
-                        title="Editar contenido de la presentación activa"
+                        title={translate("control:MenuPopup.editActivePresentationContent", "Editar contenido de la presentación activa")}
                       >
                         <Pencil size={15} />
                       </button>
@@ -1749,11 +1752,11 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                   <div className="space-y-1.5 w-full">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-1.5 min-w-0">
-                        <span className="text-[10px] font-bold uppercase tracking-wide text-gray-400 truncate">Navegación en Directo</span>
-                        <span className="hidden sm:inline text-[9px] text-gray-500 truncate">(Haz clic para proyectar)</span>
+                        <span className="text-[10px] font-bold uppercase tracking-wide text-gray-400 truncate">{translate("control:MenuPopup.liveNavigation", "Navegación en Directo")}</span>
+                        <span className="hidden sm:inline text-[9px] text-gray-500 truncate">{translate("control:MenuPopup.clickToProject", "(Haz clic para proyectar)")}</span>
                       </div>
                       <span className="text-[11px] text-yellow-500 font-bold truncate">
-                        Activa: {currentPresentation.slides[currentSlideIndex]?.label || 'Ninguna'}
+                        {translate("control:MenuPopup.active", "Activa:")} {currentPresentation.slides[currentSlideIndex]?.label || 'Ninguna'}
                       </span>
                     </div>
                     <div className="flex items-center gap-1.5 w-full">
@@ -1769,12 +1772,11 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                         }}
                         disabled={currentSlideIndex <= 0}
                         className="flex-none w-5 self-stretch rounded-sm border border-gray-700 bg-gray-800 hover:bg-gray-700 disabled:opacity-30 disabled:hover:bg-gray-800 text-gray-400 hover:text-white transition-all cursor-pointer font-bold text-[11px] flex items-center justify-center min-h-[1.8rem]"
-                        title="Anterior"
+                        title={translate("control:MenuPopup.previous", "Anterior")}
                       >
-                        &lt;
-                      </button>
+                        {translate("control:MenuPopup.symbol", "<")}</button>
 
-                      <div className="flex-1 flex flex-wrap gap-1.5 max-h-[4.2rem] overflow-y-auto pr-1 scrollbar-thin">
+                      <div className="flex-1 flex flex-wrap gap-1.5 max-h-[4.2rem] overflow-y-auto pe-1 scrollbar-thin">
                         {currentPresentation.slides.map((slide, idx) => {
                           const isSelected = currentSlideIndex === idx;
                           const isRegisteredQuizQuestion = slide.type === 'quiz'
@@ -1786,7 +1788,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                               id={`live-slide-btn-${idx}`}
                               key={slide.id}
                               onClick={() => onSelectSlide(idx)}
-                              title={isRegisteredQuizQuestion ? 'Pregunta registrada y contabilizada' : undefined}
+                              title={isRegisteredQuizQuestion ? translate("control:MenuPopup.questionRegisteredAndCounted", "Pregunta registrada y contabilizada") : undefined}
                               className={`min-w-[2.2rem] rounded border text-xs font-semibold transition-all px-2.5 py-1 select-none ${isSelected
                                 ? isRegisteredQuizQuestion
                                   ? 'border-yellow-400 bg-emerald-600 text-white font-bold ring-1 ring-yellow-400 shadow-[0_0_8px_rgba(16,185,129,0.4)]'
@@ -1814,10 +1816,9 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                         }}
                         disabled={currentSlideIndex >= currentPresentation.slides.length - 1}
                         className="flex-none w-5 self-stretch rounded-sm border border-gray-700 bg-gray-800 hover:bg-gray-700 disabled:opacity-30 disabled:hover:bg-gray-800 text-gray-400 hover:text-white transition-all cursor-pointer font-bold text-[11px] flex items-center justify-center min-h-[1.8rem]"
-                        title="Siguiente"
+                        title={translate("control:MenuPopup.next", "Siguiente")}
                       >
-                        &gt;
-                      </button>
+                        {translate("control:MenuPopup.symbol_62b67e", ">")}</button>
                     </div>
 
                     {/* ── Sefer Control Panel Mini ───────────────────────────────── */}
@@ -1889,8 +1890,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                   </div>
                 ) : (
                   <div className="text-center py-2 text-xs text-gray-500 italic">
-                    Ninguna presentación activa para proyectar
-                  </div>
+                    {translate("control:MenuPopup.noActivePresentationToProject", "Ninguna presentación activa para proyectar")}</div>
                 )}
               </div>
 
@@ -2043,11 +2043,9 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
             className="bg-gray-900 border border-gray-700 rounded-lg max-w-sm w-full p-5 shadow-2xl space-y-4"
           >
             <h3 id="reset-dialog-title" className="text-base font-bold text-red-500 flex items-center gap-2">
-              ⚠️ ¿Restablecer aplicación?
-            </h3>
+              {translate("control:MenuPopup.resetApplication", "⚠️ ¿Restablecer aplicación?")}</h3>
             <p id="reset-dialog-description" className="text-xs text-gray-300 leading-relaxed font-sans">
-              Esto borrará la memoria temporal de la presentación activa, desbloqueará los fondos y reiniciará el presentador a la pantalla inicial en todos los dispositivos conectados.
-            </p>
+              {translate("control:MenuPopup.thisClearsTheActivePresentationSTemporaryMemoryUnlocks", "Esto borrará la memoria temporal de la presentación activa, desbloqueará los fondos y reiniciará el presentador a la pantalla inicial en todos los dispositivos conectados.")}</p>
             <div className="flex justify-end gap-2 text-xs">
               <button
                 ref={resetCancelButtonRef}
@@ -2055,8 +2053,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                 onClick={() => setShowResetConfirm(false)}
                 className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-sm border border-gray-700 font-semibold cursor-pointer"
               >
-                Cancelar
-              </button>
+                {translate("control:MenuPopup.cancel", "Cancelar")}</button>
               <button
                 type="button"
                 onClick={(e) => {
@@ -2067,10 +2064,9 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                   }
                 }}
                 className="px-4 py-2 bg-red-900 hover:bg-red-800 text-white rounded-sm font-bold cursor-pointer"
-                title="Borrar id de sesión, desconectar PWA y restablecer todo"
+                title={translate("control:MenuPopup.clearSessionIdDisconnectPwaAndResetEverything", "Borrar id de sesión, desconectar PWA y restablecer todo")}
               >
-                Cerrar sesión y reiniciar
-              </button>
+                {translate("control:MenuPopup.endSessionAndRestart", "Cerrar sesión y reiniciar")}</button>
               <button
                 type="button"
                 onClick={() => {
@@ -2081,8 +2077,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                 }}
                 className="px-4 py-2 bg-red-650 hover:bg-red-600 text-white rounded-sm font-bold cursor-pointer"
               >
-                Sí, restablecer
-              </button>
+                {translate("control:MenuPopup.yesReset", "Sí, restablecer")}</button>
             </div>
           </div>
         </div>

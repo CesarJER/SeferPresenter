@@ -1,3 +1,5 @@
+import { translate } from '../../i18n/runtime';
+import { useUiTranslation } from '../../i18n/useUiTranslation';
 /**
  * QuizAudienceView — Interactive quiz view for audience members.
  *
@@ -67,6 +69,7 @@ export const QuizAudienceView: React.FC<QuizAudienceViewProps> = ({
   maxBaseCentipunts,
   liveAudioPanel,
 }) => {
+  useUiTranslation('quiz');
   const currentSubslide = subslides[currentSubslideIndex];
   const displayOptions = getDisplayOptions(quizData, slide.id);
   const isExpired = timerState.status === 'expired' || timerState.status === 'completed';
@@ -161,8 +164,7 @@ export const QuizAudienceView: React.FC<QuizAudienceViewProps> = ({
           className="flex flex-1 items-center justify-center"
         >
           <p className="text-white/60 text-sm text-center">
-            Verso {currentSubslide.verse} — sigue en pantalla
-          </p>
+            {translate("quiz:QuizAudienceView.verse", "Verso")} {currentSubslide.verse}  {translate("quiz:QuizAudienceView.stillOnScreen", "— sigue en pantalla")}</p>
         </motion.div>
       )}
 
@@ -184,9 +186,9 @@ export const QuizAudienceView: React.FC<QuizAudienceViewProps> = ({
                     ? 'bg-yellow-900/30 text-yellow-300 border-yellow-500/50 shadow-yellow-500/10'
                     : 'bg-gray-900 text-gray border-gray-700'
                   }`}>
-                  <span className="text-[10px] sm:text-xs uppercase opacity-80 mr-2 font-sans tracking-widest font-bold">Tiempo:</span>
+                  <span className="text-[10px] sm:text-xs uppercase opacity-80 me-2 font-sans tracking-widest font-bold">{translate("quiz:QuizAudienceView.time", "Tiempo:")}</span>
                   {formatRemainingTime(localRemainingMs)}
-                  <span className="text-[10px] sm:text-xs opacity-80 ml-1 font-sans font-bold">s</span>
+                  <span className="text-[10px] sm:text-xs opacity-80 ms-1 font-sans font-bold">{translate("quiz:QuizAudienceView.s", "s")}</span>
                 </div>
               </div>
             )}
@@ -199,15 +201,14 @@ export const QuizAudienceView: React.FC<QuizAudienceViewProps> = ({
             {/* Submitted banner */}
             {answer.submitted && (
               <div role="status" aria-live="polite" className="rounded-lg border border-emerald-600/50 bg-emerald-950/40 px-3 py-2 text-xs font-bold text-emerald-300 text-center">
-                ✓ Respuesta enviada
-              </div>
+                {translate("quiz:QuizAudienceView.answerSent", "✓ Respuesta enviada")}</div>
             )}
 
             {/* Options */}
             <div
               className="flex flex-col gap-2"
               role={quizData.multiSelect ? 'group' : 'radiogroup'}
-              aria-label="Opciones de respuesta"
+              aria-label={translate("quiz:QuizAudienceView.answerOptions", "Opciones de respuesta")}
             >
               {displayOptions.map((opt, idx) => {
                 const letter = OPTION_LETTERS[idx] ?? opt.id;
@@ -228,7 +229,7 @@ export const QuizAudienceView: React.FC<QuizAudienceViewProps> = ({
                       }
                     }}
                     className={[
-                      'flex items-center gap-3 rounded-xl border px-4 py-3 text-left transition-all duration-150',
+                      'flex items-center gap-3 rounded-xl border px-4 py-3 text-start transition-all duration-150',
                       isSelected
                         ? 'border-yellow-500/70 bg-yellow-950/50 shadow-md shadow-yellow-500/20'
                         : isDisabled
@@ -243,7 +244,7 @@ export const QuizAudienceView: React.FC<QuizAudienceViewProps> = ({
                       {opt.text}
                     </span>
                     {quizData.multiSelect && (
-                      <span className={`ml-auto shrink-0 h-4 w-4 rounded-sm border ${isSelected ? 'border-yellow-500 bg-yellow-500' : 'border-white/30 bg-transparent'}`} />
+                      <span className={`ms-auto shrink-0 h-4 w-4 rounded-sm border ${isSelected ? 'border-yellow-500 bg-yellow-500' : 'border-white/30 bg-transparent'}`} />
                     )}
                   </button>
                 );
@@ -254,11 +255,10 @@ export const QuizAudienceView: React.FC<QuizAudienceViewProps> = ({
             {quizData.citaRef && metadata && (
               <div className="rounded-lg border border-yellow-600/30 bg-yellow-950/20 p-3">
                 <p className="text-[11px] font-bold uppercase tracking-wider text-yellow-400 mb-2">
-                  📖 Identifica la cita
-                </p>
+                  {translate("quiz:QuizAudienceView.identifyTheReference", "📖 Identifica la cita")}</p>
                 <div className="grid grid-cols-[1fr_60px_60px_60px] gap-1.5">
                   <select
-                    aria-label="Libro de la cita"
+                    aria-label={translate("quiz:QuizAudienceView.referenceBook", "Libro de la cita")}
                     value={answer.citaBook ?? ''}
                     onChange={e => {
                       onSetCitaField({ citaBook: e.target.value, citaChapter: '', citaVerseStart: '', citaVerseEnd: '' });
@@ -266,7 +266,7 @@ export const QuizAudienceView: React.FC<QuizAudienceViewProps> = ({
                     className="rounded-sm border border-yellow-600/30 bg-black/30 py-1.5 text-xs focus:outline-hidden focus:border-yellow-500 text-center disabled:appearance-none"
                     disabled={isDisabled}
                   >
-                    <option value="" className="bg-black text-gray-400">Libro</option>
+                    <option value="" className="bg-black text-gray-400">{translate("quiz:QuizAudienceView.book", "Libro")}</option>
                     {Object.values(metadata).map(m => (
                       <option key={m.bookAbbrevEs} value={m.bookAbbrevEs} className="bg-black text-white text-center">{m.bookAbbrevEs}</option>
                     ))}
@@ -284,33 +284,33 @@ export const QuizAudienceView: React.FC<QuizAudienceViewProps> = ({
                     return (
                       <>
                         <select
-                          aria-label="Capítulo de la cita"
+                          aria-label={translate("quiz:QuizAudienceView.referenceChapter", "Capítulo de la cita")}
                           value={answer.citaChapter ?? ''}
                           onChange={e => onSetCitaField({ citaChapter: e.target.value, citaVerseStart: '', citaVerseEnd: '' })}
                           className="rounded-sm border border-yellow-600/30 bg-black/30 py-1.5 text-xs focus:outline-hidden focus:border-yellow-500 text-center disabled:appearance-none"
                           disabled={!bookMeta || isDisabled}
                         >
-                          <option value="" className="bg-black text-gray-400">Cap</option>
+                          <option value="" className="bg-black text-gray-400">{translate("quiz:QuizAudienceView.ch", "Cap")}</option>
                           {chapters.map(c => <option key={c} value={c} className="bg-black text-white text-center">{c}</option>)}
                         </select>
                         <select
-                          aria-label="Versículo inicial de la cita"
+                          aria-label={translate("quiz:QuizAudienceView.referenceFirstVerse", "Versículo inicial de la cita")}
                           value={answer.citaVerseStart ?? ''}
                           onChange={e => onSetCitaField({ citaVerseStart: e.target.value })}
                           className="rounded-sm border border-yellow-600/30 bg-black/30 py-1.5 text-xs focus:outline-hidden focus:border-yellow-500 text-center disabled:appearance-none"
                           disabled={!answer.citaChapter || isDisabled}
                         >
-                          <option value="" className="bg-black text-gray-400">V.ini</option>
+                          <option value="" className="bg-black text-gray-400">{translate("quiz:QuizAudienceView.firstV", "V.ini")}</option>
                           {verses.map(v => <option key={v} value={v} className="bg-black text-white text-center">{v}</option>)}
                         </select>
                         <select
-                          aria-label="Versículo final de la cita"
+                          aria-label={translate("quiz:QuizAudienceView.referenceLastVerse", "Versículo final de la cita")}
                           value={answer.citaVerseEnd ?? ''}
                           onChange={e => onSetCitaField({ citaVerseEnd: e.target.value })}
                           className="rounded-sm border border-yellow-600/30 bg-black/30 py-1.5 text-xs focus:outline-hidden focus:border-yellow-500 text-center disabled:appearance-none"
                           disabled={!answer.citaVerseStart || isDisabled}
                         >
-                          <option value="" className="bg-black text-gray-400">V.fin</option>
+                          <option value="" className="bg-black text-gray-400">{translate("quiz:QuizAudienceView.lastV", "V.fin")}</option>
                           {verses.filter(v => Number(v) >= Number(answer.citaVerseStart)).map(v => (
                             <option key={v} value={v} className="bg-black text-white text-center">{v}</option>
                           ))}
@@ -331,8 +331,7 @@ export const QuizAudienceView: React.FC<QuizAudienceViewProps> = ({
                   className="flex items-center gap-1.5 rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-xs font-bold text-white/50 hover:text-white/70 transition-colors"
                 >
                   <RotateCcw size={12} />
-                  Borrar
-                </button>
+                  {translate("quiz:QuizAudienceView.clear", "Borrar")}</button>
                 <button
                   type="button"
                   onClick={onSubmit}
@@ -340,8 +339,7 @@ export const QuizAudienceView: React.FC<QuizAudienceViewProps> = ({
                   className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-yellow-600/50 bg-yellow-600/20 px-4 py-2 text-sm font-bold text-yellow-300 hover:bg-yellow-600/30 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
                 >
                   <Send size={14} />
-                  Enviar respuesta
-                </button>
+                  {translate("quiz:QuizAudienceView.submitAnswer", "Enviar respuesta")}</button>
               </div>
             )}
 
@@ -364,11 +362,11 @@ export const QuizAudienceView: React.FC<QuizAudienceViewProps> = ({
                 ? <CheckCircle size={18} className="text-emerald-400" />
                 : <XCircle size={18} className="text-red-400" />}
               <span className={`font-black text-lg ${questionScore.optionCentipunts > 0 ? 'text-emerald-300' : 'text-red-300'}`}>
-                {questionScore.optionCentipunts > 0 ? '¡Correcto!' : 'Incorrecto'}
+                {questionScore.optionCentipunts > 0 ? translate("quiz:QuizAudienceView.correct", "¡Correcto!") : translate("quiz:QuizAudienceView.incorrect", "Incorrecto")}
               </span>
             </div>
             <p className="text-xs text-white/50">
-              Puntuación: <span className="text-white font-bold">{formatCentipunts(questionScore.totalCentipunts)} pts</span>
+              {translate("quiz:QuizAudienceView.score", "Puntuación:")} <span className="text-white font-bold">{formatCentipunts(questionScore.totalCentipunts)}  {translate("quiz:QuizAudienceView.pts", "pts")}</span>
             </p>
           </div>
 
@@ -389,8 +387,8 @@ export const QuizAudienceView: React.FC<QuizAudienceViewProps> = ({
                     {letter}
                   </span>
                   <span className="text-xs text-white/70">{opt.text}</span>
-                  {opt.isCorrect && <CheckCircle size={12} className="ml-auto text-emerald-400" />}
-                  {!opt.isCorrect && wasSelected && <XCircle size={12} className="ml-auto text-red-400" />}
+                  {opt.isCorrect && <CheckCircle size={12} className="ms-auto text-emerald-400" />}
+                  {!opt.isCorrect && wasSelected && <XCircle size={12} className="ms-auto text-red-400" />}
                 </div>
               );
             })}
@@ -399,11 +397,11 @@ export const QuizAudienceView: React.FC<QuizAudienceViewProps> = ({
           {/* Cita result */}
           {quizData.citaRef && (
             <div className={`rounded-lg border px-3 py-2 ${questionScore.citaCentipunts > 0 ? 'border-yellow-500/50 bg-yellow-950/30' : 'border-white/10 bg-white/3'}`}>
-              <p className="text-[10px] font-bold text-yellow-400/70 mb-0.5 uppercase tracking-wide">CITA:</p>
+              <p className="text-[10px] font-bold text-yellow-400/70 mb-0.5 uppercase tracking-wide">{translate("quiz:QuizAudienceView.reference", "CITA:")}</p>
               <p className="text-sm font-semibold text-yellow-300">{quizData.citaRef}</p>
               {questionScore.citaCentipunts > 0
-                ? <p className="text-[11px] text-emerald-400 mt-1">✓ Cita correcta +{formatCentipunts(questionScore.citaCentipunts)} pts</p>
-                : <p className="text-[11px] text-white/40 mt-1">✗ Cita no identificada</p>}
+                ? <p className="text-[11px] text-emerald-400 mt-1">{translate("quiz:QuizAudienceView.correctReference", "✓ Cita correcta +")}{formatCentipunts(questionScore.citaCentipunts)}  {translate("quiz:QuizAudienceView.pts", "pts")}</p>
+                : <p className="text-[11px] text-white/40 mt-1">{translate("quiz:QuizAudienceView.referenceNotIdentified", "✗ Cita no identificada")}</p>}
             </div>
           )}
 
@@ -416,8 +414,8 @@ export const QuizAudienceView: React.FC<QuizAudienceViewProps> = ({
               className="mt-0.5 accent-yellow-500"
             />
             <div>
-              <p className="text-xs font-bold text-white/80">He leído el texto con atención</p>
-              <p className="text-[10px] text-white/40 mt-0.5">+0.25 puntos extra</p>
+              <p className="text-xs font-bold text-white/80">{translate("quiz:QuizAudienceView.iHaveReadTheTextCarefully", "He leído el texto con atención")}</p>
+              <p className="text-[10px] text-white/40 mt-0.5">{translate("quiz:QuizAudienceView.025ExtraPoints", "+0.25 puntos extra")}</p>
             </div>
           </label>
         </motion.div>

@@ -1,3 +1,5 @@
+import { translate } from '../../../../i18n/runtime';
+import { useUiTranslation } from '../../../../i18n/useUiTranslation';
 import React, { useState, useEffect, useRef } from 'react';
 import { Mic, MicOff, Hand, MessageSquare, LogOut, Volume2, VolumeX, Play, RotateCcw, CheckCircle2, Loader2, Users } from 'lucide-react';
 import type { LiveAudioConnectionState, LiveAudioExternalBroadcastState, LiveAudioMicrophoneDiagnostics, MicrophoneTrackState } from '../../../../types/liveAudio';
@@ -66,6 +68,7 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
   externalBroadcastState,
   variant = 'overlay',
 }) => {
+  useUiTranslation('liveAudio');
   const [isVisible, setIsVisibleState] = useState<boolean>(() => {
     const stored = sessionStorage.getItem('sefer_presenter_audio_panel_visible');
     return stored === null ? true : stored === 'true';
@@ -79,7 +82,7 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
   const setIsVisible = (val: boolean | ((prev: boolean) => boolean)) => {
     setIsVisibleState(prev => {
       const next = typeof val === 'function' ? val(prev) : val;
-      sessionStorage.setItem('sefer_presenter_audio_panel_visible', next ? 'true' : 'false');
+      sessionStorage.setItem('sefer_presenter_audio_panel_visible', next ? "true" : "false");
       if (!next) {
         const storedReappear = sessionStorage.getItem('sefer_presenter_audio_panel_reappear_at');
         if (!storedReappear) {
@@ -239,21 +242,21 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
   const diagnostics = microphoneDiagnostics ? (
     <div className="hidden absolute bottom-full left-1/2 mb-2 w-[min(92vw,22rem)] -translate-x-1/2 rounded-md border border-white/10 bg-gray-950/95 px-3 py-2 text-[10px] leading-4 text-gray-300 shadow-xl">
       <div className="grid grid-cols-[auto_1fr] gap-x-2">
-        <span className="text-gray-500">secureContext</span>
-        <span>{microphoneDiagnostics.secureContext ? 'true' : 'false'}</span>
-        <span className="text-gray-500">mediaDevices</span>
-        <span>{microphoneDiagnostics.mediaDevicesAvailable ? 'disponible' : 'no disponible'}</span>
-        <span className="text-gray-500">permission</span>
+        <span className="text-gray-500">{"secureContext"}</span>
+        <span>{microphoneDiagnostics.secureContext ? "true" : "false"}</span>
+        <span className="text-gray-500">{"mediaDevices"}</span>
+        <span>{microphoneDiagnostics.mediaDevicesAvailable ? translate("liveAudio:AudienceLiveAudioPanel.available", "disponible") : translate("liveAudio:AudienceLiveAudioPanel.unavailable", "no disponible")}</span>
+        <span className="text-gray-500">{"permission"}</span>
         <span>{microphoneDiagnostics.permissionState}</span>
         {microphoneDiagnostics.lastErrorName && (
           <>
-            <span className="text-gray-500">error.name</span>
+            <span className="text-gray-500">{"error.name"}</span>
             <span>{microphoneDiagnostics.lastErrorName}</span>
           </>
         )}
         {microphoneDiagnostics.lastErrorMessage && (
           <>
-            <span className="text-gray-500">error.message</span>
+            <span className="text-gray-500">{"error.message"}</span>
             <span>{microphoneDiagnostics.lastErrorMessage}</span>
           </>
         )}
@@ -264,14 +267,14 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
     ? (
       <div className="flex items-center gap-2 h-full bg-orange-600/90 text-white px-3 rounded-full shadow-lg backdrop-blur-xs">
         <Loader2 className="w-4 h-4 animate-spin" />
-        <span className="text-xs font-semibold">Reconectando</span>
+        <span className="text-xs font-semibold">{translate("liveAudio:AudienceLiveAudioPanel.reconnecting", "Reconectando")}</span>
       </div>
     )
     : state === 'reconnected'
       ? (
         <div className="flex items-center gap-2 h-full bg-emerald-600/90 text-white px-3 rounded-full shadow-lg backdrop-blur-xs">
           <CheckCircle2 className="w-4 h-4" />
-          <span className="text-xs font-semibold">Reconectado</span>
+          <span className="text-xs font-semibold">{translate("liveAudio:AudienceLiveAudioPanel.reconnected", "Reconectado")}</span>
         </div>
       )
       : state === 'reconnectFailed'
@@ -281,7 +284,7 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
             className="flex items-center gap-2 h-full bg-red-600/90 hover:bg-red-500/90 text-white px-3 rounded-full shadow-lg backdrop-blur-xs transition-all"
           >
             <RotateCcw className="w-4 h-4" />
-            <span className="text-xs font-semibold">Reintentar audio</span>
+            <span className="text-xs font-semibold">{translate("liveAudio:AudienceLiveAudioPanel.retryAudio", "Reintentar audio")}</span>
           </button>
         )
         : null;
@@ -293,9 +296,9 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
         className={`flex h-full items-center rounded-full px-3 text-xs font-bold text-white shadow-lg ${
           externalBroadcastState === 'recording' ? 'bg-red-600/95' : 'bg-orange-600/95'
         }`}
-        title="Estado declarado por Control para la herramienta externa"
+        title={translate("liveAudio:AudienceLiveAudioPanel.statusDeclaredByControlForTheExternalTool", "Estado declarado por Control para la herramienta externa")}
       >
-        {externalBroadcastState === 'recording' ? '● En directo y grabando' : '● En directo'}
+        {externalBroadcastState === 'recording' ? translate("liveAudio:AudienceLiveAudioPanel.liveAndRecording", "● En directo y grabando") : translate("liveAudio:AudienceLiveAudioPanel.live", "● En directo")}
       </div>
     );
 
@@ -311,7 +314,7 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
               className="flex items-center gap-2 h-full bg-blue-600/90 hover:bg-blue-500/90 text-white px-4 rounded-full shadow-lg backdrop-blur-xs transition-all"
             >
               <Play className="w-5 h-5" />
-              <span className="text-sm font-medium">Escuchar en vivo</span>
+              <span className="text-sm font-medium">{translate("liveAudio:AudienceLiveAudioPanel.listenLive", "Escuchar en vivo")}</span>
             </button>
           )}
           <button
@@ -321,10 +324,10 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
               ? 'bg-gray-700 border-gray-600 text-gray-400 cursor-not-allowed'
               : 'bg-yellow-500 hover:bg-yellow-400 border-yellow-300 text-black shadow-[0_0_15px_rgba(234,179,8,0.6)] animate-pulse'
               }`}
-            title={isParticipationBlocked ? "Participacion bloqueada por Control" : "Participar"}
+            title={isParticipationBlocked ? translate("liveAudio:AudienceLiveAudioPanel.participationBlockedByControl", "Participacion bloqueada por Control") : translate("liveAudio:AudienceLiveAudioPanel.participate", "Participar")}
           >
             <Hand className="w-5 h-5" />
-            <span className="font-bold text-sm pr-1">Participa</span>
+            <span className="font-bold text-sm pe-1">{translate("liveAudio:AudienceLiveAudioPanel.joinIn", "Participa")}</span>
           </button>
         </div>
       </div>
@@ -337,7 +340,7 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
         {externalBroadcastNotice}
         {diagnostics}
         {isParticipantsOpen && (
-          <div className="absolute bottom-full mb-3 left-0 right-0" onClick={(event) => event.stopPropagation()}>
+          <div className="absolute bottom-full mb-3 start-0 end-0" onClick={(event) => event.stopPropagation()}>
             <ActiveParticipantsPanel
               isAuthorized={canViewActiveParticipants}
               participants={visibleParticipants}
@@ -353,8 +356,7 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
           <div className="relative">
             {microphoneTrackState === 'error' && (
               <div role="alert" className="absolute bottom-full left-1/2 mb-2 w-64 -translate-x-1/2 rounded-sm bg-red-950 px-3 py-2 text-xs text-red-100 shadow-lg">
-                No se pudo activar el micrófono. Pulsa de nuevo para reintentar.
-              </div>
+                {translate("liveAudio:AudienceLiveAudioPanel.couldNotEnableTheMicrophonePressAgainToRetry", "No se pudo activar el micrófono. Pulsa de nuevo para reintentar.")}</div>
             )}
             <button
               onClick={onToggleMicrophone}
@@ -368,10 +370,10 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
                     : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
                 }`}
               title={microphoneTrackState === 'publishing'
-                ? 'Activando micrófono'
+                ? translate("liveAudio:AudienceLiveAudioPanel.enablingMicrophone", "Activando micrófono")
                 : microphoneTrackState === 'error'
-                  ? 'Error de micrófono; pulsar para reintentar'
-                  : isMicrophoneActive ? 'Desactivar Micrófono' : 'Activar Micrófono'}
+                  ? translate("liveAudio:AudienceLiveAudioPanel.microphoneErrorPressToRetry", "Error de micrófono; pulsar para reintentar")
+                  : isMicrophoneActive ? translate("liveAudio:AudienceLiveAudioPanel.disableMicrophone", "Desactivar Micrófono") : translate("liveAudio:AudienceLiveAudioPanel.enableMicrophone", "Activar Micrófono")}
             >
               {microphoneTrackState === 'publishing'
                 ? <Loader2 className="w-6 h-6 animate-spin" />
@@ -385,7 +387,7 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
               ? 'bg-yellow-600/80 hover:bg-yellow-500/80 text-white'
               : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
               }`}
-            title={isPendingWord ? "Cancelar Petición" : "Pedir Palabra"}
+            title={isPendingWord ? translate("liveAudio:AudienceLiveAudioPanel.cancelRequest", "Cancelar Petición") : translate("liveAudio:AudienceLiveAudioPanel.requestToSpeak", "Pedir Palabra")}
           >
             <Hand className="w-6 h-6" />
           </button>
@@ -394,7 +396,7 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
         <button
           onClick={onOpenMessage}
           className="flex items-center justify-center p-3 rounded-xl bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors"
-          title="Mensaje Privado a Control"
+          title={translate("liveAudio:AudienceLiveAudioPanel.privateMessageToControl", "Mensaje Privado a Control")}
         >
           <MessageSquare className="w-6 h-6" />
         </button>
@@ -402,7 +404,7 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
         <button
           onClick={() => setIsParticipantsOpen((current) => !current)}
           className="flex items-center justify-center p-3 rounded-xl bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors"
-          title="Participantes"
+          title={translate("liveAudio:AudienceLiveAudioPanel.participants", "Participantes")}
         >
           <Users className="w-6 h-6" />
         </button>
@@ -419,30 +421,30 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
               onClick={(event) => event.stopPropagation()}
             >
               <div className="flex flex-col gap-1 items-center">
-                <span className="text-[10px] text-gray-400 font-bold uppercase">Volumen {Math.round(volume * 100)}%</span>
+                <span className="text-[10px] text-gray-400 font-bold uppercase">{translate("liveAudio:AudienceLiveAudioPanel.volume", "Volumen")} {Math.round(volume * 100)}%</span>
                 <input
                   type="range"
                   min="0" max="1" step="0.05"
                   value={volume}
                   onChange={e => onVolumeChange(parseFloat(e.target.value))}
                   className="w-24 h-2 accent-blue-500 cursor-pointer"
-                  title="Volumen del audio en vivo"
+                  title={translate("liveAudio:AudienceLiveAudioPanel.liveAudioVolume", "Volumen del audio en vivo")}
                 />
               </div>
 
               {isWordGranted && microphoneVolume !== undefined && onMicrophoneVolumeChange && (
                 <div className="flex flex-col gap-1 items-center pt-3 border-t border-gray-700">
-                  <span className="text-[10px] text-gray-400 font-bold uppercase">Micro {Math.round(microphoneVolume)}%</span>
+                  <span className="text-[10px] text-gray-400 font-bold uppercase">{translate("liveAudio:AudienceLiveAudioPanel.mic", "Micro")} {Math.round(microphoneVolume)}%</span>
                   <input
                     type="range"
                     min="0" max="300" step="5"
                     value={microphoneVolume}
                     onChange={e => onMicrophoneVolumeChange(parseFloat(e.target.value))}
                     className="w-24 h-2 accent-green-500 cursor-pointer"
-                    title="Volumen del micrófono (%)"
+                    title={translate("liveAudio:AudienceLiveAudioPanel.microphoneVolume", "Volumen del micrófono (%)")}
                   />
                   {isMusicMode !== undefined && onMusicModeChange && (
-                    <label className="flex items-center gap-2 mt-2 cursor-pointer hover:bg-gray-700 p-1 rounded-sm transition-colors w-full justify-center" title="Modo Música (Desactiva filtro de ruido)">
+                    <label className="flex items-center gap-2 mt-2 cursor-pointer hover:bg-gray-700 p-1 rounded-sm transition-colors w-full justify-center" title={translate("liveAudio:AudienceLiveAudioPanel.musicModeDisablesNoiseFiltering", "Modo Música (Desactiva filtro de ruido)")}>
                       <input
                         type="checkbox"
                         checked={isMusicMode}
@@ -463,7 +465,7 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
         <button
           onClick={onLeaveActive}
           className="flex items-center justify-center p-3 rounded-xl bg-red-900/60 hover:bg-red-800/80 text-red-300 transition-colors"
-          title="Salir del Modo Activo"
+          title={translate("liveAudio:AudienceLiveAudioPanel.leaveActiveMode", "Salir del Modo Activo")}
         >
           <LogOut className="w-6 h-6" />
         </button>

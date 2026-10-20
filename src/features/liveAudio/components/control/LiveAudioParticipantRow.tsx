@@ -1,3 +1,5 @@
+import { translate } from '../../../../i18n/runtime';
+import { useUiTranslation } from '../../../../i18n/useUiTranslation';
 import React, { useState } from 'react';
 import { Eye, EyeOff, Hand, MessageSquare, Mic, MicOff, RotateCcw, Trash2, UserCheck, UserX, Volume2, X, XCircle, Loader2 } from 'lucide-react';
 import type { LiveAudioConnectionState, MicrophoneTrackState, SpeakerState } from '../../../../types/liveAudio';
@@ -58,6 +60,7 @@ export const LiveAudioParticipantRow: React.FC<LiveAudioParticipantRowProps> = (
   onRemove,
   onMicrophoneConfigChange,
 }) => {
+  useUiTranslation('liveAudio');
   const [isVolumeOpen, setIsVolumeOpen] = useState(false);
 
   const isRequested = participant.speakerState === 'REQUESTED' && !participant.isKicked;
@@ -73,7 +76,7 @@ export const LiveAudioParticipantRow: React.FC<LiveAudioParticipantRowProps> = (
 
   const volume = participant.microphoneVolume ?? 100;
   const displayAlias = participant.alias.trim() || 'Sin nick';
-  const displayName = isControlAuthorized ? displayAlias : 'Usuario anónimo';
+  const displayName = isControlAuthorized ? displayAlias : translate("liveAudio:LiveAudioParticipantRow.anonymousUser", "Usuario anónimo");
 
   const badgeStatus: ParticipantStatus = participant.isKicked
     ? 'kicked'
@@ -92,7 +95,7 @@ export const LiveAudioParticipantRow: React.FC<LiveAudioParticipantRowProps> = (
   return (
     <div className="flex items-center justify-between p-2 hover:bg-gray-800 border-b border-gray-800 last:border-0 transition-colors group">
       <div className="flex min-w-0 items-center gap-3">
-        {onSelectVoice ? <button type="button" aria-label={`Comandos de voz: ${displayName}`}
+        {onSelectVoice ? <button type="button" aria-label={translate("liveAudio:LiveAudioParticipantRow.voiceCommands", "Comandos de voz: {{value1}}", { value1: displayName })}
           aria-pressed={!!voiceSelected} disabled={!voiceSelectable && !voiceSelected}
           onClick={() => onSelectVoice(participant.participantId)}
           className={`rounded-full p-1.5 disabled:opacity-40 ${
@@ -125,10 +128,10 @@ export const LiveAudioParticipantRow: React.FC<LiveAudioParticipantRowProps> = (
             onClick={() => onGrant(participant.participantId)}
             disabled={!audioReady}
             className="flex items-center gap-1 bg-green-600 hover:bg-green-500 text-white px-2 py-1 rounded-sm text-xs"
-            title={audioReady ? 'Conceder palabra' : 'Esperando conexión de audio; Audience debe reintentar el audio'}
+            title={audioReady ? translate("liveAudio:LiveAudioParticipantRow.grantSpeakingTurn", "Conceder palabra") : translate("liveAudio:LiveAudioParticipantRow.waitingForAudioConnectionAudienceMustRetryAudio", "Esperando conexión de audio; Audience debe reintentar el audio")}
           >
             <Hand size={14} />
-            <span className="hidden sm:inline">Aprobar</span>
+            <span className="hidden sm:inline">{translate("liveAudio:LiveAudioParticipantRow.approve", "Aprobar")}</span>
           </button>
         )}
 
@@ -137,10 +140,10 @@ export const LiveAudioParticipantRow: React.FC<LiveAudioParticipantRowProps> = (
             onClick={() => onGrant(participant.participantId)}
             disabled={!audioReady}
             className="flex items-center gap-1 bg-gray-700 hover:bg-gray-600 text-white px-2 py-1 rounded-sm text-xs"
-            title={audioReady ? 'Permitir micrófono' : 'Esperando conexión de audio; Audience debe reintentar el audio'}
+            title={audioReady ? translate("liveAudio:LiveAudioParticipantRow.allowMicrophone", "Permitir micrófono") : translate("liveAudio:LiveAudioParticipantRow.waitingForAudioConnectionAudienceMustRetryAudio", "Esperando conexión de audio; Audience debe reintentar el audio")}
           >
             <MessageSquare size={14} />
-            <span className="hidden sm:inline">Permitir</span>
+            <span className="hidden sm:inline">{translate("liveAudio:LiveAudioParticipantRow.allow", "Permitir")}</span>
           </button>
         )}
 
@@ -151,11 +154,11 @@ export const LiveAudioParticipantRow: React.FC<LiveAudioParticipantRowProps> = (
               ? 'bg-red-600 hover:bg-red-500 text-white'
               : 'bg-gray-600 text-gray-300'
               }`}
-            title={hasOpenMicrophone ? 'Silenciar track' : 'Micro cerrado o silenciado'}
+            title={hasOpenMicrophone ? translate("liveAudio:LiveAudioParticipantRow.muteTrack", "Silenciar track") : translate("liveAudio:LiveAudioParticipantRow.microphoneClosedOrMuted", "Micro cerrado o silenciado")}
           >
             <MicOff size={14} />
             <span className="hidden sm:inline">
-              {hasOpenMicrophone ? 'Silenciar' : 'Silenciado'}
+              {hasOpenMicrophone ? translate("liveAudio:LiveAudioParticipantRow.mute", "Silenciar") : translate("liveAudio:LiveAudioParticipantRow.muted", "Silenciado")}
             </span>
           </button>
         )}
@@ -163,15 +166,15 @@ export const LiveAudioParticipantRow: React.FC<LiveAudioParticipantRowProps> = (
         {isGranted && onRevoke && (
           <button
             onClick={() => {
-              if (window.confirm(`¿Revocar la palabra a ${displayName}?`)) {
+              if (window.confirm(translate("liveAudio:LiveAudioParticipantRow.revokeSSpeakingTurn", "¿Revocar la palabra a {{value1}}?", { value1: displayName }))) {
                 onRevoke(participant.participantId);
               }
             }}
             className="flex items-center gap-1 bg-gray-700 hover:bg-gray-600 text-white px-2 py-1 rounded-sm text-xs"
-            title="Revocar palabra"
+            title={translate("liveAudio:LiveAudioParticipantRow.revokeSpeakingTurn", "Revocar palabra")}
           >
             <X size={14} className="opacity-50" />
-            <span className="hidden sm:inline">Revocar</span>
+            <span className="hidden sm:inline">{translate("liveAudio:LiveAudioParticipantRow.revoke", "Revocar")}</span>
           </button>
         )}
 
@@ -183,14 +186,14 @@ export const LiveAudioParticipantRow: React.FC<LiveAudioParticipantRowProps> = (
                 ? 'bg-blue-600 text-white'
                 : 'text-gray-400 hover:text-white hover:bg-gray-700'
                 }`}
-              title="Ajustar micro remoto"
+              title={translate("liveAudio:LiveAudioParticipantRow.adjustRemoteMicrophone", "Ajustar micro remoto")}
             >
               <Volume2 size={16} />
-              <span className="text-[10px] w-8 text-left">{volume}%</span>
+              <span className="text-[10px] w-8 text-start">{volume}%</span>
             </button>
 
             {isVolumeOpen && (
-              <div className="absolute right-8 top-1/2 -translate-y-1/2 bg-gray-800 border border-gray-700 p-2 rounded-sm shadow-xl flex items-center gap-2 z-100 min-w-48">
+              <div className="absolute end-8 top-1/2 -translate-y-1/2 bg-gray-800 border border-gray-700 p-2 rounded-sm shadow-xl flex items-center gap-2 z-100 min-w-48">
                 <span className="text-xs font-semibold text-gray-300 w-10">
                   {volume}%
                 </span>
@@ -214,7 +217,7 @@ export const LiveAudioParticipantRow: React.FC<LiveAudioParticipantRowProps> = (
                     ? 'bg-purple-600 text-white'
                     : 'bg-gray-900 text-gray-300 hover:bg-gray-700'
                     }`}
-                  title="Modo música"
+                  title={translate("liveAudio:LiveAudioParticipantRow.musicMode", "Modo música")}
                 >
                   <input
                     type="checkbox"
@@ -232,7 +235,7 @@ export const LiveAudioParticipantRow: React.FC<LiveAudioParticipantRowProps> = (
                 <button
                   onClick={() => setIsVolumeOpen(false)}
                   className="text-gray-500 hover:text-white transition-colors"
-                  title="Cerrar"
+                  title={translate("liveAudio:LiveAudioParticipantRow.close", "Cerrar")}
                 >
                   <X size={14} />
                 </button>
@@ -259,10 +262,10 @@ export const LiveAudioParticipantRow: React.FC<LiveAudioParticipantRowProps> = (
               }`}
             title={
               !participant.isAliasVisibleToActiveParticipants
-                ? 'Usuario no autorizo compartir alias'
+                ? translate("liveAudio:LiveAudioParticipantRow.userDidNotAuthorizeSharingTheirAlias", "Usuario no autorizo compartir alias")
                 : participant.isAliasHiddenByControl
-                  ? 'Incognito, clic para hacer visible'
-                  : 'Visible para otros, clic para ocultar'
+                  ? translate("liveAudio:LiveAudioParticipantRow.hiddenClickToMakeVisible", "Incognito, clic para hacer visible")
+                  : translate("liveAudio:LiveAudioParticipantRow.visibleToOthersClickToHide", "Visible para otros, clic para ocultar")
             }
           >
             {participant.isAliasHiddenByControl ? <UserX size={16} /> : <UserCheck size={16} />}
@@ -283,8 +286,8 @@ export const LiveAudioParticipantRow: React.FC<LiveAudioParticipantRowProps> = (
               }`}
             title={
               participant.canViewActiveParticipants
-                ? 'Puede ver lista, clic para revocar'
-                : 'No puede ver lista, clic para conceder'
+                ? translate("liveAudio:LiveAudioParticipantRow.canViewListClickToRevoke", "Puede ver lista, clic para revocar")
+                : translate("liveAudio:LiveAudioParticipantRow.cannotViewListClickToAllow", "No puede ver lista, clic para conceder")
             }
           >
             {participant.canViewActiveParticipants ? <Eye size={16} /> : <EyeOff size={16} />}
@@ -295,53 +298,53 @@ export const LiveAudioParticipantRow: React.FC<LiveAudioParticipantRowProps> = (
           <button
             onClick={() => onRescue(participant.participantId)}
             className="flex items-center gap-1 bg-blue-700 hover:bg-blue-600 text-white px-2 py-1 rounded-sm text-xs"
-            title="Restablecer como activo (permite volver a pedir turno)"
+            title={translate("liveAudio:LiveAudioParticipantRow.restoreActiveStatusAllowsRequestingAnotherTurn", "Restablecer como activo (permite volver a pedir turno)")}
           >
             <RotateCcw size={14} />
-            <span className="hidden sm:inline">Restablecer</span>
+            <span className="hidden sm:inline">{translate("liveAudio:LiveAudioParticipantRow.reset", "Restablecer")}</span>
           </button>
         )}
 
         {participant.isKicked && onRemove && (
           <button
             onClick={() => {
-              if (window.confirm(`¿Expulsar a ${displayName} de la sala? Podrá volver a solicitar entrada si lo desea.`)) {
+              if (window.confirm(translate("liveAudio:LiveAudioParticipantRow.removeFromTheRoomTheyCanRequestEntryAgain", "¿Expulsar a {{value1}} de la sala? Podrá volver a solicitar entrada si lo desea.", { value1: displayName }))) {
                 onRemove(participant.participantId);
               }
             }}
             className="flex items-center gap-1 bg-slate-700 hover:bg-slate-600 text-gray-200 px-2 py-1 rounded-sm text-xs transition-colors"
-            title="Expulsar a la puerta (no bloquea, puede volver)"
+            title={translate("liveAudio:LiveAudioParticipantRow.removeToEntranceDoesNotBlockReEntry", "Expulsar a la puerta (no bloquea, puede volver)")}
           >
             <Trash2 size={13} />
-            <span className="hidden sm:inline">Expulsar</span>
+            <span className="hidden sm:inline">{translate("liveAudio:LiveAudioParticipantRow.remove", "Expulsar")}</span>
           </button>
         )}
 
         {participant.isKicked && onBlock && (
           <button
             onClick={() => {
-              if (window.confirm(`¿Bloquear y vetar totalmente a ${displayName}?`)) {
+              if (window.confirm(translate("liveAudio:LiveAudioParticipantRow.completelyBlockAndBan", "¿Bloquear y vetar totalmente a {{value1}}?", { value1: displayName }))) {
                 onBlock(participant.participantId);
               }
             }}
             className="flex items-center gap-1 bg-red-800 hover:bg-red-700 text-white px-2 py-1 rounded-sm text-xs transition-colors"
-            title="Bloquear acceso totalmente"
+            title={translate("liveAudio:LiveAudioParticipantRow.blockAccessCompletely", "Bloquear acceso totalmente")}
           >
             <XCircle size={13} />
-            <span className="hidden sm:inline">Bloquear</span>
+            <span className="hidden sm:inline">{translate("liveAudio:LiveAudioParticipantRow.block", "Bloquear")}</span>
           </button>
         )}
 
         {onKick && !participant.isKicked && (
           <button
             onClick={() => {
-              if (window.confirm(`¿Restringir a ${displayName}? Se silenciará y bloqueará su turno.`)) {
+              if (window.confirm(translate("liveAudio:LiveAudioParticipantRow.restrictTheyWillBeMutedAndTheirSpeakingTurn", "¿Restringir a {{value1}}? Se silenciará y bloqueará su turno.", { value1: displayName }))) {
                 onKick(participant.participantId);
               }
             }}
             className="text-gray-500 hover:text-amber-500 p-1 transition-colors"
-            title="Restringir participación"
-            aria-label={`Restringir a ${displayName}`}
+            title={translate("liveAudio:LiveAudioParticipantRow.restrictParticipation", "Restringir participación")}
+            aria-label={translate("liveAudio:LiveAudioParticipantRow.restrict", "Restringir a {{value1}}", { value1: displayName })}
           >
             <XCircle size={16} />
           </button>

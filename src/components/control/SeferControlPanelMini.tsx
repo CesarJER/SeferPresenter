@@ -1,3 +1,5 @@
+import { translate } from '../../i18n/runtime';
+import { useUiTranslation } from '../../i18n/useUiTranslation';
 import React from 'react';
 import { ChevronLeft, ChevronRight, Sliders } from 'lucide-react';
 import type { ScriptureNavState } from '../../types/presentation';
@@ -24,6 +26,7 @@ const SeferControlPanelMini: React.FC<SeferControlPanelMiniProps> = ({
   onUpdateFontSizes,
   onVerseResolved,
 }) => {
+  useUiTranslation('control');
   const {
     metadata,
     currentVerse,
@@ -56,8 +59,7 @@ const SeferControlPanelMini: React.FC<SeferControlPanelMiniProps> = ({
   if (Object.keys(metadata).length === 0) {
     return (
       <div id="section-loading-bible-data" className="flex items-center justify-center h-full text-gray-500 text-sm">
-        Cargando datos bíblicos...
-      </div>
+        {translate("control:SeferControlPanelMini.loadingBiblicalData", "Cargando datos bíblicos...")}</div>
     );
   }
 
@@ -70,7 +72,7 @@ const SeferControlPanelMini: React.FC<SeferControlPanelMiniProps> = ({
               <button
                 type="button"
                 onClick={() => setShowFontSettings(!showFontSettings)}
-                title="Ajustar tamaños de letra"
+                title={translate("control:SeferControlPanelMini.adjustFontSizes", "Ajustar tamaños de letra")}
                 className={`control-icon-btn p-2 ${showFontSettings
                   ? 'bg-yellow-600 text-white'
                   : 'control-icon-btn-neutral'
@@ -87,9 +89,9 @@ const SeferControlPanelMini: React.FC<SeferControlPanelMiniProps> = ({
                   onClick={handlePrev}
                   disabled={!currentVerse}
                   className="control-nav-btn flex-none px-2.5"
-                  title="Versículo anterior"
+                  title={translate("control:SeferControlPanelMini.previousVerse", "Versículo anterior")}
                 >
-                  <ChevronLeft size={14} />
+                  <ChevronLeft data-ui-directional="true" size={14} />
                 </button>
 
                 <div className="flex-1 flex flex-wrap gap-1">
@@ -106,7 +108,7 @@ const SeferControlPanelMini: React.FC<SeferControlPanelMiniProps> = ({
                       </button>
                     );
                   }) : (
-                    <span className="text-[10px] text-gray-500">Sin versículos</span>
+                    <span className="text-[10px] text-gray-500">{translate("control:SeferControlPanelMini.noVerses", "Sin versículos")}</span>
                   )}
                 </div>
 
@@ -115,9 +117,9 @@ const SeferControlPanelMini: React.FC<SeferControlPanelMiniProps> = ({
                   onClick={handleNext}
                   disabled={!currentVerse}
                   className="control-nav-btn flex-none px-2.5"
-                  title="Versículo siguiente"
+                  title={translate("control:SeferControlPanelMini.nextVerse", "Versículo siguiente")}
                 >
-                  <ChevronRight size={14} />
+                  <ChevronRight data-ui-directional="true" size={14} />
                 </button>
               </div>
             </div>
@@ -127,7 +129,7 @@ const SeferControlPanelMini: React.FC<SeferControlPanelMiniProps> = ({
         {canAdjustFont && showFontSettings && (
           <div id="section-font-adjustments" className="control-font-drawer">
             <div className="flex items-center justify-between gap-2">
-              <span className="control-font-label">Hebreo: {hebrewFontSize}px</span>
+              <span className="control-font-label">{translate("control:SeferControlPanelMini.hebrew", "Hebreo:")} {hebrewFontSize}{translate("control:SeferControlPanelMini.px", "px")}</span>
               <input
                 type="range"
                 min="20"
@@ -138,7 +140,7 @@ const SeferControlPanelMini: React.FC<SeferControlPanelMiniProps> = ({
               />
             </div>
             <div className="flex items-center justify-between gap-2">
-              <span className="control-font-label">Texto combinado: {combinedTextBaseSize}px</span>
+              <span className="control-font-label">{translate("control:SeferControlPanelMini.combinedText", "Texto combinado:")} {combinedTextBaseSize}{translate("control:SeferControlPanelMini.px", "px")}</span>
               <input
                 type="range"
                 min="12"

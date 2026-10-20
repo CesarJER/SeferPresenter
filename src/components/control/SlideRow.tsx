@@ -1,3 +1,5 @@
+import { translate } from '../../i18n/runtime';
+import { useUiTranslation } from '../../i18n/useUiTranslation';
 import React from 'react';
 import { ArrowDown, ArrowUp, BookOpen, ChevronDown, ChevronUp, FileText, HelpCircle, Image as ImageIcon, Languages, Play, ScrollText, Trash2, Video } from 'lucide-react';
 import type { Presentation, QuizData, Slide, VideoState } from '../../types/presentation';
@@ -104,6 +106,7 @@ export const SlideRow: React.FC<SlideRowProps> = ({
   handleDeleteSlide,
   handleChangeSlideType,
 }) => {
+  useUiTranslation('control');
   const rangeRootIdx = getScriptureRangeRootIndex(idx);
   const isScriptureGroupChild = rangeRootIdx >= 0 && rangeRootIdx !== idx;
   const groupRoot = rangeRootIdx >= 0 ? slides[rangeRootIdx] : null;
@@ -138,20 +141,20 @@ export const SlideRow: React.FC<SlideRowProps> = ({
                                     </span>
                                   ) : (
                                     <div className="flex items-center justify-center gap-1">
-                                      {isScriptureGroupChild && <span className="text-[10px] font-black text-gray-500">&gt;</span>}
+                                      {isScriptureGroupChild && <span className="text-[10px] font-black text-gray-500">{translate("control:SlideRow.symbol", ">")}</span>}
                                       <AutoResizeInput
                                         type="text"
                                         className={`w-[60px] text-center bg-gray-900 border border-gray-700 rounded-sm px-1.5 py-1 text-xs text-white focus:outline-hidden focus:ring-1 focus:ring-yellow-500 font-bold ${isScriptureGroupChild ? 'opacity-75' : ''}`}
                                         value={slide.label}
                                         onChange={e => handleUpdateLabel(idx, e.target.value)}
-                                        placeholder="Nº"
+                                        placeholder={translate("control:SlideRow.no", "Nº")}
                                       />
                                       {hasRangeChildren && (
                                         <button
                                           type="button"
                                           onClick={() => setExpandedRows({ ...expandedRows, [slide.id]: !groupExpanded })}
                                           className="p-1 rounded-sm bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white border border-gray-700"
-                                          title={groupExpanded ? 'Colapsar bloque' : 'Expandir bloque'}
+                                          title={groupExpanded ? translate("control:SlideRow.collapseBlock", "Colapsar bloque") : translate("control:SlideRow.expandBlock", "Expandir bloque")}
                                         >
                                           {groupExpanded ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
                                         </button>
@@ -175,7 +178,7 @@ export const SlideRow: React.FC<SlideRowProps> = ({
                                         onSelectPresentation(livePresentation, idx);
                                       }}
                                       className="p-1 rounded-sm bg-gray-800 hover:bg-yellow-600 hover:text-white border border-gray-750 transition-colors flex items-center justify-center cursor-pointer text-gray-400"
-                                      title="Proyectar esta diapositiva en directo"
+                                      title={translate("control:SlideRow.projectThisSlideLive", "Proyectar esta diapositiva en directo")}
                                     >
                                       <Play size={10} fill="currentColor" />
                                     </button>
@@ -208,7 +211,7 @@ export const SlideRow: React.FC<SlideRowProps> = ({
                                     <div className="bg-gray-950/40 border border-gray-800/80 rounded-lg p-3 space-y-3 shadow-md w-full">
                                       <div className="flex items-center gap-2 border-b border-gray-850 pb-1.5 mb-1.5">
                                         <Video size={13} className="text-yellow-500 animate-pulse" />
-                                        <span className="text-[10px] font-bold text-gray-405 uppercase tracking-wider">Configuración Multimedia</span>
+                                        <span className="text-[10px] font-bold text-gray-405 uppercase tracking-wider">{translate("control:SlideRow.mediaSettings", "Configuración Multimedia")}</span>
                                       </div>
 
                                       {(() => {
@@ -217,26 +220,26 @@ export const SlideRow: React.FC<SlideRowProps> = ({
                                           <>
                                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                               <div className="space-y-1">
-                                                <label className="text-[9px] font-black text-gray-500 uppercase tracking-wide">Ruta del Archivo</label>
+                                                <label className="text-[9px] font-black text-gray-500 uppercase tracking-wide">{translate("control:SlideRow.filePath", "Ruta del Archivo")}</label>
                                                 <CustomSearchSelect
                                                   value={slide.mediaSrc || ''}
                                                   onChange={val => handleUpdateVideoParams(idx, { mediaSrc: val })}
                                                   options={mediaOptions}
-                                                  placeholder="Seleccionar archivo..."
-                                                  dropdownWidthClass="w-[260px] -left-5"
+                                                  placeholder={translate("control:SlideRow.selectFile", "Seleccionar archivo...")}
+                                                  dropdownWidthClass="w-[260px] -start-5"
                                                   openDirection="down"
                                                 />
                                               </div>
                                               <div className="space-y-1">
-                                                <label className="text-[9px] font-black text-gray-500 uppercase tracking-wide">Ajuste (Fit)</label>
+                                                <label className="text-[9px] font-black text-gray-500 uppercase tracking-wide">{translate("control:SlideRow.fit", "Ajuste (Fit)")}</label>
                                                 <select
                                                   value={slide.mediaFit || 'cover'}
                                                   onChange={e => handleUpdateVideoParams(idx, { mediaFit: e.target.value as 'cover' | 'contain' | 'fill' })}
                                                   className="w-full bg-gray-900 border border-gray-700 rounded-sm p-1 text-xs text-gray-200 outline-hidden focus:border-yellow-500"
                                                 >
-                                                  <option value="cover">Cover (Recortar)</option>
-                                                  <option value="contain">Contain (Barras)</option>
-                                                  <option value="fill">Fill (Estirar)</option>
+                                                  <option value="cover">{translate("control:SlideRow.coverCrop", "Cover (Recortar)")}</option>
+                                                  <option value="contain">{translate("control:SlideRow.containBars", "Contain (Barras)")}</option>
+                                                  <option value="fill">{translate("control:SlideRow.fillStretch", "Fill (Estirar)")}</option>
                                                 </select>
                                               </div>
 
@@ -249,23 +252,23 @@ export const SlideRow: React.FC<SlideRowProps> = ({
                                                     onChange={e => handleUpdateVideoParams(idx, { presenterNav: e.target.checked })}
                                                     className="accent-yellow-500 h-4 w-4 rounded-sm border-gray-700 bg-gray-900 cursor-pointer"
                                                   />
-                                                  <span>Mostrar Nav</span>
+                                                  <span>{translate("control:SlideRow.showNav", "Mostrar Nav")}</span>
                                                 </label>
-                                                <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer text-gray-300 hover:text-white select-none" title="Si está activo, el fondo global se renderizará detrás de esta imagen/video. Ideal para modo Ajuste 'Contain'.">
+                                                <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer text-gray-300 hover:text-white select-none" title={translate("control:SlideRow.whenEnabledTheGlobalBackgroundIsRenderedBehindThis", "Si está activo, el fondo global se renderizará detrás de esta imagen/video. Ideal para modo Ajuste 'Contain'.")}>
                                                   <input
                                                     type="checkbox"
                                                     checked={slide.mediaShowBg === true}
                                                     onChange={e => handleUpdateVideoParams(idx, { mediaShowBg: e.target.checked })}
                                                     className="accent-yellow-500 h-4 w-4 rounded-sm border-gray-700 bg-gray-900 cursor-pointer"
                                                   />
-                                                  <span>Fondo Visible</span>
+                                                  <span>{translate("control:SlideRow.backgroundVisible", "Fondo Visible")}</span>
                                                 </label>
                                               </div>
 
                                               {!isImageMediaConfig && (
                                                 <div className="space-y-1">
                                                   <div className="flex items-center justify-between">
-                                                    <label className="text-[9px] font-black text-gray-500 uppercase tracking-wide">Volumen</label>
+                                                    <label className="text-[9px] font-black text-gray-500 uppercase tracking-wide">{translate("control:SlideRow.volume", "Volumen")}</label>
                                                     <span className="text-[10px] font-bold text-yellow-500">{Math.round((slide.mediaVolume ?? 0.8) * 100)}%</span>
                                                   </div>
                                                   <div className="flex items-center gap-2">
@@ -286,7 +289,7 @@ export const SlideRow: React.FC<SlideRowProps> = ({
                                             {!isImageMediaConfig && (
                                               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1 border-t border-gray-850/40">
                                                 <div className="space-y-1">
-                                                  <label className="text-[9px] font-black text-gray-500 uppercase tracking-wide block mb-1">Velocidad</label>
+                                                  <label className="text-[9px] font-black text-gray-500 uppercase tracking-wide block mb-1">{translate("control:SlideRow.speed", "Velocidad")}</label>
                                                   <div className="flex items-center gap-1 rounded-sm bg-gray-955 p-0.5 w-fit border border-gray-800">
                                                     {[0.5, 1.0, 1.25, 1.5, 2.0].map(speedVal => {
                                                       const isActive = (slide.mediaSpeed ?? 1.0) === speedVal;
@@ -297,15 +300,14 @@ export const SlideRow: React.FC<SlideRowProps> = ({
                                                           onClick={() => handleUpdateVideoParams(idx, { speed: speedVal })}
                                                           className={`text-[9px] font-bold px-2 py-0.5 rounded-sm transition-all cursor-pointer ${isActive ? 'bg-yellow-600 text-white font-black' : 'text-gray-400 hover:text-gray-200'}`}
                                                         >
-                                                          {speedVal}x
-                                                        </button>
+                                                          {speedVal}{translate("control:SlideRow.x", "x")}</button>
                                                       );
                                                     })}
                                                   </div>
                                                 </div>
 
                                                 <div>
-                                                  <label className="text-[9px] font-black text-gray-500 uppercase tracking-wide block mb-1.5">Reproducción</label>
+                                                  <label className="text-[9px] font-black text-gray-500 uppercase tracking-wide block mb-1.5">{translate("control:SlideRow.playback", "Reproducción")}</label>
                                                   <div className="flex items-center gap-4">
                                                     <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer text-gray-300 hover:text-white select-none">
                                                       <input
@@ -314,16 +316,16 @@ export const SlideRow: React.FC<SlideRowProps> = ({
                                                         onChange={e => handleUpdateVideoParams(idx, { loop: e.target.checked })}
                                                         className="accent-yellow-500 h-4 w-4 rounded-sm border-gray-700 bg-gray-900 cursor-pointer"
                                                       />
-                                                      <span>Bucle</span>
+                                                      <span>{translate("control:SlideRow.loop", "Bucle")}</span>
                                                     </label>
                                                   </div>
                                                 </div>
 
                                                 <div className="space-y-1">
-                                                  <label className="text-[9px] font-black text-gray-500 uppercase tracking-wide block">Intervalo (segundos)</label>
+                                                  <label className="text-[9px] font-black text-gray-500 uppercase tracking-wide block">{translate("control:SlideRow.intervalSeconds", "Intervalo (segundos)")}</label>
                                                   <div className="flex items-center gap-2">
                                                     <div className="flex-1 flex items-center gap-1.5 bg-gray-955 rounded-sm px-2 py-1 border border-gray-800">
-                                                      <span className="text-[8px] font-bold text-gray-550">INICIO</span>
+                                                      <span className="text-[8px] font-bold text-gray-550">{translate("control:SlideRow.start", "INICIO")}</span>
                                                       <input
                                                         type="number"
                                                         min="0"
@@ -341,12 +343,12 @@ export const SlideRow: React.FC<SlideRowProps> = ({
                                                       />
                                                     </div>
                                                     <div className="flex-1 flex items-center gap-1.5 bg-gray-955 rounded-sm px-2 py-1 border border-gray-800">
-                                                      <span className="text-[8px] font-bold text-gray-550">FINAL</span>
+                                                      <span className="text-[8px] font-bold text-gray-550">{translate("control:SlideRow.end", "FINAL")}</span>
                                                       <input
                                                         type="number"
                                                         min="0"
                                                         max={maxDuration}
-                                                        placeholder="Fin"
+                                                        placeholder={translate("control:SlideRow.end_5a2af6", "Fin")}
                                                         value={slide.mediaEnd !== undefined ? slide.mediaEnd : ''}
                                                         onChange={e => {
                                                           let val = e.target.value !== '' ? parseFloat(e.target.value) : undefined;
@@ -374,10 +376,9 @@ export const SlideRow: React.FC<SlideRowProps> = ({
                                           <ImageIcon size={15} />
                                         </div>
                                         <div className="space-y-0.5">
-                                          <span className="text-[10px] font-black text-blue-300 uppercase tracking-wide block">Diapositiva de Imagen Pura</span>
+                                          <span className="text-[10px] font-black text-blue-300 uppercase tracking-wide block">{translate("control:SlideRow.imageOnlySlide", "Diapositiva de Imagen Pura")}</span>
                                           <p className="text-[11px] text-gray-400 leading-relaxed max-w-lg">
-                                            Esta diapositiva oculta por completo el cuadro de texto translúcido en la pantalla de proyección, permitiendo apreciar la imagen o el video de fondo a pantalla completa.
-                                          </p>
+                                            {translate("control:SlideRow.thisSlideCompletelyHidesTheTranslucentTextBoxOn", "Esta diapositiva oculta por completo el cuadro de texto translúcido en la pantalla de proyección, permitiendo apreciar la imagen o el video de fondo a pantalla completa.")}</p>
                                         </div>
                                       </div>
                                       <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer text-gray-300 hover:text-white select-none pt-1">
@@ -387,7 +388,7 @@ export const SlideRow: React.FC<SlideRowProps> = ({
                                           onChange={e => handleUpdateImagePresenterNav(idx, e.target.checked)}
                                           className="accent-yellow-500 h-4 w-4 rounded-sm border-gray-700 bg-gray-900 cursor-pointer"
                                         />
-                                        <span>Nav</span>
+                                        <span>{translate("control:SlideRow.nav", "Nav")}</span>
                                       </label>
                                     </div>
                                   ) : (
@@ -399,40 +400,40 @@ export const SlideRow: React.FC<SlideRowProps> = ({
                                             className="w-full bg-gray-900 border border-gray-700 rounded-sm px-2 py-1.5 text-xs text-white focus:outline-hidden focus:ring-1 focus:ring-yellow-500 min-h-14 leading-relaxed resize-y"
                                             value={slide.lines[0] || ''}
                                             onChange={e => handleUpdateLine(idx, 0, e.target.value)}
-                                            placeholder={isTitle ? 'Escribe el título...' : 'Escribe la letra de la diapositiva...'}
+                                            placeholder={isTitle ? translate("control:SlideRow.enterTheTitle", "Escribe el título...") : translate("control:SlideRow.enterTheSlideLyrics", "Escribe la letra de la diapositiva...")}
                                           />
                                         </div>
                                       ) : (
                                         <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
                                           {/* Hebrew Text */}
                                           <div className="space-y-1">
-                                            <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Hebreo</span>
+                                            <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">{translate("control:SlideRow.hebrew", "Hebreo")}</span>
                                             <AutoResizeTextarea
                                               className="w-full bg-gray-900 border border-gray-700 rounded-sm px-2 py-1 text-xs text-white focus:outline-hidden focus:ring-1 focus:ring-yellow-500 min-h-12 leading-relaxed resize-y"
                                               dir="rtl"
                                               value={slide.lines[0] || ''}
                                               onChange={e => handleUpdateLine(idx, 0, e.target.value)}
-                                              placeholder={isTitle ? 'Título hebreo...' : 'Frase en hebreo...'}
+                                              placeholder={isTitle ? translate("control:SlideRow.hebrewTitle", "Título hebreo...") : translate("control:SlideRow.hebrewPhrase", "Frase en hebreo...")}
                                             />
                                           </div>
                                           {/* Transliterated Text */}
                                           <div className="space-y-1">
-                                            <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Transliteración</span>
+                                            <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">{translate("control:SlideRow.transliteration", "Transliteración")}</span>
                                             <AutoResizeTextarea
                                               className="w-full bg-gray-900 border border-gray-700 rounded-sm px-2 py-1 text-xs text-white focus:outline-hidden focus:ring-1 focus:ring-yellow-500 min-h-12 leading-relaxed resize-y"
                                               value={slide.lines[1] || ''}
                                               onChange={e => handleUpdateLine(idx, 1, e.target.value)}
-                                              placeholder={isTitle ? 'Título transliterado...' : 'Frase transliterada...'}
+                                              placeholder={isTitle ? translate("control:SlideRow.transliteratedTitle", "Título transliterado...") : translate("control:SlideRow.transliteratedPhrase", "Frase transliterada...")}
                                             />
                                           </div>
                                           {/* Translated Text */}
                                           <div className="space-y-1">
-                                            <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Traducción</span>
+                                            <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">{translate("control:SlideRow.translation", "Traducción")}</span>
                                             <AutoResizeTextarea
                                               className="w-full bg-gray-900 border border-gray-700 rounded-sm px-2 py-1 text-xs text-white focus:outline-hidden focus:ring-1 focus:ring-yellow-500 min-h-12 leading-relaxed resize-y"
                                               value={slide.lines[2] || ''}
                                               onChange={e => handleUpdateLine(idx, 2, e.target.value)}
-                                              placeholder={isTitle ? 'Título traducido...' : 'Frase traducida...'}
+                                              placeholder={isTitle ? translate("control:SlideRow.translatedTitle", "Título traducido...") : translate("control:SlideRow.translatedPhrase", "Frase traducida...")}
                                             />
                                           </div>
                                         </div>
@@ -466,7 +467,7 @@ export const SlideRow: React.FC<SlideRowProps> = ({
                                       <div className="absolute inset-0 bg-linear-to-r from-black/60 to-black/30" />
 
                                       {/* Slide Label inside preview */}
-                                      <div className="absolute top-1 left-1 bg-black/70 border border-gray-700 rounded-sm px-1 text-[8px] text-gray-300 z-10 font-bold">
+                                      <div className="absolute top-1 start-1 bg-black/70 border border-gray-700 rounded-sm px-1 text-[8px] text-gray-300 z-10 font-bold">
                                         {slide.label}
                                       </div>
 
@@ -514,19 +515,19 @@ export const SlideRow: React.FC<SlideRowProps> = ({
                                     {/* Custom search autocomplete for slide background, opens upward */}
                                     <div className="w-[130px]">
                                       <CustomSearchSelect
-                                        value={slide.background || 'Principal'}
+                                        value={slide.background || "Principal"}
                                         onChange={val => handleUpdateSlideBg(idx, val)}
                                         options={[
-                                          { label: 'Principal', value: 'Principal' },
-                                          { label: 'Ignorar', value: 'Ignorar' },
-                                          { label: 'Anterior', value: 'Anterior' },
+                                          { label: translate("control:SlideRow.main", "Principal"), value: "Principal" },
+                                          { label: translate("control:SlideRow.ignore", "Ignorar"), value: "Ignorar" },
+                                          { label: translate("control:SlideRow.previous", "Anterior"), value: "Anterior" },
                                           ...backgrounds.map(background => ({
                                             label: background.split('/').pop() || background,
                                             value: background
                                           }))
                                         ]}
-                                        placeholder="Defecto / Fondo..."
-                                        dropdownWidthClass="w-[200px] -left-10"
+                                        placeholder={translate("control:SlideRow.defaultBackground", "Defecto / Fondo...")}
+                                        dropdownWidthClass="w-[200px] -start-10"
                                         openDirection="up"
                                       />
                                     </div>
@@ -543,7 +544,7 @@ export const SlideRow: React.FC<SlideRowProps> = ({
                                           type="button"
                                           onClick={() => handleTransliterateRow(idx)}
                                           className="p-1 rounded-sm border border-sky-950 bg-sky-950/20 text-sky-400 hover:bg-sky-900/40 hover:text-sky-300 transition-colors z-10 cursor-pointer"
-                                          title="Transliterar fila"
+                                          title={translate("control:SlideRow.transliterateRow", "Transliterar fila")}
                                         >
                                           <Languages size={13} />
                                         </button>
@@ -553,7 +554,7 @@ export const SlideRow: React.FC<SlideRowProps> = ({
                                         disabled={idx <= 1}
                                         onClick={() => handleMoveUp(idx)}
                                         className="p-1 text-gray-400 hover:text-white disabled:opacity-30 disabled:pointer-events-none hover:bg-gray-700/60 rounded-sm transition-colors cursor-pointer"
-                                        title="Subir"
+                                        title={translate("control:SlideRow.moveUp", "Subir")}
                                       >
                                         <ArrowUp size={13} />
                                       </button>
@@ -562,7 +563,7 @@ export const SlideRow: React.FC<SlideRowProps> = ({
                                         disabled={idx === 0 || idx === slides.length - 1}
                                         onClick={() => handleMoveDown(idx)}
                                         className="p-1 text-gray-400 hover:text-white disabled:opacity-30 disabled:pointer-events-none hover:bg-gray-700/60 rounded-sm transition-colors cursor-pointer"
-                                        title="Bajar"
+                                        title={translate("control:SlideRow.moveDown", "Bajar")}
                                       >
                                         <ArrowDown size={13} />
                                       </button>
@@ -571,7 +572,7 @@ export const SlideRow: React.FC<SlideRowProps> = ({
                                         disabled={isTitle}
                                         onClick={() => handleDeleteSlide(idx)}
                                         className="p-1 text-red-400 hover:text-red-300 hover:bg-red-950/20 disabled:opacity-30 disabled:pointer-events-none rounded-sm transition-colors cursor-pointer"
-                                        title="Borrar diapositiva"
+                                        title={translate("control:SlideRow.deleteSlide", "Borrar diapositiva")}
                                       >
                                         <Trash2 size={13} />
                                       </button>
@@ -590,7 +591,7 @@ export const SlideRow: React.FC<SlideRowProps> = ({
                                               ? 'text-yellow-500 font-bold'
                                               : 'text-gray-500 hover:text-gray-350'
                                               }`}
-                                            title="Tipo: Texto normal"
+                                            title={translate("control:SlideRow.typeNormalText", "Tipo: Texto normal")}
                                           >
                                             <FileText size={12} />
                                           </button>
@@ -601,7 +602,7 @@ export const SlideRow: React.FC<SlideRowProps> = ({
                                               ? 'text-yellow-500 font-bold'
                                               : 'text-gray-500 hover:text-gray-350'
                                               }`}
-                                            title="Tipo: Multimedia (Video/Imagen)"
+                                            title={translate("control:SlideRow.typeMediaVideoImage", "Tipo: Multimedia (Video/Imagen)")}
                                           >
                                             <Video size={12} />
                                           </button>
@@ -618,7 +619,7 @@ export const SlideRow: React.FC<SlideRowProps> = ({
                                               ? 'text-yellow-500 font-bold'
                                               : 'text-gray-500 hover:text-gray-350'
                                               }`}
-                                            title="Tipo: Tanaj materializado"
+                                            title={translate("control:SlideRow.typeMaterializedTanaj", "Tipo: Tanaj materializado")}
                                           >
                                             <BookOpen size={12} />
                                           </button>
@@ -629,7 +630,7 @@ export const SlideRow: React.FC<SlideRowProps> = ({
                                               ? 'text-yellow-500 font-bold'
                                               : 'text-gray-500 hover:text-gray-350'
                                               }`}
-                                            title="Tipo: Sefer nativo"
+                                            title={translate("control:SlideRow.typeNativeSefer", "Tipo: Sefer nativo")}
                                           >
                                             <ScrollText size={12} />
                                           </button>
@@ -640,7 +641,7 @@ export const SlideRow: React.FC<SlideRowProps> = ({
                                               ? 'text-yellow-500 font-bold'
                                               : 'text-gray-500 hover:text-gray-350'
                                               }`}
-                                            title="Tipo: Quiz"
+                                            title={translate("control:SlideRow.typeQuiz", "Tipo: Quiz")}
                                           >
                                             <HelpCircle size={12} />
                                           </button>

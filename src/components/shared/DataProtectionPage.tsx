@@ -1,3 +1,5 @@
+import { translate } from '../../i18n/runtime';
+import { useUiTranslation } from '../../i18n/useUiTranslation';
 import React, { useEffect, useState } from 'react';
 import { ShieldCheck } from 'lucide-react';
 import {
@@ -17,6 +19,7 @@ interface LoadedLegalDocument {
 }
 
 const DataProtectionPage: React.FC = () => {
+  useUiTranslation('common');
   const [document, setDocument] = useState<LoadedLegalDocument | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -33,7 +36,7 @@ const DataProtectionPage: React.FC = () => {
       .then(async response => {
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const text = await response.text();
-        if (!text.trim()) throw new Error('documento vacío');
+        if (!text.trim()) throw new Error(translate("common:DataProtectionPage.emptyDocument", "documento vacío"));
         return {
           text,
           title: extractLegalDocumentTitle(text),
@@ -45,7 +48,7 @@ const DataProtectionPage: React.FC = () => {
       .catch(reason => {
         if (abortController.signal.aborted) return;
         const message = reason instanceof Error ? reason.message : 'error desconocido';
-        setError(`No se pudo cargar el documento legal configurado (${message}).`);
+        setError(translate("common:DataProtectionPage.couldNotLoadTheConfiguredLegalDocument", "No se pudo cargar el documento legal configurado ({{value1}}).", { value1: message }));
       });
 
     return () => abortController.abort();
@@ -60,39 +63,38 @@ const DataProtectionPage: React.FC = () => {
               <ShieldCheck aria-hidden="true" className="h-7 w-7" />
             </div>
             <div className="min-w-0">
-              <p className="text-sm font-medium uppercase tracking-[0.18em] text-blue-300">Protección de datos</p>
+              <p className="text-sm font-medium uppercase tracking-[0.18em] text-blue-300">{translate("common:DataProtectionPage.dataProtection", "Protección de datos")}</p>
               <h1 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">
-                {document?.title || 'Información de privacidad'}
+                {document?.title || translate("common:DataProtectionPage.privacyInformation", "Información de privacidad")}
               </h1>
             </div>
           </div>
           {document && (
             <div className="mt-6 flex flex-wrap gap-2 text-xs text-slate-300" data-testid="legal-document-integrity">
-              <span className="rounded-full bg-white/10 px-3 py-1.5 ring-1 ring-white/15">Versión {document.version}</span>
+              <span className="rounded-full bg-white/10 px-3 py-1.5 ring-1 ring-white/15">{translate("common:DataProtectionPage.version", "Versión")} {document.version}</span>
               <span
                 className="max-w-full break-all rounded-2xl bg-white/10 px-3 py-1.5 font-mono leading-5 ring-1 ring-white/15"
               >
-                SHA-256 {document.sha256}
+                {translate("common:DataProtectionPage.sha256", "SHA-256")} {document.sha256}
               </span>
             </div>
           )}
         </header>
 
         <div className="w-full min-w-0 overflow-hidden px-5 py-7 sm:px-10 sm:py-10">
-        {!document && !error && <p role="status" className="text-slate-600">Cargando documento legal…</p>}
+        {!document && !error && <p role="status" className="text-slate-600">{translate("common:DataProtectionPage.loadingLegalDocument", "Cargando documento legal…")}</p>}
 
         {error && (
           <div role="alert" className="rounded-xl border border-red-300 bg-red-50 p-5 text-red-900">
-            <p className="font-semibold">Documento legal no disponible</p>
+            <p className="font-semibold">{translate("common:DataProtectionPage.legalDocumentUnavailable", "Documento legal no disponible")}</p>
             <p className="mt-1 text-sm">{error}</p>
             <p className="mt-2 text-sm">
-              No active el micrófono ni facilite datos hasta que el operador restaure y revise la información aplicable.
-            </p>
+              {translate("common:DataProtectionPage.doNotEnableYourMicrophoneOrProvideDataUntil", "No active el micrófono ni facilite datos hasta que el operador restaure y revise la información aplicable.")}</p>
           </div>
         )}
 
         {document && (
-          <article aria-label="Documento legal configurado" className="w-full min-w-0 max-w-full overflow-hidden">
+          <article aria-label={translate("common:DataProtectionPage.configuredLegalDocument", "Documento legal configurado")} className="w-full min-w-0 max-w-full overflow-hidden">
             <LegalMarkdown>{prepareLegalMarkdownForDisplay(document.text)}</LegalMarkdown>
           </article>
         )}

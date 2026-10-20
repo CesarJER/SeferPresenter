@@ -1,3 +1,5 @@
+import { translate } from '../../../../i18n/runtime';
+import { useUiTranslation } from '../../../../i18n/useUiTranslation';
 import React from 'react';
 import { LegalMarkdown } from '../../../../components/shared/LegalMarkdown';
 import type { LiveAudioExternalBroadcastState } from '../../../../types/liveAudio';
@@ -15,9 +17,9 @@ interface CollapsiblePrivacyNoticeProps {
 }
 
 const stateNotice: Record<LiveAudioExternalBroadcastState, string> = {
-  off: 'No hay retransmisión externa declarada en este momento. Si el estado cambia, los permisos de voz anteriores se revocarán.',
-  live: 'La sesión está declarada en directo. Si publica su micrófono, su voz podrá llegar a destinatarios externos.',
-  recording: 'La sesión está declarada en directo y grabándose. Si publica su micrófono, su voz podrá conservarse en servicios externos del operador.',
+  get off() { return translate("liveAudio:CollapsiblePrivacyNotice.noExternalBroadcastIsCurrentlyDeclaredIfThisChangesPrevious", "No hay retransmisión externa declarada en este momento. Si el estado cambia, los permisos de voz anteriores se revocarán."); },
+  get live() { return translate("liveAudio:CollapsiblePrivacyNotice.theSessionIsDeclaredLiveIfYouPublishYourMicrophone", "La sesión está declarada en directo. Si publica su micrófono, su voz podrá llegar a destinatarios externos."); },
+  get recording() { return translate("liveAudio:CollapsiblePrivacyNotice.theSessionIsDeclaredLiveAndRecordingIfYouPublish", "La sesión está declarada en directo y grabándose. Si publica su micrófono, su voz podrá conservarse en servicios externos del operador."); },
 };
 
 interface PolicyIdentity {
@@ -29,6 +31,7 @@ export const CollapsiblePrivacyNotice: React.FC<CollapsiblePrivacyNoticeProps> =
   externalBroadcastState,
   onCheckboxesChange,
 }) => {
+  useUiTranslation('liveAudio');
   const [checkedInformation, setCheckedInformation] = React.useState(false);
   const [checkedMicrophone, setCheckedMicrophone] = React.useState(false);
   const [agePath, setAgePath] = React.useState<'age14OrOver' | 'under14' | null>(null);
@@ -51,7 +54,7 @@ export const CollapsiblePrivacyNotice: React.FC<CollapsiblePrivacyNoticeProps> =
       });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const text = await response.text();
-      if (!text.trim()) throw new Error('documento vacío');
+      if (!text.trim()) throw new Error(translate("liveAudio:CollapsiblePrivacyNotice.emptyDocument", "documento vacío"));
       return text;
     };
 
@@ -86,46 +89,40 @@ export const CollapsiblePrivacyNotice: React.FC<CollapsiblePrivacyNoticeProps> =
   return (
     <div className="mb-4 rounded-lg border border-gray-700 bg-gray-800 p-4 text-sm text-gray-200 shadow-md">
       <div className="mb-3 border-b border-gray-700 pb-2 text-base font-semibold text-white">
-        Aviso antes de intervenir
-      </div>
+        {translate("liveAudio:CollapsiblePrivacyNotice.noticeBeforeSpeaking", "Aviso antes de intervenir")}</div>
 
       <div className="mt-3 space-y-3 text-xs leading-relaxed text-gray-300">
         <p className="font-medium text-yellow-300">{stateNotice[externalBroadcastState]}</p>
         <p>
-          El micrófono no se activa automáticamente. Requiere autorización de Control, permiso del navegador y una acción local.
-        </p>
+          {translate("liveAudio:CollapsiblePrivacyNotice.theMicrophoneDoesNotActivateAutomaticallyItRequiresControl", "El micrófono no se activa automáticamente. Requiere autorización de Control, permiso del navegador y una acción local.")}</p>
         <p>
-          Su alias llega cifrado a los Controles autorizados. Solo se comparte con otros participantes activos si usted lo elige y Control lo autoriza.
-        </p>
+          {translate("liveAudio:CollapsiblePrivacyNotice.yourAliasReachesAuthorizedControlsEncryptedItIsShared", "Su alias llega cifrado a los Controles autorizados. Solo se comparte con otros participantes activos si usted lo elige y Control lo autoriza.")}</p>
         <p>
-          Los mensajes privados llegan a Control. Evite datos de terceros o información que no sea necesaria para participar.
-        </p>
+          {translate("liveAudio:CollapsiblePrivacyNotice.privateMessagesReachControlAvoidThirdPartyDataOr", "Los mensajes privados llegan a Control. Evite datos de terceros o información que no sea necesaria para participar.")}</p>
         <p className="rounded-sm border border-amber-700/60 bg-amber-950/30 p-2 text-amber-100">
-          Antes de hablar, evite decir su nombre completo u otros datos que le identifiquen y compruebe que no se oyen conversaciones o voces de fondo. Las plataformas externas pueden generar subtítulos automáticos de lo que diga.
-        </p>
+          {translate("liveAudio:CollapsiblePrivacyNotice.beforeSpeakingAvoidSayingYourFullNameOrOther", "Antes de hablar, evite decir su nombre completo u otros datos que le identifiquen y compruebe que no se oyen conversaciones o voces de fondo. Las plataformas externas pueden generar subtítulos automáticos de lo que diga.")}</p>
         {!privacySummary && !legalLoadError && (
-          <p role="status" className="text-gray-400">Cargando información básica de protección de datos…</p>
+          <p role="status" className="text-gray-400">{translate("liveAudio:CollapsiblePrivacyNotice.loadingBasicDataProtectionInformation", "Cargando información básica de protección de datos…")}</p>
         )}
         {legalLoadError && (
           <p role="alert" className="rounded-sm border border-red-700 bg-red-950/40 p-2 text-red-100">
-            No se pudo cargar la información legal aplicable. La intervención por micrófono permanecerá bloqueada.
-          </p>
+            {translate("liveAudio:CollapsiblePrivacyNotice.couldNotLoadTheApplicableLegalInformationMicrophoneParticipation", "No se pudo cargar la información legal aplicable. La intervención por micrófono permanecerá bloqueada.")}</p>
         )}
         {privacySummary && (
-          <section aria-label="Información básica de protección de datos" className="text-xs">
+          <section aria-label={translate("liveAudio:CollapsiblePrivacyNotice.basicDataProtectionInformation", "Información básica de protección de datos")} className="text-xs">
             <LegalMarkdown variant="dark">
               {prepareLegalMarkdownForDisplay(privacySummary)}
             </LegalMarkdown>
           </section>
         )}
         <p>
-          Consulte la información legal configurada en{' '}
+          {translate("liveAudio:CollapsiblePrivacyNotice.readTheConfiguredLegalInformationAt", "Consulte la información legal configurada en")}{' '}
           <a className="text-blue-400 underline" href="/proteccion-datos" target="_blank" rel="noreferrer">
             /proteccion-datos
           </a>.
           {policyIdentity && (
             <span className="text-gray-400">
-              {' '}(versión {policyIdentity.version}; SHA-256 …{policyIdentity.sha256.slice(-12)}).
+              {' '}{translate("liveAudio:CollapsiblePrivacyNotice.version", "(versión")} {policyIdentity.version}{translate("liveAudio:CollapsiblePrivacyNotice.sha256", "; SHA-256 …")}{policyIdentity.sha256.slice(-12)}).
             </span>
           )}
         </p>
@@ -139,7 +136,7 @@ export const CollapsiblePrivacyNotice: React.FC<CollapsiblePrivacyNoticeProps> =
             checked={checkedInformation}
             onChange={(event) => setCheckedInformation(event.target.checked)}
           />
-          <span>He leído y comprendido el estado indicado y la información de privacidad aplicable.</span>
+          <span>{translate("liveAudio:CollapsiblePrivacyNotice.iHaveReadAndUnderstoodTheStatedStatusAnd", "He leído y comprendido el estado indicado y la información de privacidad aplicable.")}</span>
         </label>
         <label className="flex cursor-pointer items-start gap-2">
           <input
@@ -149,11 +146,10 @@ export const CollapsiblePrivacyNotice: React.FC<CollapsiblePrivacyNoticeProps> =
             onChange={(event) => setCheckedMicrophone(event.target.checked)}
           />
           <span>
-            Autorizo específicamente la activación de mi micrófono para esta intervención y comprendo los destinatarios indicados para el estado actual.
-          </span>
+            {translate("liveAudio:CollapsiblePrivacyNotice.iSpecificallyAuthorizeActivationOfMyMicrophoneForThis", "Autorizo específicamente la activación de mi micrófono para esta intervención y comprendo los destinatarios indicados para el estado actual.")}</span>
         </label>
         <fieldset className="space-y-2 rounded-sm border border-gray-700 p-3">
-          <legend className="px-1 text-sm font-medium text-gray-200">Edad y autorización</legend>
+          <legend className="px-1 text-sm font-medium text-gray-200">{translate("liveAudio:CollapsiblePrivacyNotice.ageAndAuthorization", "Edad y autorización")}</legend>
           <label className="flex cursor-pointer items-start gap-2">
             <input
               type="radio"
@@ -166,7 +162,7 @@ export const CollapsiblePrivacyNotice: React.FC<CollapsiblePrivacyNoticeProps> =
               }}
               className="mt-1 h-4 w-4 border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500"
             />
-            <span>Tengo 14 años o más.</span>
+            <span>{translate("liveAudio:CollapsiblePrivacyNotice.iAm14OrOlder", "Tengo 14 años o más.")}</span>
           </label>
           <label className="flex cursor-pointer items-start gap-2">
             <input
@@ -177,10 +173,10 @@ export const CollapsiblePrivacyNotice: React.FC<CollapsiblePrivacyNoticeProps> =
               onChange={() => setAgePath('under14')}
               className="mt-1 h-4 w-4 border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500"
             />
-            <span>Tengo menos de 14 años.</span>
+            <span>{translate("liveAudio:CollapsiblePrivacyNotice.iAmUnder14", "Tengo menos de 14 años.")}</span>
           </label>
           {agePath === 'under14' && (
-            <label className="ml-6 flex cursor-pointer items-start gap-2 rounded-sm bg-gray-900/60 p-2">
+            <label className="ms-6 flex cursor-pointer items-start gap-2 rounded-sm bg-gray-900/60 p-2">
               <input
                 type="checkbox"
                 checked={checkedGuardian}
@@ -188,13 +184,11 @@ export const CollapsiblePrivacyNotice: React.FC<CollapsiblePrivacyNoticeProps> =
                 className="mt-1 h-4 w-4 rounded-sm border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500"
               />
               <span>
-                Mi padre, madre o tutor legal está presente, ha leído este aviso y autoriza específicamente esta intervención por micrófono.
-              </span>
+                {translate("liveAudio:CollapsiblePrivacyNotice.myParentOrLegalGuardianIsPresentHasRead", "Mi padre, madre o tutor legal está presente, ha leído este aviso y autoriza específicamente esta intervención por micrófono.")}</span>
             </label>
           )}
           <p className="text-xs text-gray-400">
-            Esta selección no se envía ni se conserva. Si no puede declarar una opción válida, puede seguir la sesión sin activar el micrófono.
-          </p>
+            {translate("liveAudio:CollapsiblePrivacyNotice.thisSelectionIsNotSentOrStoredIfYou", "Esta selección no se envía ni se conserva. Si no puede declarar una opción válida, puede seguir la sesión sin activar el micrófono.")}</p>
         </fieldset>
       </div>
     </div>

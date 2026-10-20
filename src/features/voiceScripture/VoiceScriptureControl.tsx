@@ -1,3 +1,5 @@
+import { useUiTranslation } from '../../i18n/useUiTranslation';
+import { translate } from '../../i18n/runtime';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { SeferReaderState } from '../../hooks/useSeferReader';
 import type { ScriptureNavState } from '../../types/presentation';
@@ -22,14 +24,20 @@ interface VoiceScriptureControlProps {
   onLocalState?: (options: VoiceScriptureCandidate[], detail: string, phase: VoiceSessionPhase) => void;
 }
 const phaseText: Record<VoiceSessionPhase, string> = {
-  idle: 'Listo', connecting: 'Conectando…', listening: 'Recibiendo audio', partial: 'Transcribiendo…',
-  final: 'Intervención recibida', stopping: 'Deteniendo…', error: 'Error',
+  get idle() { return translate("voiceScripture:VoiceScriptureControl.ready", "Listo"); },
+  get connecting() { return translate("voiceScripture:VoiceScriptureControl.connecting", "Conectando…"); },
+  get listening() { return translate("voiceScripture:VoiceScriptureControl.receivingAudio", "Recibiendo audio"); },
+  get partial() { return translate("voiceScripture:VoiceScriptureControl.transcribing", "Transcribiendo…"); },
+  get final() { return translate("voiceScripture:VoiceScriptureControl.speechReceived", "Intervención recibida"); },
+  get stopping() { return translate("voiceScripture:VoiceScriptureControl.stopping", "Deteniendo…"); },
+  get error() { return translate("voiceScripture:VoiceScriptureControl.error", "Error"); },
 };
 const projectionKey = (state: ScriptureNavState | null) => JSON.stringify([
   state?.bookAbbrevEs || state?.bookEs, state?.chapter, state?.verse, state?.verseStart, state?.verseEnd, state?.commandId,
 ]);
 
 export default function VoiceScriptureControl({ tracks, scriptureState, onProject, selectedId, onSelectionChange, canTranscribe = true, onAvailabilityChange, suggestionsTarget, remoteState, onLocalState }: VoiceScriptureControlProps) {
+  useUiTranslation('voiceScripture');
   const [availability, setAvailability] = useState<'checking' | 'disabled' | 'unavailable' | 'ready'>('checking');
   const [phase, setPhase] = useState<VoiceSessionPhase>('idle');
   const [detail, setDetail] = useState('');
@@ -211,9 +219,9 @@ export default function VoiceScriptureControl({ tracks, scriptureState, onProjec
   const displayOptions = canTranscribe ? options : (remoteState?.options || []);
 
   const view = <VoiceScriptureSuggestions
-    status={availability === 'ready' ? (!canTranscribe && selectedId ? (displayPhase === 'idle' ? 'Origen compartido · transcripción en Control principal' : displayDetail || phaseText[displayPhase] || '')
-      : (phase === 'error' && selectedId ? `${detail} · reconectando…` : detail) || (selectedId ? phaseText[phase] : 'Voz desactivada · selecciona un micrófono'))
-      : availability === 'checking' ? 'Comprobando voz…' : availability === 'disabled' ? 'Voz no habilitada' : 'Motor de voz no disponible · reintentando…'}
+    status={availability === 'ready' ? (!canTranscribe && selectedId ? (displayPhase === 'idle' ? translate("voiceScripture:VoiceScriptureControl.sharedSourceTranscriptionOnMainControl", "Origen compartido · transcripción en Control principal") : displayDetail || phaseText[displayPhase] || '')
+      : (phase === 'error' && selectedId ? translate('voiceScripture:reconnectingDetail', '{{detail}} · reconectando…', { detail }) : detail) || (selectedId ? phaseText[phase] : translate("voiceScripture:VoiceScriptureControl.voiceDisabledSelectAMicrophone", "Voz desactivada · selecciona un micrófono")))
+      : availability === 'checking' ? translate('voiceScripture:checking', 'Comprobando voz…') : availability === 'disabled' ? translate('voiceScripture:disabled', 'Voz no habilitada') : translate('voiceScripture:unavailable', 'Motor de voz no disponible · reintentando…')}
     options={displayOptions} onProject={project} />;
   return suggestionsTarget === undefined ? view : suggestionsTarget ? createPortal(view, suggestionsTarget) : null;
 }

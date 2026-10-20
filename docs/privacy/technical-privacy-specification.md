@@ -4,6 +4,13 @@ Versión: 2026-10-07
 Ámbito: comportamiento común del producto auditado.  
 No contiene decisiones ni datos de un operador concreto.
 
+Actualización de interfaz (2026-10-16): la preferencia de idioma se guarda
+localmente bajo `sefer.uiLocale.<interfaz>`, sin identificadores personales,
+envío al servidor ni sincronización entre roles. Puede borrarse desde el
+almacenamiento del navegador. Si no está disponible, se utiliza el idioma
+configurado o español. El selector traduce la interfaz, no los documentos
+legales publicados por el operador. Véase [i18n](../development/i18n.md).
+
 ## 1. Clasificación
 
 - **Siempre cierta:** propiedad del flujo inspeccionado en la revisión auditada,

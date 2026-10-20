@@ -1,3 +1,5 @@
+import { translate } from '../../../../i18n/runtime';
+import { useUiTranslation } from '../../../../i18n/useUiTranslation';
 import React, { useState } from 'react';
 import {
   X,
@@ -83,6 +85,7 @@ export const PrivateControlInbox: React.FC<PrivateControlInboxProps> = ({
   onSendInterControlMessage,
   onOperatorNickChange,
 }) => {
+  useUiTranslation('liveAudio');
   const { availability } = useLiveAudioAvailability();
 
   const [operatorNick, setOperatorNick] = useState<string>(
@@ -100,13 +103,12 @@ export const PrivateControlInbox: React.FC<PrivateControlInboxProps> = ({
 
   if (!isControlAuthorized) {
     return (
-      <div className="fixed top-16 right-0 md:right-4 w-full md:w-[400px] bg-gray-900 border border-red-800 md:rounded-lg shadow-xl z-50 overflow-hidden">
+      <div className="fixed top-16 end-0 md:end-4 w-full md:w-[400px] bg-gray-900 border border-red-800 md:rounded-lg shadow-xl z-50 overflow-hidden">
         <div className="p-3 bg-red-900/50 flex items-center justify-between">
-          <h3 className="font-bold text-red-200 text-sm">Acceso Denegado</h3>
+          <h3 className="font-bold text-red-200 text-sm">{translate("liveAudio:PrivateControlInbox.accessDenied", "Acceso Denegado")}</h3>
         </div>
         <div className="p-4 text-sm text-gray-400">
-          No eres un Control Autorizado. No tienes acceso a la bandeja privada ni a los alias descifrados.
-        </div>
+          {translate("liveAudio:PrivateControlInbox.youAreNotAnAuthorizedControlYouCannotAccess", "No eres un Control Autorizado. No tienes acceso a la bandeja privada ni a los alias descifrados.")}</div>
       </div>
     );
   }
@@ -204,12 +206,12 @@ export const PrivateControlInbox: React.FC<PrivateControlInboxProps> = ({
   };
 
   return (
-    <div className="fixed top-16 right-0 md:right-4 w-full md:w-[420px] max-h-[75vh] bg-gray-900 border border-gray-700 md:rounded-lg shadow-2xl z-50 flex flex-col">
+    <div className="fixed top-16 end-0 md:end-4 w-full md:w-[420px] max-h-[75vh] bg-gray-900 border border-gray-700 md:rounded-lg shadow-2xl z-50 flex flex-col">
       {/* Header */}
       <div className="p-2.5 bg-gray-800 border-b border-gray-700 flex flex-wrap items-center justify-between shrink-0 gap-2">
         <h3 className="font-bold text-gray-200 text-sm flex items-center gap-1.5 shrink-0">
           <MessageSquare size={16} className="text-blue-400" />
-          <span>Notificaciones</span>
+          <span>{translate("liveAudio:PrivateControlInbox.notifications", "Notificaciones")}</span>
         </h3>
 
         {/* Operator Nick & Visibility selector */}
@@ -219,10 +221,10 @@ export const PrivateControlInbox: React.FC<PrivateControlInboxProps> = ({
             type="text"
             value={operatorNick}
             onChange={handleOperatorNickChange}
-            placeholder="Nick operador..."
+            placeholder={translate("liveAudio:PrivateControlInbox.operatorNickname", "Nick operador...")}
             maxLength={25}
             className="bg-transparent text-xs text-white placeholder-gray-500 focus:outline-hidden w-20 md:w-24"
-            title="Nick del operador"
+            title={translate("liveAudio:PrivateControlInbox.operatorNickname_6b2ec7", "Nick del operador")}
           />
           <button
             type="button"
@@ -230,10 +232,10 @@ export const PrivateControlInbox: React.FC<PrivateControlInboxProps> = ({
             className="p-0.5 text-gray-400 hover:text-white transition-colors"
             title={
               isNickPublic
-                ? `Nick público hacia usuarios: se mostrará "Control (${operatorNick || 'Nick'})"`
-                : 'Nick privado hacia usuarios: se mostrará solo como "Control"'
+                ? translate("liveAudio:PrivateControlInbox.publicNicknameUsersWillSeeControl", "Nick público hacia usuarios: se mostrará \"Control ({{value1}})\"", { value1: operatorNick || 'Nick' })
+                : translate("liveAudio:PrivateControlInbox.privateNicknameUsersWillOnlySeeControl", "Nick privado hacia usuarios: se mostrará solo como \"Control\"")
             }
-            aria-label="Alternar visibilidad pública del nick"
+            aria-label={translate("liveAudio:PrivateControlInbox.togglePublicNicknameVisibility", "Alternar visibilidad pública del nick")}
           >
             {isNickPublic ? (
               <UserCheck size={14} className="text-emerald-400" />
@@ -244,9 +246,9 @@ export const PrivateControlInbox: React.FC<PrivateControlInboxProps> = ({
         </div>
         {onProgramAudioEnabledChange && (
           <div className="flex items-center gap-2">
-            <label className="flex items-center gap-1 text-xs text-gray-200 cursor-pointer" title="Audio de la presentación que escucha este Control">
+            <label className="flex items-center gap-1 text-xs text-gray-200 cursor-pointer" title={translate("liveAudio:PrivateControlInbox.presentationAudioHeardByThisControl", "Audio de la presentación que escucha este Control")}>
               <input type="checkbox" checked={Boolean(programAudioEnabled)} onChange={e => onProgramAudioEnabledChange(e.target.checked)} />
-              <span>🔊 Audio de programa</span>
+              <span>{translate("liveAudio:PrivateControlInbox.programAudio", "🔊 Audio de programa")}</span>
             </label>
             <AudioDeviceSettings />
           </div>
@@ -259,39 +261,36 @@ export const PrivateControlInbox: React.FC<PrivateControlInboxProps> = ({
           <div className="bg-red-950/30 border border-red-900/50 rounded-md p-2 flex items-start gap-2">
             <ShieldAlert size={14} className="text-red-400 mt-0.5 shrink-0" />
             <p className="text-xs text-red-300">
-              Audio no compatible en este navegador o contexto inseguro (requiere HTTPS o localhost).
-            </p>
+              {translate("liveAudio:PrivateControlInbox.audioUnsupportedInThisBrowserOrInsecureContextRequires", "Audio no compatible en este navegador o contexto inseguro (requiere HTTPS o localhost).")}</p>
           </div>
         )}
         {(availability === 'disabled' || availability === 'misconfigured') && (
           <div className="bg-orange-950/30 border border-orange-900/50 rounded-md p-2 flex items-start gap-2">
             <ShieldAlert size={14} className="text-orange-400 mt-0.5 shrink-0" />
             <p className="text-xs text-orange-300">
-              El servicio de Live Audio no está configurado o está deshabilitado en el servidor.
-            </p>
+              {translate("liveAudio:PrivateControlInbox.liveAudioIsNotConfiguredOrIsDisabledOn", "El servicio de Live Audio no está configurado o está deshabilitado en el servidor.")}</p>
           </div>
         )}
 
         {!hasItems && (
           <div className="p-6 text-center text-gray-500 text-xs italic">
-            Sin notificaciones pendientes.
-          </div>
+            {translate("liveAudio:PrivateControlInbox.noPendingNotifications", "Sin notificaciones pendientes.")}</div>
         )}
 
         {/* Authorization Requests */}
         {authorizationRequests.length > 0 && (
           <div className="space-y-2">
             <div className="text-[11px] font-semibold text-blue-400 uppercase tracking-wider px-1">
-              Solicitudes de Control ({authorizationRequests.length})
+              {translate("liveAudio:PrivateControlInbox.controlRequests", "Solicitudes de Control (")}{authorizationRequests.length})
             </div>
             {authorizationRequests.map((req) => (
               <div key={req.controlSessionId} className="bg-blue-900/20 border border-blue-800/50 rounded-md p-2.5">
                 <div className="flex items-center gap-2 mb-1.5">
                   <KeyRound size={15} className="text-blue-400" />
-                  <span className="text-xs font-semibold text-blue-200">Nuevo Control Conectado</span>
+                  <span className="text-xs font-semibold text-blue-200">{translate("liveAudio:PrivateControlInbox.newControlConnected", "Nuevo Control Conectado")}</span>
                 </div>
                 <div className="text-xs text-blue-300 mb-2.5">
-                  Código de verificación:{' '}
+                  {translate("liveAudio:PrivateControlInbox.verificationCode", "Código de verificación:")}{' '}
                   <strong className="text-white text-sm tracking-widest">{req.verificationCode}</strong>
                 </div>
                 <div className="flex gap-2">
@@ -299,14 +298,12 @@ export const PrivateControlInbox: React.FC<PrivateControlInboxProps> = ({
                     onClick={() => onApproveRequest(req.controlSessionId)}
                     className="flex-1 flex items-center justify-center gap-1 bg-blue-600 hover:bg-blue-500 text-white py-1 rounded-sm text-xs transition-colors font-medium"
                   >
-                    <Check size={13} /> Aprobar
-                  </button>
+                    <Check size={13} />  {translate("liveAudio:PrivateControlInbox.approve", "Aprobar")}</button>
                   <button
                     onClick={() => onRejectRequest(req.controlSessionId)}
                     className="flex-1 flex items-center justify-center gap-1 bg-gray-700 hover:bg-gray-600 text-gray-200 py-1 rounded-sm text-xs transition-colors"
                   >
-                    <X size={13} /> Rechazar
-                  </button>
+                    <X size={13} />  {translate("liveAudio:PrivateControlInbox.reject", "Rechazar")}</button>
                 </div>
               </div>
             ))}
@@ -317,7 +314,7 @@ export const PrivateControlInbox: React.FC<PrivateControlInboxProps> = ({
         {pendingAccessRequests.length > 0 && (
           <div className="space-y-2">
             <div className="text-[11px] font-semibold text-amber-400 uppercase tracking-wider px-1">
-              Accesos Pendientes ({pendingAccessRequests.length})
+              {translate("liveAudio:PrivateControlInbox.pendingAccessRequests", "Accesos Pendientes (")}{pendingAccessRequests.length})
             </div>
             {pendingAccessRequests.map((request) => {
               const accessReplyId = `access-${request.participantId}`;
@@ -330,8 +327,7 @@ export const PrivateControlInbox: React.FC<PrivateControlInboxProps> = ({
                 >
                   <div className="flex items-center justify-between mb-1.5">
                     <div className="text-xs font-semibold text-amber-100">
-                      Solicitud de Entrada
-                    </div>
+                      {translate("liveAudio:PrivateControlInbox.entryRequest", "Solicitud de Entrada")}</div>
                     <span className="text-[11px] text-gray-400 font-mono">
                       {formatTime(request.requestedAt)}
                     </span>
@@ -343,26 +339,23 @@ export const PrivateControlInbox: React.FC<PrivateControlInboxProps> = ({
                       type="button"
                       onClick={() => onAudienceAccessDecision(request.participantId, 'ADMIT')}
                       className="rounded-sm bg-emerald-700 hover:bg-emerald-600 py-1 text-xs font-bold text-white transition-colors"
-                      title="Admitir usuario"
+                      title={translate("liveAudio:PrivateControlInbox.admitUser", "Admitir usuario")}
                     >
-                      Admitir
-                    </button>
+                      {translate("liveAudio:PrivateControlInbox.admit", "Admitir")}</button>
                     <button
                       type="button"
                       onClick={() => onAudienceAccessDecision(request.participantId, 'REJECT')}
                       className="rounded-sm bg-slate-700 hover:bg-slate-600 py-1 text-xs font-bold text-white transition-colors"
-                      title="Rechazar (cooldown 30s)"
+                      title={translate("liveAudio:PrivateControlInbox.reject30sCooldown", "Rechazar (cooldown 30s)")}
                     >
-                      Rechazar
-                    </button>
+                      {translate("liveAudio:PrivateControlInbox.reject", "Rechazar")}</button>
                     <button
                       type="button"
                       onClick={() => onAudienceAccessDecision(request.participantId, 'BLOCK')}
                       className="rounded-sm bg-red-800 hover:bg-red-700 py-1 text-xs font-bold text-white transition-colors"
-                      title="Bloquear acceso totalmente"
+                      title={translate("liveAudio:PrivateControlInbox.blockAccessCompletely", "Bloquear acceso totalmente")}
                     >
-                      Bloquear
-                    </button>
+                      {translate("liveAudio:PrivateControlInbox.block", "Bloquear")}</button>
                     <button
                       type="button"
                       onClick={() => setActiveReplyId(isReplyingAccess ? null : accessReplyId)}
@@ -371,8 +364,8 @@ export const PrivateControlInbox: React.FC<PrivateControlInboxProps> = ({
                           ? 'bg-blue-600 text-white'
                           : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
                       }`}
-                      title="Responder al usuario en espera"
-                      aria-label="Responder al usuario en espera"
+                      title={translate("liveAudio:PrivateControlInbox.replyToWaitingUser", "Responder al usuario en espera")}
+                      aria-label={translate("liveAudio:PrivateControlInbox.replyToWaitingUser", "Responder al usuario en espera")}
                     >
                       <MessageSquare size={13} />
                     </button>
@@ -394,7 +387,7 @@ export const PrivateControlInbox: React.FC<PrivateControlInboxProps> = ({
         {blockedAccessRequests.length > 0 && (
           <div className="space-y-2">
             <div className="text-[11px] font-semibold text-red-400 uppercase tracking-wider px-1">
-              Usuarios Bloqueados ({blockedAccessRequests.length})
+              {translate("liveAudio:PrivateControlInbox.blockedUsers", "Usuarios Bloqueados (")}{blockedAccessRequests.length})
             </div>
             {blockedAccessRequests.map((request) => (
               <div
@@ -403,16 +396,15 @@ export const PrivateControlInbox: React.FC<PrivateControlInboxProps> = ({
               >
                 <div className="min-w-0">
                   <div className="text-xs font-medium text-red-200 truncate">{request.alias}</div>
-                  <div className="text-[10px] text-gray-500 font-mono">Acceso vetado</div>
+                  <div className="text-[10px] text-gray-500 font-mono">{translate("liveAudio:PrivateControlInbox.accessBanned", "Acceso vetado")}</div>
                 </div>
                 <button
                   type="button"
                   onClick={() => onAudienceAccessDecision(request.participantId, 'UNBLOCK')}
                   className="rounded-sm bg-slate-700 hover:bg-slate-600 px-3 py-1 text-xs font-bold text-gray-200 hover:text-white transition-colors shrink-0"
-                  title="Desbloquear y mover a solicitudes pendientes"
+                  title={translate("liveAudio:PrivateControlInbox.unblockAndMoveToPendingRequests", "Desbloquear y mover a solicitudes pendientes")}
                 >
-                  Desbloquear
-                </button>
+                  {translate("liveAudio:PrivateControlInbox.unblock", "Desbloquear")}</button>
               </div>
             ))}
           </div>
@@ -422,7 +414,7 @@ export const PrivateControlInbox: React.FC<PrivateControlInboxProps> = ({
         {messages.length > 0 && (
           <div className="space-y-2">
             <div className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider px-1">
-              Mensajes ({messages.length})
+              {translate("liveAudio:PrivateControlInbox.messages", "Mensajes (")}{messages.length})
             </div>
             {messages.map((msg) => {
               const isReplying = activeReplyId === msg.id;
@@ -436,8 +428,7 @@ export const PrivateControlInbox: React.FC<PrivateControlInboxProps> = ({
                     <div className="flex justify-between items-start mb-1">
                       <div className="flex items-center gap-1.5">
                         <span className="px-1.5 py-0.2 text-[10px] font-bold rounded-sm bg-blue-900/60 text-blue-300 border border-blue-700/50">
-                          Equipo Control
-                        </span>
+                          {translate("liveAudio:PrivateControlInbox.controlTeam", "Equipo Control")}</span>
                         <span className="text-xs font-semibold text-blue-200">{msg.fromAlias}</span>
                       </div>
                       <div className="flex items-center gap-2">
@@ -447,8 +438,8 @@ export const PrivateControlInbox: React.FC<PrivateControlInboxProps> = ({
                         <button
                           onClick={() => onDismissMessage(msg.id)}
                           className="text-gray-500 hover:text-red-400 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
-                          title="Descartar aviso"
-                          aria-label="Descartar aviso"
+                          title={translate("liveAudio:PrivateControlInbox.dismissNotice", "Descartar aviso")}
+                          aria-label={translate("liveAudio:PrivateControlInbox.dismissNotice", "Descartar aviso")}
                         >
                           <Trash2 size={13} />
                         </button>
@@ -464,12 +455,11 @@ export const PrivateControlInbox: React.FC<PrivateControlInboxProps> = ({
                   <div className="flex justify-between items-start mb-1">
                     <div className="flex items-center gap-1.5">
                       <span className="text-xs font-semibold text-gray-300">
-                        De: <span className="text-white">{msg.fromAlias}</span>
+                        {translate("liveAudio:PrivateControlInbox.from", "De:")} <span className="text-white">{msg.fromAlias}</span>
                       </span>
                       {msg.isWaitingRoom && (
                         <span className="px-1.5 py-0.2 text-[10px] font-bold rounded-sm bg-amber-900/60 text-amber-300 border border-amber-700/50">
-                          En espera
-                        </span>
+                          {translate("liveAudio:PrivateControlInbox.waiting", "En espera")}</span>
                       )}
                     </div>
                     <div className="flex items-center gap-2">
@@ -479,8 +469,8 @@ export const PrivateControlInbox: React.FC<PrivateControlInboxProps> = ({
                       <button
                         onClick={() => onDismissMessage(msg.id)}
                         className="text-gray-500 hover:text-red-400 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
-                        title="Descartar mensaje"
-                        aria-label={`Descartar mensaje de ${msg.fromAlias}`}
+                        title={translate("liveAudio:PrivateControlInbox.dismissMessage", "Descartar mensaje")}
+                        aria-label={translate("liveAudio:PrivateControlInbox.dismissMessageFrom", "Descartar mensaje de {{value1}}", { value1: msg.fromAlias })}
                       >
                         <Trash2 size={13} />
                       </button>
@@ -498,7 +488,7 @@ export const PrivateControlInbox: React.FC<PrivateControlInboxProps> = ({
                           className="text-[11px] bg-emerald-950/40 border border-emerald-800/40 rounded-sm px-2 py-1 text-emerald-200"
                         >
                           <div className="flex items-center justify-between text-[10px] text-emerald-400 font-medium mb-0.5">
-                            <span>✓ Respondido por {reply.repliedBy}</span>
+                            <span>{translate("liveAudio:PrivateControlInbox.answeredBy", "✓ Respondido por")} {reply.repliedBy}</span>
                             <span className="font-mono">{formatTime(reply.repliedAt)}</span>
                           </div>
                           <p className="text-gray-200 italic">"{reply.responseText}"</p>
@@ -516,10 +506,9 @@ export const PrivateControlInbox: React.FC<PrivateControlInboxProps> = ({
                             type="button"
                             onClick={() => handleQuickThank(msg)}
                             className="flex items-center gap-1 px-2 py-0.5 rounded-sm bg-gray-700/70 hover:bg-emerald-800/50 hover:text-emerald-200 text-[11px] text-gray-300 transition-colors"
-                            title="Enviar 'Gracias' de confirmación rápida con 1 clic"
+                            title={translate("liveAudio:PrivateControlInbox.sendAQuickThankYouConfirmationWithOneClick", "Enviar 'Gracias' de confirmación rápida con 1 clic")}
                           >
-                            <Sparkles size={11} className="text-amber-400" /> Agradecer
-                          </button>
+                            <Sparkles size={11} className="text-amber-400" />  {translate("liveAudio:PrivateControlInbox.thank", "Agradecer")}</button>
 
                           <button
                             type="button"
@@ -531,7 +520,7 @@ export const PrivateControlInbox: React.FC<PrivateControlInboxProps> = ({
                             }`}
                           >
                             <CornerDownRight size={11} />{' '}
-                            {msg.replies && msg.replies.length > 0 ? 'Responder de nuevo' : 'Responder'}
+                            {msg.replies && msg.replies.length > 0 ? translate("liveAudio:PrivateControlInbox.replyAgain", "Responder de nuevo") : translate("liveAudio:PrivateControlInbox.reply", "Responder")}
                           </button>
                         </>
                       )}
@@ -540,16 +529,15 @@ export const PrivateControlInbox: React.FC<PrivateControlInboxProps> = ({
                         <button
                           type="button"
                           onClick={() => {
-                            if (window.confirm(`¿Bloquear acceso a ${msg.fromAlias}?`)) {
+                            if (window.confirm(translate("liveAudio:PrivateControlInbox.blockAccessFor", "¿Bloquear acceso a {{value1}}?", { value1: msg.fromAlias }))) {
                               onAudienceAccessDecision(msg.fromParticipantId!, 'BLOCK');
                             }
                           }}
-                          className="flex items-center gap-1 px-2 py-0.5 rounded-sm bg-gray-700/70 hover:bg-red-800/60 hover:text-red-200 text-[11px] text-gray-400 transition-colors ml-auto"
-                          title="Bloquear acceso a este participante"
-                          aria-label={`Bloquear acceso a ${msg.fromAlias}`}
+                          className="flex items-center gap-1 px-2 py-0.5 rounded-sm bg-gray-700/70 hover:bg-red-800/60 hover:text-red-200 text-[11px] text-gray-400 transition-colors ms-auto"
+                          title={translate("liveAudio:PrivateControlInbox.blockAccessForThisParticipant", "Bloquear acceso a este participante")}
+                          aria-label={translate("liveAudio:PrivateControlInbox.blockAccessFor_d2b424", "Bloquear acceso a {{value1}}", { value1: msg.fromAlias })}
                         >
-                          <ShieldAlert size={11} className="text-red-400" /> Bloquear
-                        </button>
+                          <ShieldAlert size={11} className="text-red-400" />  {translate("liveAudio:PrivateControlInbox.block", "Bloquear")}</button>
                       )}
                     </div>
                   )}
@@ -576,7 +564,7 @@ export const PrivateControlInbox: React.FC<PrivateControlInboxProps> = ({
         >
           <input
             type="text"
-            placeholder="Aviso para el equipo de control..."
+            placeholder={translate("liveAudio:PrivateControlInbox.noticeForTheControlTeam", "Aviso para el equipo de control...")}
             value={announcementText}
             onChange={(e) => setAnnouncementText(e.target.value)}
             className="flex-1 px-2.5 py-1.5 bg-gray-900 border border-gray-700 rounded-sm text-xs text-white placeholder-gray-500 focus:outline-hidden focus:ring-1 focus:ring-blue-500"
@@ -586,7 +574,7 @@ export const PrivateControlInbox: React.FC<PrivateControlInboxProps> = ({
             type="submit"
             disabled={!announcementText.trim()}
             className="bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white px-3 py-1.5 rounded-sm text-xs font-semibold flex items-center gap-1 transition-colors"
-            title="Enviar aviso a los demás operadores"
+            title={translate("liveAudio:PrivateControlInbox.sendNoticeToOtherOperators", "Enviar aviso a los demás operadores")}
           >
             <Send size={12} />
           </button>

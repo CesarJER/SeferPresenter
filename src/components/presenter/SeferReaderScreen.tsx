@@ -1,3 +1,5 @@
+import { translate } from '../../i18n/runtime';
+import { useUiTranslation } from '../../i18n/useUiTranslation';
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import type { ScriptureNavState, SeferOnlineRefPayload } from '../../types/presentation';
 import type { VerseData, AppMetadata } from '../../hooks/useSeferReader';
@@ -27,6 +29,7 @@ export const SeferReaderScreen: React.FC<SeferReaderScreenProps> = ({
   liveAudioPanel,
   interactive = true,
 }) => {
+  useUiTranslation('presenter');
   const [metadata, setMetadata] = useState<AppMetadata>({});
   const [data, setData] = useState<VerseData[]>([]);
   const [selectedVerseIdx, setSelectedVerseIdx] = useState<number | null>(0);
@@ -298,8 +301,7 @@ export const SeferReaderScreen: React.FC<SeferReaderScreenProps> = ({
   if (isLoading || Object.keys(metadata).length === 0 || data.length === 0) {
     return (
       <div className="h-dvh flex items-center justify-center text-2xl font-hebrew bg-[#fef3c7] text-amber-900">
-        Cargando...
-      </div>
+        {translate("presenter:SeferReaderScreen.loading", "Cargando...")}</div>
     );
   }
 
@@ -337,11 +339,11 @@ export const SeferReaderScreen: React.FC<SeferReaderScreenProps> = ({
               type="button"
               onClick={onLogoClick}
               className="flex h-8 w-8 flex-none items-center justify-center rounded-sm border border-amber-900/20 bg-[#fef3c7] hover:bg-amber-100 pointer-events-auto"
-              title="Abrir menú"
+              title={translate("presenter:SeferReaderScreen.openMenu", "Abrir menú")}
             >
               <img
                 src="/api/branding/logo.svg"
-                alt="Abrir menú"
+                alt={translate("presenter:SeferReaderScreen.openMenu", "Abrir menú")}
                 className="h-6 w-6"
                 onError={applyNeutralBrandingFallback}
               />

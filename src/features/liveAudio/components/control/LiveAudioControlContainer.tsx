@@ -1,3 +1,5 @@
+import { translate } from '../../../../i18n/runtime';
+import { useUiTranslation } from '../../../../i18n/useUiTranslation';
 import { getOperatorHeaders } from '../../../../utils/operatorAuth';
 import { useState, useEffect, useCallback, useMemo, useRef, Suspense, lazy } from 'react';
 import { createPortal } from 'react-dom';
@@ -141,6 +143,7 @@ export default function LiveAudioControlContainer({
   controlState,
   verificationCode,
 }: LiveAudioControlContainerProps) {
+  useUiTranslation('liveAudio');
   const [isInboxOpen, setIsInboxOpen] = useState(false);
   const [selectedVoiceParticipantId, setSelectedVoiceParticipantId] = useState('');
   const [remoteVoiceState, setRemoteVoiceState] = useState<{ options: VoiceScriptureCandidate[], detail: string, phase: VoiceSessionPhase } | undefined>(undefined);
@@ -875,8 +878,8 @@ export default function LiveAudioControlContainer({
       ) {
         const accepted = window.confirm(
           externalBroadcastState === 'recording'
-            ? 'La sesión está declarada en directo y grabándose. Confirma que tu voz puede emitirse y quedar grabada. Evita identificarte y comprueba que no haya voces de fondo; pueden generarse subtítulos automáticos.'
-            : 'La sesión está declarada en directo. Confirma que tu voz puede emitirse públicamente. Evita identificarte y comprueba que no haya voces de fondo.',
+            ? translate("liveAudio:LiveAudioControlContainer.theSessionIsDeclaredLiveAndRecordingConfirmThatYour", "La sesión está declarada en directo y grabándose. Confirma que tu voz puede emitirse y quedar grabada. Evita identificarte y comprueba que no haya voces de fondo; pueden generarse subtítulos automáticos.")
+            : translate("liveAudio:LiveAudioControlContainer.theSessionIsDeclaredLiveConfirmThatYourVoiceMay", "La sesión está declarada en directo. Confirma que tu voz puede emitirse públicamente. Evita identificarte y comprueba que no haya voces de fondo."),
         );
         if (!accepted) return;
         moderatorConsentRevisionRef.current = externalBroadcastRevision;
@@ -985,7 +988,7 @@ export default function LiveAudioControlContainer({
       sendModerationMessage(endpoint, pid);
     } catch (err) {
       console.error(`Error in moderation action ${endpoint}`, err);
-      setModerationError(err instanceof Error ? err.message : 'No se pudo aplicar la acción de moderación');
+      setModerationError(err instanceof Error ? err.message : translate("liveAudio:LiveAudioControlContainer.couldNotApplyTheModerationAction", "No se pudo aplicar la acción de moderación"));
     }
   }, [controlSessionId, sendModerationMessage]);
 
@@ -1088,7 +1091,7 @@ export default function LiveAudioControlContainer({
   }, [wsSend]);
 
   const voiceTracks = [
-    ...(participantId && localMicrophoneTrack && !isModeratorMuted ? [{ id: participantId, track: localMicrophoneTrack, label: operatorNick || 'Mi micrófono' }] : []),
+    ...(participantId && localMicrophoneTrack && !isModeratorMuted ? [{ id: participantId, track: localMicrophoneTrack, label: operatorNick || translate("liveAudio:LiveAudioControlContainer.myMicrophone", "Mi micrófono") }] : []),
     ...remoteTracks.filter(remote => {
       const participant = participantsMap[remote.participantId || ''];
       const control = controlParticipants.find(p => p.participantId === remote.participantId);
@@ -1120,8 +1123,8 @@ export default function LiveAudioControlContainer({
         ? 'waiting'
         : 'unavailable';
   const voiceSourceLabel = !selectedVoiceParticipantId ? ''
-    : selectedVoiceParticipantId === participantId ? operatorNick.trim() || 'Mi micrófono'
-      : participantAliases[selectedVoiceParticipantId] || 'Participante seleccionado';
+    : selectedVoiceParticipantId === participantId ? operatorNick.trim() || translate("liveAudio:LiveAudioControlContainer.myMicrophone", "Mi micrófono")
+      : participantAliases[selectedVoiceParticipantId] || translate("liveAudio:LiveAudioControlContainer.selectedParticipant", "Participante seleccionado");
   const controllerIds = new Set([
     ...controlParticipants.map(p => p.participantId),
     ...Object.values(participantsMap).filter(p => p.role === 'control' && p.connected !== false).map(p => p.participantId),
@@ -1168,9 +1171,9 @@ export default function LiveAudioControlContainer({
         onClick={handleAccessModeChange}
         disabled={controlState !== 'PRINCIPAL'}
         className="rounded-sm border border-slate-600 bg-slate-800 px-2 py-1.5 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"
-        title="Solo el Control principal puede cambiar el modo de acceso"
+        title={translate("liveAudio:LiveAudioControlContainer.onlyTheMainControlCanChangeAccessMode", "Solo el Control principal puede cambiar el modo de acceso")}
       >
-        Acceso: {accessMode === 'PUBLIC' ? 'Público' : 'Controlado'}
+        {translate("liveAudio:LiveAudioControlContainer.access", "Acceso:")} {accessMode === 'PUBLIC' ? translate("liveAudio:LiveAudioControlContainer.public", "Público") : translate("liveAudio:LiveAudioControlContainer.controlled", "Controlado")}
       </button>
       <PwaRestartButton controlMenu={true} connectionState={state} connectionQuality={connectionQuality} />
       <div className="relative">
@@ -1181,12 +1184,12 @@ export default function LiveAudioControlContainer({
               : isInboxOpen ? 'bg-blue-600 border-blue-500 text-white'
                 : 'bg-gray-800 border-gray-700 hover:bg-gray-700 text-gray-300 hover:text-white'
           }`}
-          title="Bandeja Privada"
-          aria-label={`Bandeja Privada: ${unreadCount} solicitudes pendientes`}
+          title={translate("liveAudio:LiveAudioControlContainer.privateInbox", "Bandeja Privada")}
+          aria-label={translate("liveAudio:LiveAudioControlContainer.privateInboxPendingRequests", "Bandeja Privada: {{value1}} solicitudes pendientes", { value1: unreadCount })}
         >
           <Bell size={14} />
           {hasUnread && (
-            <span className="absolute -top-1 -right-1 bg-white text-red-600 text-[10px] font-bold px-1 rounded-full">
+            <span className="absolute -top-1 -end-1 bg-white text-red-600 text-[10px] font-bold px-1 rounded-full">
               {unreadCount}
             </span>
           )}

@@ -1,3 +1,5 @@
+import { translate } from '../../i18n/runtime';
+import { useUiTranslation } from '../../i18n/useUiTranslation';
 /**
  * QuizPresenterView — Projected quiz display for presenter screen & public display.
  *
@@ -46,6 +48,7 @@ export const QuizPresenterView: React.FC<QuizPresenterViewProps> = ({
   maxBaseCentipunts = 0,
   fontScale = 1,
 }) => {
+  useUiTranslation('quiz');
   const currentSubslide = subslides[currentSubslideIndex];
   const displayOptions = getDisplayOptions(quizData, slide.id);
 
@@ -131,8 +134,8 @@ export const QuizPresenterView: React.FC<QuizPresenterViewProps> = ({
           <div className="flex items-center justify-center gap-[2vw] mb-[1vh] shrink-0">
             <Trophy size={48} className="text-yellow-400 drop-shadow-lg shrink-0" />
             <div className="flex flex-col text-left">
-              <h1 className="text-3xl font-black text-white">Resultados Finales</h1>
-              <p className="text-lg text-white/60">¡Gracias por participar! Revisa tu dispositivo para ver tu puntuación.</p>
+              <h1 className="text-3xl font-black text-white">{translate("quiz:QuizPresenterView.finalResults", "Resultados Finales")}</h1>
+              <p className="text-lg text-white/60">{translate("quiz:QuizPresenterView.thankYouForParticipatingCheckYourDeviceToSee", "¡Gracias por participar! Revisa tu dispositivo para ver tu puntuación.")}</p>
             </div>
           </div>
           
@@ -243,8 +246,7 @@ export const QuizPresenterView: React.FC<QuizPresenterViewProps> = ({
           className="text-center"
         >
           <span className="rounded-full border border-yellow-500/30 bg-yellow-500/10 px-3 py-1 text-[11px] font-bold text-yellow-400">
-            📖 Identifica la cita correcta
-          </span>
+            {translate("quiz:QuizPresenterView.identifyTheCorrectReference", "📖 Identifica la cita correcta")}</span>
         </motion.div>
       )}
 
@@ -256,7 +258,7 @@ export const QuizPresenterView: React.FC<QuizPresenterViewProps> = ({
           transition={{ delay: 0.3 }}
           className="glass-panel px-4 py-2 text-center"
         >
-          <span className="text-[11px] font-bold uppercase tracking-widest text-yellow-400/70 mr-2">CITA:</span>
+          <span className="text-[11px] font-bold uppercase tracking-widest text-yellow-400/70 mr-2">{translate("quiz:QuizPresenterView.reference", "CITA:")}</span>
           <span className="text-sm font-semibold text-yellow-300">{quizData.citaRef}</span>
         </motion.div>
       )}

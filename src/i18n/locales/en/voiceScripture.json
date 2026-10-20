@@ -1,0 +1,17 @@
+{
+  "VoiceScriptureSuggestions.voiceAssistant": "Voice assistant",
+  "VoiceScriptureSuggestions.detectedReferences": "Detected references",
+  "VoiceScriptureControl.ready": "Ready",
+  "VoiceScriptureControl.connecting": "Connecting…",
+  "VoiceScriptureControl.receivingAudio": "Receiving audio",
+  "VoiceScriptureControl.transcribing": "Transcribing…",
+  "VoiceScriptureControl.speechReceived": "Speech received",
+  "VoiceScriptureControl.stopping": "Stopping…",
+  "VoiceScriptureControl.error": "Error",
+  "VoiceScriptureControl.sharedSourceTranscriptionOnMainControl": "Shared source · transcription on main Control",
+  "VoiceScriptureControl.voiceDisabledSelectAMicrophone": "Voice disabled · select a microphone",
+  "reconnectingDetail": "{{detail}} · reconnecting…",
+  "checking": "Checking voice…",
+  "disabled": "Voice not enabled",
+  "unavailable": "Voice engine unavailable · retrying…"
+}

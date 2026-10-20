@@ -1,0 +1,22 @@
+{
+  "CatalogApp.loadingCatalog": "טוענים קטלוג…",
+  "CatalogApp.error": "שגיאה",
+  "CatalogIndex.publicCatalogs": "קטלוגים ציבוריים",
+  "CatalogIndex.selectACatalogToViewItsContent": "בחרו קטלוג כדי להציג את תוכנו",
+  "CatalogIndex.noPublicCatalogsAreAvailableRightNow": "אין כעת קטלוגים ציבוריים זמינים.",
+  "CatalogViewer.loading": "טעינה",
+  "CatalogViewer.error": "שגיאה",
+  "CatalogViewer.backToCatalog": "חזרה לקטלוג",
+  "CatalogViewer.presentationNotFound": "המצגת לא נמצאה",
+  "CatalogViewer.back": "חזרה",
+  "CatalogViewer.continuousReading": "קריאה רציפה",
+  "CatalogViewer.cardView": "תצוגת כרטיסים",
+  "CatalogViewer.readInContext": "קריאה בהקשר",
+  "CatalogViewer.publicCatalog": "קטלוג ציבורי •",
+  "CatalogViewer.searchTitleOrContent": "חיפוש בכותרת או בתוכן…",
+  "CatalogViewer.noResultsFoundFor": "לא נמצאו תוצאות עבור ״",
+  "CatalogViewer.titleMatches": "התאמות בכותרת",
+  "CatalogViewer.contentMatches": "התאמות בתוכן",
+  "CatalogApp.errorLoadingCatalogs": "שגיאה בטעינת קטלוגים",
+  "CatalogViewer.errorLoadingPresentations": "שגיאה בטעינת מצגות"
+}
