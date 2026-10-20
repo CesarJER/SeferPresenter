@@ -48,18 +48,18 @@ export const VerseSidebar = ({
       <div
         role="separator"
         aria-orientation="vertical"
-        className="hidden md:block touch-none absolute right-0 top-0 h-full w-4 cursor-col-resize bg-transparent hover:bg-amber-300/40 active:bg-amber-400/50 z-[60]"
+        className="hidden md:block touch-none absolute right-0 top-0 h-full w-4 cursor-col-resize bg-transparent hover:bg-amber-300/40 active:bg-amber-400/50 z-60"
         onPointerDown={handleResizeStart}
       />
       <div
         role="separator"
         aria-orientation="horizontal"
-        className="md:hidden touch-none absolute bottom-0 left-0 w-full h-6 cursor-row-resize bg-transparent active:bg-amber-400/50 z-[60]"
+        className="md:hidden touch-none absolute bottom-0 left-0 w-full h-6 cursor-row-resize bg-transparent active:bg-amber-400/50 z-60"
         onPointerDown={handleResizeStart}
       />
 
       {navLabel && (
-        <div className="flex-none h-12 md:h-16 border-b border-amber-900/20 bg-[#f7e7b6]/95 px-4 py-2 shadow-sm">
+        <div className="flex-none h-12 md:h-16 border-b border-amber-900/20 bg-[#f7e7b6]/95 px-4 py-2 shadow-xs">
           <AutoResizeText
             text={navLabel}
             allowGrow={true}
@@ -71,7 +71,7 @@ export const VerseSidebar = ({
         </div>
       )}
 
-      <div className="flex-grow flex flex-col text-center overflow-hidden min-h-0">
+      <div className="grow flex flex-col text-center overflow-hidden min-h-0">
         <div className="flex-1 flex items-center justify-center overflow-hidden p-3">
           <AutoResizeText
             text={combinedText}

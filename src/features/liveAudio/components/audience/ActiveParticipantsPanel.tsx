@@ -21,7 +21,7 @@ export const ActiveParticipantsPanel: React.FC<ActiveParticipantsPanelProps> = (
       <h2 className="text-sm font-semibold">Participantes</h2>
       <button
         onClick={onClose}
-        className="rounded p-1 text-gray-400 transition-colors hover:bg-gray-800 hover:text-white"
+        className="rounded-sm p-1 text-gray-400 transition-colors hover:bg-gray-800 hover:text-white"
         title="Cerrar"
       >
         <X className="h-4 w-4" />

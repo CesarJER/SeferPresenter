@@ -184,7 +184,7 @@ export const PrivateControlInbox: React.FC<PrivateControlInboxProps> = ({
               }
             }}
             placeholder={placeholder}
-            className={`flex-1 px-2 py-1 bg-gray-900 border border-gray-700 rounded text-xs text-white placeholder-gray-500 focus:outline-none focus:ring-1 ${
+            className={`flex-1 px-2 py-1 bg-gray-900 border border-gray-700 rounded text-xs text-white placeholder-gray-500 focus:outline-hidden focus:ring-1 ${
               isAmber ? 'focus:ring-amber-500' : 'focus:ring-blue-500'
             }`}
           />
@@ -213,7 +213,7 @@ export const PrivateControlInbox: React.FC<PrivateControlInboxProps> = ({
         </h3>
 
         {/* Operator Nick & Visibility selector */}
-        <div className="flex items-center gap-1.5 bg-gray-900 border border-gray-700/80 rounded px-2 py-1">
+        <div className="flex items-center gap-1.5 bg-gray-900 border border-gray-700/80 rounded-sm px-2 py-1">
           <User size={13} className="text-gray-400 shrink-0" />
           <input
             type="text"
@@ -221,7 +221,7 @@ export const PrivateControlInbox: React.FC<PrivateControlInboxProps> = ({
             onChange={handleOperatorNickChange}
             placeholder="Nick operador..."
             maxLength={25}
-            className="bg-transparent text-xs text-white placeholder-gray-500 focus:outline-none w-20 md:w-24"
+            className="bg-transparent text-xs text-white placeholder-gray-500 focus:outline-hidden w-20 md:w-24"
             title="Nick del operador"
           />
           <button
@@ -297,13 +297,13 @@ export const PrivateControlInbox: React.FC<PrivateControlInboxProps> = ({
                 <div className="flex gap-2">
                   <button
                     onClick={() => onApproveRequest(req.controlSessionId)}
-                    className="flex-1 flex items-center justify-center gap-1 bg-blue-600 hover:bg-blue-500 text-white py-1 rounded text-xs transition-colors font-medium"
+                    className="flex-1 flex items-center justify-center gap-1 bg-blue-600 hover:bg-blue-500 text-white py-1 rounded-sm text-xs transition-colors font-medium"
                   >
                     <Check size={13} /> Aprobar
                   </button>
                   <button
                     onClick={() => onRejectRequest(req.controlSessionId)}
-                    className="flex-1 flex items-center justify-center gap-1 bg-gray-700 hover:bg-gray-600 text-gray-200 py-1 rounded text-xs transition-colors"
+                    className="flex-1 flex items-center justify-center gap-1 bg-gray-700 hover:bg-gray-600 text-gray-200 py-1 rounded-sm text-xs transition-colors"
                   >
                     <X size={13} /> Rechazar
                   </button>
@@ -342,7 +342,7 @@ export const PrivateControlInbox: React.FC<PrivateControlInboxProps> = ({
                     <button
                       type="button"
                       onClick={() => onAudienceAccessDecision(request.participantId, 'ADMIT')}
-                      className="rounded bg-emerald-700 hover:bg-emerald-600 py-1 text-xs font-bold text-white transition-colors"
+                      className="rounded-sm bg-emerald-700 hover:bg-emerald-600 py-1 text-xs font-bold text-white transition-colors"
                       title="Admitir usuario"
                     >
                       Admitir
@@ -350,7 +350,7 @@ export const PrivateControlInbox: React.FC<PrivateControlInboxProps> = ({
                     <button
                       type="button"
                       onClick={() => onAudienceAccessDecision(request.participantId, 'REJECT')}
-                      className="rounded bg-slate-700 hover:bg-slate-600 py-1 text-xs font-bold text-white transition-colors"
+                      className="rounded-sm bg-slate-700 hover:bg-slate-600 py-1 text-xs font-bold text-white transition-colors"
                       title="Rechazar (cooldown 30s)"
                     >
                       Rechazar
@@ -358,7 +358,7 @@ export const PrivateControlInbox: React.FC<PrivateControlInboxProps> = ({
                     <button
                       type="button"
                       onClick={() => onAudienceAccessDecision(request.participantId, 'BLOCK')}
-                      className="rounded bg-red-800 hover:bg-red-700 py-1 text-xs font-bold text-white transition-colors"
+                      className="rounded-sm bg-red-800 hover:bg-red-700 py-1 text-xs font-bold text-white transition-colors"
                       title="Bloquear acceso totalmente"
                     >
                       Bloquear
@@ -408,7 +408,7 @@ export const PrivateControlInbox: React.FC<PrivateControlInboxProps> = ({
                 <button
                   type="button"
                   onClick={() => onAudienceAccessDecision(request.participantId, 'UNBLOCK')}
-                  className="rounded bg-slate-700 hover:bg-slate-600 px-3 py-1 text-xs font-bold text-gray-200 hover:text-white transition-colors shrink-0"
+                  className="rounded-sm bg-slate-700 hover:bg-slate-600 px-3 py-1 text-xs font-bold text-gray-200 hover:text-white transition-colors shrink-0"
                   title="Desbloquear y mover a solicitudes pendientes"
                 >
                   Desbloquear
@@ -435,7 +435,7 @@ export const PrivateControlInbox: React.FC<PrivateControlInboxProps> = ({
                   >
                     <div className="flex justify-between items-start mb-1">
                       <div className="flex items-center gap-1.5">
-                        <span className="px-1.5 py-0.2 text-[10px] font-bold rounded bg-blue-900/60 text-blue-300 border border-blue-700/50">
+                        <span className="px-1.5 py-0.2 text-[10px] font-bold rounded-sm bg-blue-900/60 text-blue-300 border border-blue-700/50">
                           Equipo Control
                         </span>
                         <span className="text-xs font-semibold text-blue-200">{msg.fromAlias}</span>
@@ -467,7 +467,7 @@ export const PrivateControlInbox: React.FC<PrivateControlInboxProps> = ({
                         De: <span className="text-white">{msg.fromAlias}</span>
                       </span>
                       {msg.isWaitingRoom && (
-                        <span className="px-1.5 py-0.2 text-[10px] font-bold rounded bg-amber-900/60 text-amber-300 border border-amber-700/50">
+                        <span className="px-1.5 py-0.2 text-[10px] font-bold rounded-sm bg-amber-900/60 text-amber-300 border border-amber-700/50">
                           En espera
                         </span>
                       )}
@@ -495,7 +495,7 @@ export const PrivateControlInbox: React.FC<PrivateControlInboxProps> = ({
                       {msg.replies.map((reply, idx) => (
                         <div
                           key={idx}
-                          className="text-[11px] bg-emerald-950/40 border border-emerald-800/40 rounded px-2 py-1 text-emerald-200"
+                          className="text-[11px] bg-emerald-950/40 border border-emerald-800/40 rounded-sm px-2 py-1 text-emerald-200"
                         >
                           <div className="flex items-center justify-between text-[10px] text-emerald-400 font-medium mb-0.5">
                             <span>✓ Respondido por {reply.repliedBy}</span>
@@ -515,7 +515,7 @@ export const PrivateControlInbox: React.FC<PrivateControlInboxProps> = ({
                           <button
                             type="button"
                             onClick={() => handleQuickThank(msg)}
-                            className="flex items-center gap-1 px-2 py-0.5 rounded bg-gray-700/70 hover:bg-emerald-800/50 hover:text-emerald-200 text-[11px] text-gray-300 transition-colors"
+                            className="flex items-center gap-1 px-2 py-0.5 rounded-sm bg-gray-700/70 hover:bg-emerald-800/50 hover:text-emerald-200 text-[11px] text-gray-300 transition-colors"
                             title="Enviar 'Gracias' de confirmación rápida con 1 clic"
                           >
                             <Sparkles size={11} className="text-amber-400" /> Agradecer
@@ -544,7 +544,7 @@ export const PrivateControlInbox: React.FC<PrivateControlInboxProps> = ({
                               onAudienceAccessDecision(msg.fromParticipantId!, 'BLOCK');
                             }
                           }}
-                          className="flex items-center gap-1 px-2 py-0.5 rounded bg-gray-700/70 hover:bg-red-800/60 hover:text-red-200 text-[11px] text-gray-400 transition-colors ml-auto"
+                          className="flex items-center gap-1 px-2 py-0.5 rounded-sm bg-gray-700/70 hover:bg-red-800/60 hover:text-red-200 text-[11px] text-gray-400 transition-colors ml-auto"
                           title="Bloquear acceso a este participante"
                           aria-label={`Bloquear acceso a ${msg.fromAlias}`}
                         >
@@ -579,13 +579,13 @@ export const PrivateControlInbox: React.FC<PrivateControlInboxProps> = ({
             placeholder="Aviso para el equipo de control..."
             value={announcementText}
             onChange={(e) => setAnnouncementText(e.target.value)}
-            className="flex-1 px-2.5 py-1.5 bg-gray-900 border border-gray-700 rounded text-xs text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            className="flex-1 px-2.5 py-1.5 bg-gray-900 border border-gray-700 rounded-sm text-xs text-white placeholder-gray-500 focus:outline-hidden focus:ring-1 focus:ring-blue-500"
             maxLength={200}
           />
           <button
             type="submit"
             disabled={!announcementText.trim()}
-            className="bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white px-3 py-1.5 rounded text-xs font-semibold flex items-center gap-1 transition-colors"
+            className="bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white px-3 py-1.5 rounded-sm text-xs font-semibold flex items-center gap-1 transition-colors"
             title="Enviar aviso a los demás operadores"
           >
             <Send size={12} />

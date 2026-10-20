@@ -25,7 +25,7 @@ export const CatalogIndex: React.FC<CatalogIndexProps> = ({ catalogs }) => {
               <a
                 key={cat.id}
                 href={cat.path}
-                className="bg-white/80 border border-amber-200 hover:border-amber-400 hover:bg-white transition-colors rounded-lg p-6 flex flex-col items-center text-center group cursor-pointer shadow-sm hover:shadow-md"
+                className="bg-white/80 border border-amber-200 hover:border-amber-400 hover:bg-white transition-colors rounded-lg p-6 flex flex-col items-center text-center group cursor-pointer shadow-xs hover:shadow-md"
               >
                 <div className="bg-amber-100 p-4 rounded-full mb-4 group-hover:bg-amber-200 transition-colors">
                   <BookOpen size={32} className="text-amber-600 group-hover:text-amber-700" />
@@ -33,7 +33,7 @@ export const CatalogIndex: React.FC<CatalogIndexProps> = ({ catalogs }) => {
                 <h2 className="text-xl font-bold text-amber-900 mb-2">{cat.title}</h2>
                 <div className="flex flex-wrap gap-1 justify-center">
                   {cat.tags.map(tag => (
-                    <span key={tag} className="text-[9px] uppercase tracking-wider bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded border border-amber-200">
+                    <span key={tag} className="text-[9px] uppercase tracking-wider bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded-sm border border-amber-200">
                       {tag}
                     </span>
                   ))}

@@ -98,7 +98,7 @@ export const MediaControls: React.FC<MediaControlsProps> = ({
           </button>
         )}
 
-        <div className="flex items-center gap-2 rounded border border-gray-800 bg-gray-950/60 px-2 py-1">
+        <div className="flex items-center gap-2 rounded-sm border border-gray-800 bg-gray-950/60 px-2 py-1">
           <span className="text-[9px] font-black text-gray-500">VOL</span>
           <input
             type="range"
@@ -124,7 +124,7 @@ export const MediaControls: React.FC<MediaControlsProps> = ({
           />
         </div>
 
-        <div className="flex items-center gap-1 rounded border border-gray-800 bg-gray-950/60 p-0.5">
+        <div className="flex items-center gap-1 rounded-sm border border-gray-800 bg-gray-950/60 p-0.5">
           {[0.5, 1, 1.5, 2].map((speedVal) => (
             <button
               key={speedVal}
@@ -143,7 +143,7 @@ export const MediaControls: React.FC<MediaControlsProps> = ({
                   seekId: videoState?.seekId
                 });
               }}
-              className={`rounded px-1.5 py-1 text-[9px] font-black ${((videoState?.speed ?? 1) === speedVal) ? 'bg-yellow-600 text-white' : 'text-gray-400 hover:text-gray-200'} cursor-pointer`}
+              className={`rounded-sm px-1.5 py-1 text-[9px] font-black ${((videoState?.speed ?? 1) === speedVal) ? 'bg-yellow-600 text-white' : 'text-gray-400 hover:text-gray-200'} cursor-pointer`}
             >
               {speedVal}x
             </button>

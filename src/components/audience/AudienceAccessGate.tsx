@@ -126,7 +126,7 @@ export function AudienceAccessGate({
   const showManualRequest = mayRequest && !autoAlias;
 
   return (
-    <main className="fixed inset-0 z-[100] bg-slate-950 text-slate-100 overflow-y-auto">
+    <main className="fixed inset-0 z-100 bg-slate-950 text-slate-100 overflow-y-auto">
       <div className="min-h-full flex items-center justify-center p-4 py-12">
         <div className="w-full max-w-md flex flex-col gap-4">
           <div className="w-full rounded-2xl border border-slate-800 bg-slate-900/90 p-8 shadow-2xl backdrop-blur-md flex flex-col items-center text-center gap-6">
@@ -150,7 +150,7 @@ export function AudienceAccessGate({
                     <button
                       type="button"
                       onClick={() => setShowPrivateMessageModal(true)}
-                      className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800/90 hover:bg-slate-700 px-3.5 py-1.5 text-xs font-medium text-slate-200 hover:text-white transition-colors shadow-sm"
+                      className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800/90 hover:bg-slate-700 px-3.5 py-1.5 text-xs font-medium text-slate-200 hover:text-white transition-colors shadow-xs"
                     >
                       <MessageSquare className="h-3.5 w-3.5 text-blue-400" />
                       <span>Enviar mensaje a los moderadores</span>
@@ -162,7 +162,7 @@ export function AudienceAccessGate({
                         {receivedControlMessages.map((msg) => (
                           <div
                             key={msg.id}
-                            className="rounded-xl border border-blue-600/40 bg-blue-950/60 p-3 shadow-lg backdrop-blur-sm"
+                            className="rounded-xl border border-blue-600/40 bg-blue-950/60 p-3 shadow-lg backdrop-blur-xs"
                           >
                             <div className="flex items-center justify-between gap-2 mb-1">
                               <div className="flex items-center gap-1.5 text-xs font-semibold text-blue-300">
@@ -176,7 +176,7 @@ export function AudienceAccessGate({
                                 <button
                                   type="button"
                                   onClick={() => setReceivedControlMessages((prev) => prev.filter((m) => m.id !== msg.id))}
-                                  className="text-slate-400 hover:text-white p-0.5 rounded transition-colors"
+                                  className="text-slate-400 hover:text-white p-0.5 rounded-sm transition-colors"
                                   title="Cerrar mensaje"
                                   aria-label="Cerrar mensaje"
                                 >
@@ -235,7 +235,7 @@ export function AudienceAccessGate({
       )}
 
       {error && (
-        <p role="alert" className="fixed bottom-4 left-1/2 z-[110] -translate-x-1/2 rounded bg-red-950/90 border border-red-800 px-4 py-2 text-sm text-red-200 shadow-xl backdrop-blur-md">
+        <p role="alert" className="fixed bottom-4 left-1/2 z-110 -translate-x-1/2 rounded-sm bg-red-950/90 border border-red-800 px-4 py-2 text-sm text-red-200 shadow-xl backdrop-blur-md">
           {error}
         </p>
       )}

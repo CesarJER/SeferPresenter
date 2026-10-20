@@ -243,7 +243,7 @@ export const QuizAudienceView: React.FC<QuizAudienceViewProps> = ({
                       {opt.text}
                     </span>
                     {quizData.multiSelect && (
-                      <span className={`ml-auto shrink-0 h-4 w-4 rounded border ${isSelected ? 'border-yellow-500 bg-yellow-500' : 'border-white/30 bg-transparent'}`} />
+                      <span className={`ml-auto shrink-0 h-4 w-4 rounded-sm border ${isSelected ? 'border-yellow-500 bg-yellow-500' : 'border-white/30 bg-transparent'}`} />
                     )}
                   </button>
                 );
@@ -263,7 +263,7 @@ export const QuizAudienceView: React.FC<QuizAudienceViewProps> = ({
                     onChange={e => {
                       onSetCitaField({ citaBook: e.target.value, citaChapter: '', citaVerseStart: '', citaVerseEnd: '' });
                     }}
-                    className="rounded border border-yellow-600/30 bg-black/30 py-1.5 text-xs focus:outline-none focus:border-yellow-500 text-center disabled:appearance-none"
+                    className="rounded-sm border border-yellow-600/30 bg-black/30 py-1.5 text-xs focus:outline-hidden focus:border-yellow-500 text-center disabled:appearance-none"
                     disabled={isDisabled}
                   >
                     <option value="" className="bg-black text-gray-400">Libro</option>
@@ -287,7 +287,7 @@ export const QuizAudienceView: React.FC<QuizAudienceViewProps> = ({
                           aria-label="Capítulo de la cita"
                           value={answer.citaChapter ?? ''}
                           onChange={e => onSetCitaField({ citaChapter: e.target.value, citaVerseStart: '', citaVerseEnd: '' })}
-                          className="rounded border border-yellow-600/30 bg-black/30 py-1.5 text-xs focus:outline-none focus:border-yellow-500 text-center disabled:appearance-none"
+                          className="rounded-sm border border-yellow-600/30 bg-black/30 py-1.5 text-xs focus:outline-hidden focus:border-yellow-500 text-center disabled:appearance-none"
                           disabled={!bookMeta || isDisabled}
                         >
                           <option value="" className="bg-black text-gray-400">Cap</option>
@@ -297,7 +297,7 @@ export const QuizAudienceView: React.FC<QuizAudienceViewProps> = ({
                           aria-label="Versículo inicial de la cita"
                           value={answer.citaVerseStart ?? ''}
                           onChange={e => onSetCitaField({ citaVerseStart: e.target.value })}
-                          className="rounded border border-yellow-600/30 bg-black/30 py-1.5 text-xs focus:outline-none focus:border-yellow-500 text-center disabled:appearance-none"
+                          className="rounded-sm border border-yellow-600/30 bg-black/30 py-1.5 text-xs focus:outline-hidden focus:border-yellow-500 text-center disabled:appearance-none"
                           disabled={!answer.citaChapter || isDisabled}
                         >
                           <option value="" className="bg-black text-gray-400">V.ini</option>
@@ -307,7 +307,7 @@ export const QuizAudienceView: React.FC<QuizAudienceViewProps> = ({
                           aria-label="Versículo final de la cita"
                           value={answer.citaVerseEnd ?? ''}
                           onChange={e => onSetCitaField({ citaVerseEnd: e.target.value })}
-                          className="rounded border border-yellow-600/30 bg-black/30 py-1.5 text-xs focus:outline-none focus:border-yellow-500 text-center disabled:appearance-none"
+                          className="rounded-sm border border-yellow-600/30 bg-black/30 py-1.5 text-xs focus:outline-hidden focus:border-yellow-500 text-center disabled:appearance-none"
                           disabled={!answer.citaVerseStart || isDisabled}
                         >
                           <option value="" className="bg-black text-gray-400">V.fin</option>

@@ -24,7 +24,7 @@ export function AudioDeviceSettings() {
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className={`p-1 rounded transition-colors ${isOpen ? 'bg-zinc-700 text-white' : 'text-gray-400 hover:text-white hover:bg-zinc-800'}`}
+        className={`p-1 rounded-sm transition-colors ${isOpen ? 'bg-zinc-700 text-white' : 'text-gray-400 hover:text-white hover:bg-zinc-800'}`}
         title="Configuración de dispositivos de audio"
         aria-label="Configuración de dispositivos de audio"
       >
@@ -43,7 +43,7 @@ export function AudioDeviceSettings() {
               <button
                 type="button"
                 onClick={requestPermission}
-                className="bg-emerald-700 hover:bg-emerald-600 text-white px-3 py-1 rounded"
+                className="bg-emerald-700 hover:bg-emerald-600 text-white px-3 py-1 rounded-sm"
               >
                 Dar permiso
               </button>
@@ -55,7 +55,7 @@ export function AudioDeviceSettings() {
                   <Mic size={12} /> Micrófono (Live)
                 </label>
                 <select
-                  className="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 focus:outline-none focus:border-emerald-500"
+                  className="w-full bg-zinc-800 border border-zinc-700 rounded-sm px-2 py-1.5 focus:outline-hidden focus:border-emerald-500"
                   value={liveMicrophoneId}
                   onChange={e => setLiveMicrophoneId(e.target.value)}
                 >
@@ -71,7 +71,7 @@ export function AudioDeviceSettings() {
                   <Volume2 size={12} /> Salida de Voz (Live)
                 </label>
                 <select
-                  className="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 focus:outline-none focus:border-emerald-500"
+                  className="w-full bg-zinc-800 border border-zinc-700 rounded-sm px-2 py-1.5 focus:outline-hidden focus:border-emerald-500"
                   value={liveOutputId}
                   onChange={e => setLiveOutputId(e.target.value)}
                 >
@@ -87,7 +87,7 @@ export function AudioDeviceSettings() {
                   <Music size={12} /> Salida de Programa
                 </label>
                 <select
-                  className="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 focus:outline-none focus:border-emerald-500"
+                  className="w-full bg-zinc-800 border border-zinc-700 rounded-sm px-2 py-1.5 focus:outline-hidden focus:border-emerald-500"
                   value={programOutputId}
                   onChange={e => setProgramOutputId(e.target.value)}
                 >

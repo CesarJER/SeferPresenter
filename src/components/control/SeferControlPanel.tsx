@@ -97,7 +97,7 @@ const SeferControlPanel: React.FC<SeferControlPanelProps> = ({
             id="sefer-book-select"
             value={selectedBook}
             onChange={(e) => setSelectedBook(e.target.value)}
-            className="control-select flex-[2]"
+            className="control-select flex-2"
           >
             {bookList.map((book) => (
               <option key={book} value={book}>{book}</option>
@@ -107,7 +107,7 @@ const SeferControlPanel: React.FC<SeferControlPanelProps> = ({
             id="sefer-chapter-select"
             value={selectedChapter}
             onChange={(e) => setSelectedChapter(e.target.value)}
-            className="control-select flex-[1]"
+            className="control-select flex-1"
           >
             {chapters.map((ch) => (
               <option key={ch} value={ch}>{ch}</option>
@@ -123,7 +123,7 @@ const SeferControlPanel: React.FC<SeferControlPanelProps> = ({
                 setSelectedVerse(e.target.value);
               }
             }}
-            className="control-select flex-[1]"
+            className="control-select flex-1"
           >
             {verses.map((v) => (
               <option key={v} value={v}>{v}</option>
@@ -189,7 +189,7 @@ const SeferControlPanel: React.FC<SeferControlPanelProps> = ({
                     value={currentVerse.verseStart}
                     onChange={(e) => handleActiveRangeChange(e.target.value, currentVerse.verseEnd!)}
                     title="Versículo inicial del rango proyectado"
-                    className="h-8 rounded-md border border-gray-700 bg-gray-800 px-1.5 text-[10px] font-bold text-gray-200 focus:outline-none focus:ring-1 focus:ring-yellow-500 disabled:opacity-40"
+                    className="h-8 rounded-md border border-gray-700 bg-gray-800 px-1.5 text-[10px] font-bold text-gray-200 focus:outline-hidden focus:ring-1 focus:ring-yellow-500 disabled:opacity-40"
                   >
                     {verses
                       .filter((verse) => Number(verse) <= Number(currentVerse.verseEnd!))
@@ -202,7 +202,7 @@ const SeferControlPanel: React.FC<SeferControlPanelProps> = ({
                     value={currentVerse.verseEnd}
                     onChange={(e) => handleActiveRangeChange(currentVerse.verseStart!, e.target.value)}
                     title="Versículo final del rango proyectado"
-                    className="h-8 rounded-md border border-gray-700 bg-gray-800 px-1.5 text-[10px] font-bold text-gray-200 focus:outline-none focus:ring-1 focus:ring-yellow-500 disabled:opacity-40"
+                    className="h-8 rounded-md border border-gray-700 bg-gray-800 px-1.5 text-[10px] font-bold text-gray-200 focus:outline-hidden focus:ring-1 focus:ring-yellow-500 disabled:opacity-40"
                   >
                     {verses
                       .filter((verse) => Number(verse) >= Number(currentVerse.verseStart!))
@@ -217,7 +217,7 @@ const SeferControlPanel: React.FC<SeferControlPanelProps> = ({
                   onChange={(e) => setEndVerse(e.target.value)}
                   disabled={!currentVerse}
                   title="Versículo final opcional"
-                  className="h-8 rounded-md border border-gray-700 bg-gray-800 px-1.5 text-[10px] font-bold text-gray-200 focus:outline-none focus:ring-1 focus:ring-yellow-500 disabled:opacity-40"
+                  className="h-8 rounded-md border border-gray-700 bg-gray-800 px-1.5 text-[10px] font-bold text-gray-200 focus:outline-hidden focus:ring-1 focus:ring-yellow-500 disabled:opacity-40"
                 >
                   <option value=""></option>
                   {verses

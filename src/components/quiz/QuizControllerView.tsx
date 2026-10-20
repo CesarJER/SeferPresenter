@@ -204,7 +204,7 @@ export const QuizControllerView: React.FC<QuizControllerViewProps> = ({
                       const val = parseInt(e.target.value, 10);
                       if (!isNaN(val) && val > 0) onAdjustTimer(val);
                     }}
-                    className="w-12 rounded border border-gray-700 bg-gray-900 px-1 py-0.5 text-center text-white focus:outline-none focus:ring-1 focus:ring-yellow-500 font-mono text-[11px]"
+                    className="w-12 rounded-sm border border-gray-700 bg-gray-900 px-1 py-0.5 text-center text-white focus:outline-hidden focus:ring-1 focus:ring-yellow-500 font-mono text-[11px]"
                     title="Editar segundos"
                   />
                   <span>s</span>
@@ -300,14 +300,14 @@ export const QuizControllerView: React.FC<QuizControllerViewProps> = ({
             <button
               type="button"
               onClick={onPlayApplause}
-              className="flex items-center gap-1 rounded border border-emerald-800 bg-emerald-950/40 px-2 py-1 text-[10px] font-bold text-emerald-400 hover:bg-emerald-900/50"
+              className="flex items-center gap-1 rounded-sm border border-emerald-800 bg-emerald-950/40 px-2 py-1 text-[10px] font-bold text-emerald-400 hover:bg-emerald-900/50"
             >
               <CheckCircle size={10} /> Aplausos
             </button>
             <button
               type="button"
               onClick={onPlayMal}
-              className="flex items-center gap-1 rounded border border-red-800 bg-red-950/40 px-2 py-1 text-[10px] font-bold text-red-400 hover:bg-red-900/50"
+              className="flex items-center gap-1 rounded-sm border border-red-800 bg-red-950/40 px-2 py-1 text-[10px] font-bold text-red-400 hover:bg-red-900/50"
             >
               <XCircle size={10} /> Mal
             </button>

@@ -392,8 +392,8 @@ const PresenterScreen: React.FC<PresenterScreenProps> = ({
 
       {!isVideoSlide && !isPhotoSlide && (
         <>
-          <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/50 to-black/22 pointer-events-none" />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/78 via-black/12 to-black/28 pointer-events-none" />
+          <div className="absolute inset-0 bg-linear-to-r from-black/80 via-black/50 to-black/22 pointer-events-none" />
+          <div className="absolute inset-0 bg-linear-to-t from-black/78 via-black/12 to-black/28 pointer-events-none" />
         </>
       )}
 
@@ -401,7 +401,7 @@ const PresenterScreen: React.FC<PresenterScreenProps> = ({
         <div className="relative z-20 flex h-full items-center justify-center">
           <button
             onClick={onLogoClick}
-            className="rounded-full bg-white/12 p-8 shadow-2xl backdrop-blur-md transition-transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-white/70 cursor-pointer"
+            className="rounded-full bg-white/12 p-8 shadow-2xl backdrop-blur-md transition-transform hover:scale-105 focus:outline-hidden focus:ring-2 focus:ring-white/70 cursor-pointer"
             title="Abrir Menú"
           >
             <img
@@ -530,7 +530,7 @@ const PresenterScreen: React.FC<PresenterScreenProps> = ({
 
             {/* Injected Audio Panel from Audience Screen */}
             {!isResultsSlide && liveAudioPanel && (
-              <div className="flex items-end justify-center fixed bottom-[4vh] left-1/2 -translate-x-1/2 md:static md:translate-x-0 md:bottom-auto md:left-auto w-full md:w-auto z-[60] pointer-events-auto">
+              <div className="flex items-end justify-center fixed bottom-[4vh] left-1/2 -translate-x-1/2 md:static md:translate-x-0 md:bottom-auto md:left-auto w-full md:w-auto z-60 pointer-events-auto">
                 {liveAudioPanel}
               </div>
             )}

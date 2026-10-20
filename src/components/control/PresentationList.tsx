@@ -118,7 +118,7 @@ export const PresentationList: React.FC<PresentationListProps> = ({
                   </span>
                 )}
                 {showContentBadge && (
-                  <span className="px-1.5 py-0.5 rounded text-[9px] font-medium bg-blue-950/40 text-blue-300 border border-blue-800/30">
+                  <span className="px-1.5 py-0.5 rounded-sm text-[9px] font-medium bg-blue-950/40 text-blue-300 border border-blue-800/30">
                     Letra coincidente
                   </span>
                 )}
@@ -143,7 +143,7 @@ export const PresentationList: React.FC<PresentationListProps> = ({
                 <button
                   type="button"
                   onClick={() => onStartEditing(presentation)}
-                  className="p-1.5 text-gray-400 hover:text-yellow-400 hover:bg-gray-700/60 rounded transition-all cursor-pointer"
+                  className="p-1.5 text-gray-400 hover:text-yellow-400 hover:bg-gray-700/60 rounded-sm transition-all cursor-pointer"
                   title="Editar contenido"
                 >
                   <Pencil size={14} />
@@ -152,7 +152,7 @@ export const PresentationList: React.FC<PresentationListProps> = ({
                   type="button"
                   disabled={originalIdx === 0}
                   onClick={() => onMovePresentationUp(originalIdx)}
-                  className="p-1 text-gray-400 hover:text-white disabled:opacity-30 disabled:pointer-events-none hover:bg-gray-700/60 rounded transition-colors cursor-pointer"
+                  className="p-1 text-gray-400 hover:text-white disabled:opacity-30 disabled:pointer-events-none hover:bg-gray-700/60 rounded-sm transition-colors cursor-pointer"
                   title="Mover Arriba"
                 >
                   <ArrowUp size={14} />
@@ -161,7 +161,7 @@ export const PresentationList: React.FC<PresentationListProps> = ({
                   type="button"
                   disabled={originalIdx === presentations.length - 1}
                   onClick={() => onMovePresentationDown(originalIdx)}
-                  className="p-1 text-gray-400 hover:text-white disabled:opacity-30 disabled:pointer-events-none hover:bg-gray-700/60 rounded transition-colors cursor-pointer"
+                  className="p-1 text-gray-400 hover:text-white disabled:opacity-30 disabled:pointer-events-none hover:bg-gray-700/60 rounded-sm transition-colors cursor-pointer"
                   title="Mover Abajo"
                 >
                   <ArrowDown size={14} />
@@ -169,7 +169,7 @@ export const PresentationList: React.FC<PresentationListProps> = ({
                 <button
                   type="button"
                   onClick={() => onDeletePresentation(originalIdx)}
-                  className="p-1 text-red-400 hover:text-red-300 hover:bg-red-950/20 rounded transition-colors cursor-pointer"
+                  className="p-1 text-red-400 hover:text-red-300 hover:bg-red-950/20 rounded-sm transition-colors cursor-pointer"
                   title="Eliminar Presentación"
                 >
                   <Trash2 size={14} />
@@ -185,7 +185,7 @@ export const PresentationList: React.FC<PresentationListProps> = ({
                   <div className="text-[10px] font-bold uppercase tracking-wider text-gray-500">
                     Diapositivas (Haz clic en una para mostrarla):
                   </div>
-                  <div className="flex flex-wrap gap-1.5 max-h-[10rem] overflow-y-auto py-1">
+                  <div className="flex flex-wrap gap-1.5 max-h-40 overflow-y-auto py-1">
                     {presentation.slides.map((slide, slideIdx) => {
                       const slideMatchesQuery =
                         hasSearch &&
@@ -231,7 +231,7 @@ export const PresentationList: React.FC<PresentationListProps> = ({
             value={searchQuery}
             onChange={(event) => setSearchQuery(event.target.value)}
             onKeyDown={(event) => event.key === 'Escape' && setSearchQuery('')}
-            className="w-full bg-white border border-gray-300 rounded-md pl-3 pr-8 py-1.5 text-xs text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
+            className="w-full bg-white border border-gray-300 rounded-md pl-3 pr-8 py-1.5 text-xs text-gray-900 placeholder-gray-400 focus:outline-hidden focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
           />
           {searchQuery && (
             <button
@@ -240,7 +240,7 @@ export const PresentationList: React.FC<PresentationListProps> = ({
                 setSearchQuery('');
                 searchInputRef.current?.focus();
               }}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700 focus:outline-none p-0.5 rounded cursor-pointer transition-colors"
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700 focus:outline-hidden p-0.5 rounded-sm cursor-pointer transition-colors"
               title="Limpiar búsqueda"
               aria-label="Limpiar búsqueda"
             >
@@ -263,7 +263,7 @@ export const PresentationList: React.FC<PresentationListProps> = ({
           <button
             type="button"
             onClick={onStartEditingNew}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold bg-yellow-600 hover:bg-yellow-500 transition-colors text-white cursor-pointer shadow-sm"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold bg-yellow-600 hover:bg-yellow-500 transition-colors text-white cursor-pointer shadow-xs"
           >
             <Plus size={13} />
             <span>Nueva Presentación</span>

@@ -124,7 +124,7 @@ export const LiveAudioParticipantRow: React.FC<LiveAudioParticipantRowProps> = (
           <button
             onClick={() => onGrant(participant.participantId)}
             disabled={!audioReady}
-            className="flex items-center gap-1 bg-green-600 hover:bg-green-500 text-white px-2 py-1 rounded text-xs"
+            className="flex items-center gap-1 bg-green-600 hover:bg-green-500 text-white px-2 py-1 rounded-sm text-xs"
             title={audioReady ? 'Conceder palabra' : 'Esperando conexión de audio; Audience debe reintentar el audio'}
           >
             <Hand size={14} />
@@ -136,7 +136,7 @@ export const LiveAudioParticipantRow: React.FC<LiveAudioParticipantRowProps> = (
           <button
             onClick={() => onGrant(participant.participantId)}
             disabled={!audioReady}
-            className="flex items-center gap-1 bg-gray-700 hover:bg-gray-600 text-white px-2 py-1 rounded text-xs"
+            className="flex items-center gap-1 bg-gray-700 hover:bg-gray-600 text-white px-2 py-1 rounded-sm text-xs"
             title={audioReady ? 'Permitir micrófono' : 'Esperando conexión de audio; Audience debe reintentar el audio'}
           >
             <MessageSquare size={14} />
@@ -167,7 +167,7 @@ export const LiveAudioParticipantRow: React.FC<LiveAudioParticipantRowProps> = (
                 onRevoke(participant.participantId);
               }
             }}
-            className="flex items-center gap-1 bg-gray-700 hover:bg-gray-600 text-white px-2 py-1 rounded text-xs"
+            className="flex items-center gap-1 bg-gray-700 hover:bg-gray-600 text-white px-2 py-1 rounded-sm text-xs"
             title="Revocar palabra"
           >
             <X size={14} className="opacity-50" />
@@ -190,7 +190,7 @@ export const LiveAudioParticipantRow: React.FC<LiveAudioParticipantRowProps> = (
             </button>
 
             {isVolumeOpen && (
-              <div className="absolute right-8 top-1/2 -translate-y-1/2 bg-gray-800 border border-gray-700 p-2 rounded shadow-xl flex items-center gap-2 z-[100] min-w-48">
+              <div className="absolute right-8 top-1/2 -translate-y-1/2 bg-gray-800 border border-gray-700 p-2 rounded-sm shadow-xl flex items-center gap-2 z-100 min-w-48">
                 <span className="text-xs font-semibold text-gray-300 w-10">
                   {volume}%
                 </span>
@@ -294,7 +294,7 @@ export const LiveAudioParticipantRow: React.FC<LiveAudioParticipantRowProps> = (
         {participant.isKicked && onRescue && (
           <button
             onClick={() => onRescue(participant.participantId)}
-            className="flex items-center gap-1 bg-blue-700 hover:bg-blue-600 text-white px-2 py-1 rounded text-xs"
+            className="flex items-center gap-1 bg-blue-700 hover:bg-blue-600 text-white px-2 py-1 rounded-sm text-xs"
             title="Restablecer como activo (permite volver a pedir turno)"
           >
             <RotateCcw size={14} />
@@ -309,7 +309,7 @@ export const LiveAudioParticipantRow: React.FC<LiveAudioParticipantRowProps> = (
                 onRemove(participant.participantId);
               }
             }}
-            className="flex items-center gap-1 bg-slate-700 hover:bg-slate-600 text-gray-200 px-2 py-1 rounded text-xs transition-colors"
+            className="flex items-center gap-1 bg-slate-700 hover:bg-slate-600 text-gray-200 px-2 py-1 rounded-sm text-xs transition-colors"
             title="Expulsar a la puerta (no bloquea, puede volver)"
           >
             <Trash2 size={13} />
@@ -324,7 +324,7 @@ export const LiveAudioParticipantRow: React.FC<LiveAudioParticipantRowProps> = (
                 onBlock(participant.participantId);
               }
             }}
-            className="flex items-center gap-1 bg-red-800 hover:bg-red-700 text-white px-2 py-1 rounded text-xs transition-colors"
+            className="flex items-center gap-1 bg-red-800 hover:bg-red-700 text-white px-2 py-1 rounded-sm text-xs transition-colors"
             title="Bloquear acceso totalmente"
           >
             <XCircle size={13} />

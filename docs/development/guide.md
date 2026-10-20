@@ -65,6 +65,9 @@ sentidos; una prueba de un productor no valida todos los consumidores.
 
 ## Convenciones y modificación segura
 
+- Los estilos usan Tailwind CSS 4 mediante `@tailwindcss/postcss`. El tema hebreo,
+  las utilidades propias (`@utility`) y las fuentes escaneadas (`@source`) se
+  mantienen en `src/index.css`; no hay un `tailwind.config.js` paralelo.
 - Mantener coordinadores pequeños y lógica reusable en hooks/utilidades; no
   volver a concentrar comportamiento en App, MenuPopup o PresenterScreen.
 - Componentes de proyección renderizan desde props. Si varias capas transportan

@@ -102,25 +102,25 @@ export const ScriptureRangeEditor: React.FC<ScriptureRangeEditorProps> = ({ slid
         <input
           value={bookToken}
           onChange={(e) => setBookToken(e.target.value)}
-          className="w-full rounded border border-gray-700 bg-gray-900 px-2 py-1 text-[11px] text-white focus:outline-none focus:ring-1 focus:ring-yellow-500"
+          className="w-full rounded-sm border border-gray-700 bg-gray-900 px-2 py-1 text-[11px] text-white focus:outline-hidden focus:ring-1 focus:ring-yellow-500"
           placeholder="Gn"
         />
         <input
           value={chapter}
           onChange={(e) => setChapter(e.target.value)}
-          className="w-full rounded border border-gray-700 bg-gray-900 px-2 py-1 text-[11px] text-white focus:outline-none focus:ring-1 focus:ring-yellow-500"
+          className="w-full rounded-sm border border-gray-700 bg-gray-900 px-2 py-1 text-[11px] text-white focus:outline-hidden focus:ring-1 focus:ring-yellow-500"
           placeholder="Cap"
         />
         <input
           value={verseStart}
           onChange={(e) => setVerseStart(e.target.value)}
-          className="w-full rounded border border-gray-700 bg-gray-900 px-2 py-1 text-[11px] text-white focus:outline-none focus:ring-1 focus:ring-yellow-500"
+          className="w-full rounded-sm border border-gray-700 bg-gray-900 px-2 py-1 text-[11px] text-white focus:outline-hidden focus:ring-1 focus:ring-yellow-500"
           placeholder="Ver"
         />
         <input
           value={verseEnd}
           onChange={(e) => setVerseEnd(e.target.value)}
-          className="w-full rounded border border-gray-700 bg-gray-900 px-2 py-1 text-[11px] text-white focus:outline-none focus:ring-1 focus:ring-yellow-500"
+          className="w-full rounded-sm border border-gray-700 bg-gray-900 px-2 py-1 text-[11px] text-white focus:outline-hidden focus:ring-1 focus:ring-yellow-500"
           placeholder="End"
         />
         <button
@@ -169,7 +169,7 @@ export const ScriptureRangeEditor: React.FC<ScriptureRangeEditorProps> = ({ slid
                             className="w-5 h-5 rounded-full bg-white/5 hover:bg-yellow-600 text-gray-400 hover:text-white border border-white/10 transition-all flex items-center justify-center cursor-pointer"
                             title={`Ir al verso ${verse.verse}`}
                           >
-                            <Play size={9} fill="currentColor" className="ml-[1px]" />
+                            <Play size={9} fill="currentColor" className="ml-px" />
                           </button>
                         </div>
                       </td>
@@ -180,7 +180,7 @@ export const ScriptureRangeEditor: React.FC<ScriptureRangeEditorProps> = ({ slid
                         <select
                           value={slide.scriptureVerseBackgrounds?.[verse.verse] || 'Principal'}
                           onChange={(e) => onVerseBackgroundChange(verse.verse, e.target.value)}
-                          className="w-full rounded border border-gray-700 bg-gray-900 px-1.5 py-1 text-[10px] text-gray-200"
+                          className="w-full rounded-sm border border-gray-700 bg-gray-900 px-1.5 py-1 text-[10px] text-gray-200"
                         >
                           {['Principal', 'Anterior', 'Ignorar', 'No cambiar', ...backgrounds].map((bgOption) => (
                             <option key={bgOption} value={bgOption}>{bgOption.split('/').pop() || bgOption}</option>

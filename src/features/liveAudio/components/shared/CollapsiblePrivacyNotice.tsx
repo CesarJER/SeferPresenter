@@ -100,14 +100,14 @@ export const CollapsiblePrivacyNotice: React.FC<CollapsiblePrivacyNoticeProps> =
         <p>
           Los mensajes privados llegan a Control. Evite datos de terceros o información que no sea necesaria para participar.
         </p>
-        <p className="rounded border border-amber-700/60 bg-amber-950/30 p-2 text-amber-100">
+        <p className="rounded-sm border border-amber-700/60 bg-amber-950/30 p-2 text-amber-100">
           Antes de hablar, evite decir su nombre completo u otros datos que le identifiquen y compruebe que no se oyen conversaciones o voces de fondo. Las plataformas externas pueden generar subtítulos automáticos de lo que diga.
         </p>
         {!privacySummary && !legalLoadError && (
           <p role="status" className="text-gray-400">Cargando información básica de protección de datos…</p>
         )}
         {legalLoadError && (
-          <p role="alert" className="rounded border border-red-700 bg-red-950/40 p-2 text-red-100">
+          <p role="alert" className="rounded-sm border border-red-700 bg-red-950/40 p-2 text-red-100">
             No se pudo cargar la información legal aplicable. La intervención por micrófono permanecerá bloqueada.
           </p>
         )}
@@ -135,7 +135,7 @@ export const CollapsiblePrivacyNotice: React.FC<CollapsiblePrivacyNoticeProps> =
         <label className="flex cursor-pointer items-start gap-2">
           <input
             type="checkbox"
-            className="mt-1 h-4 w-4 rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500"
+            className="mt-1 h-4 w-4 rounded-sm border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500"
             checked={checkedInformation}
             onChange={(event) => setCheckedInformation(event.target.checked)}
           />
@@ -144,7 +144,7 @@ export const CollapsiblePrivacyNotice: React.FC<CollapsiblePrivacyNoticeProps> =
         <label className="flex cursor-pointer items-start gap-2">
           <input
             type="checkbox"
-            className="mt-1 h-4 w-4 rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500"
+            className="mt-1 h-4 w-4 rounded-sm border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500"
             checked={checkedMicrophone}
             onChange={(event) => setCheckedMicrophone(event.target.checked)}
           />
@@ -152,7 +152,7 @@ export const CollapsiblePrivacyNotice: React.FC<CollapsiblePrivacyNoticeProps> =
             Autorizo específicamente la activación de mi micrófono para esta intervención y comprendo los destinatarios indicados para el estado actual.
           </span>
         </label>
-        <fieldset className="space-y-2 rounded border border-gray-700 p-3">
+        <fieldset className="space-y-2 rounded-sm border border-gray-700 p-3">
           <legend className="px-1 text-sm font-medium text-gray-200">Edad y autorización</legend>
           <label className="flex cursor-pointer items-start gap-2">
             <input
@@ -180,12 +180,12 @@ export const CollapsiblePrivacyNotice: React.FC<CollapsiblePrivacyNoticeProps> =
             <span>Tengo menos de 14 años.</span>
           </label>
           {agePath === 'under14' && (
-            <label className="ml-6 flex cursor-pointer items-start gap-2 rounded bg-gray-900/60 p-2">
+            <label className="ml-6 flex cursor-pointer items-start gap-2 rounded-sm bg-gray-900/60 p-2">
               <input
                 type="checkbox"
                 checked={checkedGuardian}
                 onChange={(event) => setCheckedGuardian(event.target.checked)}
-                className="mt-1 h-4 w-4 rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500"
+                className="mt-1 h-4 w-4 rounded-sm border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500"
               />
               <span>
                 Mi padre, madre o tutor legal está presente, ha leído este aviso y autoriza específicamente esta intervención por micrófono.

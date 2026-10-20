@@ -166,7 +166,7 @@ export const PresentationEditor: React.FC<PresentationEditorProps> = ({
                       value={title}
                       onChange={e => setTitle(e.target.value)}
                       placeholder="Escribe el título..."
-                      className="bg-transparent border-b border-transparent hover:border-gray-700 focus:border-yellow-500 outline-none text-base font-bold text-white px-2 py-1 flex-1 min-w-0 transition-colors"
+                      className="bg-transparent border-b border-transparent hover:border-gray-700 focus:border-yellow-500 outline-hidden text-base font-bold text-white px-2 py-1 flex-1 min-w-0 transition-colors"
                     />
                   </div>
                   <div className="flex flex-wrap items-center gap-3 justify-end">
@@ -200,7 +200,7 @@ export const PresentationEditor: React.FC<PresentationEditorProps> = ({
                             alert('Se han configurado todos los fondos de las diapositivas al seleccionado.');
                           }
                         }}
-                        className="p-1.5 rounded bg-yellow-600 hover:bg-yellow-500 text-white transition-all cursor-pointer flex items-center justify-center"
+                        className="p-1.5 rounded-sm bg-yellow-600 hover:bg-yellow-500 text-white transition-all cursor-pointer flex items-center justify-center"
                         title="Aplicar este fondo a todas las diapositivas"
                       >
                         <Layers size={13} />
@@ -224,7 +224,7 @@ export const PresentationEditor: React.FC<PresentationEditorProps> = ({
                                 }}
                                 className={`px-2 py-0.5 rounded text-[10px] font-bold transition-colors cursor-pointer whitespace-nowrap ${
                                   active 
-                                    ? 'bg-yellow-600 text-white shadow-sm' 
+                                    ? 'bg-yellow-600 text-white shadow-xs'
                                     : 'bg-gray-700 text-gray-400 hover:text-white hover:bg-gray-600'
                                 }`}
                                 title={`Asignar tag '${tag}' para publicación en catálogo`}
@@ -334,7 +334,7 @@ export const PresentationEditor: React.FC<PresentationEditorProps> = ({
                                   <button
                                     type="button"
                                     onClick={handleTransliterateAllTable}
-                                    className="inline-flex items-center gap-1 bg-blue-600 hover:bg-blue-500 text-white text-[10px] px-2.5 py-1 rounded transition-all cursor-pointer shadow-sm"
+                                    className="inline-flex items-center gap-1 bg-blue-600 hover:bg-blue-500 text-white text-[10px] px-2.5 py-1 rounded-sm transition-all cursor-pointer shadow-xs"
                                     title="Generar transliteración para todas las diapositivas"
                                   >
                                     <Languages size={10} />
@@ -391,7 +391,7 @@ export const PresentationEditor: React.FC<PresentationEditorProps> = ({
                     </div>
 
                     {/* Add Slide button with integrated secondary shortcuts */}
-                    <div className="mt-1 flex items-center justify-between gap-2 w-full rounded-md border border-dashed border-gray-650 bg-gray-900/20 px-3 py-2 text-xs font-bold shadow-sm">
+                    <div className="mt-1 flex items-center justify-between gap-2 w-full rounded-md border border-dashed border-gray-650 bg-gray-900/20 px-3 py-2 text-xs font-bold shadow-xs">
                       {/* Left: + Image Shortcut */}
                       <button
                         type="button"
@@ -439,7 +439,7 @@ export const PresentationEditor: React.FC<PresentationEditorProps> = ({
                   mode === 'standard' ? (
                     <div className="flex flex-col gap-3">
                       <textarea
-                        className={`${textareaClass} min-h-[20rem] md:min-h-[26rem]`}
+                        className={`${textareaClass} min-h-80 md:min-h-104`}
                         value={standardText}
                         onChange={e => setStandardText(e.target.value)}
                         placeholder={'#Coro\nEste es un ejemplo de coro.\n\nEste es el párrafo 1.'}
@@ -462,7 +462,7 @@ export const PresentationEditor: React.FC<PresentationEditorProps> = ({
                           </button>
                         </div>
                         <textarea
-                          className={`${textareaClass} min-h-[20rem] md:min-h-[24rem]`}
+                          className={`${textareaClass} min-h-80 md:min-h-96`}
                           value={hebText}
                           onChange={e => setHebText(e.target.value)}
                           dir="rtl"
@@ -473,7 +473,7 @@ export const PresentationEditor: React.FC<PresentationEditorProps> = ({
                       <div className="flex flex-col gap-1.5">
                         <label className="text-xs font-semibold uppercase tracking-wide text-gray-400">Transliteración</label>
                         <textarea
-                          className={`${textareaClass} min-h-[20rem] md:min-h-[24rem]`}
+                          className={`${textareaClass} min-h-80 md:min-h-96`}
                           value={transText}
                           onChange={e => setTransText(e.target.value)}
                           placeholder={'> Mi título\nShemá Israel'}
@@ -483,7 +483,7 @@ export const PresentationEditor: React.FC<PresentationEditorProps> = ({
                       <div className="flex flex-col gap-1.5">
                         <label className="text-xs font-semibold uppercase tracking-wide text-gray-400">Traducción</label>
                         <textarea
-                          className={`${textareaClass} min-h-[20rem] md:min-h-[24rem]`}
+                          className={`${textareaClass} min-h-80 md:min-h-96`}
                           value={traText}
                           onChange={e => setTraText(e.target.value)}
                           placeholder={'> Mi título\nEscucha Israel'}

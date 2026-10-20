@@ -206,9 +206,9 @@ export const QuizPresenterView: React.FC<QuizPresenterViewProps> = ({
                 const isWrongDemo = isDemoSelected && !opt.isCorrect;
 
                 let borderColor = 'glass-panel';
-                if (showCorrect) borderColor = 'glass-panel border-emerald-500/70 !bg-emerald-950/60 shadow-[inset_0_0_20px_rgba(16,185,129,0.3)]';
-                if (isDemoSelected && showCorrect) borderColor = 'glass-panel border-emerald-400 !bg-emerald-900/70 shadow-lg shadow-emerald-500/30';
-                if (isWrongDemo) borderColor = 'glass-panel border-red-500/70 !bg-red-950/60 shadow-[inset_0_0_20px_rgba(239,68,68,0.3)]';
+                if (showCorrect) borderColor = 'glass-panel border-emerald-500/70 bg-emerald-950/60! shadow-[inset_0_0_20px_rgba(16,185,129,0.3)]';
+                if (isDemoSelected && showCorrect) borderColor = 'glass-panel border-emerald-400 bg-emerald-900/70! shadow-lg shadow-emerald-500/30';
+                if (isWrongDemo) borderColor = 'glass-panel border-red-500/70 bg-red-950/60! shadow-[inset_0_0_20px_rgba(239,68,68,0.3)]';
 
                 return (
                   <div

@@ -27,12 +27,12 @@ export const DataProtectionLink: React.FC<DataProtectionLinkProps> = ({
       className={`${className} group relative overflow-hidden`}
       title="Información sobre privacidad y protección de datos"
     >
-      <Shield className="w-3.5 h-3.5 flex-shrink-0" />
+      <Shield className="w-3.5 h-3.5 shrink-0" />
       <span 
         className={`transition-all duration-500 ease-in-out overflow-hidden whitespace-nowrap ${
           isCollapsed 
-            ? 'max-w-0 group-hover:max-w-[15rem] opacity-0 group-hover:opacity-100 group-hover:ml-1' 
-            : 'max-w-[15rem] opacity-100 ml-1'
+            ? 'max-w-0 group-hover:max-w-60 opacity-0 group-hover:opacity-100 group-hover:ml-1'
+            : 'max-w-60 opacity-100 ml-1'
         }`}
       >
         {text}
