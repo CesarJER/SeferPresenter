@@ -1,4 +1,4 @@
-FROM node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293 AS builder
+FROM node:24-alpine@sha256:44fce696f38ba8c987c4db89954051000bbd05ffd8d8659ba15ed4a8602e937f AS builder
 
 WORKDIR /app
 COPY package.json package-lock.json ./
@@ -38,7 +38,7 @@ COPY static ./static
 COPY examples ./examples
 RUN npx tsc -b && npx vite build
 
-FROM node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293 AS production
+FROM node:24-alpine@sha256:44fce696f38ba8c987c4db89954051000bbd05ffd8d8659ba15ed4a8602e937f AS production
 
 WORKDIR /app
 

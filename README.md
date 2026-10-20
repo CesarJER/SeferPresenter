@@ -73,8 +73,8 @@ Administración completa de la sesión: selección de textos, control de fondos 
 
 ## Probarlo en desarrollo local
 
-Necesita Git, npm y una versión de Node compatible con el lockfile:
-`^20.19.0 || >=22.12.0`. Docker no es necesario para el frontend/backend base.
+Necesita Git, npm y Node.js 24 LTS (`24.x`). Docker no es necesario para el
+frontend/backend base.
 
 ```sh
 git clone https://github.com/CesarJER/SeferPresenter.git
