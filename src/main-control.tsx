@@ -16,7 +16,7 @@ import { useLiveAudioAvailability } from './features/liveAudio/hooks/useLiveAudi
 import type { AudioState, AudioSyncMap, AudioTimelineState } from './types/audio';
 import { DEFAULT_AUDIO_STATE } from './types/audio';
 import type { AppMode, Presentation, ScriptureNavState, Slide, VideoState } from './types/presentation';
-import type { SeferReaderState } from './hooks/useSeferReader';
+import type { SeferReaderState } from './types/scripture';
 import type { QuizSyncState } from './types/quiz';
 import type { AutoduckState } from './types/sync';
 

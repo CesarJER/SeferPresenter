@@ -31,7 +31,7 @@ import {
   serializeVisibleParticipants,
 } from '../../utils/activeParticipants';
 import type { ScriptureNavState } from '../../../../types/presentation';
-import type { SeferReaderState } from '../../../../hooks/useSeferReader';
+import type { SeferReaderState } from '../../../../types/scripture';
 import { isValidEphemeralParticipantId } from '../../../../utils/validation';
 import type { VoiceScriptureCandidate } from '../../../voiceScripture/voiceScriptureParser';
 import type { VoiceSessionPhase } from '../../../voiceScripture/voiceScriptureSession';

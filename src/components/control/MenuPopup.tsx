@@ -3,7 +3,7 @@ import { sameValue } from '../../utils/catalogMerge';
 import { useUiTranslation } from '../../i18n/useUiTranslation';
 import React, { useCallback, useEffect, useState, useRef, Suspense, lazy } from 'react';
 import type { Presentation, QuizData, Slide, VideoState, AppMode, ScriptureNavState } from '../../types/presentation';
-import type { SeferReaderState } from '../../hooks/useSeferReader';
+import type { SeferReaderState } from '../../types/scripture';
 import { transliterateText } from '../../utils/transliterate';
 import { parseMediaSlideString, serializeMediaToText } from '../../utils/mediaUtils';
 import {

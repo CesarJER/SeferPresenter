@@ -2,7 +2,7 @@ import type { AudioState, AudioTimelineAction, AudioTimelineState } from './audi
 import type { LiveAudioBroadcastMessage } from './liveAudio';
 import type { AppMode, Presentation, ScriptureNavState, VideoState } from './presentation';
 import type { QuizSyncState } from './quiz';
-import type { SeferReaderState } from '../hooks/useSeferReader';
+import type { SeferReaderState } from './scripture';
 
 export const SYNC_PROTOCOL_VERSION = 1;
 

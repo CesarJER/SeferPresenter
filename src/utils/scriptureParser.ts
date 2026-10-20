@@ -1,5 +1,5 @@
 import Papa from 'papaparse';
-import type { VerseData } from '../hooks/useSeferReader';
+import type { VerseData } from '../types/scripture';
 import { removeNiqqudPreserveHtml, sanitizeHtml } from './hebrewText';
 
 export const parseVerses = (source: string): VerseData[] => {

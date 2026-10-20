@@ -34,7 +34,7 @@ import { useAudioTimeline } from './hooks/useAudioTimeline';
 import { useAudioTimelineApplicator } from './hooks/useAudioTimelineApplicator';
 import { useScriptureNavigation } from './hooks/useScriptureNavigation';
 import { useQuizAudio } from './hooks/useQuizAudio';
-import type { SeferReaderState } from './hooks/useSeferReader';
+import type { SeferReaderState } from './types/scripture';
 import { useQuizTimer } from './hooks/useQuizTimer';
 import { validateAudioSyncMaps, validatePresentationList } from './utils/validation';
 import { generateQuizSubslides, calcMaxBaseCentipunts } from './utils/quizUtils';

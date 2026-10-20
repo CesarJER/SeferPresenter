@@ -1,25 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { loadBookData, getMetadata } from '../utils/metadataCache';
 import { parseVerses } from '../utils/scriptureParser';
+import type { SeferReaderState, VerseData } from '../types/scripture';
 
 // ---------------------------------------------------------------------------
-// Types (inline — avoids @sefer/core circular dep during bootstrap)
+// Metadata types
 // ---------------------------------------------------------------------------
-export interface VerseData {
-  bookEs: string;
-  bookAbbrevEs: string;
-  bookHeb: string;
-  chapter: string;
-  verse: string;
-  verseNikud: string;
-  verseNikudClean?: string;
-  verseNikudSanitized?: string;
-  verseNikudCleanSanitized?: string;
-  transliteration: string;
-  translation: string;
-  DIR?: string;
-}
-
 export interface BookMetadata {
   bookHeb: string;
   bookAbbrevEs: string;
@@ -28,26 +14,6 @@ export interface BookMetadata {
 }
 
 export type AppMetadata = Record<string, BookMetadata>;
-
-// ---------------------------------------------------------------------------
-// State types
-// ---------------------------------------------------------------------------
-export interface SeferReaderState {
-  bookEs: string;
-  bookHeb: string;
-  bookAbbrevEs: string;
-  chapter: string;
-  verseStart?: string;
-  verse: string;
-  verseEnd?: string;
-  verseNikud: string;
-  verseNikudSanitized?: string;
-  transliteration: string;
-  translation: string;
-  verseIdx: number;       // index in loaded book data
-  totalVerses: number;    // total verses in loaded book
-  scriptureKind?: 'tanaj' | 'sefer';
-}
 
 interface UseSeferReaderResult {
   metadata: AppMetadata;

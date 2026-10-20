@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ScriptureNavState } from '../types/presentation';
-import { useSeferReader, type SeferReaderState } from './useSeferReader';
+import { useSeferReader } from './useSeferReader';
+import type { SeferReaderState } from '../types/scripture';
 
 type SeferCommand = 'navigate' | 'next' | 'previous';
 type SeferPanelVariant = 'full' | 'mini';

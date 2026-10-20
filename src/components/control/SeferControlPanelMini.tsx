@@ -3,7 +3,7 @@ import { useUiTranslation } from '../../i18n/useUiTranslation';
 import React from 'react';
 import { ChevronLeft, ChevronRight, Sliders } from 'lucide-react';
 import type { ScriptureNavState } from '../../types/presentation';
-import type { SeferReaderState } from '../../hooks/useSeferReader';
+import type { SeferReaderState } from '../../types/scripture';
 import { useSeferControlLogic } from '../../hooks/useSeferControlLogic';
 
 interface SeferControlPanelMiniProps {
