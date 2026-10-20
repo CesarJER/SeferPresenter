@@ -143,6 +143,28 @@ En shells compatibles pueden usarse `npm`/`npx` sin `.cmd`. El tsconfig raíz
 solo contiene referencias; un `tsc --noEmit` sin proyecto no comprueba los hijos.
 La configuración no habilita strict ni type-check del backend `.mjs`.
 
+Los [límites arquitectónicos](../adr/0005-minimal-dependency-boundaries.md) se
+ejecutan con los comandos existentes: `npm run lint` comprueba imports de `src/`
+y `server/`, y `npm test` incluye `architectureBoundaries.test.ts`. CI ejecuta
+ambos. Para revisar solo estos tests:
+
+```powershell
+npm.cmd test -- __tests__/architectureBoundaries.test.ts --maxWorkers=2
+```
+
+Los fixtures usan el ESLint real y programas TypeScript sin DOM, sin crear
+archivos de producto. Los contratos se descubren recursivamente en `src/types/`.
+Las excepciones conocidas identifican archivo, interfaz, miembro, nombre de tipo
+y diagnóstico, y solo se consumen una vez. Un uso adicional, otro error o una
+excepción sobrante falla: revisar la frontera antes de modificar esa lista.
+
+Al añadir un recurso compartido, revisar su propietario estable, cleanup,
+operaciones asíncronas obsoletas y comportamiento al mover u ocultar widgets.
+StrictMode debe dejar los recursos activos correctos, aunque repita setup/cleanup.
+Mantener variantes funcionales explícitas, utilidades Tailwind 4, i18n, dirección
+del contenido hebreo, teclado, accesibilidad y pruebas responsive. Son criterios
+de revisión y comportamiento; el linter de imports no los demuestra.
+
 El build completo incluye prehooks con escrituras de corpus. Ejecútelo en un
 entorno de validación controlado, con datos autorizados y configuración explícita.
 Pasar pruebas jsdom, mocks o builds no verifica SFU, navegador físico, GPU,

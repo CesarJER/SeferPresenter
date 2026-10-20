@@ -18,6 +18,10 @@ Redactados el 2026-10-07 a partir de commits de GitHub y fuentes actuales sobre
 formal de estos registros. «Implementada» describe adopción comprobable; no
 atribuye una aprobación histórica inventada.
 
+Registro adicional de gobierno modular:
+[0005 — Límites mínimos de dependencias](0005-minimal-dependency-boundaries.md)
+(Proposed; controles de desarrollo implementados).
+
 ## Crear y mantener un ADR
 
 Numerar consecutivamente con cuatro dígitos y título descriptivo. Un ADR nuevo

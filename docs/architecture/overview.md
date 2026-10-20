@@ -48,6 +48,27 @@ Los widgets compartidos de texto, preview y documento legal permanecen en
 [cryptoUtils](../../src/utils/cryptoUtils.ts) utiliza Web Crypto y el transporte
 existente; no necesita importar el SDK LiveKit al núcleo.
 
+## Límites comprobados en desarrollo
+
+ESLint restringe los imports de `src/` y `server/` mediante
+[la regla de arquitectura](../../scripts/eslint-architecture.mjs). Los módulos de
+`src/types/` solo pueden depender de otros contratos de esa carpeta y no cargar
+módulos mediante `import()` o `require()`. Los widgets Scripture no importan como
+valores su lector o controlador; pueden importar tipos del controlador compartido.
+Solo `useLiveAudio.ts` puede importar `livekit-client`, y solo
+`server/livekit-server.mjs` puede importar `livekit-server-sdk`.
+
+[Los tests de arquitectura](../../__tests__/architectureBoundaries.test.ts)
+comprueban esos límites y compilan los contratos sin DOM, con cuatro excepciones
+exactas para dos interfaces locales del navegador en `types/liveAudio.ts`.
+No son campos del protocolo ni una exclusión de todo el archivo.
+[ADR 0005](../adr/0005-minimal-dependency-boundaries.md) detalla alcance y límites.
+
+La unicidad de recursos, limpieza de efectos, autoridad servidor, accesibilidad,
+i18n y comportamiento responsive siguen requiriendo revisión y pruebas de
+comportamiento. Estas reglas no convierten todo `utils/` en lógica portable ni
+prohíben hooks visuales, componentes React o reutilización de vistas entre roles.
+
 ## Ownership de datos y estado
 
 Aquí ownership significa responsabilidad técnica; no asignación a una persona.

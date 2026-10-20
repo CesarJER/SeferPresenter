@@ -20,6 +20,7 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npm audit --audit-level=low
       - run: npm run i18n:check
+      - run: npm run lint
       - run: npx tsc -p tsconfig.app.json --noEmit
       - run: npx tsc -p tsconfig.node.json --noEmit
       - run: npm test -- --maxWorkers=4
