@@ -73,6 +73,10 @@ sentidos; una prueba de un productor no valida todos los consumidores.
   mantienen en `src/index.css`; no hay un `tailwind.config.js` paralelo.
 - Mantener coordinadores pequeños y lógica reusable en hooks/utilidades; no
   volver a concentrar comportamiento en App, MenuPopup o PresenterScreen.
+- Para componer paneles Scripture de un mismo contexto, pasar una instancia de
+  `useSeferControlLogic` desde un host estable. Las vistas no crean lectores ni
+  listeners de teclado. El host habilita el atajo según el modo; las acciones
+  del panel completo conservan la navegación manual y las del compacto proyectan.
 - Componentes de proyección renderizan desde props. Si varias capas transportan
   los mismos campos, revisar la responsabilidad antes de ampliar prop-drilling.
 - Las props públicas de hijos compartidos/extensos se declaran en sus interfaces;

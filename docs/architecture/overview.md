@@ -33,6 +33,14 @@ Los hooks en `src/hooks/` coordinan ciclos de vida. Las utilidades en `src/utils
 contienen parsing, normalización, validación y cálculos compartidos. Los contratos
 están en `src/types/`; sus tipos no sustituyen la validación runtime.
 
+En Scripture, `MenuPopup` mantiene una instancia de `useSeferControlLogic` por
+contexto de navegación. Los paneles completo y compacto reciben ese controlador
+por props; conservan solo estado visual, como abrir el ajuste de fuentes. Mover
+u ocultar un panel no reinicia selección, rango ni carga del corpus. El host
+elige la política del único atajo de teclado; cada vista conserva su política
+de navegación manual o proyectada. El estado canónico sigue en el backend.
+Los datos portables de Scripture están en `src/types/scripture.ts`, sin React.
+
 Los widgets compartidos de texto, preview y documento legal permanecen en
 `src/components/shared/`. Los widgets dependientes de Live Audio están en
 `src/features/liveAudio/components/`. El canal crypto compartido

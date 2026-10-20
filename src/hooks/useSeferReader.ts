@@ -43,7 +43,7 @@ interface UseSeferReaderResult {
 // ---------------------------------------------------------------------------
 // Hook
 // ---------------------------------------------------------------------------
-export function useSeferReader(): UseSeferReaderResult {
+export function useSeferReader(enabled = true): UseSeferReaderResult {
   const [metadata, setMetadata] = useState<AppMetadata>({});
   const [bookData, setBookData] = useState<VerseData[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -75,8 +75,11 @@ export function useSeferReader(): UseSeferReaderResult {
   // Load metadata on mount
   // ------------------------------------------------------------------
   useEffect(() => {
+    if (!enabled) return;
+    let cancelled = false;
     getMetadata()
       .then((meta: AppMetadata) => {
+        if (cancelled) return;
         setMetadata(meta);
         metadataRef.current = meta;
         const books = Object.keys(meta);
@@ -84,23 +87,27 @@ export function useSeferReader(): UseSeferReaderResult {
           setSelectedBookState(prev => prev || books[0]);
         }
       })
-      .catch((e) => console.error('SeferReader: error loading metadata', e));
-  }, []);
+      .catch((e) => { if (!cancelled) console.error('SeferReader: error loading metadata', e); });
+    return () => { cancelled = true; };
+  }, [enabled]);
 
   // ------------------------------------------------------------------
   // Load book data when selectedBook changes
   // ------------------------------------------------------------------
   useEffect(() => {
-    if (!selectedBook || !metadataRef.current[selectedBook]) return;
+    if (!enabled || !selectedBook || !metadata[selectedBook]) return;
 
+    let cancelled = false;
     setIsLoading(true);
     loadBookData(selectedBook, parseVerses)
       .then((parsed) => {
+        if (cancelled) return;
         setBookData(parsed);
       })
-      .catch((e) => console.error('SeferReader: error loading book', e))
-      .finally(() => setIsLoading(false));
-  }, [selectedBook]);
+      .catch((e) => { if (!cancelled) console.error('SeferReader: error loading book', e); })
+      .finally(() => { if (!cancelled) setIsLoading(false); });
+    return () => { cancelled = true; };
+  }, [enabled, metadata, selectedBook]);
 
   // ------------------------------------------------------------------
   // Derived lists

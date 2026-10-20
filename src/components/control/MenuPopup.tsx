@@ -17,6 +17,7 @@ import {
 import { ArrowUp, Pencil, Maximize2, Minimize2, Music, ArrowUpDown } from 'lucide-react';
 import SeferControlPanel from './SeferControlPanel';
 import SeferControlPanelMini from './SeferControlPanelMini';
+import { useSeferControlLogic } from '../../hooks/useSeferControlLogic';
 import { MediaControls } from './MediaControls';
 import SlideVisualizer from '../shared/SlideVisualizer';
 import { BackgroundSelector } from './BackgroundSelector';
@@ -226,6 +227,16 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
     }
   };
   const isActiveScriptureSlide = !!activeSlide && (activeSlide.type === 'sefer' || activeSlide.type === 'tanaj' || !!activeSlide.scriptureBook);
+  const scriptureController = useSeferControlLogic({
+    keyboardMode: appMode === 'seferManual' ? 'manual' : isActiveScriptureSlide && scriptureState ? 'projected' : null,
+    onProject: onProjectScripture,
+    onDeactivate: () => onToggleAppMode('slides'),
+    onAddSlide: onAddScriptureSlide,
+    onBoundaryReached,
+    restoredState: scriptureState,
+    onUpdateFontSizes: onUpdateScriptureFontSizes,
+  });
+  const resolvedScriptureState = scriptureController.currentVerse;
 
   const [id, setId] = useState('');
   const [title, setTitle] = useState('');
@@ -236,8 +247,6 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isMusicPanelOpen, setIsMusicPanelOpen] = useState(false);
   const [voiceSuggestionsTarget, setVoiceSuggestionsTarget] = useState<HTMLDivElement | null>(null);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [resolvedScriptureState, setResolvedScriptureState] = useState<any>(null);
 
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const resetDialogRef = useRef<HTMLDivElement>(null);
@@ -1679,20 +1688,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
         <div className="shrink-0 border-b border-gray-700 bg-gray-950/70 flex flex-col md:flex-row">
           {appMode === 'seferManual' && (
             <div className="min-w-0 flex-1">
-              <SeferControlPanel
-                onProject={(state, cmd) => {
-                  if (onProjectScripture) {
-                    onProjectScripture(state, cmd);
-                  }
-                }}
-                onDeactivate={() => {
-                  if (onToggleAppMode) onToggleAppMode('slides');
-                }}
-                onAddSlide={onAddScriptureSlide}
-                restoredState={scriptureState}
-                onUpdateFontSizes={onUpdateScriptureFontSizes}
-                onVerseResolved={(state) => setResolvedScriptureState(state)}
-              />
+              <SeferControlPanel controller={scriptureController} />
             </div>
           )}
           <div ref={setVoiceSuggestionsTarget} className="empty:hidden md:w-64 md:shrink-0" />
@@ -1833,17 +1829,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                     {/* ── Sefer Control Panel Mini ───────────────────────────────── */}
                     {appMode !== 'seferManual' && isActiveScriptureSlide && scriptureState && (
                       <div id="section-sefer-control-mini" className="rounded-md border border-gray-800 bg-gray-950/50">
-                        <SeferControlPanelMini
-                          onProject={(state, cmd) => {
-                            if (onProjectScripture) {
-                              onProjectScripture(state, cmd);
-                            }
-                          }}
-                          onBoundaryReached={onBoundaryReached}
-                          restoredState={scriptureState}
-                          onUpdateFontSizes={onUpdateScriptureFontSizes}
-                          onVerseResolved={(state) => setResolvedScriptureState(state)}
-                        />
+                        <SeferControlPanelMini controller={scriptureController} />
                       </div>
                     )}
 
@@ -1909,7 +1895,11 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
           <SlideVisualizer
             slide={activeSlide}
             appMode={appMode}
-            scriptureState={resolvedScriptureState || scriptureState}
+            scriptureState={resolvedScriptureState ? {
+              ...scriptureState,
+              ...resolvedScriptureState,
+              verseStart: resolvedScriptureState.verseStart ?? resolvedScriptureState.verse,
+            } : scriptureState}
             quizSubslide={activeSlide?.type === 'quiz' ? quizSubslides[quizCurrentSubslideIndex] : undefined}
             videoState={videoState}
             isMediaMaster={isMediaMaster}

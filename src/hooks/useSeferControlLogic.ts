@@ -4,10 +4,10 @@ import { useSeferReader } from './useSeferReader';
 import type { SeferReaderState } from '../types/scripture';
 
 type SeferCommand = 'navigate' | 'next' | 'previous';
-type SeferPanelVariant = 'full' | 'mini';
+type SeferNavigationMode = 'manual' | 'projected';
 
 interface UseSeferControlLogicProps {
-  variant: SeferPanelVariant;
+  keyboardMode: SeferNavigationMode | null;
   onProject: (state: SeferReaderState, command?: SeferCommand) => void;
   onDeactivate?: () => void;
   onAddSlide?: (state: SeferReaderState, kind?: 'sefer' | 'tanaj') => void;
@@ -23,7 +23,7 @@ const clampNumber = (value: number, min: number, max: number) =>
   Math.max(min, Math.min(max, value));
 
 export function useSeferControlLogic({
-  variant,
+  keyboardMode,
   onProject,
   onDeactivate,
   onAddSlide,
@@ -32,7 +32,7 @@ export function useSeferControlLogic({
   onUpdateFontSizes,
 }: UseSeferControlLogicProps) {
   const lastSyncedStateRef = useRef<string | null>(null);
-  const [showFontSettings, setShowFontSettings] = useState(false);
+  const [hasStarted, setHasStarted] = useState(keyboardMode !== null);
   const [endVerse, setEndVerse] = useState('');
   const [hebrewFontSize, setHebrewFontSize] = useState<number>(() => {
     const val = localStorage.getItem('sefer-presenter-font-hebrew');
@@ -43,7 +43,12 @@ export function useSeferControlLogic({
     return val ? Number(val) : 40;
   });
 
-  const reader = useSeferReader();
+  // Load on first use, then retain the reader independently of its widgets.
+  useEffect(() => {
+    if (keyboardMode !== null) setHasStarted(true);
+  }, [keyboardMode]);
+
+  const reader = useSeferReader(hasStarted);
   const {
     currentVerse,
     isActive,
@@ -75,7 +80,7 @@ export function useSeferControlLogic({
   }, [restoredState, combinedTextBaseSize, hebrewFontSize]);
 
   useEffect(() => {
-    if (!restoredState) return;
+    if (!hasStarted || !restoredState) return;
     const stateKey = makeStateKey(restoredState);
     if (stateKey !== lastSyncedStateRef.current) {
       lastSyncedStateRef.current = stateKey;
@@ -87,7 +92,7 @@ export function useSeferControlLogic({
         setEndVerse('');
       }
     }
-  }, [restoreState, restoredState]);
+  }, [hasStarted, restoreState, restoredState]);
 
   useEffect(() => {
     if (endVerse && Number(endVerse) < Number(selectedVerse)) {
@@ -145,13 +150,13 @@ export function useSeferControlLogic({
   const hasActiveRange = !!currentVerse?.verseEnd;
   const currentVerseIndex = currentVerse ? rangeVerses.indexOf(currentVerse.verse) : -1;
 
-  const handleNext = useCallback(() => {
+  const handleNext = useCallback((mode: SeferNavigationMode) => {
     if (currentVerse && hasActiveRange) {
       if (currentVerseIndex >= 0 && currentVerseIndex < rangeVerses.length - 1) {
         handleVerseSelect(rangeVerses[currentVerseIndex + 1], 'next');
         return;
       }
-      if (isActive) {
+      if (isActive && mode === 'projected') {
         onBoundaryReached?.('next');
       }
       return;
@@ -160,22 +165,22 @@ export function useSeferControlLogic({
     const state = goNext();
     if (state) {
       lastSyncedStateRef.current = makeStateKey(state);
-      if (variant === 'mini' || isActive) {
+      if (mode === 'projected' || isActive) {
         onProject(state, 'next');
       }
     }
   }, [
     currentVerse, currentVerseIndex, goNext, handleVerseSelect, hasActiveRange,
-    isActive, onBoundaryReached, onProject, rangeVerses, variant,
+    isActive, onBoundaryReached, onProject, rangeVerses,
   ]);
 
-  const handlePrev = useCallback(() => {
+  const handlePrev = useCallback((mode: SeferNavigationMode) => {
     if (currentVerse && hasActiveRange) {
       if (currentVerseIndex > 0) {
         handleVerseSelect(rangeVerses[currentVerseIndex - 1], 'previous');
         return;
       }
-      if (isActive) {
+      if (isActive && mode === 'projected') {
         onBoundaryReached?.('previous');
       }
       return;
@@ -184,13 +189,13 @@ export function useSeferControlLogic({
     const state = goPrev();
     if (state) {
       lastSyncedStateRef.current = makeStateKey(state);
-      if (variant === 'mini' || isActive) {
+      if (mode === 'projected' || isActive) {
         onProject(state, 'previous');
       }
     }
   }, [
     currentVerse, currentVerseIndex, goPrev, handleVerseSelect, hasActiveRange,
-    isActive, onBoundaryReached, onProject, rangeVerses, variant,
+    isActive, onBoundaryReached, onProject, rangeVerses,
   ]);
 
   const handleAddSlide = useCallback((kind: 'sefer' | 'tanaj') => {
@@ -210,22 +215,23 @@ export function useSeferControlLogic({
   }, [currentVerse, endVerse, markAndProject, onAddSlide]);
 
   useEffect(() => {
+    if (keyboardMode === null) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       const targetTag = (e.target as HTMLElement).tagName.toUpperCase();
       if (targetTag === 'INPUT' || targetTag === 'TEXTAREA' || targetTag === 'SELECT') return;
 
       if (e.key === 'ArrowRight') {
         e.preventDefault();
-        handleNext();
+        handleNext(keyboardMode);
       } else if (e.key === 'ArrowLeft') {
         e.preventDefault();
-        handlePrev();
+        handlePrev(keyboardMode);
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleNext, handlePrev]);
+  }, [handleNext, handlePrev, keyboardMode]);
 
   const handleSetEndVerse = useCallback((value: string) => {
     setEndVerse(value);
@@ -243,8 +249,6 @@ export function useSeferControlLogic({
 
   return {
     ...reader,
-    showFontSettings,
-    setShowFontSettings,
     hebrewFontSize,
     combinedTextBaseSize,
     updateHebrewFontSize,
@@ -262,3 +266,5 @@ export function useSeferControlLogic({
     canAdjustFont: restoredState?.scriptureKind !== 'tanaj',
   };
 }
+
+export type SeferControlController = ReturnType<typeof useSeferControlLogic>;

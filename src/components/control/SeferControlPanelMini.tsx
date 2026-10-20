@@ -2,38 +2,22 @@ import { translate } from '../../i18n/runtime';
 import { useUiTranslation } from '../../i18n/useUiTranslation';
 import React from 'react';
 import { ChevronLeft, ChevronRight, Sliders } from 'lucide-react';
-import type { ScriptureNavState } from '../../types/presentation';
-import type { SeferReaderState } from '../../types/scripture';
-import { useSeferControlLogic } from '../../hooks/useSeferControlLogic';
+import type { SeferControlController } from '../../hooks/useSeferControlLogic';
 
 interface SeferControlPanelMiniProps {
-  /** Called whenever a verse should be projected (activate or arrow nav while active) */
-  onProject: (state: SeferReaderState, command?: 'navigate' | 'next' | 'previous') => void;
-  /** Called when navigation hits the start/end of the current Sefer range */
-  onBoundaryReached?: (direction: 'next' | 'previous') => void;
-  /** Restore a previously projected state (when returning to scripture mode) */
-  restoredState?: ScriptureNavState | null;
-  /** Callback to update font sizes */
-  onUpdateFontSizes?: (sizes: { hebrewFontSize: number; combinedTextBaseSize: number }) => void;
-  /** Emits the fully resolved verse data for preview */
-  onVerseResolved?: (state: SeferReaderState | null) => void;
+  controller: SeferControlController;
 }
 
 const SeferControlPanelMini: React.FC<SeferControlPanelMiniProps> = ({
-  onProject,
-  onBoundaryReached,
-  restoredState,
-  onUpdateFontSizes,
-  onVerseResolved,
+  controller,
 }) => {
   useUiTranslation('control');
+  const [showFontSettings, setShowFontSettings] = React.useState(false);
   const {
     metadata,
     currentVerse,
     selectedVerse,
     rangeVerses,
-    showFontSettings,
-    setShowFontSettings,
     hebrewFontSize,
     combinedTextBaseSize,
     updateHebrewFontSize,
@@ -42,19 +26,7 @@ const SeferControlPanelMini: React.FC<SeferControlPanelMiniProps> = ({
     handleNext,
     handlePrev,
     canAdjustFont,
-  } = useSeferControlLogic({
-    variant: 'mini',
-    onProject,
-    onBoundaryReached,
-    restoredState,
-    onUpdateFontSizes,
-  });
-
-  React.useEffect(() => {
-    if (onVerseResolved) {
-      onVerseResolved(currentVerse);
-    }
-  }, [currentVerse, onVerseResolved]);
+  } = controller;
 
   if (Object.keys(metadata).length === 0) {
     return (
@@ -86,7 +58,7 @@ const SeferControlPanelMini: React.FC<SeferControlPanelMiniProps> = ({
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={handlePrev}
+                  onClick={() => handlePrev('projected')}
                   disabled={!currentVerse}
                   className="control-nav-btn flex-none px-2.5"
                   title={translate("control:SeferControlPanelMini.previousVerse", "Versículo anterior")}
@@ -114,7 +86,7 @@ const SeferControlPanelMini: React.FC<SeferControlPanelMiniProps> = ({
 
                 <button
                   type="button"
-                  onClick={handleNext}
+                  onClick={() => handleNext('projected')}
                   disabled={!currentVerse}
                   className="control-nav-btn flex-none px-2.5"
                   title={translate("control:SeferControlPanelMini.nextVerse", "Versículo siguiente")}
