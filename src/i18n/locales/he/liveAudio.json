@@ -1,4 +1,9 @@
 {
+  "PrivateControlInbox.replyAudienceQueued": "קהל: השליחה התקבלה; הקבלה טרם אושרה.",
+  "PrivateControlInbox.replyAudienceFailed": "קהל: לא ניתן היה לשלוח את התשובה.",
+  "PrivateControlInbox.replyControlsQueued": "בקרים: הסנכרון נשלח; הקבלה טרם אושרה.",
+  "PrivateControlInbox.replyControlsFailed": "בקרים: לא ניתן היה לשלוח את הסנכרון.",
+  "PrivateControlInbox.replyAuthor": "תשובה מאת",
   "ActiveParticipantsPanel.participants": "משתתפים",
   "ActiveParticipantsPanel.close": "סגירה",
   "ActiveParticipantsPanel.showMyAliasToOtherParticipants": "הצגת הכינוי שלי למשתתפים אחרים",
@@ -157,7 +162,6 @@
   "PrivateControlInbox.waiting": "ממתין",
   "PrivateControlInbox.dismissMessage": "סגירת ההודעה",
   "PrivateControlInbox.dismissMessageFrom": "סגירת ההודעה מאת {{value1}}",
-  "PrivateControlInbox.answeredBy": "✓ נענה על ידי",
   "PrivateControlInbox.sendAQuickThankYouConfirmationWithOneClick": "שליחת אישור מהיר ״תודה״ בלחיצה אחת",
   "PrivateControlInbox.thank": "הודיית תודה",
   "PrivateControlInbox.replyAgain": "תשובה נוספת",

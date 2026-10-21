@@ -1,4 +1,9 @@
 {
+  "PrivateControlInbox.replyAudienceQueued": "Audience: envío aceptado; recepción sin confirmar.",
+  "PrivateControlInbox.replyAudienceFailed": "Audience: no se pudo enviar la respuesta.",
+  "PrivateControlInbox.replyControlsQueued": "Controles: sincronización enviada; recepción sin confirmar.",
+  "PrivateControlInbox.replyControlsFailed": "Controles: no se pudo enviar la sincronización.",
+  "PrivateControlInbox.replyAuthor": "Respuesta de",
   "ActiveParticipantsPanel.participants": "Participantes",
   "ActiveParticipantsPanel.close": "Cerrar",
   "ActiveParticipantsPanel.showMyAliasToOtherParticipants": "Mostrar mi alias a otros participantes",
@@ -157,7 +162,6 @@
   "PrivateControlInbox.waiting": "En espera",
   "PrivateControlInbox.dismissMessage": "Descartar mensaje",
   "PrivateControlInbox.dismissMessageFrom": "Descartar mensaje de {{value1}}",
-  "PrivateControlInbox.answeredBy": "✓ Respondido por",
   "PrivateControlInbox.sendAQuickThankYouConfirmationWithOneClick": "Enviar 'Gracias' de confirmación rápida con 1 clic",
   "PrivateControlInbox.thank": "Agradecer",
   "PrivateControlInbox.replyAgain": "Responder de nuevo",

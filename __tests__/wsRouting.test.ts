@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { createServer, type Server } from 'node:http';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { WebSocket, type WebSocketServer } from 'ws';
+import { decrypt, deriveSharedKey, encrypt, exportPublicKey, generateSessionKeyPair } from '../src/utils/cryptoUtils';
 import {
   createWsServer,
   bootstrapAudienceAccess,
@@ -143,6 +144,32 @@ describe('Live Audio WebSocket routing', () => {
     resetWsServerStateForTests();
     delete process.env.SEFER_LIVE_AUDIO_REJOIN_GRACE_SECONDS;
     delete process.env.SEFER_SESSION_ACCESS_DEFAULT;
+  });
+
+  it('relays encrypted reply synchronization to authorized Controls including sender, but never a pending Control', async () => {
+    const principal = await connectWs('control');
+    const secondary = await connectWs('control');
+    const pending = await waitFor(secondary, message => message.type === 'LIVE_AUDIO_CONTROL_AUTHORIZATION_STATE' && message.controlState === 'PENDING');
+    principal.send({ type: 'LIVE_AUDIO_CONTROL_AUTHORIZATION_DECISION', targetControlSessionId: pending.controlSessionId, decision: 'APPROVE' });
+    await waitFor(secondary, message => message.type === 'LIVE_AUDIO_CONTROL_AUTHORIZATION_STATE' && message.controlState === 'AUTHORIZED');
+    const outsider = await connectWs('control');
+    await waitFor(outsider, message => message.type === 'LIVE_AUDIO_CONTROL_AUTHORIZATION_STATE' && message.controlState === 'PENDING');
+    const keyPair = await generateSessionKeyPair();
+    const key = await deriveSharedKey(keyPair.privateKey, keyPair.publicKey);
+    const plaintext = JSON.stringify({ type: 'MESSAGE_REPLY_SYNC', replyId: 'reply-1', messageId: 'message-1', responseText: 'Synthetic private reply' });
+    const encrypted = await encrypt(key, plaintext);
+    const welcome = await waitFor(principal, message => message.type === 'WELCOME');
+    const frame: WsMessage = {
+      type: 'PRIVATE_CONTROL_SIGNAL', fromParticipantId: welcome.controlSessionId as string,
+      keyId: 'reply-key', ephemeralPublicKey: await exportPublicKey(keyPair), ...encrypted,
+    };
+    expect(JSON.stringify(frame)).not.toContain('Synthetic private reply');
+    principal.send(frame);
+    const received = await waitFor(secondary, message => message.type === 'PRIVATE_CONTROL_SIGNAL');
+    expect(await decrypt(key, received.ciphertext as string, received.nonce as string)).toBe(plaintext);
+    expect((await waitFor(principal, message => message.type === 'PRIVATE_CONTROL_SIGNAL')).ciphertext).toBe(encrypted.ciphertext);
+    await wait(50);
+    expect(outsider.messages.some(message => message.type === 'PRIVATE_CONTROL_SIGNAL')).toBe(false);
   });
 
   it('requires Control admission when the session access mode is controlled', async () => {

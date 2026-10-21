@@ -194,9 +194,8 @@ const validatePrivateControlSignalValue = (
     errors.push('PRIVATE_CONTROL_SIGNAL.toParticipantId no esta permitido desde audiencia.');
   }
   if (senderRole === 'control') {
-    if (msg.toParticipantId === undefined && msg.toControlSessionId === undefined) {
-      errors.push('PRIVATE_CONTROL_SIGNAL debe tener toParticipantId o toControlSessionId desde control.');
-    } else if (msg.toParticipantId !== undefined) {
+    // An absent target is the existing authorized Control broadcast.
+    if (msg.toParticipantId !== undefined) {
       validateParticipantId(msg.toParticipantId, 'PRIVATE_CONTROL_SIGNAL.toParticipantId', errors);
     }
   }

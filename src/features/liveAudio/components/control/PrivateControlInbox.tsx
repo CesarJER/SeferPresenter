@@ -1,6 +1,6 @@
 import { translate } from '../../../../i18n/runtime';
 import { useUiTranslation } from '../../../../i18n/useUiTranslation';
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   X,
   MessageSquare,
@@ -20,9 +20,16 @@ import type { PendingControlAuthorization } from '../../../../types/liveAudio';
 import { AudioDeviceSettings } from './AudioDeviceSettings';
 
 export interface MessageReply {
+  replyId: string;
   responseText: string;
   repliedBy: string;
   repliedAt: number;
+  audienceQueued: boolean;
+}
+
+export interface PrivateReplyResult {
+  audienceQueued: boolean;
+  controlsQueued: boolean;
 }
 
 export interface PrivateMessage {
@@ -32,6 +39,7 @@ export interface PrivateMessage {
   timestamp: number;
   fromParticipantId?: string;
   ephemeralPublicKey?: string;
+  keyId?: string;
   isWaitingRoom?: boolean;
   isInterControl?: boolean;
   replies?: MessageReply[];
@@ -56,7 +64,7 @@ interface PrivateControlInboxProps {
   onRejectRequest: (sessionId: string) => void;
   onDismissMessage: (id: string) => void;
   onAudienceAccessDecision?: (participantId: string, decision: 'ADMIT' | 'REJECT' | 'BLOCK' | 'UNBLOCK') => void;
-  onReplyToParticipant?: (messageId: string, participantId: string, text: string) => void;
+  onReplyToParticipant?: (messageId: string, participantId: string, text: string) => Promise<PrivateReplyResult>;
   onSendInterControlMessage?: (text: string) => void;
   onOperatorNickChange?: (nick: string) => void;
 }
@@ -98,6 +106,8 @@ export const PrivateControlInbox: React.FC<PrivateControlInboxProps> = ({
   const [activeReplyId, setActiveReplyId] = useState<string | null>(null);
   const [replyDrafts, setReplyDrafts] = useState<Record<string, string>>({});
   const [announcementText, setAnnouncementText] = useState('');
+  const [replyResult, setReplyResult] = useState<PrivateReplyResult | null>(null);
+  const pendingReplies = useRef(new Set<string>());
 
   if (!isOpen) return null;
 
@@ -141,18 +151,27 @@ export const PrivateControlInbox: React.FC<PrivateControlInboxProps> = ({
     });
   };
 
-  const handleSendReply = (replyId: string, participantId: string) => {
-    const text = (replyDrafts[replyId] || '').trim();
-    if (!text || !onReplyToParticipant) return;
-    onReplyToParticipant(replyId, participantId, text);
-    setReplyDrafts((prev) => ({ ...prev, [replyId]: '' }));
-    setActiveReplyId(null);
+  const handleSendReply = async (replyId: string, participantId: string, text = (replyDrafts[replyId] || '').trim()) => {
+    if (!text || !onReplyToParticipant || pendingReplies.current.has(replyId)) return;
+    pendingReplies.current.add(replyId);
+    try {
+      const result = await onReplyToParticipant(replyId, participantId, text);
+      setReplyResult(result);
+      if (result.audienceQueued) {
+        setReplyDrafts((prev) => ({ ...prev, [replyId]: '' }));
+        setActiveReplyId(null);
+      }
+    } catch {
+      setReplyResult({ audienceQueued: false, controlsQueued: false });
+    } finally {
+      pendingReplies.current.delete(replyId);
+    }
   };
 
   const handleQuickThank = (msg: PrivateMessage) => {
     if (!msg.fromParticipantId || !onReplyToParticipant) return;
     const thankText = msg.fromAlias && msg.fromAlias !== 'Sin nick' ? `Gracias, ${msg.fromAlias}` : 'Gracias';
-    onReplyToParticipant(msg.id, msg.fromParticipantId, thankText);
+    void handleSendReply(msg.id, msg.fromParticipantId, thankText);
   };
 
   const handleSendAnnouncement = (e: React.FormEvent) => {
@@ -257,6 +276,16 @@ export const PrivateControlInbox: React.FC<PrivateControlInboxProps> = ({
 
       {/* Main Content List */}
       <div className="overflow-y-auto p-2 space-y-3 flex-1">
+        {replyResult && (
+          <div role={replyResult.audienceQueued && replyResult.controlsQueued ? 'status' : 'alert'} className="text-xs text-gray-200 space-y-1">
+            <p>{replyResult.audienceQueued
+              ? translate('liveAudio:PrivateControlInbox.replyAudienceQueued', 'Audience: envío aceptado; recepción sin confirmar.')
+              : translate('liveAudio:PrivateControlInbox.replyAudienceFailed', 'Audience: no se pudo enviar la respuesta.')}</p>
+            <p>{replyResult.controlsQueued
+              ? translate('liveAudio:PrivateControlInbox.replyControlsQueued', 'Controles: sincronización enviada; recepción sin confirmar.')
+              : translate('liveAudio:PrivateControlInbox.replyControlsFailed', 'Controles: no se pudo enviar la sincronización.')}</p>
+          </div>
+        )}
         {availability === 'unsupported' && (
           <div className="bg-red-950/30 border border-red-900/50 rounded-md p-2 flex items-start gap-2">
             <ShieldAlert size={14} className="text-red-400 mt-0.5 shrink-0" />
@@ -482,16 +511,17 @@ export const PrivateControlInbox: React.FC<PrivateControlInboxProps> = ({
                   {/* Replies trail */}
                   {msg.replies && msg.replies.length > 0 && (
                     <div className="space-y-1 mb-2">
-                      {msg.replies.map((reply, idx) => (
+                      {msg.replies.map((reply) => (
                         <div
-                          key={idx}
+                          key={reply.replyId}
                           className="text-[11px] bg-emerald-950/40 border border-emerald-800/40 rounded-sm px-2 py-1 text-emerald-200"
                         >
                           <div className="flex items-center justify-between text-[10px] text-emerald-400 font-medium mb-0.5">
-                            <span>{translate("liveAudio:PrivateControlInbox.answeredBy", "✓ Respondido por")} {reply.repliedBy}</span>
+                            <span>{translate('liveAudio:PrivateControlInbox.replyAuthor', 'Respuesta de')} {reply.repliedBy}</span>
                             <span className="font-mono">{formatTime(reply.repliedAt)}</span>
                           </div>
                           <p className="text-gray-200 italic">"{reply.responseText}"</p>
+                          {!reply.audienceQueued && <p role="alert">{translate('liveAudio:PrivateControlInbox.replyAudienceFailed', 'Audience: no se pudo enviar la respuesta.')}</p>}
                         </div>
                       ))}
                     </div>

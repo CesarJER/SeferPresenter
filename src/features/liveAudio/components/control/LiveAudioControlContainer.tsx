@@ -5,7 +5,7 @@ import { useState, useEffect, useCallback, useMemo, useRef, Suspense, lazy } fro
 import { createPortal } from 'react-dom';
 import { Bell } from 'lucide-react';
 import { LiveAudioControlPanel } from './LiveAudioControlPanel';
-import { PrivateControlInbox, type PrivateMessage } from './PrivateControlInbox';
+import { PrivateControlInbox, type PrivateMessage, type MessageReply, type PrivateReplyResult } from './PrivateControlInbox';
 import type { LiveAudioParticipant } from './LiveAudioParticipantRow';
 import { assignStableAliasOrdinal, formatAliasForControl, type AliasOrdinalState } from '../../utils/aliasOrdinals';
 import { PwaRestartButton } from '../../../../components/shared/PwaRestartButton';
@@ -82,6 +82,16 @@ const sanitizeAlias = (value: unknown): string | null => {
   if (typeof value !== 'string') return null;
   const alias = value.trim().slice(0, 80);
   return alias || null;
+};
+
+const appendPrivateReply = (
+  messages: PrivateMessage[], messageId: string, participantId: string, keyId: string, reply: MessageReply,
+): PrivateMessage[] => {
+  if (messages.some(message => message.replies?.some(existing => existing.replyId === reply.replyId))) return messages;
+  return messages.map(message => {
+    if (message.id !== messageId || message.fromParticipantId !== participantId || message.keyId !== keyId) return message;
+    return { ...message, replies: [...(message.replies || []), reply] };
+  });
 };
 
 const clampVolume = (volume: number) => Math.max(0, Math.min(volume, 300));
@@ -162,6 +172,9 @@ export default function LiveAudioControlContainer({
   const [moderationError, setModerationError] = useState<string | null>(null);
   const [connectionCounts, setConnectionCounts] = useState<LiveAudioConnectionCountsMessage | null>(null);
   const [messages, setMessages] = useState<PrivateMessage[]>([]);
+  const messagesRef = useRef(messages);
+  messagesRef.current = messages;
+  const replyEpochRef = useRef(0);
   const [externalBroadcastState, setExternalBroadcastState] = useState<LiveAudioExternalBroadcastState>('off');
   const [externalBroadcastRevision, setExternalBroadcastRevision] = useState(0);
   const [joinRequests, setJoinRequests] = useState<Record<string, LiveAudioControlJoinRequestMessage>>({});
@@ -244,6 +257,7 @@ export default function LiveAudioControlContainer({
         return;
       }
       if (type === 'PRESENTATION_SESSION_ROTATED') {
+        replyEpochRef.current += 1;
         setParticipantsMap({});
         setParticipantAliases({});
         setParticipantAliasOrdinals({});
@@ -255,6 +269,10 @@ export default function LiveAudioControlContainer({
         setAudienceAccessRequests({});
         lastSentListRef.current = '';
         resetVoiceSelection();
+        return;
+      }
+      if (type === 'CONTROL_KEY_ROTATED') {
+        replyEpochRef.current += 1;
         return;
       }
       if (type === 'LIVE_AUDIO_SNAPSHOT') {
@@ -518,23 +536,20 @@ export default function LiveAudioControlContainer({
     }
 
     if (data.type === 'MESSAGE_REPLY_SYNC') {
+      if (!signal.isControlSignal) return;
       const messageId = typeof data.messageId === 'string' ? data.messageId : '';
       const targetParticipantId = typeof data.targetParticipantId === 'string' ? data.targetParticipantId : '';
       const responseText = typeof data.responseText === 'string' ? data.responseText : '';
-      const repliedBy = typeof data.repliedBy === 'string' ? data.repliedBy : 'Control';
-      const repliedAt = typeof data.repliedAt === 'number' ? data.repliedAt : Date.now();
-      if (responseText) {
-        setMessages(prev => prev.map(m => {
-          if (m.id === messageId || (targetParticipantId && m.fromParticipantId === targetParticipantId)) {
-            const existingReplies = m.replies || [];
-            return {
-              ...m,
-              replies: [...existingReplies, { responseText, repliedBy, repliedAt }],
-            };
-          }
-          return m;
-        }));
-      }
+      if (!messageId || !targetParticipantId || !responseText.trim()
+        || typeof data.replyId !== 'string' || !data.replyId
+        || typeof data.repliedBy !== 'string'
+        || typeof data.repliedAt !== 'number' || !Number.isFinite(data.repliedAt)
+        || typeof data.audienceQueued !== 'boolean') return;
+      const reply: MessageReply = {
+        replyId: data.replyId, responseText, repliedBy: data.repliedBy,
+        repliedAt: data.repliedAt, audienceQueued: data.audienceQueued,
+      };
+      setMessages(prev => appendPrivateReply(prev, messageId, targetParticipantId, signal.keyId, reply));
       return;
     }
 
@@ -578,15 +593,17 @@ export default function LiveAudioControlContainer({
         : '';
 
     if ((signalType === 'PRIVATE_MESSAGE' || signalType === 'message' || signalType === 'ACCESS_REQUEST') && content) {
+      if (!signal.signalId) return;
       const fromAlias = alias || participantAliasesRef.current[signal.fromParticipantId] || 'Sin nick';
       const isWaitingRoom = Boolean(audienceAccessRequests[signal.fromParticipantId]);
-      setMessages(prev => [...prev, {
-        id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      setMessages(prev => prev.some(message => message.id === signal.signalId) ? prev : [...prev, {
+        id: signal.signalId!,
         fromAlias,
         content,
         timestamp: Date.now(),
         fromParticipantId: signal.fromParticipantId,
         ephemeralPublicKey: signal.ephemeralPublicKey,
+        keyId: signal.keyId,
         isWaitingRoom,
       }]);
     }
@@ -610,6 +627,10 @@ export default function LiveAudioControlContainer({
     transportReady: wsStatus === 'open',
     onPrivateSignal: handlePrivateSignal,
   });
+
+  const replyContextRef = useRef({ keyId: privateSignalKeyId, isControlAuthorized, wsStatus });
+  replyContextRef.current = { keyId: privateSignalKeyId, isControlAuthorized, wsStatus };
+  useEffect(() => () => { replyEpochRef.current += 1; }, [controlSessionId]);
 
   useEffect(() => {
     if (!participantId || !wsSend || wsStatus !== 'open') return;
@@ -691,48 +712,51 @@ export default function LiveAudioControlContainer({
     });
   }, [authorizeSecondaryControl, joinRequests, onApproveRequest, participantAliasesRef]);
 
-  const handleReplyToParticipant = useCallback((messageId: string, targetParticipantId: string, text: string) => {
-    if (!targetParticipantId || !text.trim()) return;
+  const handleReplyToParticipant = useCallback(async (messageId: string, targetParticipantId: string, text: string): Promise<PrivateReplyResult> => {
+    const failed = { audienceQueued: false, controlsQueued: false };
+    if (!targetParticipantId || !text.trim() || !isControlAuthorized || wsStatus !== 'open' || !privateSignalKeyId) return failed;
+    const message = messagesRef.current.find(item => item.id === messageId
+      && item.fromParticipantId === targetParticipantId && item.keyId === privateSignalKeyId);
+    // Admission replies address the request itself, never another message from its participant.
+    if (!message && !(messageId === `access-${targetParticipantId}` && audienceAccessRequests[targetParticipantId])) return failed;
     const targetPublicKey = participantEphemeralKeys[targetParticipantId];
-    if (!targetPublicKey) {
-      console.warn('LiveAudioControl: Cannot reply - participant public key not available for', targetParticipantId);
-      return;
-    }
+    if (!targetPublicKey) return failed;
+    const epoch = replyEpochRef.current;
+    const isCurrent = () => epoch === replyEpochRef.current
+      && replyContextRef.current.keyId === privateSignalKeyId
+      && replyContextRef.current.isControlAuthorized && replyContextRef.current.wsStatus === 'open';
 
     const storedNick = localStorage.getItem('sefer_control_operator_nick') || '';
     const isNickPublic = localStorage.getItem('sefer_control_nick_public') === 'true';
     const effectiveNick = isNickPublic && storedNick.trim() ? `Control (${storedNick.trim()})` : 'Control';
     const internalNick = storedNick.trim() ? `Control (${storedNick.trim()})` : 'Control';
     const now = Date.now();
+    const replyId = crypto.randomUUID();
 
-    void sendPrivateSignalToParticipant(targetParticipantId, targetPublicKey, {
+    const audienceQueued = await sendPrivateSignalToParticipant(targetParticipantId, targetPublicKey, {
       type: 'CHAT_RESPONSE',
       text: text.trim(),
       senderNick: effectiveNick,
       timestamp: now,
-    });
+    }).catch(() => false);
+    if (!isCurrent()) return { audienceQueued, controlsQueued: false };
 
     const syncPayload = {
       type: 'MESSAGE_REPLY_SYNC',
+      replyId,
       messageId,
       targetParticipantId,
       responseText: text.trim(),
       repliedBy: internalNick,
       repliedAt: now,
+      audienceQueued,
     };
-    wsSend?.('PRIVATE_CONTROL_SIGNAL', syncPayload);
-
-    setMessages(prev => prev.map(m => {
-      if (m.id === messageId || (messageId.startsWith('access-') && m.fromParticipantId === targetParticipantId)) {
-        const existingReplies = m.replies || [];
-        return {
-          ...m,
-          replies: [...existingReplies, { responseText: text.trim(), repliedBy: internalNick, repliedAt: now }],
-        };
-      }
-      return m;
-    }));
-  }, [participantEphemeralKeys, sendPrivateSignalToParticipant, wsSend]);
+    const controlsQueued = await sendPrivateSignalToControls(syncPayload).catch(() => false);
+    if (isCurrent()) {
+      setMessages(prev => appendPrivateReply(prev, messageId, targetParticipantId, privateSignalKeyId, syncPayload));
+    }
+    return { audienceQueued, controlsQueued };
+  }, [audienceAccessRequests, isControlAuthorized, participantEphemeralKeys, privateSignalKeyId, sendPrivateSignalToParticipant, sendPrivateSignalToControls, wsStatus]);
 
   const handleSendInterControlMessage = useCallback((text: string) => {
     if (!text.trim()) return;

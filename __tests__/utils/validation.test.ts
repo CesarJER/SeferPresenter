@@ -367,6 +367,13 @@ describe('runtime validation', () => {
     }, 'control')).toBe(true);
   });
 
+  it('accepts the existing targetless Control broadcast while retaining envelope validation', () => {
+    expect(isValidPrivateControlSignal({
+      type: 'PRIVATE_CONTROL_SIGNAL', fromParticipantId: 'control-session-1', keyId: 'key-1',
+      ephemeralPublicKey: 'AQIDBA==', ciphertext: 'SGVsbG8=', nonce: 'AQIDBAUGBwgJCgsM',
+    }, 'control')).toBe(true);
+  });
+
   it('accepts empty live audio alias requests', () => {
     expect(validateSyncMessage({
       type: 'LIVE_AUDIO_REQUEST_ALIASES',
@@ -517,7 +524,7 @@ describe('runtime validation', () => {
   it('rejects malformed role-specific private control signals or oversized ciphertext', () => {
     expect(isValidPrivateControlSignal({
       type: 'PRIVATE_CONTROL_SIGNAL',
-      fromParticipantId: '550e8400-e29b-41d4-a716-446655440000',
+      fromParticipantId: '',
       keyId: 'key-1',
       ephemeralPublicKey: 'AQIDBA==',
       ciphertext: 'SGVsbG8=',

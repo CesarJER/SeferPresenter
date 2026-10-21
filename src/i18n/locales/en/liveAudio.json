@@ -1,4 +1,9 @@
 {
+  "PrivateControlInbox.replyAudienceQueued": "Audience: send accepted; receipt unconfirmed.",
+  "PrivateControlInbox.replyAudienceFailed": "Audience: the reply could not be sent.",
+  "PrivateControlInbox.replyControlsQueued": "Controls: synchronization sent; receipt unconfirmed.",
+  "PrivateControlInbox.replyControlsFailed": "Controls: synchronization could not be sent.",
+  "PrivateControlInbox.replyAuthor": "Reply from",
   "ActiveParticipantsPanel.participants": "Participants",
   "ActiveParticipantsPanel.close": "Close",
   "ActiveParticipantsPanel.showMyAliasToOtherParticipants": "Show my alias to other participants",
@@ -157,7 +162,6 @@
   "PrivateControlInbox.waiting": "Waiting",
   "PrivateControlInbox.dismissMessage": "Dismiss message",
   "PrivateControlInbox.dismissMessageFrom": "Dismiss message from {{value1}}",
-  "PrivateControlInbox.answeredBy": "✓ Answered by",
   "PrivateControlInbox.sendAQuickThankYouConfirmationWithOneClick": "Send a quick 'Thank you' confirmation with one click",
   "PrivateControlInbox.thank": "Thank",
   "PrivateControlInbox.replyAgain": "Reply again",

@@ -134,10 +134,12 @@ toParticipantId?, keyId, ephemeralPublicKey, ciphertext, nonce, createdAt? }`.
 
 Audience solo envía desde su UUID vinculado a WS; el backend valida base64,
 ciphertext ≤4096 bytes, nonce de 12 bytes y límite de cinco mensajes/minuto.
-Controls autorizados pueden dirigirse a Audience o a otros Controls según ruta.
+Controls autorizados pueden dirigirse a Audience o emitir a Controls autorizados
+sin destinatario; este broadcast incluye al emisor. La validación cliente admite
+ese envelope existente también cuando el emisor usa su controlSessionId.
 El servidor no descifra el payload. Consumers crypto derivan ECDH P-256/AES-GCM
 256 y mantienen rechazo de nonce repetido en memoria; una rotación de clave
-pierde historial y exige renegociación.
+exige renegociación y descarta operaciones pendientes de la generación anterior.
 
 Dentro del ciphertext existen contratos propios, no nuevos tipos WS:
 ACTIVE_PROFILE/ACTIVE_STATE/REQUEST_WORD/ACCESS_REQUEST, AUDIO_FALLBACK y mensajes privados hacia Control;
@@ -154,8 +156,25 @@ Especialmente:
 - CONTROL_PROFILE: alias, volume, musicMode; no perfil público.
 - CONTROL_MICROPHONE_CONFIG: targetParticipantId y volume/musicMode opcionales;
   el destinatario actual aplica su configuración.
-- MESSAGE_REPLY_SYNC: messageId, targetParticipantId, responseText, repliedBy,
-  repliedAt; estado de respuesta privado.
+- MESSAGE_REPLY_SYNC: replyId, messageId, targetParticipantId, responseText,
+  repliedBy, repliedAt y audienceQueued; todos dentro del ciphertext. El receptor
+  exige una señal cifrada con la clave compartida de Controls. El messageId de un
+  mensaje recibido es JSON.stringify([keyId, fromParticipantId, nonce]) del
+  envelope original, igual para todos los Controls; no depende del reloj local.
+  Se exige coincidencia exacta de mensaje, participante y keyId. replyId identifica
+  la operación para aplicar una sola vez tanto el eco como un reenvío recifrado;
+  no sustituye el rechazo criptográfico de nonce repetido. Correlaciones ausentes,
+  desconocidas o de otra clave se ignoran, sin buscar por participante.
+
+La respuesta CHAT_RESPONSE a Audience y su sincronización a Controls informan
+resultados de envío separados. Un booleano positivo solo acredita aceptación por
+el WebSocket local, sin ACK de recepción ni de aplicación. Un fallo de Audience
+conserva el borrador; la sincronización no se emite como mensaje WS en claro.
+Las respuestas desde la fila de admisión usan access-<participantId> y no se
+adjuntan a mensajes de ese participante ni crean un historial de admisión.
+Mensajes y respuestas no se reconstruyen de snapshots ni se persisten. Los
+Controls deben ejecutar el mismo candidato: los IDs locales anteriores y payloads
+sin replyId no proporcionan correlación segura para esta sincronización.
 
 Otros payloads emitidos por los clientes actuales:
 
