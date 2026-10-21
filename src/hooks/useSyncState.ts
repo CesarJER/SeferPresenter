@@ -8,7 +8,7 @@ import type { RemoteCommandPayload, DisplayTelemetryState, AutoduckState } from 
 import { normalizePresentation } from '../utils/normalizePresentation';
 import { makeSyncMessage } from '../utils/syncProtocol';
 import { validateRemoteStatePayload, validateSyncMessage } from '../utils/validation';
-import { useWebSocket } from './useWebSocket';
+import { useWebSocket, type WebSocketConnectionStatus } from './useWebSocket';
 import { getOperatorHeaders, setOperatorCredential } from '../utils/operatorAuth';
 
 interface SyncStateOptions {
@@ -64,6 +64,7 @@ interface UseSyncStateProps {
   audienceSseTicket?: string | null;
   onAudienceSseReconnect?: () => void;
   onWsMessage?: (type: string, payload: Record<string, unknown>) => void;
+  onAudienceWsConnectionChange?: (status: WebSocketConnectionStatus) => void;
 }
 
 const isServerVersioned = (data: Record<string, unknown>) =>
@@ -230,10 +231,12 @@ export function useSyncState(props: UseSyncStateProps) {
   useEffect(() => { onWsMessageRef.current = onWsMessage; }, [onWsMessage]);
 
   const lastKeyMessageRef = useRef<{type: string, payload: Record<string, unknown>} | null>(null);
+  const lastBroadcastStateRef = useRef<Record<string, unknown> | null>(null);
   const wsMessageSubscribersRef = useRef<Set<(type: string, payload: Record<string, unknown>) => void>>(new Set());
   
   const subscribeToWsMessage = useCallback((handler: (type: string, payload: Record<string, unknown>) => void) => {
     wsMessageSubscribersRef.current.add(handler);
+    if (lastBroadcastStateRef.current) handler('LIVE_AUDIO_EXTERNAL_BROADCAST_STATE', lastBroadcastStateRef.current);
     if (lastKeyMessageRef.current) {
       handler(lastKeyMessageRef.current.type, lastKeyMessageRef.current.payload);
     }
@@ -243,6 +246,11 @@ export function useSyncState(props: UseSyncStateProps) {
   }, []);
 
   const handleWsMessage = useCallback((type: string, payload: Record<string, unknown>) => {
+    if (type === 'WELCOME' || type === 'PRESENTATION_SESSION_ROTATED') {
+      lastKeyMessageRef.current = null;
+      lastBroadcastStateRef.current = null;
+    }
+    if (type === 'LIVE_AUDIO_EXTERNAL_BROADCAST_STATE') lastBroadcastStateRef.current = payload;
     onWsMessageRef.current?.(type, payload);
     if (type === 'LIVE_AUDIO_CONTROL_PUBLIC_KEY' || type === 'CONTROL_KEY_ROTATED') {
       lastKeyMessageRef.current = { type, payload };
@@ -286,6 +294,7 @@ export function useSyncState(props: UseSyncStateProps) {
 
   const { status: wsStatus, sendMessage: wsSend } = useWebSocket(wsUrl, {
     onMessage: handleWsMessage,
+    onStatusChange: props.onAudienceWsConnectionChange,
   });
   const wsSendRef = useRef(wsSend);
   useEffect(() => { wsSendRef.current = wsSend; }, [wsSend]);

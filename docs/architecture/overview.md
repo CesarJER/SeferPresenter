@@ -48,6 +48,20 @@ Los widgets compartidos de texto, preview y documento legal permanecen en
 [cryptoUtils](../../src/utils/cryptoUtils.ts) utiliza Web Crypto y el transporte
 existente; no necesita importar el SDK LiveKit al núcleo.
 
+En Audience, [AudienceParticipationProvider](../../src/components/audience/AudienceParticipationProvider.tsx)
+mantiene una instancia de [useAudienceParticipationOwner](../../src/hooks/useAudienceParticipation.ts)
+por identidad de acceso y presentación. La puerta y el contenedor admitido
+consumen sus claves E2EE, respuestas, alias enviado y estado de participación;
+cambiar entre ambas vistas u ocultarlas no crea otra sesión criptográfica.
+La identidad procede de `useAudienceAccess`, y el envío exige la confirmación
+`AUDIENCE_ACCESS_STATE` del bind WS actual, además del bootstrap HTTP.
+Cambiar la credencial o la identidad desmonta ese propietario; una reconexión
+de la misma identidad conserva estado privado, pero exige un nuevo bind antes
+de enviar. Las generaciones invalidan resultados asíncronos antiguos.
+El contenedor Live Audio conserva los efectos de reproducción, consentimiento
+y publicación. La composición completa de UI sin RTC sigue pendiente: el flag
+de build, la disponibilidad y el panel aún limitan la experiencia admitida.
+
 ## Límites comprobados en desarrollo
 
 ESLint restringe los imports de `src/` y `server/` mediante

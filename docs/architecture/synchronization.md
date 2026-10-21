@@ -55,6 +55,16 @@ obtiene credencial de acceso, la enlaza a WS y transmite alias cifrado; decision
 tickets SSE, quiz y tokens se comprueban en sus fronteras. Credencial de acceso,
 identidad Live Audio y submissionId de quiz son entidades distintas.
 
+El bootstrap HTTP no confirma el bind WS: `useAudienceAccess` exige una respuesta
+`AUDIENCE_ACCESS_STATE` con participante y presentación coincidentes en la conexión
+actual. Cierre, reconexión y credenciales obsoletas invalidan esa confirmación
+antes de permitir más envíos. El propietario Audience comparte E2EE y respuestas
+entre puerta y vista admitida; conserva la sesión al reconectar con la misma
+identidad y descarta operaciones asíncronas del epoch anterior. Una identidad o
+credencial distinta crea otro propietario. Bootstrap y tickets tardíos no pueden
+restaurar acceso anterior. El replay local de metadatos públicos de emisión y
+clave se limpia en WELCOME/rotación; no reproduce mensajes privados.
+
 Los detalles/puntuaciones de quiz permanecen en Audience dentro del TTL local,
 separados por presentación. Cada pregunta/resultado utiliza submissionIds de
 scope independientes. El servidor transforma contribuciones en contadores y

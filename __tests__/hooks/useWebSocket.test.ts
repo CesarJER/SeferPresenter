@@ -1,6 +1,9 @@
+// @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, renderHook } from '@testing-library/react';
 import {
   createWebSocketController,
+  useWebSocket,
   type WebSocketAdapter,
 } from '../../src/hooks/useWebSocket';
 
@@ -46,6 +49,29 @@ class MockWebSocket implements WebSocketAdapter {
     this.onmessage?.({ data });
   }
 }
+
+it('notifies binding invalidation synchronously on close and cleanup without opening a second socket', () => {
+  MockWebSocket.instances = [];
+  vi.stubGlobal('WebSocket', MockWebSocket);
+  let bound = false;
+  const changed = vi.fn(() => { bound = false; });
+  const hook = renderHook(() => useWebSocket('ws://localhost/synthetic', { onStatusChange: changed }));
+  try {
+    expect(MockWebSocket.instances).toHaveLength(1);
+    act(() => MockWebSocket.instances[0].triggerOpen());
+    bound = true;
+    act(() => {
+      MockWebSocket.instances[0].triggerClose();
+      expect(bound).toBe(false);
+    });
+    hook.unmount();
+    expect(changed).toHaveBeenLastCalledWith('closed');
+    expect(MockWebSocket.instances).toHaveLength(1);
+  } finally {
+    hook.unmount();
+    vi.unstubAllGlobals();
+  }
+});
 
 describe('createWebSocketController', () => {
   beforeEach(() => {

@@ -8,6 +8,7 @@ export interface UseWebSocketOptions {
   enabled?: boolean;
   protocols?: string | string[];
   onMessage?: WebSocketMessageHandler;
+  onStatusChange?: (status: WebSocketConnectionStatus) => void;
 }
 
 export interface UseWebSocketResult {
@@ -185,14 +186,16 @@ export function createWebSocketController(options: WebSocketControllerOptions): 
 }
 
 export function useWebSocket(url: string | null, options: UseWebSocketOptions = {}): UseWebSocketResult {
-  const { enabled = true, protocols, onMessage } = options;
+  const { enabled = true, protocols, onMessage, onStatusChange } = options;
   const [status, setStatus] = useState<WebSocketConnectionStatus>(
     enabled && url ? 'connecting' : 'closed',
   );
   const controllerRef = useRef<WebSocketController | null>(null);
   const onMessageRef = useRef<WebSocketMessageHandler | undefined>(onMessage);
+  const onStatusChangeRef = useRef(onStatusChange);
 
   onMessageRef.current = onMessage;
+  onStatusChangeRef.current = onStatusChange;
 
   useEffect(() => {
     if (!enabled || !url) {
@@ -208,13 +211,17 @@ export function useWebSocket(url: string | null, options: UseWebSocketOptions = 
     const controller = createWebSocketController({
       url,
       protocols,
-      onStatusChange: setStatus,
+      onStatusChange: nextStatus => {
+        onStatusChangeRef.current?.(nextStatus);
+        setStatus(nextStatus);
+      },
       onMessage: (type, payload) => onMessageRef.current?.(type, payload),
     });
 
     controllerRef.current = controller;
 
     return () => {
+      onStatusChangeRef.current?.('closed');
       controller.cleanup();
       if (controllerRef.current === controller) {
         controllerRef.current = null;

@@ -3,7 +3,11 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { act, cleanup, renderHook } from '@testing-library/react';
 import { useSyncState } from '../../src/hooks/useSyncState';
 import { DEFAULT_AUDIO_STATE } from '../../src/types/audio';
-vi.mock('../../src/hooks/useWebSocket', () => ({ useWebSocket: () => ({ status: 'closed', sendMessage: () => false }) }));
+const ws = vi.hoisted(() => ({ onMessage: undefined as ((type: string, payload: Record<string, unknown>) => void) | undefined }));
+vi.mock('../../src/hooks/useWebSocket', () => ({ useWebSocket: (_url: string, options: { onMessage: typeof ws.onMessage }) => {
+  ws.onMessage = options.onMessage;
+  return { status: 'closed', sendMessage: () => false };
+} }));
 afterEach(() => { cleanup(); localStorage.clear(); vi.unstubAllGlobals(); });
 it('rejects delayed GET and BroadcastChannel rollback after a newer server revision', async () => {
   let resolveSnapshot: (response: unknown) => void = () => {};
@@ -76,4 +80,45 @@ it('rejects delayed GET and BroadcastChannel rollback after a newer server revis
   act(() => streams[0].onmessage?.({ data: JSON.stringify({ ...state(0, 1, 'restart'), stateEpoch: 'restarted-server' }) }));
   expect(updates).toEqual([1, 0, 1]);
   expect(JSON.parse(localStorage.getItem('sefer-presenter-state')!).slideIndex).toBe(1);
+});
+
+it('replays only current public crypto/broadcast metadata and clears it at connection and presentation boundaries', () => {
+  vi.stubGlobal('fetch', vi.fn(() => new Promise(() => {})));
+  vi.stubGlobal('BroadcastChannel', class { addEventListener() {} removeEventListener() {} postMessage() {} });
+  const ref = <T,>(current: T) => ({ current });
+  const noOp = () => {};
+  const hook = renderHook(() => useSyncState({
+    isControlMode: false, isPresenterMode: false, audienceAuthorized: false,
+    clientIdRef: ref('synthetic-audience'), currentPresentationRef: ref(null),
+    currentSlideIndexRef: ref(-1), currentStepIndexRef: ref(0),
+    backgroundLockRef: ref(false), lockedBackgroundValueRef: ref(null),
+    userSelectedBackgroundRef: ref(null), videoStateRef: ref(null),
+    audioStateRef: ref(DEFAULT_AUDIO_STATE), appModeRef: ref('slides'), scriptureStateRef: ref(null),
+    autoduckStateRef: ref({ enabled: false, factor: 0.2 }),
+    setCurrentPresentation: noOp, setCurrentSlideIndex: noOp, setCurrentStepIndex: noOp,
+    setBackgroundLock: noOp, setLockedBackgroundValue: noOp, setUserSelectedBackground: noOp,
+    setVideoState: noOp, setAppMode: noOp, setScriptureState: noOp, setAudioState: noOp,
+    setAudioSyncMaps: noOp, setAutoduckState: noOp,
+  }));
+  const key = { keyId: 'synthetic-key', publicKey: 'synthetic-public-key' };
+  act(() => {
+    ws.onMessage!('LIVE_AUDIO_EXTERNAL_BROADCAST_STATE', { state: 'recording', revision: 1 });
+    ws.onMessage!('LIVE_AUDIO_CONTROL_PUBLIC_KEY', key);
+    ws.onMessage!('PRIVATE_CONTROL_SIGNAL', { ciphertext: 'synthetic-ciphertext' });
+  });
+  const replay = vi.fn();
+  const unsubscribe = hook.result.current.subscribeToWsMessage(replay);
+  expect(replay.mock.calls.map(([type]) => type)).toEqual(['LIVE_AUDIO_EXTERNAL_BROADCAST_STATE', 'LIVE_AUDIO_CONTROL_PUBLIC_KEY']);
+  unsubscribe();
+  act(() => ws.onMessage!('WELCOME', { role: 'audience', presentationSessionId: 'session-a' }));
+  replay.mockClear();
+  hook.result.current.subscribeToWsMessage(replay)();
+  expect(replay).not.toHaveBeenCalled();
+  act(() => {
+    ws.onMessage!('LIVE_AUDIO_CONTROL_PUBLIC_KEY', key);
+    ws.onMessage!('PRESENTATION_SESSION_ROTATED', { hardRefresh: false });
+  });
+  replay.mockClear();
+  hook.result.current.subscribeToWsMessage(replay)();
+  expect(replay).not.toHaveBeenCalled();
 });

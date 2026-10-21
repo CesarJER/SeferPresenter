@@ -18,6 +18,7 @@ import { useAudienceAudioPlayback } from './hooks/useAudienceAudioPlayback';
 import { useAudienceSession } from './hooks/useAudienceSession';
 import { useAudienceAccess } from './hooks/useAudienceAccess';
 import { AudienceAccessGate } from './components/audience/AudienceAccessGate';
+import { AudienceParticipationProvider } from './components/audience/AudienceParticipationProvider';
 import { useQuizAudio } from './hooks/useQuizAudio';
 import { registerScopedServiceWorker } from './utils/pwaUpdate';
 import { isMediaPlaybackBlockedError, resumeManagedMediaAudio } from './utils/mediaVolume';
@@ -165,6 +166,7 @@ function AudienceApp() {
     audienceSseTicket: audienceAccess.stateSseTicket,
     onAudienceSseReconnect: audienceAccess.refreshTickets,
     onWsMessage: audienceAccess.handleWsMessage,
+    onAudienceWsConnectionChange: audienceAccess.handleWsConnectionChange,
   });
 
   const { serverNow } = useServerClock(wsSend, wsStatus, subscribeToWsMessage);
@@ -308,38 +310,37 @@ function AudienceApp() {
     !audienceAccess.quizSseTicket ||
     (audienceAccess.accessMode === 'CONTROLLED' && !audienceSession.nick);
 
-  if (isGateRequired) {
-    const effectiveAccessState =
+  const effectiveAccessState =
       audienceAccess.accessMode === 'CONTROLLED' && !audienceSession.nick && audienceAccess.accessState === 'ADMITTED'
         ? 'REQUEST_REQUIRED'
         : audienceAccess.accessState;
 
-    return (
+  return (
+    <AudienceParticipationProvider
+      key={JSON.stringify([audienceAccess.presentationSessionId, audienceAccess.participantId, audienceAccess.credential, audienceAccess.sessionGeneration])}
+      access={audienceAccess}
+      audienceSession={audienceSession}
+      wsStatus={wsStatus}
+      wsSend={wsSend}
+      subscribeToWsMessage={subscribeToWsMessage}
+    >
+    {isGateRequired ? (
       <AudienceAccessGate
         accessState={effectiveAccessState}
-        participantId={audienceAccess.participantId}
         retryAt={audienceAccess.retryAt}
-        wsStatus={wsStatus}
-        wsSend={wsSend}
-        subscribeToWsMessage={subscribeToWsMessage}
         autoAlias={isTvMode ? 'TV' : undefined}
         onAliasAccepted={(alias, visible) => {
           audienceSession.login(alias);
           audienceSession.setAliasVisible(visible);
         }}
       />
-    );
-  }
-
-  return (
+    ) : (
     <>
       {LiveAudioContainer ? (
         <React.Suspense fallback={audienceScreenElement}>
           <LiveAudioContainer
             availability={liveAudioAvailability.availability}
-            wsSend={wsSend}
             subscribeToWsMessage={subscribeToWsMessage}
-            clientId={clientIdRef.current}
             audienceSession={audienceSession}
           >
             {audienceScreenElement}
@@ -364,7 +365,8 @@ function AudienceApp() {
       <div className="fixed bottom-2 end-2 z-50 opacity-50 hover:opacity-100 transition-opacity">
         <DataProtectionLink className="text-[10px] text-white/70 hover:text-white flex items-center gap-1" />
       </div>
-    </>
+    </>)}
+    </AudienceParticipationProvider>
   );
 }
 

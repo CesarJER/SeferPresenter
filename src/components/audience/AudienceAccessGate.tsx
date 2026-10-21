@@ -2,10 +2,8 @@ import { translate } from '../../i18n/runtime';
 import { useUiTranslation } from '../../i18n/useUiTranslation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Clock3, ShieldAlert, ShieldCheck, MessageSquare, X } from 'lucide-react';
-import type { WebSocketConnectionStatus } from '../../hooks/useWebSocket';
-import { usePrivateControlSignals, type DecryptedPrivateControlSignal } from '../../hooks/usePrivateControlSignals';
+import { useAudienceParticipation } from '../../hooks/useAudienceParticipation';
 import type { AudienceAccessState } from '../../types/audienceAccess';
-import type { LiveAudioExternalBroadcastState } from '../../types/liveAudio';
 import { AudienceInterventionModal } from '../../features/liveAudio/components/audience/AudienceInterventionModal';
 import { AudiencePrivateControlMessage } from '../../features/liveAudio/components/audience/AudiencePrivateControlMessage';
 import { BrandingWelcome } from '../shared/BrandingWelcome';
@@ -13,73 +11,28 @@ import { applyNeutralBrandingFallback } from '../../utils/branding';
 
 interface AudienceAccessGateProps {
   accessState: AudienceAccessState;
-  participantId: string | null;
   retryAt?: number;
-  wsStatus: WebSocketConnectionStatus;
-  wsSend: (type: string, payload?: unknown) => boolean;
-  subscribeToWsMessage: (handler: (type: string, payload: Record<string, unknown>) => void) => () => void;
   onAliasAccepted: (alias: string, visible: boolean) => void;
   autoAlias?: string;
 }
 
 export function AudienceAccessGate({
   accessState,
-  participantId,
   retryAt,
-  wsStatus,
-  wsSend,
-  subscribeToWsMessage,
   onAliasAccepted,
   autoAlias,
 }: AudienceAccessGateProps) {
   useUiTranslation('audience');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [submittedAlias, setSubmittedAlias] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
-  const [broadcastState, setBroadcastState] = useState<LiveAudioExternalBroadcastState>('off');
   const [showPrivateMessageModal, setShowPrivateMessageModal] = useState(false);
-  const [receivedControlMessages, setReceivedControlMessages] = useState<
-    Array<{ id: string; senderNick: string; text: string; timestamp: number }>
-  >([]);
+  const { participantId, privateSignals, submittedAlias, setSubmittedAlias,
+    receivedControlMessages, dismissControlMessage, externalBroadcastState: broadcastState,
+    sendSessionMessage: wsSend } = useAudienceParticipation();
   const autoRequestedParticipantRef = useRef<string | null>(null);
-
-  const handlePrivateSignal = useCallback((signal: DecryptedPrivateControlSignal) => {
-    const payload = signal.value as Record<string, unknown>;
-    if (payload && typeof payload === 'object' && payload.type === 'CHAT_RESPONSE') {
-      const text = typeof payload.text === 'string' ? payload.text.trim() : '';
-      const senderNick = typeof payload.senderNick === 'string' && payload.senderNick ? payload.senderNick : 'Control';
-      const timestamp = typeof payload.timestamp === 'number' ? payload.timestamp : Date.now();
-      if (text) {
-        setReceivedControlMessages((prev) => [
-          ...prev,
-          {
-            id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-            senderNick,
-            text,
-            timestamp,
-          },
-        ]);
-      }
-    }
-  }, []);
-
-  const privateSignals = usePrivateControlSignals({
-    role: 'audience',
-    participantId: participantId || 'unbound-audience',
-    sendMessage: wsSend,
-    subscribeToWsMessage,
-    transportReady: wsStatus === 'open' && Boolean(participantId),
-    onPrivateSignal: handlePrivateSignal,
-  });
-
-  useEffect(() => subscribeToWsMessage((type, payload) => {
-    if (type === 'LIVE_AUDIO_EXTERNAL_BROADCAST_STATE' && (payload.state === 'off' || payload.state === 'live' || payload.state === 'recording')) {
-      setBroadcastState(payload.state);
-    } else if (type === 'LIVE_AUDIO_REQUEST_ALIASES' && submittedAlias && privateSignals.ready) {
-      void privateSignals.sendPrivateSignal({ type: 'ACCESS_REQUEST', alias: submittedAlias });
-    }
-  }), [privateSignals, submittedAlias, subscribeToWsMessage]);
+  const requestGenerationRef = useRef(0);
+  useEffect(() => () => { requestGenerationRef.current += 1; }, []);
 
   useEffect(() => {
     if (accessState !== 'REJECTED' || !retryAt) return;
@@ -91,8 +44,10 @@ export function AudienceAccessGate({
     if (!participantId || !privateSignals.ready || sending) return;
     setSending(true);
     setError(null);
+    const generation = requestGenerationRef.current;
     try {
       const aliasSent = await privateSignals.sendPrivateSignal({ type: 'ACCESS_REQUEST', alias });
+      if (generation !== requestGenerationRef.current) return;
       if (!aliasSent) throw new Error(translate("audience:AudienceAccessGate.couldNotSendTheAlias", "No se pudo enviar el alias."));
       setSubmittedAlias(alias);
       const requestSent = wsSend('AUDIENCE_ACCESS_REQUEST', {
@@ -102,11 +57,12 @@ export function AudienceAccessGate({
       if (!requestSent) throw new Error(translate("audience:AudienceAccessGate.couldNotSendTheRequest", "No se pudo enviar la solicitud."));
       onAliasAccepted(alias, visible);
     } catch (requestError) {
+      if (generation !== requestGenerationRef.current) return;
       setError(requestError instanceof Error ? requestError.message : translate("audience:AudienceAccessGate.couldNotSendTheRequest", "No se pudo enviar la solicitud."));
     } finally {
-      setSending(false);
+      if (generation === requestGenerationRef.current) setSending(false);
     }
-  }, [onAliasAccepted, participantId, privateSignals, sending, wsSend]);
+  }, [onAliasAccepted, participantId, privateSignals, sending, setSubmittedAlias, wsSend]);
 
   useEffect(() => {
     if (!autoAlias || accessState !== 'REQUEST_REQUIRED' || !participantId || !privateSignals.ready) return;
@@ -178,7 +134,7 @@ export function AudienceAccessGate({
                                 </span>
                                 <button
                                   type="button"
-                                  onClick={() => setReceivedControlMessages((prev) => prev.filter((m) => m.id !== msg.id))}
+                                  onClick={() => dismissControlMessage(msg.id)}
                                   className="text-slate-400 hover:text-white p-0.5 rounded-sm transition-colors"
                                   title={translate("audience:AudienceAccessGate.closeMessage", "Cerrar mensaje")}
                                   aria-label={translate("audience:AudienceAccessGate.closeMessage", "Cerrar mensaje")}
