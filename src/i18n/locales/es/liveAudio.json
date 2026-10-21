@@ -221,5 +221,7 @@
   "CollapsiblePrivacyNotice.noExternalBroadcastIsCurrentlyDeclaredIfThisChangesPrevious": "No hay retransmisión externa declarada en este momento. Si el estado cambia, los permisos de voz anteriores se revocarán.",
   "CollapsiblePrivacyNotice.theSessionIsDeclaredLiveIfYouPublishYourMicrophone": "La sesión está declarada en directo. Si publica su micrófono, su voz podrá llegar a destinatarios externos.",
   "CollapsiblePrivacyNotice.theSessionIsDeclaredLiveAndRecordingIfYouPublish": "La sesión está declarada en directo y grabándose. Si publica su micrófono, su voz podrá conservarse en servicios externos del operador.",
-  "CollapsiblePrivacyNotice.emptyDocument": "documento vacío"
+  "CollapsiblePrivacyNotice.emptyDocument": "documento vacío",
+  "AudienceLiveAudioPanel.showParticipation": "Mostrar controles de participación",
+  "AudienceParticipationPanel.preparingSecureParticipation": "Participación segura no disponible. Comprueba la conexión y el cifrado."
 }

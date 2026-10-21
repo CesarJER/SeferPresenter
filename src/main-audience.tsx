@@ -13,7 +13,7 @@ import { useAudioTimelineApplicator } from './hooks/useAudioTimelineApplicator';
 import { generateQuizSubslides, calcMaxBaseCentipunts } from './utils/quizUtils';
 import { makeClientId } from './utils/normalizePresentation';
 import { DataProtectionLink } from './components/shared/DataProtectionLink';
-import { useLiveAudioAvailability } from './features/liveAudio/hooks/useLiveAudioAvailability';
+import { AudienceParticipationSurface } from './components/audience/AudienceParticipationSurface';
 import { useAudienceAudioPlayback } from './hooks/useAudienceAudioPlayback';
 import { useAudienceSession } from './hooks/useAudienceSession';
 import { useAudienceAccess } from './hooks/useAudienceAccess';
@@ -31,11 +31,7 @@ import { DEFAULT_AUDIO_STATE } from './types/audio';
 
 import './index.css';
 
-const LiveAudioContainer = import.meta.env.VITE_SEFER_LIVE_AUDIO_BUILD !== 'false'
-  ? React.lazy(() => import('./features/liveAudio/components/audience/LiveAudioAudienceContainer'))
-  : null;
-
-function AudienceApp() {
+export function AudienceApp() {
   useUiTranslation('audience');
   const isTvMode = new URLSearchParams(window.location.search).get('tv') === '1';
   const audienceAccess = useAudienceAccess();
@@ -175,7 +171,6 @@ function AudienceApp() {
   }), [handlePlaybackBlocked]);
   useAudioTimelineApplicator(audioTimelineRef, audioTimeline, serverNow, autoduckState, audioTimelineApplicatorOptions);
 
-  const liveAudioAvailability = useLiveAudioAvailability();
   const audienceSession = useAudienceSession({ subscribeToWsMessage });
 
   const { getActiveBackground } = useBackgroundResolver({
@@ -336,17 +331,9 @@ function AudienceApp() {
       />
     ) : (
     <>
-      {LiveAudioContainer ? (
-        <React.Suspense fallback={audienceScreenElement}>
-          <LiveAudioContainer
-            availability={liveAudioAvailability.availability}
-            subscribeToWsMessage={subscribeToWsMessage}
-            audienceSession={audienceSession}
-          >
-            {audienceScreenElement}
-          </LiveAudioContainer>
-        </React.Suspense>
-      ) : audienceScreenElement}
+      <AudienceParticipationSurface subscribeToWsMessage={subscribeToWsMessage}>
+        {audienceScreenElement}
+      </AudienceParticipationSurface>
       {shouldShowMediaUnlock && (
         <button
           type="button"

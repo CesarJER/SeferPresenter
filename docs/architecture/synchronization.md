@@ -65,6 +65,14 @@ credencial distinta crea otro propietario. Bootstrap y tickets tardíos no puede
 restaurar acceso anterior. El replay local de metadatos públicos de emisión y
 clave se limpia en WELCOME/rotación; no reproduce mensajes privados.
 
+En Audience, la activación, petición/cancelación, perfiles y mensajes usan ese
+propietario aunque no haya adaptador RTC. El perfil técnico vuelve a comprobar el
+epoch después de obtener la clave pública; una operación anterior al rebind no
+puede enviarse en la nueva conexión. El único adaptador media publica su estado real
+al propietario y conserva los efectos sobre pistas; no duplica los handlers sociales.
+Una concesión `LIVE_AUDIO_GRANT_SPEAK` sigue siendo permiso de audio: sin conexión
+RTC no muestra un micrófono publicado ni concede un turno presencial.
+
 Los detalles/puntuaciones de quiz permanecen en Audience dentro del TTL local,
 separados por presentación. Cada pregunta/resultado utiliza submissionIds de
 scope independientes. El servidor transforma contribuciones en contadores y

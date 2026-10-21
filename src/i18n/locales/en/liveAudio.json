@@ -221,5 +221,7 @@
   "CollapsiblePrivacyNotice.noExternalBroadcastIsCurrentlyDeclaredIfThisChangesPrevious": "No external broadcast is currently declared. If this changes, previous voice permissions will be revoked.",
   "CollapsiblePrivacyNotice.theSessionIsDeclaredLiveIfYouPublishYourMicrophone": "The session is declared live. If you publish your microphone, your voice may reach external recipients.",
   "CollapsiblePrivacyNotice.theSessionIsDeclaredLiveAndRecordingIfYouPublish": "The session is declared live and recording. If you publish your microphone, your voice may be stored in the operator’s external services.",
-  "CollapsiblePrivacyNotice.emptyDocument": "empty document"
+  "CollapsiblePrivacyNotice.emptyDocument": "empty document",
+  "AudienceLiveAudioPanel.showParticipation": "Show participation controls",
+  "AudienceParticipationPanel.preparingSecureParticipation": "Secure participation unavailable. Check the connection and encryption."
 }

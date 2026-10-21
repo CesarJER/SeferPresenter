@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useContext } from 'react';
 import type { AppMode, ScriptureNavState, Slide, VideoState } from '../../types/presentation';
 import type { QuizSubslide, QuizTimerState } from '../../types/quiz';
 import type { AutoduckState } from '../../types/sync';
@@ -7,7 +7,8 @@ import PresenterScreen from '../presenter/PresenterScreen';
 import SeferReaderScreen from '../presenter/SeferReaderScreen';
 import { QuizAudienceView } from '../quiz/QuizAudienceView';
 import { useAudienceLiveAudio } from '../../features/liveAudio/components/audience/AudienceLiveAudioContext';
-import { AudienceLiveAudioPanel } from '../../features/liveAudio/components/audience/AudienceLiveAudioPanel';
+import { AudienceParticipationContext } from '../../hooks/useAudienceParticipation';
+import { AudienceParticipationPanel } from './AudienceParticipationPanel';
 import { PwaRestartButton } from '../shared/PwaRestartButton';
 import AudienceTvCallToAction from './AudienceTvCallToAction';
 
@@ -58,6 +59,7 @@ const AudienceScreen = ({
   const domain = import.meta.env.VITE_DOMAIN || window.location.host;
 
   const liveAudio = useAudienceLiveAudio();
+  const participation = useContext(AudienceParticipationContext);
 
   const handleFullscreen = useCallback(() => {
     if (!document.fullscreenElement) {
@@ -73,39 +75,8 @@ const AudienceScreen = ({
 
   const ignoreVideoState = useCallback(() => {}, []);
 
-  const liveAudioPanel = liveAudio && !isTvMode ? (
-    <AudienceLiveAudioPanel
-      state={liveAudio.state}
-      isActive={liveAudio.isActive}
-      isMicrophoneActive={liveAudio.isMicrophoneActive}
-      microphoneTrackState={liveAudio.microphoneTrackState}
-      hasAudioStarted={liveAudio.hasAudioStarted}
-      isPendingWord={liveAudio.isPendingWord}
-      isWordGranted={liveAudio.isWordGranted}
-      isParticipationBlocked={liveAudio.isParticipationBlocked}
-      volume={liveAudio.volume}
-      onVolumeChange={liveAudio.onVolumeChange}
-      microphoneVolume={liveAudio.microphoneVolume}
-      isMusicMode={liveAudio.isMusicMode}
-      onMicrophoneVolumeChange={liveAudio.onMicrophoneVolumeChange}
-      onMusicModeChange={liveAudio.onMusicModeChange}
-      onStartAudio={liveAudio.onStartAudio}
-      onRetryAudio={liveAudio.onRetryAudio}
-      onJoinActive={liveAudio.onJoinActive}
-      onLeaveActive={liveAudio.onLeaveActive}
-      onRequestWord={liveAudio.onRequestWord}
-      onCancelRequest={liveAudio.onCancelRequest}
-      onToggleMicrophone={liveAudio.onToggleMicrophone}
-      onOpenMessage={liveAudio.onOpenMessage}
-      isAliasVisibleToOthers={liveAudio.isAliasVisibleToOthers}
-      onAliasVisibilityChange={liveAudio.onAliasVisibilityChange}
-      canViewActiveParticipants={liveAudio.canViewActiveParticipants}
-      visibleParticipants={liveAudio.visibleParticipants}
-      microphoneDiagnostics={liveAudio.microphoneDiagnostics}
-      externalBroadcastState={liveAudio.externalBroadcastState}
-      variant="inline"
-    />
-  ) : null;
+  const liveAudioPanel = participation && !isTvMode ? <AudienceParticipationPanel /> : null;
+  const needsFallback = !slide || (slide.type === 'quiz' && activeSubslide?.kind === 'results');
 
   if (isCitaVerse && scriptureState) {
     return (
@@ -185,13 +156,14 @@ const AudienceScreen = ({
           quizSubslides={quizSubslides}
           quizCurrentSubslideIndex={quizCurrentSubslideIndex}
           quizTimerState={quizTimerState}
-          liveAudioPanel={liveAudioPanel}
+          liveAudioPanel={needsFallback ? null : liveAudioPanel}
           autoduckState={autoduckState}
           onPlaybackBlocked={onPlaybackBlocked}
           enableDriftCorrection={true}
           serverNow={serverNow}
         />
       </div>
+      {needsFallback && liveAudioPanel && <div className="fixed bottom-12 start-0 end-0 z-60 pointer-events-auto">{liveAudioPanel}</div>}
       <div className="fixed bottom-2 start-2 z-50 pointer-events-auto opacity-60 hover:opacity-100 transition-opacity">
         <PwaRestartButton
           connectionState={liveAudio?.state}

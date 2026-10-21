@@ -58,9 +58,18 @@ La identidad procede de `useAudienceAccess`, y el envío exige la confirmación
 Cambiar la credencial o la identidad desmonta ese propietario; una reconexión
 de la misma identidad conserva estado privado, pero exige un nuevo bind antes
 de enviar. Las generaciones invalidan resultados asíncronos antiguos.
-El contenedor Live Audio conserva los efectos de reproducción, consentimiento
-y publicación. La composición completa de UI sin RTC sigue pendiente: el flag
-de build, la disponibilidad y el panel aún limitan la experiencia admitida.
+Ese propietario también coordina activación/salida, petición/cancelación, perfil
+y mensajes sociales. [AudienceParticipationSurface](../../src/components/audience/AudienceParticipationSurface.tsx)
+compone la vista admitida con un adaptador RTC hermano y opcional, bajo su propio
+Suspense/límite de error. [AudienceParticipationPanel](../../src/components/audience/AudienceParticipationPanel.tsx)
+reutiliza los widgets en los slots Scripture/slides/quiz, con fallback cuando no
+hay slot y entrada para reabrir el panel. TV conserva solo escucha pasiva.
+El contenedor Live Audio conserva `useLiveAudio`, pistas, reproducción, consentimiento
+y publicación; comunica únicamente estado/acciones de medios por una interfaz local.
+El flag `VITE_SEFER_LIVE_AUDIO_BUILD=false`, la ausencia de RTC o un fallo del módulo
+opcional no retiran el propietario ni los widgets sociales de Audience. Los envíos
+siguen exigiendo admisión, bind WS vigente y cifrado. Control conserva su composición
+actual: su extracción independiente de RTC pertenece a una fase posterior.
 
 ## Límites comprobados en desarrollo
 

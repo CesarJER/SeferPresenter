@@ -221,5 +221,7 @@
   "CollapsiblePrivacyNotice.noExternalBroadcastIsCurrentlyDeclaredIfThisChangesPrevious": "Aucune diffusion externe n’est actuellement déclarée. Si cet état change, les autorisations vocales précédentes seront révoquées.",
   "CollapsiblePrivacyNotice.theSessionIsDeclaredLiveIfYouPublishYourMicrophone": "La session est déclarée en direct. Si vous diffusez votre microphone, votre voix pourra atteindre des destinataires externes.",
   "CollapsiblePrivacyNotice.theSessionIsDeclaredLiveAndRecordingIfYouPublish": "La session est déclarée en direct et enregistrée. Si vous diffusez votre microphone, votre voix pourra être conservée dans les services externes de l’opérateur.",
-  "CollapsiblePrivacyNotice.emptyDocument": "document vide"
+  "CollapsiblePrivacyNotice.emptyDocument": "document vide",
+  "AudienceLiveAudioPanel.showParticipation": "Afficher les commandes de participation",
+  "AudienceParticipationPanel.preparingSecureParticipation": "Participation sécurisée indisponible. Vérifiez la connexion et le chiffrement."
 }

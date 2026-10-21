@@ -3,7 +3,17 @@ import { usePrivateControlSignals } from './usePrivateControlSignals';
 import type { useAudienceAccess } from './useAudienceAccess';
 import type { useAudienceSession } from './useAudienceSession';
 import type { WebSocketConnectionStatus } from './useWebSocket';
-import type { LiveAudioExternalBroadcastState } from '../types/liveAudio';
+import type { LiveAudioExternalBroadcastState, LiveAudioConnectionState, MicrophoneTrackState } from '../types/liveAudio';
+
+export interface AudienceMediaStatus {
+  liveAudioConnectionState: LiveAudioConnectionState;
+  isMicrophoneActive: boolean;
+  microphoneTrackState: MicrophoneTrackState;
+}
+
+const unavailableMedia: AudienceMediaStatus = {
+  liveAudioConnectionState: 'unavailable', isMicrophoneActive: false, microphoneTrackState: 'off',
+};
 
 export interface AudienceParticipationOptions {
   access: ReturnType<typeof useAudienceAccess>;
@@ -26,6 +36,11 @@ export function useAudienceParticipationOwner({ access, audienceSession, wsStatu
   const [externalBroadcastRevision, setExternalBroadcastRevision] = useState(0);
   const [submittedAlias, setSubmittedAlias] = useState<string | null>(null);
   const lastPrivateProfileSignatureRef = useRef('');
+  const [mediaStatus, setMediaStatus] = useState(unavailableMedia);
+  const currentAccessRef = useRef(access);
+  currentAccessRef.current = access;
+  const mountedRef = useRef(true);
+  useEffect(() => { mountedRef.current = true; return () => { mountedRef.current = false; }; }, []);
   const [microphoneConfig, setMicrophoneConfig] = useState<{ volume?: number; musicMode?: boolean } | null>(null);
   const [receivedControlMessages, setReceivedControlMessages] = useState<Array<{
     id: string; senderNick: string; text: string; timestamp: number;
@@ -49,7 +64,7 @@ export function useAudienceParticipationOwner({ access, audienceSession, wsStatu
           text,
           timestamp: typeof payload.timestamp === 'number' ? payload.timestamp : Date.now(),
         }]);
-      } else if (payload.type === 'VISIBLE_ACTIVE_PARTICIPANTS' && Array.isArray(payload.participants)) {
+      } else if (payload.type === 'VISIBLE_ACTIVE_PARTICIPANTS' && canViewActiveParticipants && Array.isArray(payload.participants)) {
         setVisibleParticipants(payload.participants.filter((value): value is string => typeof value === 'string'));
       } else if (payload.type === 'SET_MICROPHONE_CONFIG') {
         setMicrophoneConfig(previous => ({ ...previous,
@@ -60,11 +75,105 @@ export function useAudienceParticipationOwner({ access, audienceSession, wsStatu
     },
   });
 
-  const { authorized, isCurrentWsBinding } = access;
+  const { authorized, isCurrentWsBinding, getWsBindingEpoch } = access;
   const { logout } = audienceSession;
-  const { sendPrivateSignal } = privateSignals;
+  const { sendPrivateSignal, getAudiencePublicKey } = privateSignals;
   const sendSessionMessage = useCallback((type: string, payload?: unknown) =>
     isCurrentWsBinding() && wsSend(type, payload), [isCurrentWsBinding, wsSend]);
+
+  const canParticipate = useCallback(() => mountedRef.current && currentAccessRef.current.authorized
+    && currentAccessRef.current.isCurrentWsBinding(), []);
+  const socialReady = wsStatus === 'open' && canParticipate() && privateSignals.ready;
+  const mediaConnected = mediaStatus.liveAudioConnectionState === 'connected' || mediaStatus.liveAudioConnectionState === 'reconnected';
+  const mediaGrantAvailable = isWordGranted && mediaConnected;
+
+  const publishActiveProfile = useCallback(async (alias: string, visible: boolean) => {
+    if (!alias || !canParticipate()) return false;
+    const epoch = getWsBindingEpoch();
+    const activeListPublicKey = await getAudiencePublicKey().catch(() => null);
+    if (!activeListPublicKey || !canParticipate() || epoch !== getWsBindingEpoch()) return false;
+    return sendSessionMessage('LIVE_AUDIO_ACTIVE_PARTICIPANT_PROFILE', {
+      type: 'LIVE_AUDIO_ACTIVE_PARTICIPANT_PROFILE', participantId, activeListPublicKey,
+      isAliasVisibleToActiveParticipants: visible, createdAt: Date.now(),
+    });
+  }, [getWsBindingEpoch, canParticipate, participantId, getAudiencePublicKey, sendSessionMessage]);
+
+  const activate = useCallback((alias: string, visible: boolean) => {
+    if (!canParticipate() || !privateSignals.ready || isKicked || !alias.trim()) return false;
+    audienceSession.login(alias);
+    audienceSession.setAliasVisible(visible);
+    setIsActive(true); setIsPendingWord(false); setIsWordGranted(false);
+    return true;
+  }, [audienceSession, canParticipate, isKicked, privateSignals.ready]);
+
+  const leave = useCallback(() => {
+    setIsActive(false); setIsPendingWord(false); setIsWordGranted(false); setIsKicked(false);
+    setCanViewActiveParticipants(false); setVisibleParticipants([]);
+    sendSessionMessage('LIVE_AUDIO_PARTICIPANT_STATUS', {
+      type: 'LIVE_AUDIO_PARTICIPANT_STATUS', participantId, role: 'audience', speakerState: 'REVOKED',
+      canSubscribe: true, canPublishAudio: false, isMuted: true, isActiveAudience: false,
+      isMicrophoneActive: false, microphoneTrackState: 'off', liveAudioConnectionState: mediaStatus.liveAudioConnectionState,
+      isKicked: false, updatedAt: Date.now(),
+    });
+    sendSessionMessage('AUDIENCE_ACCESS_LEAVE', { createdAt: Date.now() });
+    audienceSession.logout();
+  }, [audienceSession, mediaStatus.liveAudioConnectionState, participantId, sendSessionMessage]);
+
+  const requestWord = useCallback(() => {
+    if (!canParticipate() || !privateSignals.ready || !isActive || isKicked || mediaGrantAvailable) return;
+    setIsPendingWord(true);
+  }, [canParticipate, isActive, isKicked, mediaGrantAvailable, privateSignals.ready]);
+  const cancelRequest = useCallback(() => {
+    if (!canParticipate() || !privateSignals.ready || !isActive || isKicked) return;
+    setIsPendingWord(false);
+    void sendPrivateSignal({ type: 'CANCEL_REQUEST_WORD', alias: audienceSession.nick || undefined });
+  }, [audienceSession.nick, canParticipate, isActive, isKicked, privateSignals.ready, sendPrivateSignal]);
+  const sendPrivateMessage = useCallback((text: string) => {
+    if (!privateSignals.ready || !isCurrentWsBinding() || isKicked) return Promise.resolve(false);
+    return sendPrivateSignal({ type: 'PRIVATE_MESSAGE', text, alias: audienceSession.nick || submittedAlias || undefined });
+  }, [audienceSession.nick, isCurrentWsBinding, isKicked, privateSignals.ready, sendPrivateSignal, submittedAlias]);
+  const changeAliasVisibility = useCallback((visible: boolean) => {
+    if (canParticipate()) audienceSession.setAliasVisible(visible);
+  }, [audienceSession, canParticipate]);
+
+  useEffect(() => {
+    if (canParticipate() && audienceSession.isLoggedIn && !isKicked) setIsActive(true);
+  }, [audienceSession.isLoggedIn, canParticipate, isKicked, socialReady]);
+
+  useEffect(() => {
+    if (!socialReady) return;
+    const microphoneActive = isActive && mediaGrantAvailable && mediaStatus.isMicrophoneActive;
+    sendSessionMessage('LIVE_AUDIO_PARTICIPANT_STATUS', {
+      type: 'LIVE_AUDIO_PARTICIPANT_STATUS', participantId, role: 'audience',
+      speakerState: !isActive ? 'REVOKED' : mediaGrantAvailable ? 'GRANTED' : isPendingWord ? 'REQUESTED' : 'LISTENER',
+      canSubscribe: true, canPublishAudio: isActive && mediaGrantAvailable,
+      isMuted: !microphoneActive, isActiveAudience: isActive,
+      ...mediaStatus, isMicrophoneActive: microphoneActive,
+      microphoneTrackState: isActive && mediaGrantAvailable ? mediaStatus.microphoneTrackState : 'off',
+      isKicked, microphonePermissionState: 'unknown', updatedAt: Date.now(),
+    });
+  }, [isActive, isKicked, isPendingWord, mediaGrantAvailable, mediaStatus, participantId, sendSessionMessage, socialReady]);
+
+  useEffect(() => {
+    if (!socialReady || !isActive || !audienceSession.nick) return;
+    const signature = JSON.stringify([privateSignals.keyId, keyRotationCount, getWsBindingEpoch(),
+      audienceSession.nick, audienceSession.aliasVisible, isPendingWord, mediaGrantAvailable]);
+    if (signature === lastPrivateProfileSignatureRef.current) return;
+    let cancelled = false;
+    const epoch = getWsBindingEpoch();
+    void (async () => {
+      if (!await publishActiveProfile(audienceSession.nick, audienceSession.aliasVisible)) return;
+      if (cancelled || !canParticipate() || epoch !== getWsBindingEpoch()) return;
+      const sent = await sendPrivateSignal({
+        type: isPendingWord ? 'REQUEST_WORD' : mediaGrantAvailable ? 'ACTIVE_STATE' : 'ACTIVE_PROFILE',
+        alias: audienceSession.nick, isAliasVisibleToActiveParticipants: audienceSession.aliasVisible,
+        speakerState: mediaGrantAvailable ? 'GRANTED' : isPendingWord ? 'REQUESTED' : 'LISTENER',
+      });
+      if (sent && !cancelled) lastPrivateProfileSignatureRef.current = signature;
+    })();
+    return () => { cancelled = true; };
+  }, [getWsBindingEpoch, audienceSession.aliasVisible, audienceSession.nick, canParticipate, isActive,
+    isPendingWord, mediaGrantAvailable, keyRotationCount, privateSignals.keyId, publishActiveProfile, sendPrivateSignal, socialReady]);
 
   useEffect(() => subscribeToWsMessage((type, payload) => {
     if (type === 'LIVE_AUDIO_EXTERNAL_BROADCAST_STATE') {
@@ -75,8 +184,10 @@ export function useAudienceParticipationOwner({ access, audienceSession, wsStatu
       return;
     }
     if (!isCurrentWsBinding()) return;
-    if (type === 'LIVE_AUDIO_REQUEST_ALIASES' && submittedAlias && !authorized) {
-      void sendPrivateSignal({ type: 'ACCESS_REQUEST', alias: submittedAlias });
+    if (type === 'LIVE_AUDIO_REQUEST_ALIASES') {
+      lastPrivateProfileSignatureRef.current = '';
+      setKeyRotationCount(value => value + 1);
+      if (submittedAlias && !authorized) void sendPrivateSignal({ type: 'ACCESS_REQUEST', alias: submittedAlias });
     } else if (type === 'LIVE_AUDIO_MUTE_ALL' && isWordGranted) {
       const excluded = Array.isArray(payload.excludeParticipantIds) ? payload.excludeParticipantIds : [];
       if (!excluded.includes(participantId)) { setIsActive(true); setIsPendingWord(false); }
@@ -104,6 +215,8 @@ export function useAudienceParticipationOwner({ access, audienceSession, wsStatu
   }, []);
 
   return {
+    audienceSession, socialReady, canParticipate, activate, leave, requestWord, cancelRequest, sendPrivateMessage, changeAliasVisibility,
+    setMediaStatus,
     participantId, privateSignals, sendSessionMessage, submittedAlias, setSubmittedAlias,
     lastPrivateProfileSignatureRef,
     receivedControlMessages, dismissControlMessage, microphoneConfig,

@@ -221,5 +221,7 @@
   "CollapsiblePrivacyNotice.noExternalBroadcastIsCurrentlyDeclaredIfThisChangesPrevious": "לא הוצהר כרגע על שידור חיצוני. אם המצב ישתנה, הרשאות הקול הקודמות יבוטלו.",
   "CollapsiblePrivacyNotice.theSessionIsDeclaredLiveIfYouPublishYourMicrophone": "המפגש הוצהר כשידור חי. אם תשדרו מהמיקרופון, קולכם עשוי להגיע לנמענים חיצוניים.",
   "CollapsiblePrivacyNotice.theSessionIsDeclaredLiveAndRecordingIfYouPublish": "המפגש הוצהר כשידור חי ובהקלטה. אם תשדרו מהמיקרופון, קולכם עשוי להישמר בשירותים החיצוניים של המפעיל.",
-  "CollapsiblePrivacyNotice.emptyDocument": "מסמך ריק"
+  "CollapsiblePrivacyNotice.emptyDocument": "מסמך ריק",
+  "AudienceLiveAudioPanel.showParticipation": "הצגת פקדי השתתפות",
+  "AudienceParticipationPanel.preparingSecureParticipation": "השתתפות מאובטחת אינה זמינה. יש לבדוק את החיבור ואת ההצפנה."
 }

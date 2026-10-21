@@ -49,6 +49,12 @@ transcripciones ni nicks reales. Para una release, completar también
 
 ## Fallos y parada
 
+En Audience, un fallo de audio conserva las acciones sociales si admisión, WS y
+cifrado siguen disponibles. Utilizar el mensaje privado como respaldo; el botón
+de mano reabre un panel oculto. Sin RTC no aparece un micrófono concedido ni se
+solicita permiso de captura. Esto requiere que Control tenga activo su canal privado;
+su composición con build=false sigue pendiente de una fase posterior.
+
 Ante participant_not_ready, reconectar y comprobar presencia SFU real. Ante
 livekit_unavailable o permiso no confirmado, no asumir que se concedió palabra.
 Los retries automáticos de red son limitados; denegación, kick o fallo de captura

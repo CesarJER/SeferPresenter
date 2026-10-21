@@ -122,6 +122,14 @@ proveedores HTTPS permitidos, valida una respuesta IPv4 y falla si no obtiene
 una válida.
 Antes de construirlo, activa tambien `SEFER_LIVE_AUDIO_ENABLED=true` y
 `VITE_SEFER_LIVE_AUDIO_BUILD=true` en el entorno.
+
+En Audience, `VITE_SEFER_LIVE_AUDIO_BUILD=false` conserva participación y mensajería
+E2EE y excluye solo el adaptador RTC/SDK de su grafo. No necesita token LiveKit para
+las acciones sociales. El mismo flag todavía excluye el contenedor actual de
+Control; para recibir/responder necesita un Control autorizado con su canal privado
+activo. La independencia del propietario Control sigue pendiente. Véase
+[comportamiento y límites](../features/live-audio.md).
+
 `npm run dev` sigue siendo util
 para desarrollo local del frontend/backend, pero no sustituye el entorno
 contenedorizado cuando quieres validar la ruta completa de voz en vivo.

@@ -5,7 +5,8 @@ import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { AudienceParticipationProvider } from '../src/components/audience/AudienceParticipationProvider';
 import { AudienceAccessGate } from '../src/components/audience/AudienceAccessGate';
-import LiveAudioAudienceContainer from '../src/features/liveAudio/components/audience/LiveAudioAudienceContainer';
+import { AudienceParticipationSurface } from '../src/components/audience/AudienceParticipationSurface';
+import { AudienceParticipationPanel } from '../src/components/audience/AudienceParticipationPanel';
 import { useAudienceParticipation } from '../src/hooks/useAudienceParticipation';
 import { useAudienceAccess } from '../src/hooks/useAudienceAccess';
 import { useAudienceSession } from '../src/hooks/useAudienceSession';
@@ -14,6 +15,7 @@ import * as cryptoUtils from '../src/utils/cryptoUtils';
 import { useAudienceLiveAudio } from '../src/features/liveAudio/components/audience/AudienceLiveAudioContext';
 
 const media = vi.hoisted(() => ({ publish: vi.fn(), unpublish: vi.fn(), connect: vi.fn() }));
+vi.mock('../src/features/liveAudio/hooks/useLiveAudioAvailability', () => ({ useLiveAudioAvailability: () => ({ availability: 'enabled' }) }));
 vi.mock('../src/features/liveAudio/hooks/useLiveAudio', () => ({
   isMicrophonePublicationCancelled: () => false,
   useLiveAudio: () => ({ state: 'connected', connectionQuality: 'good', remoteTracks: [], participantId: 'rtc-must-not-authorize',
@@ -66,11 +68,11 @@ function Harness({ hidden = false, relocated = false, status = 'open' }: {
   >
     <Probe />
     {hidden ? null : admitted
-      ? <div key={relocated ? 'other-slot' : 'original-slot'}><LiveAudioAudienceContainer availability="enabled"
-        subscribeToWsMessage={subscribe} audienceSession={currentSession}>
+      ? <AudienceParticipationSurface subscribeToWsMessage={subscribe}><div key={relocated ? 'other-slot' : 'original-slot'}>
         <p>Admitted view</p>
+        <AudienceParticipationPanel />
         <MediaProbe />
-      </LiveAudioAudienceContainer></div>
+      </div></AudienceParticipationSurface>
       : <AudienceAccessGate accessState={currentAccess.accessState} retryAt={currentAccess.retryAt} onAliasAccepted={(alias, visible) => {
         currentSession.login(alias); currentSession.setAliasVisible(visible);
       }} />}
@@ -137,7 +139,7 @@ it('preserves the actual E2EE session and waiting-room messages through admissio
   await screen.findByText('Admitted view');
   expect(screen.getByText('"Reply received while waiting"')).toBeTruthy();
   expect(await owner.privateSignals.getAudiencePublicKey()).toBe(audienceKey);
-  expect(subscribers.size).toBe(before + 1); // The media adapter adds only its RTC moderation subscription.
+  await waitFor(() => expect(subscribers.size).toBe(before + 1)); // The optional media adapter adds only its RTC moderation subscription.
   act(() => owner.setIsPendingWord(true));
   view.rerender(<Harness relocated />);
   expect(owner.isPendingWord).toBe(true);
@@ -268,13 +270,15 @@ it('keeps grant confirmation and microphone configuration separate from explicit
   mode = 'PUBLIC';
   await start();
   await screen.findByText('Admitted view');
-  act(() => emit('LIVE_AUDIO_GRANT_SPEAK', { participantId }));
-  await waitFor(() => expect(audio?.isWordGranted).toBe(true));
-  expect(media.publish).not.toHaveBeenCalled();
-  act(() => audio!.onRequestWord());
+  await waitFor(() => expect(audio?.state).toBe('connected'));
+  act(() => owner.activate('Synthetic Alias', false));
+  act(() => owner.requestWord());
   expect(owner.isPendingWord).toBe(true);
-  act(() => audio!.onCancelRequest());
+  act(() => owner.cancelRequest());
   expect(owner.isPendingWord).toBe(false);
+  act(() => emit('LIVE_AUDIO_GRANT_SPEAK', { participantId }));
+  await waitFor(() => expect(owner.isWordGranted).toBe(true));
+  expect(media.publish).not.toHaveBeenCalled();
   expect(media.publish).not.toHaveBeenCalled();
   act(() => emit('LIVE_AUDIO_REVOKE_SPEAK', { participantId }));
   expect(owner.isWordGranted).toBe(false);

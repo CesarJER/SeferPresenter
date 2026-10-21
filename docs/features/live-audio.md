@@ -13,6 +13,22 @@ de música/vídeo sincronizados. Con la feature desactivada, el uso de presentac
 debe seguir disponible. Hay flags distintos de bundle y backend; cargar la UI
 no demuestra que LiveKit esté disponible ni que audio llegue al receptor.
 
+La participación social de Audience utiliza admisión autenticada, el WS existente
+y WebCrypto/E2EE: puede activar/salir, pedir/cancelar palabra, enviar mensajes a
+Control, recibir respuestas y consultar la lista permitida sin LiveKit. La entrada
+está disponible en Scripture, slides y quiz; al ocultar el panel queda un botón para
+reabrirlo. Las pantallas sin slot usan un único fallback. TV conserva escucha pasiva
+sin controles de participación ni captura.
+
+`VITE_SEFER_LIVE_AUDIO_BUILD=false` excluye el runtime RTC de Audience, conservando
+su propietario y widgets sociales. Un fallo de carga/render del adaptador también
+queda aislado. Los controles de medios requieren el adaptador disponible; publicar
+micrófono requiere además conexión, permiso de Control y acción local. Si falta WS
+o cifrado, la participación indica indisponibilidad y no usa texto plano. Esta fase
+no extrae la composición Control: con build=false también se excluye su contenedor
+actual, por lo que la comunicación necesita un Control autorizado con su canal
+privado activo. No hay recuperación de historial ni un turno presencial nuevo.
+
 Audience puede escuchar pasivamente o participar activamente tras el recorrido
 de alias/aviso/admisión. Conceder palabra habilita publicación, pero no abre la
 captura automáticamente: cada navegador confirma su micrófono. Presenter y
