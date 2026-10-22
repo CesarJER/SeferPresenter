@@ -15,6 +15,7 @@ export function AudienceParticipationPanel() {
   const media = useAudienceLiveAudio();
   const [joining, setJoining] = useState(false);
   const [messaging, setMessaging] = useState(false);
+  const [replyTo, setReplyTo] = useState<string>();
   const noMedia = () => {};
   const mediaAvailable = Boolean(media && media.availability === 'enabled');
   const microphoneAvailable = mediaAvailable && (media?.state === 'connected' || media?.state === 'reconnected');
@@ -43,7 +44,7 @@ export function AudienceParticipationPanel() {
       onLeaveActive={owner.leave}
       onRequestWord={owner.requestWord}
       onCancelRequest={owner.cancelRequest}
-      onOpenMessage={() => setMessaging(true)}
+      onOpenMessage={() => { setReplyTo(undefined); setMessaging(true); }}
       isAliasVisibleToOthers={owner.audienceSession.aliasVisible}
       onAliasVisibilityChange={owner.changeAliasVisibility}
       canViewActiveParticipants={owner.canViewActiveParticipants}
@@ -63,7 +64,7 @@ export function AudienceParticipationPanel() {
       submitDisabled={!owner.socialReady}
       onSubmit={(alias, visible) => { if (owner.activate(alias, visible)) setJoining(false); }}
     />}
-    {messaging && <AudiencePrivateControlMessage onClose={() => setMessaging(false)} onSend={owner.sendPrivateMessage} />}
+    {messaging && <AudiencePrivateControlMessage onClose={() => setMessaging(false)} onSend={text => owner.sendPrivateMessage(text, replyTo)} />}
     {owner.receivedControlMessages.length > 0 && <div className="fixed top-4 end-4 start-4 md:start-auto md:w-96 z-50 space-y-2 pointer-events-auto">
       {owner.receivedControlMessages.map(message => <div key={message.id}
         className="rounded-xl border border-blue-600/50 bg-gray-900/95 p-3.5 shadow-2xl backdrop-blur-md text-white">
@@ -82,6 +83,10 @@ export function AudienceParticipationPanel() {
           </button>
         </div>
         <p dir="auto" className="text-xs text-gray-100 leading-relaxed ps-5">"{message.text}"</p>
+        {message.correlated && <button type="button" disabled={!owner.socialReady}
+          className="mt-2 text-xs underline disabled:opacity-50" onClick={() => { setReplyTo(message.id); setMessaging(true); }}>
+          {translate('liveAudio:Conversations.reply', 'Responder')}
+        </button>}
       </div>)}
     </div>}
     </>, document.body)}

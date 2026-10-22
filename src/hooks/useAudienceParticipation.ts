@@ -4,6 +4,7 @@ import type { useAudienceAccess } from './useAudienceAccess';
 import type { useAudienceSession } from './useAudienceSession';
 import type { WebSocketConnectionStatus } from './useWebSocket';
 import type { LiveAudioExternalBroadcastState, LiveAudioConnectionState, MicrophoneTrackState } from '../types/liveAudio';
+import { conversationIdFor, isConversationOperationId } from '../utils/privateConversations';
 
 export interface AudienceMediaStatus {
   liveAudioConnectionState: LiveAudioConnectionState;
@@ -43,8 +44,9 @@ export function useAudienceParticipationOwner({ access, audienceSession, wsStatu
   useEffect(() => { mountedRef.current = true; return () => { mountedRef.current = false; }; }, []);
   const [microphoneConfig, setMicrophoneConfig] = useState<{ volume?: number; musicMode?: boolean } | null>(null);
   const [receivedControlMessages, setReceivedControlMessages] = useState<Array<{
-    id: string; senderNick: string; text: string; timestamp: number;
+    id: string; senderNick: string; text: string; timestamp: number; correlated?: boolean; replyTo?: string;
   }>>([]);
+  const receivedOperations = useRef(new Set<string>());
 
   const privateSignals = usePrivateControlSignals({
     role: 'audience', participantId: participantId ?? '',
@@ -57,9 +59,18 @@ export function useAudienceParticipationOwner({ access, audienceSession, wsStatu
       const payload = signal.value as Record<string, unknown> | null;
       if (!payload || typeof payload !== 'object') return;
       if (payload.type === 'CHAT_RESPONSE' && typeof payload.text === 'string' && payload.text.trim()) {
+        const correlated = payload.operationId !== undefined || payload.conversationId !== undefined || payload.presentationSessionId !== undefined;
+        const sessionId = currentAccessRef.current.presentationSessionId;
+        if (correlated && (!currentAccessRef.current.authorized || !sessionId || !participantId
+          || !isConversationOperationId(payload.operationId) || payload.presentationSessionId !== sessionId
+          || payload.conversationId !== conversationIdFor(sessionId, participantId)
+          || payload.text.length > 1000 || (payload.replyTo !== undefined && (typeof payload.replyTo !== 'string' || payload.replyTo.length > 256)))) return;
+        const id = correlated ? payload.operationId as string : signal.signalId;
+        if (!id || receivedOperations.current.has(id)) return;
+        receivedOperations.current.add(id);
         const text = payload.text.trim();
         setReceivedControlMessages(previous => [...previous, {
-          id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+          id, correlated, replyTo: typeof payload.replyTo === 'string' ? payload.replyTo : undefined,
           senderNick: typeof payload.senderNick === 'string' && payload.senderNick ? payload.senderNick : 'Control',
           text,
           timestamp: typeof payload.timestamp === 'number' ? payload.timestamp : Date.now(),
@@ -128,10 +139,15 @@ export function useAudienceParticipationOwner({ access, audienceSession, wsStatu
     setIsPendingWord(false);
     void sendPrivateSignal({ type: 'CANCEL_REQUEST_WORD', alias: audienceSession.nick || undefined });
   }, [audienceSession.nick, canParticipate, isActive, isKicked, privateSignals.ready, sendPrivateSignal]);
-  const sendPrivateMessage = useCallback((text: string) => {
+  const sendPrivateMessage = useCallback((text: string, replyTo?: string) => {
     if (!privateSignals.ready || !isCurrentWsBinding() || isKicked) return Promise.resolve(false);
-    return sendPrivateSignal({ type: 'PRIVATE_MESSAGE', text, alias: audienceSession.nick || submittedAlias || undefined });
-  }, [audienceSession.nick, isCurrentWsBinding, isKicked, privateSignals.ready, sendPrivateSignal, submittedAlias]);
+    const sessionId = currentAccessRef.current.presentationSessionId;
+    if (!sessionId || !participantId || !text.trim() || text.length > 1000
+      || (replyTo && !receivedOperations.current.has(replyTo))) return Promise.resolve(false);
+    return sendPrivateSignal({ type: 'PRIVATE_MESSAGE', text: text.trim(), alias: audienceSession.nick || submittedAlias || undefined,
+      operationId: crypto.randomUUID(), presentationSessionId: sessionId,
+      conversationId: conversationIdFor(sessionId, participantId), createdAt: Date.now(), replyTo });
+  }, [audienceSession.nick, isCurrentWsBinding, isKicked, participantId, privateSignals.ready, sendPrivateSignal, submittedAlias]);
   const changeAliasVisibility = useCallback((visible: boolean) => {
     if (canParticipate()) audienceSession.setAliasVisible(visible);
   }, [audienceSession, canParticipate]);

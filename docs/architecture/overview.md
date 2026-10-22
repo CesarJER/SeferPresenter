@@ -68,8 +68,26 @@ El contenedor Live Audio conserva `useLiveAudio`, pistas, reproducción, consent
 y publicación; comunica únicamente estado/acciones de medios por una interfaz local.
 El flag `VITE_SEFER_LIVE_AUDIO_BUILD=false`, la ausencia de RTC o un fallo del módulo
 opcional no retiran el propietario ni los widgets sociales de Audience. Los envíos
-siguen exigiendo admisión, bind WS vigente y cifrado. Control conserva su composición
-actual: su extracción independiente de RTC pertenece a una fase posterior.
+siguen exigiendo admisión, bind WS vigente y cifrado.
+
+En Control, [ControlParticipationOwner](../../src/components/control/ControlParticipationOwner.tsx)
+permanece bajo MenuPopup, fuera del flag y del límite de error RTC. Consume la
+autorización canónica de `useControlAuthorization` y posee una sola instancia del
+canal privado. Conserva bandeja, admisión, cola, visibilidad, claves y conversaciones;
+el adaptador LiveAudioControlContainer posee SDK, pistas, dispositivos y Voice.
+Comunica metadatos y acciones de medios, sin exportar pistas al propietario social.
+La bandeja tiene fallback cuando no existe su slot. Ocultar sus widgets no reinicia
+las claves; errores/desconexión RTC no desmontan la conversación.
+
+[useControlConversations](../../src/hooks/useControlConversations.ts) mantiene en
+memoria solo las operaciones nuevas hacia Audience, por presentación y UUID canónico
+del destinatario. Los cuerpos entrantes y sus respuestas contextuales tienen un único
+propietario en el modelo de Notificaciones; no se duplican en un historial interno.
+Un Control autorizado puede iniciar un mensaje sin uno previo cuando Audience está conectada,
+activo y admitido, con perfil técnico recibido en vivo y perfil E2EE que confirman
+la misma clave. Los snapshots no acreditan por sí solos esa elegibilidad. Ambos
+envíos cifrados comparten un UUID de operación; sus resultados son independientes.
+Correlación, límites y compatibilidad: [señales privadas](../api/realtime.md#señales-privadas-envelope-y-payload-descifrado).
 
 ## Límites comprobados en desarrollo
 

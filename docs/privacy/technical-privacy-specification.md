@@ -168,6 +168,13 @@ depende del despliegue. Las claves públicas se distribuyen por el servidor:
 esta arquitectura no demuestra autenticación independiente frente a un servidor
 malicioso. El cifrado privado tampoco describe el transporte de audio LiveKit.
 
+Las conversaciones iniciadas por Control utilizan dos sobres cifrados: destinatario
+Audience y equipo autorizado. El mismo UUID de operación permite correlación sin
+guardar texto en el servidor. El apodo mostrado atribuye un envío al operador dentro
+del grupo que comparte clave; no es una firma individual. Conversaciones, correlaciones
+y borradores permanecen en memoria; no hay historial persistente, ACK ni backfill.
+Se exige presencia/admisión y confirmación de clave actuales antes de iniciar.
+
 Evidencia: [src/utils/cryptoUtils.ts](../../src/utils/cryptoUtils.ts),
 [src/hooks/usePrivateControlSignals.ts](../../src/hooks/usePrivateControlSignals.ts) y
 [server/ws-server.mjs](../../server/ws-server.mjs).

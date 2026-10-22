@@ -47,6 +47,8 @@ export interface UsePrivateControlSignalsOptions {
   transportReady?: boolean;
   isAudienceSessionCurrent?: () => boolean;
   getAudienceSessionEpoch?: () => string;
+  getControlSessionEpoch?: () => number;
+  isControlSessionCurrent?: () => boolean;
   onPrivateSignal?: (signal: DecryptedPrivateControlSignal) => void;
   onControlKeyRotated?: (message: ControlKeyRotatedMessage) => void;
   onError?: (error: unknown) => void;
@@ -64,8 +66,8 @@ export interface PrivateControlSignalsState {
   publishControlPublicKey: () => Promise<void>;
   rotateControlKey: () => Promise<void>;
   sendPrivateSignal: (value: unknown, options?: SendPrivateSignalOptions) => Promise<boolean>;
-  sendPrivateSignalToParticipant: (participantId: string, participantPublicKeyBase64: string, value: unknown) => Promise<boolean>;
-  sendPrivateSignalToControls: (value: unknown) => Promise<boolean>;
+  sendPrivateSignalToParticipant: (participantId: string, participantPublicKeyBase64: string, value: unknown, isCurrent?: () => boolean) => Promise<boolean>;
+  sendPrivateSignalToControls: (value: unknown, isCurrent?: () => boolean) => Promise<boolean>;
   getAudiencePublicKey: () => Promise<string | null>;
   requestAliases: (targetParticipantIds?: string[]) => Promise<boolean>;
   requestControlAuthorization: (verificationCode: string) => Promise<boolean>;
@@ -127,6 +129,10 @@ export function usePrivateControlSignals(options: UsePrivateControlSignalsOption
     && (contextRef.current.isAudienceSessionCurrent?.() ?? true), []);
   const audienceEpochRef = useRef(options.getAudienceSessionEpoch);
   audienceEpochRef.current = options.getAudienceSessionEpoch;
+  const controlEpochRef = useRef(options.getControlSessionEpoch);
+  controlEpochRef.current = options.getControlSessionEpoch;
+  const controlCurrentRef = useRef(options.isControlSessionCurrent);
+  controlCurrentRef.current = options.isControlSessionCurrent;
   const sendMessageRef = useRef(sendMessage);
   const onPrivateSignalRef = useRef(onPrivateSignal);
   const onControlKeyRotatedRef = useRef(onControlKeyRotated);
@@ -182,11 +188,13 @@ export function usePrivateControlSignals(options: UsePrivateControlSignalsOption
     }
 
     const generation = privateGenerationRef.current;
+    const epoch = controlEpochRef.current?.();
     const keyPair = sessionKeyPairRef.current ?? await generateSessionKeyPair();
 
     const nextKeyId = currentKeyIdRef.current ?? createId('control-key');
     const publicKey = await exportPublicKey(keyPair);
-    if (generation !== privateGenerationRef.current || !contextRef.current.transportReady) return;
+    if (generation !== privateGenerationRef.current || epoch !== controlEpochRef.current?.() || !contextRef.current.transportReady
+      || contextRef.current.controlState !== 'PRINCIPAL' || controlCurrentRef.current?.() === false) return;
     sessionKeyPairRef.current = keyPair;
 
     currentKeyIdRef.current = nextKeyId;
@@ -209,10 +217,11 @@ export function usePrivateControlSignals(options: UsePrivateControlSignalsOption
     if (role !== 'control' || !transportReady) return;
 
     const generation = privateGenerationRef.current;
+    const epoch = controlEpochRef.current?.();
     const keyPair = await generateSessionKeyPair();
     const nextKeyId = createId('control-key');
     const publicKey = await exportPublicKey(keyPair);
-    if (generation !== privateGenerationRef.current || !contextRef.current.transportReady) return;
+    if (generation !== privateGenerationRef.current || epoch !== controlEpochRef.current?.() || !contextRef.current.transportReady || controlCurrentRef.current?.() === false) return;
     privateGenerationRef.current += 1;
 
     sessionKeyPairRef.current = keyPair;
@@ -317,10 +326,12 @@ export function usePrivateControlSignals(options: UsePrivateControlSignalsOption
   const sendPrivateSignalToParticipant = useCallback(async (
     targetParticipantId: string,
     targetPublicKeyBase64: string,
-    value: unknown
+    value: unknown,
+    isCurrent?: () => boolean,
   ): Promise<boolean> => {
     if (role !== 'control' || !sessionKeyPairRef.current || !currentKeyIdRef.current || !currentControlPublicKeyRef.current) return false;
     const generation = privateGenerationRef.current;
+    const epoch = controlEpochRef.current?.();
     const keyPair = sessionKeyPairRef.current;
     const activeKeyId = currentKeyIdRef.current;
     const publicKey = currentControlPublicKeyRef.current;
@@ -328,7 +339,7 @@ export function usePrivateControlSignals(options: UsePrivateControlSignalsOption
     const participantPublicKey = await importPublicKey(targetPublicKeyBase64);
     const sharedKey = await deriveSharedKey(keyPair.privateKey, participantPublicKey);
     const encrypted = await encrypt(sharedKey, serializeSignalValue(value));
-    if (generation !== privateGenerationRef.current || keyPair !== sessionKeyPairRef.current
+    if (isCurrent?.() === false || controlCurrentRef.current?.() === false || epoch !== controlEpochRef.current?.() || generation !== privateGenerationRef.current || keyPair !== sessionKeyPairRef.current
       || !contextRef.current.transportReady
       || !['PRINCIPAL', 'AUTHORIZED'].includes(contextRef.current.controlState ?? '')) return false;
 
@@ -347,17 +358,19 @@ export function usePrivateControlSignals(options: UsePrivateControlSignalsOption
   }, [participantId, role]);
 
   const sendPrivateSignalToControls = useCallback(async (
-    value: unknown
+    value: unknown,
+    isCurrent?: () => boolean,
   ): Promise<boolean> => {
     if (role !== 'control' || !sessionKeyPairRef.current || !currentKeyIdRef.current || !currentControlPublicKeyRef.current) return false;
     const generation = privateGenerationRef.current;
+    const epoch = controlEpochRef.current?.();
     const keyPair = sessionKeyPairRef.current;
     const activeKeyId = currentKeyIdRef.current;
     const publicKey = currentControlPublicKeyRef.current;
 
     const sharedKey = await deriveSharedKey(keyPair.privateKey, keyPair.publicKey);
     const encrypted = await encrypt(sharedKey, serializeSignalValue(value));
-    if (generation !== privateGenerationRef.current || keyPair !== sessionKeyPairRef.current
+    if (isCurrent?.() === false || controlCurrentRef.current?.() === false || epoch !== controlEpochRef.current?.() || generation !== privateGenerationRef.current || keyPair !== sessionKeyPairRef.current
       || !contextRef.current.transportReady
       || !['PRINCIPAL', 'AUTHORIZED'].includes(contextRef.current.controlState ?? '')) return false;
 
@@ -388,6 +401,8 @@ export function usePrivateControlSignals(options: UsePrivateControlSignalsOption
   const requestControlAuthorization = useCallback(async (verificationCode: string): Promise<boolean> => {
     if (role !== 'control' || !transportReady) return false;
 
+    const generation = privateGenerationRef.current;
+    const epoch = controlEpochRef.current?.();
     const keyPair = authorizationKeyPairRef.current ?? await generateEphemeralKeyPair();
     authorizationKeyPairRef.current = keyPair;
 
@@ -399,6 +414,7 @@ export function usePrivateControlSignals(options: UsePrivateControlSignalsOption
       createdAt: Date.now(),
     });
 
+    if (generation !== privateGenerationRef.current || epoch !== controlEpochRef.current?.() || !contextRef.current.transportReady) return false;
     return sendMessageRef.current(message.type, message);
   }, [controlSessionId, role, transportReady]);
 
@@ -409,10 +425,15 @@ export function usePrivateControlSignals(options: UsePrivateControlSignalsOption
     if (role !== 'control' || !transportReady || !request.recipientPublicKey) return false;
     if (!sessionKeyPairRef.current || !currentKeyIdRef.current || !currentControlPublicKeyRef.current) return false;
 
+    const generation = privateGenerationRef.current;
+    const epoch = controlEpochRef.current?.();
+    const keyPair = sessionKeyPairRef.current;
+    const keyId = currentKeyIdRef.current;
+    const publicKey = currentControlPublicKeyRef.current;
     const receiverPublicKey = await importPublicKey(request.recipientPublicKey);
     const transferKeyPair = await generateEphemeralKeyPair();
     const transferKey = await deriveSharedKey(transferKeyPair.privateKey, receiverPublicKey);
-    const exportedPrivateKey = await exportPrivateKey(sessionKeyPairRef.current.privateKey);
+    const exportedPrivateKey = await exportPrivateKey(keyPair.privateKey);
     const encrypted = await encrypt(transferKey, exportedPrivateKey);
 
     let encryptedAliases;
@@ -424,8 +445,8 @@ export function usePrivateControlSignals(options: UsePrivateControlSignalsOption
       type: 'LIVE_AUDIO_CONTROL_AUTHORIZED' as const,
       controlSessionId: request.controlSessionId,
       authorizedByControlSessionId: controlSessionId,
-      keyId: currentKeyIdRef.current,
-      sessionPublicKey: currentControlPublicKeyRef.current,
+      keyId,
+      sessionPublicKey: publicKey,
       transferPublicKey: await exportPublicKey(transferKeyPair),
       encryptedSessionPrivateKey: encrypted.ciphertext,
       nonce: encrypted.nonce,
@@ -434,6 +455,8 @@ export function usePrivateControlSignals(options: UsePrivateControlSignalsOption
       createdAt: Date.now(),
     });
 
+    if (generation !== privateGenerationRef.current || epoch !== controlEpochRef.current?.() || keyPair !== sessionKeyPairRef.current
+      || !contextRef.current.transportReady || !['PRINCIPAL', 'AUTHORIZED'].includes(contextRef.current.controlState ?? '') || controlCurrentRef.current?.() === false) return false;
     return sendMessageRef.current(message.type, message);
   }, [controlSessionId, role, transportReady]);
 
@@ -441,9 +464,10 @@ export function usePrivateControlSignals(options: UsePrivateControlSignalsOption
     const signal = payload as unknown as PrivateControlSignalMessage;
     const generation = privateGenerationRef.current;
     const epoch = audienceEpochRef.current?.();
+    const controlEpoch = controlEpochRef.current?.();
 
     if (role === 'control') {
-      if (!['PRINCIPAL', 'AUTHORIZED'].includes(contextRef.current.controlState ?? '')) return;
+      if (!contextRef.current.transportReady || controlCurrentRef.current?.() === false || !['PRINCIPAL', 'AUTHORIZED'].includes(contextRef.current.controlState ?? '')) return;
       if (!isValidPrivateControlSignal(payload, 'audience') && !isValidPrivateControlSignal(payload, 'control')) return;
       if (!sessionKeyPairRef.current || payload.keyId !== currentKeyIdRef.current) return;
 
@@ -455,7 +479,7 @@ export function usePrivateControlSignals(options: UsePrivateControlSignalsOption
         signal.nonce,
         usedNonceKeysRef.current,
       );
-      if (generation !== privateGenerationRef.current || signal.keyId !== currentKeyIdRef.current
+      if (generation !== privateGenerationRef.current || controlEpoch !== controlEpochRef.current?.() || !contextRef.current.transportReady || controlCurrentRef.current?.() === false || signal.keyId !== currentKeyIdRef.current
         || !['PRINCIPAL', 'AUTHORIZED'].includes(contextRef.current.controlState ?? '')) return;
 
       onPrivateSignalRef.current?.({
@@ -470,6 +494,7 @@ export function usePrivateControlSignals(options: UsePrivateControlSignalsOption
       });
     } else if (role === 'audience') {
       if (!isAudienceCurrent()) return;
+      if (!isValidPrivateControlSignal({ ...payload, type: 'PRIVATE_CONTROL_SIGNAL' }, 'control')) return;
       if (!audienceSharedKeyRef.current || payload.keyId !== currentKeyIdRef.current) return;
       if (signal.toParticipantId !== participantId) return;
 
@@ -488,6 +513,7 @@ export function usePrivateControlSignals(options: UsePrivateControlSignalsOption
         plaintext,
         value: parseSignalPlaintext(plaintext),
         receivedAt: Date.now(),
+        signalId: JSON.stringify([signal.keyId, signal.fromParticipantId, signal.nonce]),
       });
     }
   }, [isAudienceCurrent, role, participantId]);
@@ -495,6 +521,7 @@ export function usePrivateControlSignals(options: UsePrivateControlSignalsOption
   const handleControlAuthorized = useCallback(async (payload: Record<string, unknown>) => {
     if (role !== 'control' || payload.controlSessionId !== controlSessionId) return;
     const generation = privateGenerationRef.current;
+    const epoch = controlEpochRef.current?.();
 
     const message = payload as unknown as LiveAudioControlAuthorizedMessage;
     if (
@@ -513,7 +540,7 @@ export function usePrivateControlSignals(options: UsePrivateControlSignalsOption
     const exportedPrivateKey = await decrypt(transferKey, message.encryptedSessionPrivateKey, message.nonce);
     const privateKey = await importPrivateKey(exportedPrivateKey);
     const publicKey = await importPublicKey(message.sessionPublicKey);
-    if (generation !== privateGenerationRef.current) return;
+    if (generation !== privateGenerationRef.current || epoch !== controlEpochRef.current?.() || !contextRef.current.transportReady) return;
 
     sessionKeyPairRef.current = { privateKey, publicKey };
     usedNonceKeysRef.current.clear();
@@ -526,6 +553,7 @@ export function usePrivateControlSignals(options: UsePrivateControlSignalsOption
       try {
         const decryptedAliasesJson = await decrypt(transferKey, message.encryptedAliases, message.aliasesNonce);
         const decryptedAliases = JSON.parse(decryptedAliasesJson);
+        if (generation !== privateGenerationRef.current || epoch !== controlEpochRef.current?.() || !contextRef.current.transportReady) return;
         onPrivateSignalRef.current?.({
           type: 'PRIVATE_CONTROL_SIGNAL',
           fromParticipantId: 'system',

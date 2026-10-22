@@ -1,7 +1,5 @@
 {
-  "PrivateControlInbox.replyAudienceQueued": "Audience: envío aceptado; recepción sin confirmar.",
   "PrivateControlInbox.replyAudienceFailed": "Audience: no se pudo enviar la respuesta.",
-  "PrivateControlInbox.replyControlsQueued": "Controles: sincronización enviada; recepción sin confirmar.",
   "PrivateControlInbox.replyControlsFailed": "Controles: no se pudo enviar la sincronización.",
   "PrivateControlInbox.replyAuthor": "Respuesta de",
   "ActiveParticipantsPanel.participants": "Participantes",
@@ -135,8 +133,6 @@
   "PrivateControlInbox.togglePublicNicknameVisibility": "Alternar visibilidad pública del nick",
   "PrivateControlInbox.presentationAudioHeardByThisControl": "Audio de la presentación que escucha este Control",
   "PrivateControlInbox.programAudio": "🔊 Audio de programa",
-  "PrivateControlInbox.audioUnsupportedInThisBrowserOrInsecureContextRequires": "Audio no compatible en este navegador o contexto inseguro (requiere HTTPS o localhost).",
-  "PrivateControlInbox.liveAudioIsNotConfiguredOrIsDisabledOn": "El servicio de Live Audio no está configurado o está deshabilitado en el servidor.",
   "PrivateControlInbox.noPendingNotifications": "Sin notificaciones pendientes.",
   "PrivateControlInbox.controlRequests": "Solicitudes de Control (",
   "PrivateControlInbox.newControlConnected": "Nuevo Control Conectado",
@@ -170,7 +166,12 @@
   "PrivateControlInbox.blockAccessForThisParticipant": "Bloquear acceso a este participante",
   "PrivateControlInbox.blockAccessFor_d2b424": "Bloquear acceso a {{value1}}",
   "PrivateControlInbox.noticeForTheControlTeam": "Aviso para el equipo de control...",
-  "PrivateControlInbox.sendNoticeToOtherOperators": "Enviar aviso a los demás operadores",
+  "PrivateControlInbox.recipient": "Destinatario",
+  "PrivateControlInbox.recipientControl": "Control",
+  "PrivateControlInbox.audienceUser": "Usuario",
+  "PrivateControlInbox.privateMessageTo": "Mensaje a {{alias}}...",
+  "PrivateControlInbox.message": "Mensaje",
+  "PrivateControlInbox.send": "Enviar",
   "CollapsiblePrivacyNotice.noticeBeforeSpeaking": "Aviso antes de intervenir",
   "CollapsiblePrivacyNotice.theMicrophoneDoesNotActivateAutomaticallyItRequiresControl": "El micrófono no se activa automáticamente. Requiere autorización de Control, permiso del navegador y una acción local.",
   "CollapsiblePrivacyNotice.yourAliasReachesAuthorizedControlsEncryptedItIsShared": "Su alias llega cifrado a los Controles autorizados. Solo se comparte con otros participantes activos si usted lo elige y Control lo autoriza.",
@@ -223,5 +224,10 @@
   "CollapsiblePrivacyNotice.theSessionIsDeclaredLiveAndRecordingIfYouPublish": "La sesión está declarada en directo y grabándose. Si publica su micrófono, su voz podrá conservarse en servicios externos del operador.",
   "CollapsiblePrivacyNotice.emptyDocument": "documento vacío",
   "AudienceLiveAudioPanel.showParticipation": "Mostrar controles de participación",
-  "AudienceParticipationPanel.preparingSecureParticipation": "Participación segura no disponible. Comprueba la conexión y el cifrado."
+  "AudienceParticipationPanel.preparingSecureParticipation": "Participación segura no disponible. Comprueba la conexión y el cifrado.",
+  "Conversations.unavailable": "Envío seguro no disponible",
+  "Conversations.reply": "Responder",
+  "Conversations.mediaUnavailable": "Audio en directo no disponible. La participación y los mensajes siguen disponibles.",
+  "Conversations.recipientUnavailable": "{{alias}} (envío no disponible)",
+  "Conversations.couldNotSend": "No se pudo preparar o enviar el mensaje. El borrador se conserva."
 }

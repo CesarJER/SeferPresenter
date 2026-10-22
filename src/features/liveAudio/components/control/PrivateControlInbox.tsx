@@ -1,6 +1,6 @@
 import { translate } from '../../../../i18n/runtime';
 import { useUiTranslation } from '../../../../i18n/useUiTranslation';
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   X,
   MessageSquare,
@@ -15,9 +15,14 @@ import {
   CornerDownRight,
   Sparkles,
 } from 'lucide-react';
-import { useLiveAudioAvailability } from '../../hooks/useLiveAudioAvailability';
 import type { PendingControlAuthorization } from '../../../../types/liveAudio';
 import { AudioDeviceSettings } from './AudioDeviceSettings';
+
+export interface ConversationRecipient {
+  participantId: string;
+  alias: string;
+  eligible: boolean;
+}
 
 export interface MessageReply {
   replyId: string;
@@ -30,6 +35,7 @@ export interface MessageReply {
 export interface PrivateReplyResult {
   audienceQueued: boolean;
   controlsQueued: boolean;
+  operationId?: string;
 }
 
 export interface PrivateMessage {
@@ -40,9 +46,15 @@ export interface PrivateMessage {
   fromParticipantId?: string;
   ephemeralPublicKey?: string;
   keyId?: string;
+  replyTo?: string;
   isWaitingRoom?: boolean;
   isInterControl?: boolean;
   replies?: MessageReply[];
+  isControlToAudience?: boolean;
+  toAlias?: string;
+  toParticipantId?: string;
+  audienceQueued?: boolean;
+  controlsQueued?: boolean;
 }
 
 export interface AudienceAccessRequestItem {
@@ -53,6 +65,9 @@ export interface AudienceAccessRequestItem {
 }
 
 interface PrivateControlInboxProps {
+  mediaAvailable?: boolean;
+  conversationRecipients?: ConversationRecipient[];
+  onSendConversation?: (participantId: string, text: string) => Promise<PrivateReplyResult>;
   programAudioEnabled?: boolean;
   onProgramAudioEnabledChange?: (enabled: boolean) => void;
   isOpen: boolean;
@@ -65,8 +80,10 @@ interface PrivateControlInboxProps {
   onDismissMessage: (id: string) => void;
   onAudienceAccessDecision?: (participantId: string, decision: 'ADMIT' | 'REJECT' | 'BLOCK' | 'UNBLOCK') => void;
   onReplyToParticipant?: (messageId: string, participantId: string, text: string) => Promise<PrivateReplyResult>;
-  onSendInterControlMessage?: (text: string) => void;
+  onSendInterControlMessage?: (text: string) => Promise<boolean>;
   onOperatorNickChange?: (nick: string) => void;
+  presentationSessionId?: string | null;
+  keyId?: string | null;
 }
 
 const formatTime = (timestamp: number): string => {
@@ -78,6 +95,7 @@ const formatTime = (timestamp: number): string => {
 };
 
 export const PrivateControlInbox: React.FC<PrivateControlInboxProps> = ({
+  mediaAvailable = false, conversationRecipients = [], onSendConversation,
   programAudioEnabled,
   onProgramAudioEnabledChange,
   isOpen,
@@ -92,9 +110,10 @@ export const PrivateControlInbox: React.FC<PrivateControlInboxProps> = ({
   onReplyToParticipant,
   onSendInterControlMessage,
   onOperatorNickChange,
+  presentationSessionId,
+  keyId,
 }) => {
   useUiTranslation('liveAudio');
-  const { availability } = useLiveAudioAvailability();
 
   const [operatorNick, setOperatorNick] = useState<string>(
     () => localStorage.getItem('sefer_control_operator_nick') || '',
@@ -105,9 +124,30 @@ export const PrivateControlInbox: React.FC<PrivateControlInboxProps> = ({
 
   const [activeReplyId, setActiveReplyId] = useState<string | null>(null);
   const [replyDrafts, setReplyDrafts] = useState<Record<string, string>>({});
-  const [announcementText, setAnnouncementText] = useState('');
-  const [replyResult, setReplyResult] = useState<PrivateReplyResult | null>(null);
+  const [replyResults, setReplyResults] = useState<Record<string, PrivateReplyResult>>({});
+  const [selectedRecipient, setSelectedRecipient] = useState<string>('control');
+  const [composerText, setComposerText] = useState('');
+  const [isSending, setIsSending] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
+  const composerRevisionRef = useRef(0);
+  const composerDraftRef = useRef({ text: '', recipient: 'control' });
+  composerDraftRef.current = { text: composerText, recipient: selectedRecipient };
+  const lifecycleRef = useRef({ isControlAuthorized, presentationSessionId, keyId });
+  lifecycleRef.current = { isControlAuthorized, presentationSessionId, keyId };
+  const isMountedRef = useRef(true);
   const pendingReplies = useRef(new Set<string>());
+
+  useEffect(() => {
+    composerRevisionRef.current += 1;
+  }, [isControlAuthorized, presentationSessionId, keyId]);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      composerRevisionRef.current += 1;
+    };
+  }, []);
 
   if (!isOpen) return null;
 
@@ -156,13 +196,13 @@ export const PrivateControlInbox: React.FC<PrivateControlInboxProps> = ({
     pendingReplies.current.add(replyId);
     try {
       const result = await onReplyToParticipant(replyId, participantId, text);
-      setReplyResult(result);
+      setReplyResults(previous => ({ ...previous, [replyId]: result }));
       if (result.audienceQueued) {
         setReplyDrafts((prev) => ({ ...prev, [replyId]: '' }));
         setActiveReplyId(null);
       }
     } catch {
-      setReplyResult({ audienceQueued: false, controlsQueued: false });
+      setReplyResults(previous => ({ ...previous, [replyId]: { audienceQueued: false, controlsQueued: false } }));
     } finally {
       pendingReplies.current.delete(replyId);
     }
@@ -174,12 +214,121 @@ export const PrivateControlInbox: React.FC<PrivateControlInboxProps> = ({
     void handleSendReply(msg.id, msg.fromParticipantId, thankText);
   };
 
-  const handleSendAnnouncement = (e: React.FormEvent) => {
+  const isSelectedRecipientEligible = selectedRecipient === 'control'
+    || Boolean(conversationRecipients.find((r) => r.participantId === selectedRecipient)?.eligible);
+  const selectedRecipientAlias = conversationRecipients.find((r) => r.participantId === selectedRecipient)?.alias || '';
+
+  const handleSendFromComposer = async (e: React.FormEvent) => {
     e.preventDefault();
-    const text = announcementText.trim();
-    if (!text || !onSendInterControlMessage) return;
-    onSendInterControlMessage(text);
-    setAnnouncementText('');
+    const text = composerText.trim();
+    if (!text || isSending || !isSelectedRecipientEligible) return;
+
+    if (selectedRecipient === 'control') {
+      if (!onSendInterControlMessage) return;
+      setIsSending(true);
+      setSendError(null);
+      const sendRevision = ++composerRevisionRef.current;
+      const sendLifecycle = { ...lifecycleRef.current };
+      const targetText = text;
+
+      try {
+        const ok = await onSendInterControlMessage(text);
+        if (
+          isMountedRef.current &&
+          composerRevisionRef.current === sendRevision &&
+          lifecycleRef.current.isControlAuthorized &&
+          lifecycleRef.current.presentationSessionId === sendLifecycle.presentationSessionId &&
+          lifecycleRef.current.keyId === sendLifecycle.keyId &&
+          composerDraftRef.current.recipient === 'control' &&
+          composerDraftRef.current.text.trim() === targetText
+        ) {
+          if (ok === true) {
+            setComposerText('');
+            composerDraftRef.current.text = '';
+            setSendError(null);
+          } else {
+            setSendError(translate('liveAudio:Conversations.couldNotSend', 'No se pudo preparar o enviar el mensaje. El borrador se conserva.'));
+          }
+        }
+      } catch {
+        if (
+          isMountedRef.current &&
+          composerRevisionRef.current === sendRevision &&
+          lifecycleRef.current.isControlAuthorized &&
+          lifecycleRef.current.presentationSessionId === sendLifecycle.presentationSessionId &&
+          lifecycleRef.current.keyId === sendLifecycle.keyId &&
+          composerDraftRef.current.recipient === 'control' &&
+          composerDraftRef.current.text.trim() === targetText
+        ) {
+          setSendError(translate('liveAudio:Conversations.couldNotSend', 'No se pudo preparar o enviar el mensaje. El borrador se conserva.'));
+        }
+      } finally {
+        if (isMountedRef.current) {
+          setIsSending(false);
+        }
+      }
+      return;
+    }
+
+    if (!onSendConversation) return;
+    setIsSending(true);
+    setSendError(null);
+    const targetId = selectedRecipient;
+    const sendRevision = ++composerRevisionRef.current;
+    const sendLifecycle = { ...lifecycleRef.current };
+    const targetText = text;
+
+    try {
+      const result = await onSendConversation(targetId, text);
+      if (
+        isMountedRef.current &&
+        composerRevisionRef.current === sendRevision &&
+        lifecycleRef.current.isControlAuthorized &&
+        lifecycleRef.current.presentationSessionId === sendLifecycle.presentationSessionId &&
+        lifecycleRef.current.keyId === sendLifecycle.keyId &&
+        composerDraftRef.current.recipient === targetId &&
+        composerDraftRef.current.text.trim() === targetText
+      ) {
+        if (result.audienceQueued) {
+          setComposerText('');
+          composerDraftRef.current.text = '';
+          setSelectedRecipient('control');
+          composerDraftRef.current.recipient = 'control';
+          setSendError(null);
+        } else {
+          setSendError(translate('liveAudio:Conversations.couldNotSend', 'No se pudo preparar o enviar el mensaje. El borrador se conserva.'));
+        }
+      }
+    } catch {
+      if (
+        isMountedRef.current &&
+        composerRevisionRef.current === sendRevision &&
+        lifecycleRef.current.isControlAuthorized &&
+        lifecycleRef.current.presentationSessionId === sendLifecycle.presentationSessionId &&
+        lifecycleRef.current.keyId === sendLifecycle.keyId &&
+        composerDraftRef.current.recipient === targetId &&
+        composerDraftRef.current.text.trim() === targetText
+      ) {
+        setSendError(translate('liveAudio:Conversations.couldNotSend', 'No se pudo preparar o enviar el mensaje. El borrador se conserva.'));
+      }
+    } finally {
+      if (isMountedRef.current) {
+        setIsSending(false);
+      }
+    }
+  };
+
+  const renderReplyFailures = (replyId: string, audienceFailureShown = false) => {
+    const result = replyResults[replyId];
+    if (!result) return null;
+    return <>
+      {!result.audienceQueued && !audienceFailureShown && <p role="alert" className="text-xs text-red-400">
+        {translate('liveAudio:PrivateControlInbox.replyAudienceFailed', 'Audience: no se pudo enviar la respuesta.')}
+      </p>}
+      {!result.controlsQueued && <p role="alert" className="text-xs text-amber-400">
+        {translate('liveAudio:PrivateControlInbox.replyControlsFailed', 'Controles: no se pudo enviar la sincronización.')}
+      </p>}
+    </>;
   };
 
   const renderInlineReplyForm = (
@@ -213,6 +362,8 @@ export const PrivateControlInbox: React.FC<PrivateControlInboxProps> = ({
             type="button"
             onClick={() => handleSendReply(replyId, participantId)}
             disabled={!currentDraft.trim()}
+            title={translate("liveAudio:PrivateControlInbox.reply", "Responder")}
+            aria-label={translate("liveAudio:PrivateControlInbox.reply", "Responder")}
             className={`${
               isAmber ? 'bg-amber-600 hover:bg-amber-500' : 'bg-blue-600 hover:bg-blue-500'
             } disabled:opacity-40 text-white px-2.5 py-1 rounded text-xs font-bold flex items-center`}
@@ -269,35 +420,18 @@ export const PrivateControlInbox: React.FC<PrivateControlInboxProps> = ({
               <input type="checkbox" checked={Boolean(programAudioEnabled)} onChange={e => onProgramAudioEnabledChange(e.target.checked)} />
               <span>{translate("liveAudio:PrivateControlInbox.programAudio", "🔊 Audio de programa")}</span>
             </label>
-            <AudioDeviceSettings />
+            {mediaAvailable && <AudioDeviceSettings />}
           </div>
         )}
       </div>
 
       {/* Main Content List */}
       <div className="overflow-y-auto p-2 space-y-3 flex-1">
-        {replyResult && (
-          <div role={replyResult.audienceQueued && replyResult.controlsQueued ? 'status' : 'alert'} className="text-xs text-gray-200 space-y-1">
-            <p>{replyResult.audienceQueued
-              ? translate('liveAudio:PrivateControlInbox.replyAudienceQueued', 'Audience: envío aceptado; recepción sin confirmar.')
-              : translate('liveAudio:PrivateControlInbox.replyAudienceFailed', 'Audience: no se pudo enviar la respuesta.')}</p>
-            <p>{replyResult.controlsQueued
-              ? translate('liveAudio:PrivateControlInbox.replyControlsQueued', 'Controles: sincronización enviada; recepción sin confirmar.')
-              : translate('liveAudio:PrivateControlInbox.replyControlsFailed', 'Controles: no se pudo enviar la sincronización.')}</p>
-          </div>
-        )}
-        {availability === 'unsupported' && (
+        {!mediaAvailable && (
           <div className="bg-red-950/30 border border-red-900/50 rounded-md p-2 flex items-start gap-2">
             <ShieldAlert size={14} className="text-red-400 mt-0.5 shrink-0" />
             <p className="text-xs text-red-300">
-              {translate("liveAudio:PrivateControlInbox.audioUnsupportedInThisBrowserOrInsecureContextRequires", "Audio no compatible en este navegador o contexto inseguro (requiere HTTPS o localhost).")}</p>
-          </div>
-        )}
-        {(availability === 'disabled' || availability === 'misconfigured') && (
-          <div className="bg-orange-950/30 border border-orange-900/50 rounded-md p-2 flex items-start gap-2">
-            <ShieldAlert size={14} className="text-orange-400 mt-0.5 shrink-0" />
-            <p className="text-xs text-orange-300">
-              {translate("liveAudio:PrivateControlInbox.liveAudioIsNotConfiguredOrIsDisabledOn", "El servicio de Live Audio no está configurado o está deshabilitado en el servidor.")}</p>
+              {translate('liveAudio:Conversations.mediaUnavailable', 'Audio en directo no disponible. La participación y los mensajes siguen disponibles.')}</p>
           </div>
         )}
 
@@ -400,6 +534,7 @@ export const PrivateControlInbox: React.FC<PrivateControlInboxProps> = ({
                     </button>
                   </div>
 
+                  {renderReplyFailures(accessReplyId)}
                   {renderInlineReplyForm(
                     accessReplyId,
                     request.participantId,
@@ -479,6 +614,53 @@ export const PrivateControlInbox: React.FC<PrivateControlInboxProps> = ({
                 );
               }
 
+              if (msg.isControlToAudience) {
+                return (
+                  <div
+                    key={msg.id}
+                    data-operation-id={msg.id}
+                    className="bg-amber-950/30 border border-amber-800/50 rounded-md p-2.5 group"
+                  >
+                    <div className="flex justify-between items-start mb-1">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="px-1.5 py-0.2 text-[10px] font-bold rounded-sm bg-blue-900/60 text-blue-300 border border-blue-700/50">
+                          {translate("liveAudio:PrivateControlInbox.controlTeam", "Equipo Control")}
+                        </span>
+                        <span className="text-xs font-semibold text-amber-200 flex items-center gap-1">
+                          <bdi>{msg.fromAlias}</bdi>
+                          <span className="text-gray-400">→</span>
+                          <bdi className="text-white">{msg.toAlias || translate("liveAudio:PrivateControlInbox.audienceUser", "Usuario")}</bdi>
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] text-gray-400 font-mono">
+                          {formatTime(msg.timestamp)}
+                        </span>
+                        <button
+                          onClick={() => onDismissMessage(msg.id)}
+                          className="text-gray-500 hover:text-red-400 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
+                          title={translate("liveAudio:PrivateControlInbox.dismissNotice", "Descartar aviso")}
+                          aria-label={translate("liveAudio:PrivateControlInbox.dismissNotice", "Descartar aviso")}
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                    </div>
+                    <p className="text-xs text-amber-100 leading-relaxed" dir="auto">{msg.content}</p>
+                    {msg.audienceQueued === false && (
+                      <p role="alert" className="text-[10px] text-red-400 mt-1">
+                        {translate('liveAudio:PrivateControlInbox.replyAudienceFailed', 'Audience: no se pudo enviar la respuesta.')}
+                      </p>
+                    )}
+                    {msg.controlsQueued === false && (
+                      <p role="alert" className="text-[10px] text-amber-400 mt-0.5">
+                        {translate('liveAudio:PrivateControlInbox.replyControlsFailed', 'Controles: no se pudo enviar la sincronización.')}
+                      </p>
+                    )}
+                  </div>
+                );
+              }
+
               return (
                 <div key={msg.id} className="bg-gray-800 border border-gray-700 rounded-md p-2.5 group">
                   <div className="flex justify-between items-start mb-1">
@@ -528,6 +710,7 @@ export const PrivateControlInbox: React.FC<PrivateControlInboxProps> = ({
                   )}
 
                   {/* Actions: Quick Thank, Reply & Block */}
+                  {renderReplyFailures(msg.id, msg.replies?.some(reply => !reply.audienceQueued))}
                   {msg.fromParticipantId && (
                     <div className="flex items-center gap-1.5 pt-1 border-t border-gray-700/50">
                       {onReplyToParticipant && (
@@ -586,29 +769,83 @@ export const PrivateControlInbox: React.FC<PrivateControlInboxProps> = ({
         )}
       </div>
 
-      {/* Footer: Inter-Control Quick Announcement */}
-      {isControlAuthorized && onSendInterControlMessage && (
-        <form
-          onSubmit={handleSendAnnouncement}
-          className="p-2 border-t border-gray-700 bg-gray-800/80 flex gap-1.5 shrink-0"
-        >
+      {/* Footer: Compact horizontal composer */}
+      {isControlAuthorized && (onSendInterControlMessage || onSendConversation) && (
+        <>
+          {sendError && (
+            <div role="alert" className="px-2.5 py-1.5 border-t border-red-800 bg-red-950/60 text-xs text-red-300 shrink-0">
+              {sendError}
+            </div>
+          )}
+          {!isSelectedRecipientEligible && (
+            <div role="status" className="px-2.5 py-1 text-xs text-amber-400 bg-amber-950/40 border-t border-amber-900/40 shrink-0">
+              {translate('liveAudio:Conversations.unavailable', 'Envío seguro no disponible')}
+            </div>
+          )}
+          <form
+            onSubmit={handleSendFromComposer}
+            className="p-2 border-t border-gray-700 bg-gray-800/80 flex items-center gap-1.5 shrink-0"
+          >
+          <select
+            value={selectedRecipient}
+            onChange={(e) => {
+              setSelectedRecipient(e.target.value);
+              composerDraftRef.current.recipient = e.target.value;
+              composerRevisionRef.current += 1;
+            }}
+            className={`px-2 py-1.5 rounded-sm text-xs font-medium border transition-colors focus:outline-hidden max-w-[130px] truncate ${
+              selectedRecipient === 'control'
+                ? 'bg-gray-900 border-gray-700 text-gray-200 focus:ring-1 focus:ring-blue-500'
+                : 'bg-emerald-950 border-emerald-600 text-emerald-200 focus:ring-1 focus:ring-emerald-500'
+            }`}
+            aria-label={translate("liveAudio:PrivateControlInbox.recipient", "Destinatario")}
+          >
+            <option value="control">
+              {translate("liveAudio:PrivateControlInbox.recipientControl", "Control")}
+            </option>
+            {conversationRecipients.map((r) => (
+              <option key={r.participantId} value={r.participantId}>
+                {r.eligible
+                  ? r.alias
+                  : translate('liveAudio:Conversations.recipientUnavailable', '{{alias}} (envío no disponible)', { alias: r.alias })}
+              </option>
+            ))}
+          </select>
           <input
             type="text"
-            placeholder={translate("liveAudio:PrivateControlInbox.noticeForTheControlTeam", "Aviso para el equipo de control...")}
-            value={announcementText}
-            onChange={(e) => setAnnouncementText(e.target.value)}
-            className="flex-1 px-2.5 py-1.5 bg-gray-900 border border-gray-700 rounded-sm text-xs text-white placeholder-gray-500 focus:outline-hidden focus:ring-1 focus:ring-blue-500"
-            maxLength={200}
+            value={composerText}
+            onChange={(e) => {
+              setComposerText(e.target.value);
+              composerDraftRef.current.text = e.target.value;
+              composerRevisionRef.current += 1;
+            }}
+            placeholder={
+              selectedRecipient === 'control'
+                ? translate("liveAudio:PrivateControlInbox.noticeForTheControlTeam", "Aviso para el equipo de control...")
+                : translate("liveAudio:PrivateControlInbox.privateMessageTo", "Mensaje a {{alias}}...", {
+                    alias: selectedRecipientAlias || translate("liveAudio:PrivateControlInbox.audienceUser", "Usuario"),
+                  })
+            }
+            dir="auto"
+            maxLength={selectedRecipient === 'control' ? 200 : 1000}
+            className="flex-1 px-2.5 py-1.5 bg-gray-900 border border-gray-700 rounded-sm text-xs text-white placeholder-gray-500 focus:outline-hidden focus:ring-1 focus:ring-blue-500 min-w-0"
+            aria-label={translate("liveAudio:PrivateControlInbox.message", "Mensaje")}
           />
           <button
             type="submit"
-            disabled={!announcementText.trim()}
-            className="bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white px-3 py-1.5 rounded-sm text-xs font-semibold flex items-center gap-1 transition-colors"
-            title={translate("liveAudio:PrivateControlInbox.sendNoticeToOtherOperators", "Enviar aviso a los demás operadores")}
+            disabled={!composerText.trim() || isSending || !isSelectedRecipientEligible}
+            className={`${
+              selectedRecipient === 'control'
+                ? 'bg-blue-600 hover:bg-blue-500'
+                : 'bg-emerald-600 hover:bg-emerald-500'
+            } disabled:opacity-40 text-white px-3 py-1.5 rounded-sm text-xs font-semibold flex items-center gap-1 transition-colors shrink-0`}
+            title={translate("liveAudio:PrivateControlInbox.send", "Enviar")}
+            aria-label={translate("liveAudio:PrivateControlInbox.send", "Enviar")}
           >
             <Send size={12} />
           </button>
         </form>
+        </>
       )}
     </div>
   );

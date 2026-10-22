@@ -172,6 +172,67 @@ describe('Live Audio WebSocket routing', () => {
     expect(outsider.messages.some(message => message.type === 'PRIVATE_CONTROL_SIGNAL')).toBe(false);
   });
 
+  it('discovers an admitted recipient before any private message and routes both E2EE conversation paths without RTC', async () => {
+    process.env.SEFER_SESSION_ACCESS_DEFAULT = 'CONTROLLED'; resetWsServerStateForTests();
+    const a = await connectWs('control'), b = await connectWs('control'), pending = await connectWs('control');
+    const welcome = await waitFor(a, message => message.type === 'WELCOME');
+    const bState = await waitFor(b, message => message.type === 'LIVE_AUDIO_CONTROL_AUTHORIZATION_STATE');
+    a.send({ type: 'LIVE_AUDIO_CONTROL_AUTHORIZATION_DECISION', targetControlSessionId: bState.controlSessionId, decision: 'APPROVE' });
+    await waitFor(b, message => message.type === 'LIVE_AUDIO_CONTROL_AUTHORIZATION_STATE' && message.controlState === 'AUTHORIZED');
+    const access = bootstrapAudienceAccess(null), audience = await connectWs('audience');
+    audience.send({ type: 'AUDIENCE_ACCESS_BIND', credential: access.credential });
+    await waitFor(audience, message => message.type === 'AUDIENCE_ACCESS_STATE' && message.accessState === 'REQUEST_REQUIRED');
+    const recipientKeys = await generateSessionKeyPair(), groupKeys = await generateSessionKeyPair();
+    const publicKey = await exportPublicKey(recipientKeys), groupPublicKey = await exportPublicKey(groupKeys);
+    const profile: WsMessage = { type: 'LIVE_AUDIO_ACTIVE_PARTICIPANT_PROFILE', participantId: access.participantId,
+      activeListPublicKey: publicKey, isAliasVisibleToActiveParticipants: false, createdAt: Date.now() };
+    audience.send(profile); await wait(50);
+    expect(a.messages.some(message => message.type === profile.type)).toBe(false);
+    a.send({ type: 'AUDIENCE_ACCESS_DECISION', participantId: access.participantId, decision: 'ADMIT' });
+    await waitFor(audience, message => message.type === 'AUDIENCE_ACCESS_STATE' && message.accessState === 'ADMITTED');
+    audience.send({ ...makeParticipantStatus(access.participantId), isActiveAudience: true, canPublishAudio: false,
+      isMicrophoneActive: false, microphoneTrackState: 'off', liveAudioConnectionState: 'unavailable' });
+    audience.send(profile);
+    expect((await waitFor(a, message => message.type === profile.type)).activeListPublicKey).toBe(publicKey);
+    await waitFor(b, message => message.type === profile.type);
+    expect(a.messages.some(message => message.type === 'PRIVATE_CONTROL_SIGNAL')).toBe(false);
+    const shared = await deriveSharedKey(groupKeys.privateKey, recipientKeys.publicKey);
+    const operationId = randomUUID(), conversationId = JSON.stringify([welcome.presentationSessionId, access.participantId]);
+    const audienceValue = { type: 'CHAT_RESPONSE', text: 'Synthetic first conversation', operationId, conversationId,
+      presentationSessionId: welcome.presentationSessionId, senderNick: 'Control' };
+    a.send({ type: 'PRIVATE_CONTROL_SIGNAL', fromParticipantId: welcome.controlSessionId,
+      toParticipantId: access.participantId, keyId: 'conversation-key', ephemeralPublicKey: groupPublicKey,
+      ...await encrypt(shared, JSON.stringify(audienceValue)) });
+    const delivered = await waitFor(audience, message => message.type === 'PRIVATE_CONTROL_SIGNAL');
+    expect(JSON.parse(await decrypt(shared, delivered.ciphertext as string, delivered.nonce as string))).toEqual(audienceValue);
+    const teamKey = await deriveSharedKey(groupKeys.privateKey, groupKeys.publicKey);
+    const syncValue = { type: 'CONTROL_CONVERSATION_MESSAGE', version: 1, operationId, conversationId,
+      participantId: access.participantId, presentationSessionId: welcome.presentationSessionId,
+      text: audienceValue.text, operator: 'Synthetic operator', createdAt: Date.now(), audienceQueued: true };
+    a.send({ type: 'PRIVATE_CONTROL_SIGNAL', fromParticipantId: welcome.controlSessionId,
+      keyId: 'conversation-key', ephemeralPublicKey: groupPublicKey, ...await encrypt(teamKey, JSON.stringify(syncValue)) });
+    const synchronized = await waitFor(b, message => message.type === 'PRIVATE_CONTROL_SIGNAL');
+    expect(JSON.parse(await decrypt(teamKey, synchronized.ciphertext as string, synchronized.nonce as string))).toEqual(syncValue);
+    const reply = { type: 'PRIVATE_MESSAGE', text: 'Synthetic correlated answer', operationId: randomUUID(), replyTo: operationId,
+      conversationId, presentationSessionId: welcome.presentationSessionId };
+    const encryptedReply = await encrypt(shared, JSON.stringify(reply));
+    audience.send({ type: 'PRIVATE_CONTROL_SIGNAL', fromParticipantId: access.participantId,
+      keyId: 'conversation-key', ephemeralPublicKey: publicKey, ...encryptedReply });
+    for (const control of [a, b]) {
+      const frame = await waitFor(control, message => message.ciphertext === encryptedReply.ciphertext);
+      expect(JSON.parse(await decrypt(shared, frame.ciphertext as string, frame.nonce as string))).toEqual(reply);
+    }
+    a.send({ type: 'AUDIENCE_ACCESS_DECISION', participantId: access.participantId, decision: 'REJECT' });
+    await waitFor(audience, message => message.type === 'AUDIENCE_ACCESS_STATE' && message.accessState === 'REJECTED');
+    const before = a.messages.filter(message => message.type === profile.type).length;
+    audience.send({ ...profile, createdAt: Date.now() }); await wait(50);
+    expect(a.messages.filter(message => message.type === profile.type)).toHaveLength(before);
+    expect(pending.messages.some(message => message.type === profile.type || message.type === 'PRIVATE_CONTROL_SIGNAL')).toBe(false);
+    expect(JSON.stringify([...a.messages, ...b.messages, ...audience.messages, getLiveAudioParticipantSnapshot()]))
+      .not.toMatch(/Synthetic first conversation|Synthetic correlated answer|Synthetic operator/);
+    expect(liveKitPermissions.size).toBe(0);
+  });
+
   it('requires Control admission when the session access mode is controlled', async () => {
     process.env.SEFER_SESSION_ACCESS_DEFAULT = 'CONTROLLED';
     resetWsServerStateForTests();

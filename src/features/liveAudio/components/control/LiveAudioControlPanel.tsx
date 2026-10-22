@@ -9,6 +9,7 @@ import { LiveAudioParticipantRow, type LiveAudioParticipant } from './LiveAudioP
 import type { LiveAudioExternalBroadcastState, MicrophoneTrackState } from '../../../../types/liveAudio';
 
 interface LiveAudioControlPanelProps {
+  mediaAvailable?: boolean;
   controllers?: LiveAudioParticipant[];
   selectedVoiceParticipantId?: string;
   voiceSelectableIds?: string[];
@@ -50,6 +51,7 @@ interface LiveAudioControlPanelProps {
 }
 
 export const LiveAudioControlPanel: React.FC<LiveAudioControlPanelProps> = ({
+  mediaAvailable = true,
   controllers = [],
   selectedVoiceParticipantId,
   voiceSelectableIds,
@@ -235,7 +237,7 @@ export const LiveAudioControlPanel: React.FC<LiveAudioControlPanelProps> = ({
         </div>
 
         {/* Moderator Controls */}
-        <div className="flex items-center gap-2">
+        {mediaAvailable && <div className="flex items-center gap-2">
           <div className="relative flex items-center">
             <button
               onClick={() => {
@@ -328,6 +330,7 @@ export const LiveAudioControlPanel: React.FC<LiveAudioControlPanelProps> = ({
           </div>
         </div>
 
+        }
         {/* Expand Toggle */}
         <button 
           onClick={() => setIsExpanded(!isExpanded)}

@@ -102,8 +102,8 @@ anónimos al gate. BLOCK de admisión no equivale a KICK de publicación LiveKit
 ## Live Audio: autorización, perfiles y snapshots
 
 Tipos exactos en la tabla de sintaxis al final. Productores y consumidores:
-[Control](../../src/features/liveAudio/components/control/LiveAudioControlContainer.tsx),
-[Audience](../../src/features/liveAudio/components/audience/LiveAudioAudienceContainer.tsx),
+[Control](../../src/components/control/ControlParticipationOwner.tsx),
+[Audience](../../src/hooks/useAudienceParticipation.ts),
 [useControlAuthorization](../../src/hooks/useControlAuthorization.ts) y
 WS servidor; moderación utiliza además la [API HTTP](http.md#live-audio-tokens-y-moderación).
 
@@ -145,21 +145,22 @@ Dentro del ciphertext existen contratos propios, no nuevos tipos WS:
 ACTIVE_PROFILE/ACTIVE_STATE/REQUEST_WORD/ACCESS_REQUEST, AUDIO_FALLBACK y mensajes privados hacia Control;
 VISIBLE_ACTIVE_PARTICIPANTS y CHAT_RESPONSE hacia Audience;
 CONTROL_PROFILE, CONTROL_MICROPHONE_CONFIG, CONTROL_ANNOUNCEMENT y
-MESSAGE_REPLY_SYNC entre Controls. Sus campos y guards están en los contenedores
+MESSAGE_REPLY_SYNC y CONTROL_CONVERSATION_MESSAGE entre Controls. Sus campos y guards están en los propietarios
 anteriores y [usePrivateControlSignals](../../src/hooks/usePrivateControlSignals.ts).
 
 Especialmente:
 - VOICE_SOURCE_SELECTION: `{ type, participantId: string|null, version: 1, updatedAt: number }`;
-  allowlist de campos y emisores Control actuales; sincroniza selección, no PCM.
+  allowlist de campos y pertenencia cifrada al grupo Control actual; sincroniza selección, no PCM.
 - VOICE_SCRIPTURE_SYNC: `{ type, options, detail, phase }`; sugerencias/estado
   transitorios; el principal produce y los secundarios consumen.
-- CONTROL_PROFILE: alias, volume, musicMode; no perfil público.
+- CONTROL_PROFILE: alias, volume, musicMode y mediaParticipantId opcional; este último
+  asocia el ID RTC con el emisor controlSessionId, sin convertirlo en identidad social.
 - CONTROL_MICROPHONE_CONFIG: targetParticipantId y volume/musicMode opcionales;
   el destinatario actual aplica su configuración.
 - MESSAGE_REPLY_SYNC: replyId, messageId, targetParticipantId, responseText,
   repliedBy, repliedAt y audienceQueued; todos dentro del ciphertext. El receptor
   exige una señal cifrada con la clave compartida de Controls. El messageId de un
-  mensaje recibido es JSON.stringify([keyId, fromParticipantId, nonce]) del
+  mensaje legacy recibido es JSON.stringify([keyId, fromParticipantId, nonce]) del
   envelope original, igual para todos los Controls; no depende del reloj local.
   Se exige coincidencia exacta de mensaje, participante y keyId. replyId identifica
   la operación para aplicar una sola vez tanto el eco como un reenvío recifrado;
@@ -175,6 +176,50 @@ adjuntan a mensajes de ese participante ni crean un historial de admisión.
 Mensajes y respuestas no se reconstruyen de snapshots ni se persisten. Los
 Controls deben ejecutar el mismo candidato: los IDs locales anteriores y payloads
 sin replyId no proporcionan correlación segura para esta sincronización.
+
+Las conversaciones nuevas usan `conversationId = JSON.stringify([presentationSessionId,
+participantId])` y `operationId = crypto.randomUUID()` (UUID v4). PRIVATE_MESSAGE y
+CHAT_RESPONSE conservan sus campos anteriores y añaden operationId, conversationId,
+presentationSessionId y replyTo opcional; PRIVATE_MESSAGE añade createdAt. replyTo
+referencia una operación exacta, nunca «el último mensaje del participante».
+
+CONTROL_CONVERSATION_MESSAGE contiene version=1, operationId, conversationId,
+presentationSessionId, participantId, text, operator, createdAt, replyTo opcional y
+audienceQueued. Solo se aplica desde el grupo E2EE autorizado, en sesión/clave vigente.
+Texto no vacío ≤1000 caracteres, operator ≤80 y fecha entero seguro; el productor de
+Control limita además bytes antes de cifrar. IDs repetidos conservan identidad/contenido
+inmutables; solo actualizan resultados locales. El compositor de Control produce
+operaciones nuevas sin replyTo. Los eventos de equipo con replyTo no crean otra
+tarjeta: las respuestas contextuales se aplican por MESSAGE_REPLY_SYNC, con la
+coincidencia exacta descrita arriba.
+
+Control conserva el cuerpo de PRIVATE_MESSAGE y sus respuestas verdes solo en el
+modelo de Notificaciones. useControlConversations conserva solo las operaciones
+nuevas hacia Audience y sus resultados; no duplica los cuerpos entrantes ni mantiene
+una línea de historial oculta. El replyTo validado de Audience se conserva en el
+mensaje entrante, incluso si su operación original todavía no llegó a ese Control;
+no se muestra un historial resuelto. No se cambia el ID ni se asocia al último mensaje.
+Los IDs descartados se conservan sin el cuerpo entrante hasta cambiar sesión/clave
+o perder autorización. Reencriptar una operación descartada no la vuelve a mostrar;
+esto es distinto del rechazo criptográfico de un nonce repetido.
+
+El Control emite CHAT_RESPONSE con la clave del destinatario y un evento separado
+con la clave compartida del equipo, usando el mismo operationId. Cada escritura
+puede fallar por separado. audienceQueued/controlsQueued son resultados internos:
+no se renderizan banners de éxito, solo fallos contextuales. audienceQueued no demuestra entrega; recibir el evento
+del equipo tampoco demuestra que Audience lo recibió. No hay ACK, reintento automático,
+persistencia, replay histórico ni backfill. Nick del operador es atribución del
+grupo de confianza, no firma criptográfica individual.
+
+La iniciación exige estado técnico conectado/activo/no kicked, un perfil técnico
+LIVE_AUDIO_ACTIVE_PARTICIPANT_PROFILE recibido en vivo (su handler servidor exige
+admisión) y un perfil E2EE actual que confirme la misma clave. requestAliases permite
+obtener ambos sin mensaje previo. Un snapshot antiguo o un ACTIVE_PROFILE cifrado
+aislado no acreditan admisión. Rechazo, desconexión, revocación y cambio de clave/sesión
+invalidan esas confirmaciones. El backend conserva sus envelopes y rutas existentes;
+no interpreta estos campos descifrados. Clientes antiguos muestran CHAT_RESPONSE y
+pueden escribir PRIVATE_MESSAGE sin metadatos, pero no comparten los nuevos eventos
+ni ofrecen su correlación. MESSAGE_REPLY_SYNC sigue rechazando referencias desconocidas.
 
 Otros payloads emitidos por los clientes actuales:
 

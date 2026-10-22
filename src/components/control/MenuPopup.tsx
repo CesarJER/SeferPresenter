@@ -1,7 +1,7 @@
 import { translate } from '../../i18n/runtime';
 import { sameValue } from '../../utils/catalogMerge';
 import { useUiTranslation } from '../../i18n/useUiTranslation';
-import React, { useCallback, useEffect, useState, useRef, Suspense, lazy } from 'react';
+import React, { useCallback, useEffect, useState, useRef } from 'react';
 import type { Presentation, QuizData, Slide, VideoState, AppMode, ScriptureNavState } from '../../types/presentation';
 import type { SeferReaderState } from '../../types/scripture';
 import { transliterateText } from '../../utils/transliterate';
@@ -31,9 +31,7 @@ import type { PendingControlAuthorization, LiveAudioControlState } from '../../t
 import type { WebSocketConnectionStatus } from '../../hooks/useWebSocket';
 import type { RemoteCommandPayload } from '../../types/sync';
 
-const LiveAudioControlContainer = import.meta.env.VITE_SEFER_LIVE_AUDIO_BUILD !== 'false'
-  ? lazy(() => import('../../features/liveAudio/components/control/LiveAudioControlContainer'))
-  : null;
+import ControlParticipationOwner from './ControlParticipationOwner';
 import { useControllerAnswers } from '../../hooks/useQuizAnswers';
 import { QuizControllerView } from '../quiz/QuizControllerView';
 import { applyNeutralBrandingFallback } from '../../utils/branding';
@@ -100,7 +98,7 @@ interface MenuPopupProps {
   onQuizPlayApplause?: () => void;
   onQuizPlayMal?: () => void;
   onQuizAdjustTimer?: (seconds: number) => void;
-  controlAuthorization?: { role: string; verificationCode?: string; pendingControls?: PendingControlAuthorization[]; controlState?: LiveAudioControlState | null; };
+  controlAuthorization?: { role: string; verificationCode?: string; pendingControls?: PendingControlAuthorization[]; controlState?: LiveAudioControlState | null; presentationSessionId?: string | null; };
   onApproveControlRequest?: (sessionId: string) => void;
   onRejectControlRequest?: (sessionId: string) => void;
   wsSend?: (type: string, payload?: unknown) => boolean;
@@ -2082,34 +2080,31 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
         </div>
       )}
 
-      {/* Live Audio Control Container */}
-      {LiveAudioControlContainer && (
-        <Suspense fallback={null}>
-          <LiveAudioControlContainer
-            scriptureState={scriptureState}
-            voiceSuggestionsTarget={voiceSuggestionsTarget}
-            onProjectScripture={(state, command) => {
-              onToggleAppMode('seferManual');
-              onProjectScripture?.(state, command);
-            }}
-            isControlAuthorized={controlAuthorization?.role === 'principal' || controlAuthorization?.role === 'delegated'}
-            programAudioEnabled={programAudioEnabled}
-            onProgramAudioEnabledChange={onProgramAudioEnabledChange}
-            authorizationRequests={controlAuthorization?.pendingControls || []}
-            onApproveRequest={onApproveControlRequest}
-            onRejectRequest={onRejectControlRequest}
-            wsSend={wsSend}
-            subscribeToWsMessage={subscribeToWsMessage}
-            wsStatus={wsStatus}
-            controlSessionId={controlSessionId}
-            controlState={controlAuthorization?.controlState}
-            verificationCode={controlAuthorization?.verificationCode}
-          />
-        </Suspense>
-      )}
+      {/* Stable participation; RTC is an optional sibling inside the owner. */}
+      <ControlParticipationOwner
+        key={controlSessionId}
+        presentationSessionId={controlAuthorization?.presentationSessionId}
+        scriptureState={scriptureState}
+        voiceSuggestionsTarget={voiceSuggestionsTarget}
+        onProjectScripture={(state, command) => {
+          onToggleAppMode('seferManual');
+          onProjectScripture?.(state, command);
+        }}
+        isControlAuthorized={controlAuthorization?.role === 'principal' || controlAuthorization?.role === 'delegated'}
+        programAudioEnabled={programAudioEnabled}
+        onProgramAudioEnabledChange={onProgramAudioEnabledChange}
+        authorizationRequests={controlAuthorization?.pendingControls || []}
+        onApproveRequest={onApproveControlRequest}
+        onRejectRequest={onRejectControlRequest}
+        wsSend={wsSend}
+        subscribeToWsMessage={subscribeToWsMessage}
+        wsStatus={wsStatus}
+        controlSessionId={controlSessionId}
+        controlState={controlAuthorization?.controlState}
+        verificationCode={controlAuthorization?.verificationCode}
+      />
     </div>
   );
 };
 
 export default MenuPopup;
-

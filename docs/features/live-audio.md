@@ -20,14 +20,12 @@ está disponible en Scripture, slides y quiz; al ocultar el panel queda un botó
 reabrirlo. Las pantallas sin slot usan un único fallback. TV conserva escucha pasiva
 sin controles de participación ni captura.
 
-`VITE_SEFER_LIVE_AUDIO_BUILD=false` excluye el runtime RTC de Audience, conservando
-su propietario y widgets sociales. Un fallo de carga/render del adaptador también
+`VITE_SEFER_LIVE_AUDIO_BUILD=false` excluye el runtime RTC de Audience y Control,
+conservando sus propietarios y widgets sociales. Un fallo de carga/render del adaptador también
 queda aislado. Los controles de medios requieren el adaptador disponible; publicar
 micrófono requiere además conexión, permiso de Control y acción local. Si falta WS
-o cifrado, la participación indica indisponibilidad y no usa texto plano. Esta fase
-no extrae la composición Control: con build=false también se excluye su contenedor
-actual, por lo que la comunicación necesita un Control autorizado con su canal
-privado activo. No hay recuperación de historial ni un turno presencial nuevo.
+o cifrado, la participación indica indisponibilidad y no usa texto plano.
+No hay recuperación de historial ni un turno presencial nuevo.
 
 Audience puede escuchar pasivamente o participar activamente tras el recorrido
 de alias/aviso/admisión. Conceder palabra habilita publicación, pero no abre la
@@ -73,6 +71,41 @@ legible y la envía cifrada a destinatarios con permiso; el servidor gestiona
 preferencias/permisos técnicos. Incógnito y permiso de ver lista son acciones
 distintas. La rotación de clave exige volver a comunicar estado; no hay historia
 privada recuperada del backend.
+
+## Conversaciones compartidas sin RTC
+
+Desde la bandeja privada, un Control PRINCIPAL o AUTHORIZED puede seleccionar una
+Audience conectada, activa y admitida que haya publicado una clave válida y su perfil
+cifrado actual. No necesita un mensaje previo. Cuando faltan esas confirmaciones,
+la opción indica que el envío no está disponible; no se envía en claro ni se concede
+un permiso de micrófono para habilitar el chat.
+
+Notificaciones utiliza un compositor compacto con destinatario Control por defecto.
+Los avisos entre Controls son azules; los mensajes entrantes de Audience, grises;
+las respuestas contextuales se adjuntan en verde; los mensajes nuevos hacia Audience
+son naranjas. Se muestra el operador y, en los salientes, el destinatario. Elegir
+Audience vuelve el selector verde oscuro. Tras aceptar el envío a Audience, vuelve
+a Control si el operador no ha cambiado el borrador o destinatario durante el envío.
+No hay un panel separado de historial.
+
+Cada mensaje hacia Audience se cifra y se sincroniza por separado con el equipo
+autorizado. Las respuestas referencian una operación concreta, conservando la
+distinción entre escribir un mensaje nuevo y responder a una tarjeta gris. Solo se
+muestran fallos, diferenciando Audience y sincronización del equipo; los booleanos
+internos positivos indican aceptación local, sin confirmar recepción remota. Un fallo
+de envío conserva el borrador y una finalización antigua no borra ediciones nuevas.
+No hay reintento automático. Los alias permanecen en las rutas cifradas y autorizadas.
+
+Mensajes y borradores permanecen en memoria; un fallo RTC no los desmonta. La rotación
+de presentación/clave o revocación limpia los mensajes privados de Control e invalida
+trabajos pendientes. La desconexión invalida envíos y vacía las operaciones iniciadas;
+con la misma sesión/clave se conservan los descartes, sin reconstruir historial.
+Descartar oculta una operación localmente: otro sobre cifrado con el mismo ID no la
+reabre. Los IDs de descarte se limpian al cambiar sesión/clave o perder autorización.
+Los borradores no se borran por una finalización de otra sesión/clave y no se persisten
+al recargar. No hay backfill para Controls nuevos o reconectados. MESSAGE_REPLY_SYNC
+mantiene su correlación exacta y rechazo de duplicados. Audience y todos los Controls
+deben ejecutar este candidato para disponer de la experiencia completa.
 
 ## Emisión externa y avisos
 

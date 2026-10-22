@@ -1,7 +1,5 @@
 {
-  "PrivateControlInbox.replyAudienceQueued": "Audience: send accepted; receipt unconfirmed.",
   "PrivateControlInbox.replyAudienceFailed": "Audience: the reply could not be sent.",
-  "PrivateControlInbox.replyControlsQueued": "Controls: synchronization sent; receipt unconfirmed.",
   "PrivateControlInbox.replyControlsFailed": "Controls: synchronization could not be sent.",
   "PrivateControlInbox.replyAuthor": "Reply from",
   "ActiveParticipantsPanel.participants": "Participants",
@@ -135,8 +133,6 @@
   "PrivateControlInbox.togglePublicNicknameVisibility": "Toggle public nickname visibility",
   "PrivateControlInbox.presentationAudioHeardByThisControl": "Presentation audio heard by this Control",
   "PrivateControlInbox.programAudio": "🔊 Program audio",
-  "PrivateControlInbox.audioUnsupportedInThisBrowserOrInsecureContextRequires": "Audio unsupported in this browser or insecure context (requires HTTPS or localhost).",
-  "PrivateControlInbox.liveAudioIsNotConfiguredOrIsDisabledOn": "Live Audio is not configured or is disabled on the server.",
   "PrivateControlInbox.noPendingNotifications": "No pending notifications.",
   "PrivateControlInbox.controlRequests": "Control requests (",
   "PrivateControlInbox.newControlConnected": "New Control Connected",
@@ -170,7 +166,12 @@
   "PrivateControlInbox.blockAccessForThisParticipant": "Block access for this participant",
   "PrivateControlInbox.blockAccessFor_d2b424": "Block access for {{value1}}",
   "PrivateControlInbox.noticeForTheControlTeam": "Notice for the control team…",
-  "PrivateControlInbox.sendNoticeToOtherOperators": "Send notice to other operators",
+  "PrivateControlInbox.recipient": "Recipient",
+  "PrivateControlInbox.recipientControl": "Control",
+  "PrivateControlInbox.audienceUser": "User",
+  "PrivateControlInbox.privateMessageTo": "Message to {{alias}}...",
+  "PrivateControlInbox.message": "Message",
+  "PrivateControlInbox.send": "Send",
   "CollapsiblePrivacyNotice.noticeBeforeSpeaking": "Notice before speaking",
   "CollapsiblePrivacyNotice.theMicrophoneDoesNotActivateAutomaticallyItRequiresControl": "The microphone does not activate automatically. It requires Control authorization, browser permission and a local action.",
   "CollapsiblePrivacyNotice.yourAliasReachesAuthorizedControlsEncryptedItIsShared": "Your alias reaches authorized Controls encrypted. It is shared with other active participants only if you choose and Control authorizes it.",
@@ -223,5 +224,10 @@
   "CollapsiblePrivacyNotice.theSessionIsDeclaredLiveAndRecordingIfYouPublish": "The session is declared live and recording. If you publish your microphone, your voice may be stored in the operator’s external services.",
   "CollapsiblePrivacyNotice.emptyDocument": "empty document",
   "AudienceLiveAudioPanel.showParticipation": "Show participation controls",
-  "AudienceParticipationPanel.preparingSecureParticipation": "Secure participation unavailable. Check the connection and encryption."
+  "AudienceParticipationPanel.preparingSecureParticipation": "Secure participation unavailable. Check the connection and encryption.",
+  "Conversations.unavailable": "Secure sending unavailable",
+  "Conversations.reply": "Reply",
+  "Conversations.mediaUnavailable": "Live audio unavailable. Participation and messaging remain available.",
+  "Conversations.recipientUnavailable": "{{alias}} (sending unavailable)",
+  "Conversations.couldNotSend": "Could not prepare or send the message. The draft has been kept."
 }

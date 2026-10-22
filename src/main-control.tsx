@@ -536,7 +536,8 @@ function ControlApp() {
                 controlAuthorization.controlState === 'AUTHORIZED' ? 'delegated' : 'pending',
           verificationCode: controlAuthorization.verificationCode ?? undefined,
           pendingControls: controlAuthorization.pendingControls,
-          controlState: controlAuthorization.controlState
+          controlState: controlAuthorization.controlState,
+          presentationSessionId: controlAuthorization.presentationSessionId,
         }}
         onApproveControlRequest={controlAuthorization.approveControl}
         onRejectControlRequest={controlAuthorization.rejectControl}

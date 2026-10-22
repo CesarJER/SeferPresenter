@@ -95,6 +95,13 @@ El contenido de perfiles públicos no incluye alias. Véanse
 
 ## Desconexión, sucesión y recuperación
 
+Las conversaciones privadas de Control son estado efímero del propietario social,
+independiente de RTC. Se correlacionan por presentación, participante y UUID de
+operación; cada destinatario utiliza un envío E2EE separado. La aceptación de WS
+solo indica escritura local. No se reconstruyen desde snapshots ni tienen backfill;
+revocar autorización o cambiar frontera de clave/sesión invalida trabajos crypto
+pendientes. Véase [contrato privado](../api/realtime.md#señales-privadas-envelope-y-payload-descifrado).
+
 - Cada transporte posee su reconexión. No hay cola persistente común de comandos;
   una operación rechazada debe permanecer visible y requerir acción explícita.
 - Al desconectar el principal se promueve el Control autorizado más antiguo.
