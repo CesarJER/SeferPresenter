@@ -1222,6 +1222,7 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
     liveAudioParticipants.clear()
     audienceAccessRecords.clear()
     audienceSseTickets.clear()
+    snapshotProviders.invalidateAudienceStreams?.()
     accessMode = getDefaultAccessMode()
     setExternalBroadcastState('off')
     broadcastConnectionCounts()
