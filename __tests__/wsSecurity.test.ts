@@ -70,6 +70,8 @@ describe('WebSocket transport authorization', () => {
   });
 
   afterEach(async () => {
+    vi.restoreAllMocks();
+    vi.unstubAllEnvs();
     for (const client of clients) {
       if (client.ws.readyState === WebSocket.OPEN || client.ws.readyState === WebSocket.CONNECTING) client.ws.terminate();
     }
@@ -139,5 +141,71 @@ describe('WebSocket transport authorization', () => {
     const closed = new Promise<number>((resolve) => audience.ws.once('close', resolve));
     audience.ws.send(JSON.stringify({ type: 'SERVER_TIME_PING', padding: 'x'.repeat(70 * 1024) }));
     await expect(closed).resolves.toBe(1009);
+  });
+
+  it.each([
+    [true, 'APPROVE'], [true, 'REJECT'], [false, 'APPROVE'], [false, 'REJECT'],
+  ] as const)('preserves delegated=%s authorization for %s decisions and pending exclusion', async (delegated, decision) => {
+    vi.stubEnv('SEFER_LIVE_AUDIO_ALLOW_DELEGATED_MODERATORS', String(delegated));
+    const principal = await connect('control');
+    const secondary = await connect('control');
+    const secondaryPending = await waitFor(secondary, message => message.type === 'LIVE_AUDIO_CONTROL_AUTHORIZATION_STATE' && message.controlState === 'PENDING');
+    expect(secondaryPending.verificationCode).toMatch(/^\d{3}-\d{3}$/);
+    principal.send({ type: 'LIVE_AUDIO_CONTROL_AUTHORIZATION_DECISION', targetControlSessionId: secondaryPending.controlSessionId, decision: 'APPROVE' });
+    const authorized = await waitFor(secondary, message => message.type === 'LIVE_AUDIO_CONTROL_AUTHORIZATION_STATE' && message.controlState === 'AUTHORIZED');
+    expect(authorized.allowDelegatedModerators).toBe(delegated);
+    expect(authorized).not.toHaveProperty('verificationCode');
+    expect(authorized).not.toHaveProperty('codeExpiresAt');
+    expect('pendingControls' in authorized).toBe(delegated);
+
+    const target = await connect('control');
+    const pending = await waitFor(target, message => message.type === 'LIVE_AUDIO_CONTROL_AUTHORIZATION_STATE' && message.controlState === 'PENDING');
+    target.send({ type: 'LIVE_AUDIO_CONTROL_AUTHORIZATION_DECISION', targetControlSessionId: pending.controlSessionId, decision });
+    await waitFor(target, message => message.type === 'ERROR' && message.code === 'CONTROL_AUTH_FORBIDDEN');
+    expect(target.messages.some(message => message.type === 'LIVE_AUDIO_SNAPSHOT')).toBe(false);
+
+    secondary.send({ type: 'LIVE_AUDIO_CONTROL_AUTHORIZATION_DECISION', targetControlSessionId: pending.controlSessionId, decision });
+    if (!delegated) {
+      await waitFor(secondary, message => message.type === 'ERROR' && message.code === 'CONTROL_AUTH_FORBIDDEN');
+      expect(target.messages.some(message => message.controlState === 'AUTHORIZED')).toBe(false);
+      // The principal retains authority when delegation is disabled; no code is supplied in either decision.
+      principal.send({ type: 'LIVE_AUDIO_CONTROL_AUTHORIZATION_DECISION', targetControlSessionId: pending.controlSessionId, decision });
+    }
+    if (decision === 'APPROVE') {
+      const state = await waitFor(target, message => message.type === 'LIVE_AUDIO_CONTROL_AUTHORIZATION_STATE' && message.controlState === 'AUTHORIZED');
+      await waitFor(target, message => message.type === 'LIVE_AUDIO_SNAPSHOT');
+      expect(state).not.toHaveProperty('verificationCode');
+      expect(state).not.toHaveProperty('codeExpiresAt');
+      const frames = target.messages.filter(message => message.controlState === 'AUTHORIZED' || message.type === 'LIVE_AUDIO_SNAPSHOT');
+      expect(frames.map(message => message.type)).toEqual(['LIVE_AUDIO_CONTROL_AUTHORIZATION_STATE', 'LIVE_AUDIO_SNAPSHOT']);
+    } else {
+      const closed = new Promise<[number, string]>(resolve => target.ws.once('close', (code, reason) => resolve([code, reason.toString()])));
+      await expect(closed).resolves.toEqual([4003, 'Control authorization rejected']);
+      const lastState = target.messages.filter(message => message.type === 'LIVE_AUDIO_CONTROL_AUTHORIZATION_STATE').at(-1)!;
+      expect(lastState.controlState).toBe('PENDING');
+      expect(lastState).not.toHaveProperty('verificationCode');
+      expect(lastState.codeExpiresAt).toEqual(expect.any(Number));
+      expect(target.messages.some(message => message.type === 'LIVE_AUDIO_SNAPSHOT')).toBe(false);
+    }
+    principal.messages.length = 0;
+    principal.send({ type: 'LIVE_AUDIO_CONTROL_AUTHORIZATION_DECISION', targetControlSessionId: pending.controlSessionId, decision: 'APPROVE' });
+    await waitFor(principal, message => message.type === 'ERROR' && message.code === 'CONTROL_AUTH_TARGET_INVALID');
+  });
+
+  it('retains missing-target and expired-code checks before authorization mutation', async () => {
+    const principal = await connect('control');
+    principal.send({ type: 'LIVE_AUDIO_CONTROL_AUTHORIZATION_DECISION', targetControlSessionId: 'missing-control', decision: 'APPROVE' });
+    await waitFor(principal, message => message.type === 'ERROR' && message.code === 'CONTROL_AUTH_TARGET_INVALID');
+    const target = await connect('control');
+    const pending = await waitFor(target, message => message.type === 'LIVE_AUDIO_CONTROL_AUTHORIZATION_STATE' && message.controlState === 'PENDING');
+    target.messages.length = 0;
+    vi.spyOn(Date, 'now').mockReturnValue((pending.codeExpiresAt as number) + 1);
+    principal.send({ type: 'LIVE_AUDIO_CONTROL_AUTHORIZATION_DECISION', targetControlSessionId: pending.controlSessionId, decision: 'APPROVE' });
+    await waitFor(principal, message => message.type === 'ERROR' && message.code === 'CONTROL_AUTH_CODE_EXPIRED');
+    const state = await waitFor(target, message => message.type === 'LIVE_AUDIO_CONTROL_AUTHORIZATION_STATE');
+    expect(state.controlState).toBe('PENDING');
+    expect(state.verificationCode).toBe(pending.verificationCode);
+    expect(state.codeExpiresAt).toBe(pending.codeExpiresAt);
+    expect(target.messages.some(message => message.type === 'LIVE_AUDIO_SNAPSHOT')).toBe(false);
   });
 });

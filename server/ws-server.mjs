@@ -471,27 +471,10 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
     }
   }
 
-  const makeConnectionCountsMessage = () => {
-    const counts = {
-      audienceConnections: 0,
-      controlConnections: 0,
-      presenterConnections: 0,
-    }
-
-    for (const [client, meta] of wsClients) {
-      if (client.readyState !== WebSocket.OPEN) continue
-      if (meta.role === 'audience') counts.audienceConnections += 1
-      if (meta.role === 'control') counts.controlConnections += 1
-      if (meta.role === 'presenter') counts.presenterConnections += 1
-    }
-
-    return {
-      type: 'LIVE_AUDIO_CONNECTION_COUNTS',
-      totalConnections: counts.audienceConnections + counts.controlConnections + counts.presenterConnections,
-      ...counts,
-      updatedAt: Date.now(),
-    }
-  }
+  const makeConnectionCountsMessage = () => ({
+    type: 'LIVE_AUDIO_CONNECTION_COUNTS',
+    ...getConnectionCountsSnapshot(),
+  })
 
   const broadcastConnectionCounts = () => {
     const message = makeConnectionCountsMessage()
@@ -773,13 +756,11 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
     return control
   }
 
-  const isAuthorizedToDecide = (control) => canAuthorizeControls(control)
-
   const handleAuthorizationDecision = (meta, msg) => {
     const issuer = liveAudioControls.get(meta?.controlSessionId)
     const target = liveAudioControls.get(msg.targetControlSessionId)
 
-    if (!isAuthorizedToDecide(issuer)) {
+    if (!canAuthorizeControls(issuer)) {
       sendError(meta.ws, 'CONTROL_AUTH_FORBIDDEN', 'Control is not allowed to authorize other controls')
       return
     }

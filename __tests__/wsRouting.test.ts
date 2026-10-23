@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { createServer, type Server } from 'node:http';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { WebSocket, type WebSocketServer } from 'ws';
 import { decrypt, deriveSharedKey, encrypt, exportPublicKey, generateSessionKeyPair } from '../src/utils/cryptoUtils';
 import {
@@ -144,6 +144,7 @@ describe('Live Audio WebSocket routing', () => {
   });
 
   afterEach(async () => {
+    vi.restoreAllMocks();
     for (const client of clients) {
       if (client.ws.readyState === WebSocket.OPEN || client.ws.readyState === WebSocket.CONNECTING) {
         client.ws.close();
@@ -609,7 +610,67 @@ describe('Live Audio WebSocket routing', () => {
     expect(controlCounts.controlConnections).toBe(1);
     expect(controlCounts.presenterConnections).toBe(1);
     expect(presenterCounts.totalConnections).toBe(3);
+    expect(presenterCounts).toEqual(controlCounts);
+    expect(Object.keys(controlCounts)).toEqual(['type', 'totalConnections', 'audienceConnections', 'controlConnections', 'presenterConnections', 'updatedAt']);
+    expect(controlCounts.updatedAt).toEqual(expect.any(Number));
     expect(audience.messages.some((message) => message.type === 'LIVE_AUDIO_CONNECTION_COUNTS')).toBe(false);
+  });
+
+  it('preserves count recipients, snapshot shape, timestamps and publication order across disconnect and reconnect', async () => {
+    const principal = await connectWs('control');
+    const pending = await connectWs('control');
+    const presenter = await connectWs('presenter');
+    const unknown = await connectWs('unknown');
+    await waitFor(pending, message => message.type === 'LIVE_AUDIO_CONTROL_AUTHORIZATION_STATE' && message.controlState === 'PENDING');
+    await flushMessages(principal, [pending, presenter, unknown]);
+    const recipients = [principal, pending, presenter];
+    const timestamp = Date.now();
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(timestamp);
+    for (const client of [...recipients, unknown]) client.messages.length = 0;
+
+    const audience = await connectWs('audience');
+    await flushMessages(audience, [...recipients, unknown]);
+    const expected = {
+      type: 'LIVE_AUDIO_CONNECTION_COUNTS', totalConnections: 4,
+      audienceConnections: 1, controlConnections: 2, presenterConnections: 1, updatedAt: timestamp,
+    };
+    for (const client of recipients) {
+      expect(client.messages.filter(message => message.type === expected.type)).toEqual([expected]);
+      expect(client.messages.filter(message => [expected.type, 'MEDIA_MASTER_STATUS'].includes(message.type)).map(message => message.type))
+        .toEqual(client === presenter ? [expected.type] : [expected.type, 'MEDIA_MASTER_STATUS', 'MEDIA_MASTER_STATUS']);
+    }
+    expect(audience.messages.some(message => message.type === expected.type)).toBe(false);
+    expect(unknown.messages.some(message => message.type === expected.type)).toBe(false);
+
+    principal.send({ type: 'LIVE_AUDIO_SNAPSHOT_REQUEST' });
+    await flushMessages(principal, [pending]);
+    const snapshot = principal.messages.find(message => message.type === 'LIVE_AUDIO_SNAPSHOT')!;
+    expect((snapshot.snapshot as { connectionCounts: unknown }).connectionCounts).toEqual({
+      totalConnections: 4, audienceConnections: 1, controlConnections: 2, presenterConnections: 1, updatedAt: timestamp,
+    });
+    expect(pending.messages.some(message => message.type === 'LIVE_AUDIO_SNAPSHOT')).toBe(false);
+
+    for (const client of recipients) client.messages.length = 0;
+    clock.mockReturnValue(timestamp + 1);
+    const closed = new Promise<void>(resolve => audience.ws.once('close', () => resolve()));
+    audience.ws.close();
+    await closed;
+    await waitFor(principal, message => message.type === expected.type && message.totalConnections === 3);
+    await flushMessages(principal, [pending, presenter]);
+    for (const client of recipients) {
+      expect(client.messages.filter(message => message.type === expected.type)).toEqual([
+        { ...expected, totalConnections: 3, audienceConnections: 0, updatedAt: timestamp + 1 },
+      ]);
+      client.messages.length = 0;
+    }
+
+    clock.mockReturnValue(timestamp + 2);
+    const reconnected = await connectWs('audience');
+    await flushMessages(reconnected, recipients);
+    for (const client of recipients) {
+      expect(client.messages.filter(message => message.type === expected.type)).toEqual([{ ...expected, updatedAt: timestamp + 2 }]);
+    }
+    expect(reconnected.messages.some(message => message.type === expected.type)).toBe(false);
   });
 
   it('routes control moderation actions to the target audience participant', async () => {
