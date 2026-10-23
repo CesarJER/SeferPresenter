@@ -44,8 +44,9 @@ Una casilla completada aquí no certifica un despliegue distinto.
 
 ## Implementación y mantenimiento pendientes
 
-- [ ] Cerrar la invalidación de streams Audience ya abiertos al rotar una sesión
+- [x] Cerrar la invalidación de streams Audience ya abiertos al rotar una sesión
   CONTROLLED; comprobar que no reciben proyección posterior sin nueva admisión.
+  Resuelto en commit d62b4c6.
 - [ ] Revisar conjuntamente backpressure y cleanup WS: conservar metadata hasta
   retirar autoridad/bindings y aplicar una política explícita en cada ruta de envío.
 - [ ] Completar la liberación de timers y listeners WS al rotar/cerrar y verificar

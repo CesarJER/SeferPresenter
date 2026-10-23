@@ -128,9 +128,17 @@ la devuelve otra vez. El backend guarda su digest y registro en RAM. Los tickets
 caducan a los 30 segundos y se consumen también cuando el propósito no coincide:
 solicitar uno nuevo para otra conexión. Rotar sesión o política invalida tickets.
 
-La admisión SSE se comprueba al abrir la conexión. Invalidar credenciales y
-tickets al rotar sesión no garantiza el cierre de streams ya abiertos; ese cierre
-requiere el seguimiento pendiente en [TODO](../../TODO.md).
+La admisión SSE se comprueba al abrir la conexión. Tras persistir correctamente
+una rotación de sesión, el servidor invalida las credenciales y tickets anteriores
+y termina las suscripciones Audience STATE y QUIZ antes de publicar el estado
+de la nueva sesión. Las suscripciones administrativas se conservan. En modo
+CONTROLLED, Audience debe obtener nueva admisión y tickets; en PUBLIC se mantiene
+la política de acceso público. Si falla la persistencia antes de completar la
+rotación, la sesión y los streams anteriores siguen vigentes.
+
+El cierre impide escribir datos de la sesión nueva al stream retirado; pueden
+terminar de llegar bytes de la sesión anterior ya enviados. Esta garantía no
+supone revocación de permisos RTC ni solución de otros riesgos de lifecycle.
 
 El cliente conserva la credencial de acceso en `sefer-audience-access` ligada
 a la sesión. Este registro tiene un lifecycle distinto de las respuestas con
