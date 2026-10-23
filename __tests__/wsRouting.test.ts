@@ -81,6 +81,17 @@ const connectWs = (role: 'presenter' | 'control' | 'audience' | 'unknown') =>
     ws.on('error', reject);
   });
 
+const flushMessages = async (sender: WsClient, recipients: WsClient[]) => {
+  const ping = async (client: WsClient) => {
+    const marker = randomUUID();
+    client.send({ type: 'SERVER_TIME_PING', clientSentAtMs: marker });
+    await waitFor(client, message => message.type === 'SERVER_TIME_PONG' && message.clientSentAtMs === marker);
+  };
+  // The sender barrier precedes recipient barriers, so earlier routed frames have arrived.
+  await ping(sender);
+  await Promise.all(recipients.map(ping));
+};
+
 const makeParticipantStatus = (participantId: string): WsMessage => ({
   type: 'LIVE_AUDIO_PARTICIPANT_STATUS',
   participantId,
@@ -836,6 +847,95 @@ describe('Live Audio WebSocket routing', () => {
 
     const privateSignals = control.messages.filter((message) => message.type === 'PRIVATE_CONTROL_SIGNAL');
     expect(privateSignals).toHaveLength(5);
+  });
+
+  it('rejects malformed formats before participant mutation or routing, then still accepts valid status and profile', async () => {
+    const principal = await connectWs('control');
+    const audience = await connectWs('audience');
+    const participantId = randomUUID();
+    const profile = { type: 'LIVE_AUDIO_ACTIVE_PARTICIPANT_PROFILE', participantId, activeListPublicKey: Buffer.from('synthetic-key').toString('base64'), isAliasVisibleToActiveParticipants: false };
+    for (const message of [
+      { ...makePrivateSignal(participantId), ciphertext: Buffer.alloc(4097).toString('base64') },
+      { ...makePrivateSignal(participantId), nonce: Buffer.alloc(11).toString('base64') },
+      { ...makePrivateSignal(participantId), ephemeralPublicKey: 'invalid!' },
+      { ...makePrivateSignal(participantId), toParticipantId: randomUUID() },
+      { ...makeParticipantStatus(participantId), alias: 'must-not-be-public' },
+      { ...makeParticipantStatus(participantId), role: 'control' },
+      { ...makeParticipantStatus(participantId), canPublishAudio: 'true' },
+      { ...profile, alias: 'must-not-be-public' },
+      { ...profile, activeListPublicKey: 'invalid!' },
+    ]) audience.send(message);
+    await flushMessages(audience, [principal]);
+    expect(getLiveAudioParticipantSnapshot().participants).toEqual([]);
+    expect(principal.messages.filter(message => ['PRIVATE_CONTROL_SIGNAL', 'LIVE_AUDIO_PARTICIPANT_STATUS', 'LIVE_AUDIO_ACTIVE_PARTICIPANT_PROFILE'].includes(message.type))).toEqual([]);
+    expect(audience.messages.filter(message => message.type === 'ERROR')).toEqual([]);
+
+    audience.send(makeParticipantStatus(participantId));
+    await waitFor(principal, message => message.type === 'LIVE_AUDIO_PARTICIPANT_STATUS' && message.participantId === participantId);
+    audience.send(profile);
+    await waitFor(principal, message => message.type === 'LIVE_AUDIO_ACTIVE_PARTICIPANT_PROFILE' && message.participantId === participantId);
+    const before = getLiveAudioParticipantSnapshot();
+    const count = principal.messages.filter(message => message.type === 'LIVE_AUDIO_PARTICIPANT_STATUS').length;
+    principal.send({ type: 'LIVE_AUDIO_GRANT_SPEAK', participantId, excludeParticipantIds: [] });
+    principal.send({ type: 'LIVE_AUDIO_MUTE_ALL', excludeParticipantIds: ['invalid'] });
+    await flushMessages(principal, [audience]);
+    expect(getLiveAudioParticipantSnapshot()).toEqual(before);
+    expect(principal.messages.filter(message => message.type === 'LIVE_AUDIO_PARTICIPANT_STATUS')).toHaveLength(count);
+    expect(audience.messages.filter(message => ['LIVE_AUDIO_GRANT_SPEAK', 'LIVE_AUDIO_MUTE_ALL'].includes(message.type))).toEqual([]);
+    expect(principal.messages.filter(message => message.type === 'ERROR')).toEqual([]);
+
+    liveKitPermissions.set(participantId, true);
+    principal.send({ type: 'LIVE_AUDIO_GRANT_SPEAK', participantId });
+    await waitFor(audience, message => message.type === 'LIVE_AUDIO_GRANT_SPEAK' && message.participantId === participantId);
+    expect(getLiveAudioParticipantSnapshot().participants[0].canPublishAudio).toBe(true);
+  });
+
+  it('keeps exact ciphertext and nonce limits before binding and without spending the Audience rate budget on rejects', async () => {
+    const principal = await connectWs('control');
+    const pending = await connectWs('control');
+    const presenter = await connectWs('presenter');
+    const audience = await connectWs('audience');
+    const participantId = randomUUID();
+    for (const patch of [
+      { ciphertext: Buffer.alloc(4097).toString('base64') },
+      { nonce: Buffer.alloc(11).toString('base64') },
+      { nonce: Buffer.alloc(13).toString('base64') },
+    ]) audience.send({ ...makePrivateSignal(participantId), ...patch });
+    await flushMessages(audience, [principal]);
+    expect(getLiveAudioParticipantSnapshot().participants).toEqual([]);
+    expect(principal.messages.filter(message => message.type === 'PRIVATE_CONTROL_SIGNAL')).toEqual([]);
+    for (let index = 0; index < 6; index++) audience.send({ ...makePrivateSignal(participantId, String(index + 1)), ciphertext: Buffer.alloc(4096, index).toString('base64'), extra: 'allowed' });
+    await flushMessages(audience, [principal, pending, presenter]);
+    expect(principal.messages.filter(message => message.type === 'PRIVATE_CONTROL_SIGNAL')).toHaveLength(5);
+    expect(principal.messages.filter(message => message.type === 'PRIVATE_CONTROL_SIGNAL').every(message => Buffer.from(message.ciphertext as string, 'base64').length === 4096)).toBe(true);
+    expect(pending.messages.filter(message => message.type === 'PRIVATE_CONTROL_SIGNAL')).toEqual([]);
+    expect(presenter.messages.filter(message => message.type === 'PRIVATE_CONTROL_SIGNAL')).toEqual([]);
+  });
+
+  it('preserves Control size limits, target routing and team sender echo while rejecting Presenter signals', async () => {
+    const principal = await connectWs('control');
+    const presenter = await connectWs('presenter');
+    const audience = await connectWs('audience');
+    const otherAudience = await connectWs('audience');
+    const participantId = randomUUID();
+    audience.send(makeParticipantStatus(participantId));
+    await waitFor(principal, message => message.type === 'LIVE_AUDIO_PARTICIPANT_STATUS' && message.participantId === participantId);
+    const signal = { ...makeControlPrivateSignal(participantId), ciphertext: Buffer.alloc(4096).toString('base64') };
+    principal.send({ ...signal, ciphertext: Buffer.alloc(4097).toString('base64') });
+    principal.send({ ...signal, nonce: Buffer.alloc(13).toString('base64') });
+    presenter.send(signal);
+    await flushMessages(principal, [audience, otherAudience]);
+    await flushMessages(presenter, [audience]);
+    expect(audience.messages.filter(message => message.type === 'PRIVATE_CONTROL_SIGNAL')).toEqual([]);
+    principal.send(signal);
+    await flushMessages(principal, [audience, otherAudience]);
+    expect(audience.messages.filter(message => message.type === 'PRIVATE_CONTROL_SIGNAL')).toEqual([signal]);
+    expect(otherAudience.messages.filter(message => message.type === 'PRIVATE_CONTROL_SIGNAL')).toEqual([]);
+    const teamSignal = { ...signal, toParticipantId: undefined };
+    principal.send(teamSignal);
+    await flushMessages(principal, [audience]);
+    expect(principal.messages.filter(message => message.type === 'PRIVATE_CONTROL_SIGNAL')).toEqual([JSON.parse(JSON.stringify(teamSignal))]);
+    expect(audience.messages.filter(message => message.type === 'PRIVATE_CONTROL_SIGNAL')).toEqual([signal]);
   });
 
   it('cleans ephemeral audience participant state after the rejoin grace period', async () => {
