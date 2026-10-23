@@ -373,7 +373,8 @@ const broadcastWs = (message, filter) => {
     try {
       client.send(data)
     } catch {
-      wsClients.delete(client)
+      meta.cleanup()
+      client.terminate()
     }
   }
 }
@@ -443,14 +444,15 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
       if (client.readyState !== WebSocket.OPEN) continue
       if (filter && !filter(meta)) continue
       if (client.bufferedAmount > WS_MAX_BUFFERED_BYTES) {
-        wsClients.delete(client)
+        meta.cleanup()
         client.close(1013, 'Slow consumer')
         continue
       }
       try {
         client.send(data)
       } catch {
-        wsClients.delete(client)
+        meta.cleanup()
+        client.terminate()
       }
     }
   }
@@ -458,7 +460,7 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
   const sendJson = (client, message) => {
     if (client.readyState !== WebSocket.OPEN) return false
     if (client.bufferedAmount > WS_MAX_BUFFERED_BYTES) {
-      wsClients.delete(client)
+      wsClients.get(client)?.cleanup()
       client.close(1013, 'Slow consumer')
       return false
     }
@@ -466,7 +468,8 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
       client.send(JSON.stringify(message))
       return true
     } catch {
-      wsClients.delete(client)
+      wsClients.get(client)?.cleanup()
+      client.terminate()
       return false
     }
   }
@@ -712,6 +715,7 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
   const removeControl = (controlSessionId) => {
     const control = liveAudioControls.get(controlSessionId)
     if (!control) return
+    clearTimeout(control.expiryTimer)
     const wasPrincipal = control.controlState === 'PRINCIPAL'
     liveAudioControls.delete(controlSessionId)
     if (wasPrincipal) {
@@ -1278,7 +1282,25 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
       controlSessionId: control?.controlSessionId,
       operatorCredential: role === 'control' || role === 'presenter' ? randomBytes(32).toString('hex') : undefined,
     }
+    let cleanedUp = false
+    meta.cleanup = () => {
+      // Retain socket identity even when rotation/rejection already retired metadata.
+      if (cleanedUp) return
+      cleanedUp = true
+      wsClients.delete(ws)
+      if (meta.role === 'control' && liveAudioControls.get(meta.controlSessionId)?.ws === ws) {
+        removeControl(meta.controlSessionId)
+      }
+      releaseParticipantConnection(meta)
+      broadcastConnectionCounts()
+      broadcastMediaMasterStatus()
+    }
     wsClients.set(ws, meta)
+    ws.on('close', meta.cleanup)
+    ws.on('error', () => {
+      meta.cleanup()
+      if (ws.readyState === WebSocket.OPEN) ws.terminate()
+    })
 
     ws.send(JSON.stringify({
       type: 'WELCOME',
@@ -1715,39 +1737,12 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
           break
       }
     })
-
-    ws.on('close', () => {
-      const meta = wsClients.get(ws)
-      wsClients.delete(ws)
-      if (meta?.role === 'control' && meta.controlSessionId) {
-        removeControl(meta.controlSessionId)
-      }
-      releaseParticipantConnection(meta)
-      broadcastConnectionCounts()
-      broadcastMediaMasterStatus()
-    })
-    ws.on('error', () => {
-      const meta = wsClients.get(ws)
-      wsClients.delete(ws)
-      if (meta?.role === 'control' && meta.controlSessionId) {
-        removeControl(meta.controlSessionId)
-      }
-      releaseParticipantConnection(meta)
-      broadcastConnectionCounts()
-      broadcastMediaMasterStatus()
-    })
   })
 
   const heartbeat = setInterval(() => {
     for (const [client, meta] of wsClients) {
       if (client.isAlive === false) {
-        wsClients.delete(client)
-        if (meta?.role === 'control' && meta.controlSessionId) {
-          removeControl(meta.controlSessionId)
-        }
-        releaseParticipantConnection(meta)
-        broadcastConnectionCounts()
-        broadcastMediaMasterStatus()
+        meta.cleanup()
         client.terminate()
         continue
       }
@@ -1757,10 +1752,11 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
         try {
           client.ping()
         } catch {
-          wsClients.delete(client)
+          meta.cleanup()
+          client.terminate()
         }
       } else {
-        wsClients.delete(client)
+        meta.cleanup()
       }
     }
     sweepExpiredParticipants()

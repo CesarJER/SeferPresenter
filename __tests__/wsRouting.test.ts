@@ -6,7 +6,12 @@ import { decrypt, deriveSharedKey, encrypt, exportPublicKey, generateSessionKeyP
 import {
   createWsServer,
   bootstrapAudienceAccess,
+  broadcastWs,
+  getLiveAudioControlSnapshot,
+  getLiveAudioControlState,
+  getLiveAudioParticipantState,
   getLiveAudioParticipantSnapshot,
+  isLiveAudioControlAuthorized,
   resetWsServerStateForTests,
 } from '../server/ws-server.mjs';
 
@@ -23,6 +28,7 @@ let wss: WebSocketServer;
 let baseUrl: string;
 let clients: WsClient[] = [];
 let liveKitPermissions: Map<string, boolean>;
+let heartbeatTick: () => void;
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -62,9 +68,9 @@ const waitFor = async (
   });
 };
 
-const connectWs = (role: 'presenter' | 'control' | 'audience' | 'unknown') =>
+const connectWs = (role: 'presenter' | 'control' | 'audience' | 'unknown', controlSessionId?: string) =>
   new Promise<WsClient>((resolve, reject) => {
-    const ws = new WebSocket(`${baseUrl}?role=${role}&clientId=${randomUUID()}`);
+    const ws = new WebSocket(`${baseUrl}?role=${role}&clientId=${randomUUID()}${controlSessionId ? `&controlSessionId=${encodeURIComponent(controlSessionId)}` : ''}`);
     const client: WsClient = {
       ws,
       messages: [],
@@ -132,11 +138,13 @@ describe('Live Audio WebSocket routing', () => {
     liveKitPermissions = new Map();
 
     httpServer = createServer();
+    const intervals = vi.spyOn(globalThis, 'setInterval');
     wss = createWsServer(httpServer, undefined, {
       getLiveKitState: () => ({
         participants: Array.from(liveKitPermissions, ([participantId, canPublish]) => ({ participantId, canPublish })),
       }),
     });
+    heartbeatTick = intervals.mock.calls.find(([, ms]) => ms === 25_000)![0] as () => void;
     await new Promise<void>((resolve) => httpServer.listen(0, resolve));
     const address = httpServer.address();
     if (!address || typeof address === 'string') throw new Error('Expected HTTP server address');
@@ -156,6 +164,7 @@ describe('Live Audio WebSocket routing', () => {
     resetWsServerStateForTests();
     delete process.env.SEFER_LIVE_AUDIO_REJOIN_GRACE_SECONDS;
     delete process.env.SEFER_SESSION_ACCESS_DEFAULT;
+    vi.unstubAllEnvs();
   });
 
   it('relays encrypted reply synchronization to authorized Controls including sender, but never a pending Control', async () => {
@@ -1043,5 +1052,274 @@ describe('Live Audio WebSocket routing', () => {
     await wait(1_250);
 
     expect(getLiveAudioParticipantSnapshot().participants).toHaveLength(0);
+  });
+
+  describe('R1 terminal connection cleanup', () => {
+    const terminalPaths = [
+      'close', 'sendJson overflow', 'sendJson throw', 'broadcast overflow',
+      'broadcast throw', 'broadcastWs throw', 'error', 'heartbeat timeout',
+      'heartbeat ping throw', 'heartbeat closing',
+    ] as const;
+
+    const trackedConnection = async (role: 'control' | 'audience', controlSessionId?: string) => {
+      const accepted = new Promise<WebSocket>(resolve => wss.once('connection', resolve));
+      const client = await connectWs(role, controlSessionId);
+      const serverSocket = await accepted;
+      const welcome = await waitFor(client, message => message.type === 'WELCOME');
+      await flushMessages(client, []);
+      return { client, serverSocket, welcome };
+    };
+
+    const triggerTerminal = async (
+      path: typeof terminalPaths[number],
+      target: Awaited<ReturnType<typeof trackedConnection>>,
+      sender: WsClient,
+    ) => {
+      const { client, serverSocket, welcome } = target;
+      if (path.includes('overflow')) {
+        vi.spyOn(serverSocket, 'bufferedAmount', 'get').mockReturnValue(512 * 1024 + 1);
+      }
+      if (path.endsWith('throw') && path !== 'heartbeat ping throw') {
+        vi.spyOn(serverSocket, 'send').mockImplementation(() => { throw new Error('Synthetic send failure'); });
+      }
+      switch (path) {
+        case 'close': {
+          const closed = new Promise(resolve => client.ws.once('close', resolve));
+          client.ws.close();
+          await closed;
+          break;
+        }
+        case 'sendJson overflow':
+        case 'sendJson throw':
+          client.send(welcome.role === 'control'
+            ? { type: 'LIVE_AUDIO_SNAPSHOT_REQUEST' }
+            : { type: 'AUDIENCE_ACCESS_BIND', credential: 'synthetic-obsolete-credential' });
+          break;
+        case 'broadcast overflow':
+        case 'broadcast throw':
+          sender.send({ type: 'AUDIO_TIMELINE_ACTION', action: { type: 'PAUSE' } });
+          break;
+        case 'broadcastWs throw':
+          broadcastWs({ type: 'R1_SYNTHETIC_MARKER' });
+          break;
+        case 'error':
+          serverSocket.emit('error', new Error('Synthetic terminal error'));
+          break;
+        case 'heartbeat timeout':
+          Object.assign(serverSocket, { isAlive: false });
+          heartbeatTick();
+          break;
+        case 'heartbeat ping throw':
+          vi.spyOn(serverSocket, 'ping').mockImplementation(() => { throw new Error('Synthetic ping failure'); });
+          heartbeatTick();
+          break;
+        case 'heartbeat closing':
+          serverSocket.close();
+          expect(serverSocket.readyState).toBe(WebSocket.CLOSING);
+          heartbeatTick();
+          break;
+      }
+    };
+
+    beforeEach(() => {
+      vi.stubEnv('SEFER_SESSION_ACCESS_DEFAULT', 'PUBLIC');
+      vi.stubEnv('SEFER_LIVE_AUDIO_REJOIN_GRACE_SECONDS', '60');
+      resetWsServerStateForTests();
+    });
+
+    it.each(terminalPaths)('releases phantom PRINCIPAL authority on %s', async path => {
+      const principal = await trackedConnection('control');
+      const id = principal.welcome.controlSessionId as string;
+      expect(isLiveAudioControlAuthorized(id)).toBe(true);
+      await triggerTerminal(path, principal, principal.client);
+      await vi.waitFor(() => expect(getLiveAudioControlState(id)).toBeNull());
+      expect(isLiveAudioControlAuthorized(id)).toBe(false);
+      const fresh = await trackedConnection('control');
+      expect(fresh.welcome.controlState).toBe('PRINCIPAL');
+      expect(fresh.serverSocket.readyState).toBe(WebSocket.OPEN);
+    });
+
+    it.each(terminalPaths)('retains Audience identity with disconnected/grace state on %s', async path => {
+      const control = await trackedConnection('control');
+      const audience = await trackedConnection('audience');
+      const access = bootstrapAudienceAccess(null);
+      audience.client.send({ type: 'AUDIENCE_ACCESS_BIND', credential: access.credential });
+      await waitFor(audience.client, message => message.type === 'AUDIENCE_ACCESS_STATE');
+      audience.client.send(makeParticipantStatus(access.participantId));
+      await flushMessages(audience.client, [control.client]);
+      expect(getLiveAudioParticipantState(access.participantId)?.connected).toBe(true);
+      await triggerTerminal(path, audience, control.client);
+      await vi.waitFor(() => expect(getLiveAudioParticipantState(access.participantId)).toMatchObject({
+        connected: false, disconnectedAt: expect.any(Number),
+      }));
+      const disconnected = getLiveAudioParticipantState(access.participantId);
+      await flushMessages(control.client, []);
+      control.client.messages.length = 0;
+      audience.serverSocket.emit('error', new Error('Delayed duplicate error'));
+      audience.serverSocket.emit('close');
+      await flushMessages(control.client, []);
+      expect(getLiveAudioParticipantState(access.participantId)).toEqual(disconnected);
+      expect(control.client.messages.filter(message => message.type === 'LIVE_AUDIO_PARTICIPANT_STATUS')).toEqual([]);
+
+      const rejoined = await trackedConnection('audience');
+      rejoined.client.send({ type: 'AUDIENCE_ACCESS_BIND', credential: access.credential });
+      await waitFor(rejoined.client, message => message.type === 'AUDIENCE_ACCESS_STATE');
+      rejoined.client.send(makeParticipantStatus(access.participantId));
+      await flushMessages(rejoined.client, [control.client]);
+      audience.serverSocket.emit('close');
+      expect(getLiveAudioParticipantState(access.participantId)).toMatchObject({ connected: true, disconnectedAt: undefined });
+      await flushMessages(rejoined.client, [control.client]);
+    });
+
+    it.each([false, true])('preserves succession and PENDING restrictions with delegation=%s', async delegated => {
+      vi.stubEnv('SEFER_LIVE_AUDIO_ALLOW_DELEGATED_MODERATORS', String(delegated));
+      const principal = await trackedConnection('control');
+      const secondary = await trackedConnection('control');
+      principal.client.send({ type: 'LIVE_AUDIO_CONTROL_AUTHORIZATION_DECISION', targetControlSessionId: secondary.welcome.controlSessionId, decision: 'APPROVE' });
+      await waitFor(secondary.client, message => message.controlState === 'AUTHORIZED');
+      const pending = await trackedConnection('control');
+      secondary.client.messages.length = 0;
+      await triggerTerminal('sendJson overflow', principal, principal.client);
+      await vi.waitFor(() => expect(getLiveAudioControlSnapshot().principalControlSessionId).toBe(secondary.welcome.controlSessionId));
+      expect(getLiveAudioControlState(pending.welcome.controlSessionId)?.controlState).toBe('PENDING');
+      pending.client.send({ type: 'LIVE_AUDIO_GRANT_SPEAK', participantId: randomUUID() });
+      await waitFor(pending.client, message => message.code === 'CONTROL_PENDING_FORBIDDEN');
+      await flushMessages(secondary.client, [pending.client]);
+      const states = secondary.client.messages.filter(message => message.type === 'LIVE_AUDIO_CONTROL_AUTHORIZATION_STATE');
+      const beforeDuplicate = states.length;
+      principal.serverSocket.emit('error', new Error('Delayed error after eviction'));
+      principal.serverSocket.emit('close');
+      await flushMessages(secondary.client, [pending.client]);
+      expect(secondary.client.messages.filter(message => message.type === 'LIVE_AUDIO_CONTROL_AUTHORIZATION_STATE')).toHaveLength(beforeDuplicate);
+      expect(getLiveAudioControlSnapshot().principalControlSessionId).toBe(secondary.welcome.controlSessionId);
+      const fresh = await trackedConnection('control');
+      expect(fresh.welcome.controlState).toBe('PENDING');
+    });
+
+    it.each(['AUTHORIZED', 'PENDING'])('removes a terminal %s secondary without replacing the principal', async state => {
+      const principal = await trackedConnection('control');
+      const secondary = await trackedConnection('control');
+      if (state === 'AUTHORIZED') {
+        principal.client.send({ type: 'LIVE_AUDIO_CONTROL_AUTHORIZATION_DECISION', targetControlSessionId: secondary.welcome.controlSessionId, decision: 'APPROVE' });
+        await waitFor(secondary.client, message => message.controlState === state);
+      }
+      await triggerTerminal('error', secondary, principal.client);
+      await vi.waitFor(() => expect(getLiveAudioControlState(secondary.welcome.controlSessionId)).toBeNull());
+      expect(getLiveAudioControlSnapshot().principalControlSessionId).toBe(principal.welcome.controlSessionId);
+    });
+
+    it('preserves a new binding when the original socket delivers its first close late', async () => {
+      const control = await trackedConnection('control');
+      const original = await trackedConnection('audience');
+      const access = bootstrapAudienceAccess(null);
+      original.client.send({ type: 'AUDIENCE_ACCESS_BIND', credential: access.credential });
+      await waitFor(original.client, message => message.type === 'AUDIENCE_ACCESS_STATE');
+      original.client.send(makeParticipantStatus(access.participantId));
+      await flushMessages(original.client, [control.client]);
+      const nativeEmit = original.serverSocket.emit;
+      let delayedClose: unknown[] | undefined;
+      const emit = vi.spyOn(original.serverSocket, 'emit').mockImplementation(function (event, ...args) {
+        if (event === 'close') { delayedClose = args; return false; }
+        return Reflect.apply(nativeEmit, original.serverSocket, [event, ...args]);
+      });
+      original.serverSocket.terminate();
+      await vi.waitFor(() => expect(delayedClose).toBeDefined());
+      const rejoined = await trackedConnection('audience');
+      rejoined.client.send({ type: 'AUDIENCE_ACCESS_BIND', credential: access.credential });
+      await waitFor(rejoined.client, message => message.type === 'AUDIENCE_ACCESS_STATE');
+      rejoined.client.send(makeParticipantStatus(access.participantId));
+      await flushMessages(rejoined.client, [control.client]);
+      emit.mockRestore();
+      Reflect.apply(nativeEmit, original.serverSocket, ['close', ...delayedClose!]);
+      expect(getLiveAudioParticipantState(access.participantId)).toMatchObject({ connected: true, disconnectedAt: undefined });
+      await flushMessages(rejoined.client, [control.client]);
+    });
+
+    it('cancels the removed pending Control expiry timer', async () => {
+      const principal = await trackedConnection('control');
+      const timers = vi.spyOn(globalThis, 'setTimeout');
+      const pending = await trackedConnection('control');
+      const index = timers.mock.calls.findIndex(([callback]) => String(callback).includes('expirePendingControl'));
+      expect(index).toBeGreaterThanOrEqual(0);
+      const expiryTimer = timers.mock.results[index].value;
+      const cancel = vi.spyOn(globalThis, 'clearTimeout');
+      await triggerTerminal('error', pending, principal.client);
+      expect(cancel).toHaveBeenCalledWith(expiryTimer);
+    });
+
+    it('does not remove a newer Control reusing an id after rotation and delayed close', async () => {
+      const original = await trackedConnection('control');
+      const id = original.welcome.controlSessionId as string;
+      const nativeEmit = original.serverSocket.emit;
+      let delayedClose: unknown[] | undefined;
+      const emit = vi.spyOn(original.serverSocket, 'emit').mockImplementation(function (event, ...args) {
+        if (event === 'close') { delayedClose = args; return false; }
+        return Reflect.apply(nativeEmit, original.serverSocket, [event, ...args]);
+      });
+      (wss as WebSocketServer & { rotatePresentationSession: () => void }).rotatePresentationSession();
+      await vi.waitFor(() => expect(delayedClose).toBeDefined());
+      const fresh = await trackedConnection('control', id);
+      expect(fresh.welcome.controlSessionId).toBe(id);
+      expect(fresh.welcome.controlState).toBe('PRINCIPAL');
+      emit.mockRestore();
+      Reflect.apply(nativeEmit, original.serverSocket, ['close', ...delayedClose!]);
+      expect(getLiveAudioControlState(id)?.clientId).toBe(fresh.welcome.clientId);
+      expect(isLiveAudioControlAuthorized(id)).toBe(true);
+      await flushMessages(fresh.client, []);
+    });
+
+    it('schedules grace cleanup once and cancels it on authenticated rejoin', async () => {
+      const control = await trackedConnection('control');
+      const original = await trackedConnection('audience');
+      const access = bootstrapAudienceAccess(null);
+      original.client.send({ type: 'AUDIENCE_ACCESS_BIND', credential: access.credential });
+      await waitFor(original.client, message => message.type === 'AUDIENCE_ACCESS_STATE');
+      original.client.send(makeParticipantStatus(access.participantId));
+      await flushMessages(original.client, [control.client]);
+      const timers = vi.spyOn(globalThis, 'setTimeout');
+      await triggerTerminal('error', original, control.client);
+      const cleanupCalls = () => timers.mock.calls.filter(([callback]) => String(callback).includes('cleanupExpiredParticipant'));
+      expect(cleanupCalls()).toHaveLength(1);
+      expect(cleanupCalls()[0][1]).toBe(60_000);
+      const index = timers.mock.calls.findIndex(([callback]) => String(callback).includes('cleanupExpiredParticipant'));
+      const cleanupTimer = timers.mock.results[index].value;
+      original.serverSocket.emit('close');
+      expect(cleanupCalls()).toHaveLength(1);
+      const cancel = vi.spyOn(globalThis, 'clearTimeout');
+      const rejoined = await trackedConnection('audience');
+      rejoined.client.send({ type: 'AUDIENCE_ACCESS_BIND', credential: access.credential });
+      await waitFor(rejoined.client, message => message.type === 'AUDIENCE_ACCESS_STATE');
+      rejoined.client.send(makeParticipantStatus(access.participantId));
+      await flushMessages(rejoined.client, [control.client]);
+      expect(cancel).toHaveBeenCalledWith(cleanupTimer);
+      Reflect.apply(cleanupCalls()[0][0] as () => void, undefined, []);
+      expect(getLiveAudioParticipantState(access.participantId)?.connected).toBe(true);
+    });
+
+    it('keeps exactly 512 KiB and broadcastWs policy while isolating one overflowing recipient', async () => {
+      const control = await trackedConnection('control');
+      const slow = await trackedConnection('audience');
+      const healthy = await trackedConnection('audience');
+      const buffer = vi.spyOn(slow.serverSocket, 'bufferedAmount', 'get').mockReturnValue(512 * 1024);
+      control.client.send({ type: 'LIVE_AUDIO_REQUEST_ALIASES' });
+      await waitFor(slow.client, message => message.type === 'LIVE_AUDIO_REQUEST_ALIASES');
+      expect(slow.serverSocket.readyState).toBe(WebSocket.OPEN);
+      buffer.mockReturnValue(512 * 1024 + 1);
+      broadcastWs({ type: 'R1_POLICY_MARKER' }, meta => meta.role === 'audience');
+      await waitFor(slow.client, message => message.type === 'R1_POLICY_MARKER');
+      expect(control.client.messages.some(message => message.type === 'R1_POLICY_MARKER')).toBe(false);
+      const closed = new Promise(resolve => slow.client.ws.once('close', (code, reason) => resolve([code, reason.toString()])));
+      healthy.client.messages.length = 0;
+      control.client.send({ type: 'LIVE_AUDIO_REQUEST_ALIASES' });
+      await expect(closed).resolves.toEqual([1013, 'Slow consumer']);
+      await waitFor(healthy.client, message => message.type === 'LIVE_AUDIO_REQUEST_ALIASES');
+      expect(healthy.serverSocket.readyState).toBe(WebSocket.OPEN);
+      await vi.waitFor(() => expect(slow.serverSocket.readyState).toBe(WebSocket.CLOSED));
+      const send = vi.spyOn(slow.serverSocket, 'send');
+      broadcastWs({ type: 'R1_CLOSED_RECIPIENT_MARKER' });
+      await waitFor(healthy.client, message => message.type === 'R1_CLOSED_RECIPIENT_MARKER');
+      expect(send).not.toHaveBeenCalled();
+      await flushMessages(control.client, [healthy.client]);
+    });
   });
 });
