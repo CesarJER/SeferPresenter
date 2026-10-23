@@ -44,6 +44,15 @@ Una casilla completada aquí no certifica un despliegue distinto.
 
 ## Implementación y mantenimiento pendientes
 
+- [ ] Cerrar la invalidación de streams Audience ya abiertos al rotar una sesión
+  CONTROLLED; comprobar que no reciben proyección posterior sin nueva admisión.
+- [ ] Revisar conjuntamente backpressure y cleanup WS: conservar metadata hasta
+  retirar autoridad/bindings y aplicar una política explícita en cada ruta de envío.
+- [ ] Completar la liberación de timers y listeners WS al rotar/cerrar y verificar
+  recreación sobre el mismo servidor HTTP. No asumir soporte multiinstancia.
+- [ ] Acordar el alcance de la comparación humana del código de Control y su
+  descripción en la UI; el protocolo actual comprueba vigencia, no coteja el código.
+
 - [x] Preparar Tailwind 4 en la rama `codex/tailwind-v4`, completando los cambios
   que faltaban en la PR #4. PostCSS, tema CSS, clases y Dockerfile adaptados;
   audit completo sin vulnerabilidades, tipos, 590 tests y build pasan.

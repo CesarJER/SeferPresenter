@@ -4,7 +4,10 @@ La explicación de autoridad/recuperación está en
 [sincronización](../architecture/synchronization.md). Esta página concentra la
 sintaxis y los límites. Fuentes: [sync](../../src/types/sync.ts),
 [audio](../../src/types/audio.ts), [Live Audio](../../src/types/liveAudio.ts),
-[WS servidor](../../server/ws-server.mjs), [validación cliente](../../src/utils/validation.ts),
+[WS servidor](../../server/ws-server.mjs),
+[validación backend de mensajes](../../server/ws-message-validation.mjs),
+[vistas técnicas de participantes](../../server/ws-participant-snapshots.mjs),
+[validación cliente](../../src/utils/validation.ts),
 [useSyncState](../../src/hooks/useSyncState.ts) y consumidores de cada feature.
 
 ## Transportes y envelopes
@@ -16,7 +19,9 @@ y, para Control, controlSessionId/controlState. Control/Presenter reciben ademá
 operatorCredential: el cliente la conserva en memoria y la borra al cerrar socket.
 Estos campos runtime exceden la forma mínima de WELCOME en sync.ts.
 
-WS limita mensajes a 64 KiB y cierra clientes cuya cola supera 512 KiB. JSON
+WS limita mensajes entrantes a 64 KiB. Los helpers internos `sendJson` y
+`broadcast` cierran con 1013 al observar una cola superior a 512 KiB;
+`broadcastWs` y los envíos directos no aplican uniformemente ese límite. JSON
 malformado, tipos no permitidos y determinados payloads inválidos se descartan;
 otras denegaciones emiten `{ type: 'ERROR', code, message }`.
 No hay un ACK genérico ni retransmisión persistente para todos los mensajes.
@@ -112,6 +117,16 @@ y autorización de Controls; perfil/permisos/lista visible; external broadcast;
 solicitud/snapshot/patch operacional; y PRIVATE_CONTROL_SIGNAL.
 PENDING no recibe snapshots ni señales privadas y no puede moderar. La autorización
 y sucesión pertenecen al servidor, no al perfil comunicado por el cliente.
+
+El código temporal mostrado identifica una solicitud para comparación humana.
+La decisión envía `targetControlSessionId` y `APPROVE`/`REJECT`, sin devolver el
+código para cotejo. El servidor exige emisor elegible, target pendiente y código
+no caducado; no acredita que una persona haya comparado los códigos.
+
+`LIVE_AUDIO_CONNECTION_COUNTS` cuenta sockets abiertos Audience/Control/Presenter,
+incluidos Controls pendientes. Se publica a Control y Presenter, sin Audience;
+su `updatedAt` se genera en cada construcción. El snapshot operacional reutiliza
+esos recuentos, pero conserva su autorización y sus destinatarios propios.
 
 LIVE_AUDIO_ACTIVE_PARTICIPANT_PROFILE permite participantId, sharing preference,
 activeListPublicKey y createdAt opcional. **alias es inválido**. El servidor

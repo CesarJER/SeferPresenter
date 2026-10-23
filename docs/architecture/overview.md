@@ -89,6 +89,28 @@ la misma clave. Los snapshots no acreditan por sí solos esa elegibilidad. Ambos
 envíos cifrados comparten un UUID de operación; sus resultados son independientes.
 Correlación, límites y compatibilidad: [señales privadas](../api/realtime.md#señales-privadas-envelope-y-payload-descifrado).
 
+## Coordinación WebSocket del backend
+
+[ws-server](../../server/ws-server.mjs) conserva los registros de conexiones,
+Controls, participantes, admisión y tickets, además de la identidad de sesión.
+Autoriza, enlaza identidades, enruta, modera y coordina snapshots, reconexión y
+rotación. Dos módulos auxiliares separan lógica sin apropiarse de esos registros:
+
+| Módulo | Responsabilidad | Límite |
+| --- | --- | --- |
+| [ws-message-validation](../../server/ws-message-validation.mjs) | Comprueba formatos de señales privadas, estados/perfiles y moderación | Validar forma no concede autorización ni admisión |
+| [ws-participant-snapshots](../../server/ws-participant-snapshots.mjs) | Proyecta vistas técnicas de un participante recibido como argumento | Selecciona campos; no enruta ni decide destinatarios |
+
+La vista operacional incluye conexión y rol derivado; el status reducido tiene
+su propio envelope y selección de campos. No son representaciones intercambiables
+ni copias completas del registro interno. La autorización y los filtros permanecen
+en el coordinador que las publica.
+
+Una sola función del coordinador cuenta sockets abiertos por rol para el snapshot
+operacional y el mensaje de recuentos. Este último llega a Control y Presenter,
+incluidos Controls pendientes; recibirlo no concede acceso al snapshot operacional.
+Los contratos de transporte se detallan en [realtime](../api/realtime.md).
+
 ## Límites comprobados en desarrollo
 
 ESLint restringe los imports de `src/` y `server/` mediante
