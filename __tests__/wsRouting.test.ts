@@ -834,6 +834,38 @@ describe('Live Audio WebSocket routing', () => {
     expect(serialized).not.toContain(Buffer.from('ciphertext-secret').toString('base64'));
   });
 
+  it('keeps distinct technical wire views and excludes pending Controls and Audience from operational data', async () => {
+    const principal = await connectWs('control');
+    const pending = await connectWs('control');
+    const presenter = await connectWs('presenter');
+    const audience = await connectWs('audience');
+    const otherAudience = await connectWs('audience');
+    const participantId = randomUUID();
+    audience.send({
+      ...makeParticipantStatus(participantId), speakerState: 'REQUESTED', isActiveAudience: true,
+      microphonePermissionState: 'denied', microphoneTrackState: 'mutedByUser', liveAudioConnectionState: 'reconnecting',
+      operatorCredential: 'private-operator', credentialHash: 'private-hash', cleanupTimer: 42,
+      privateSignalTimestamps: [1], controlState: 'PRINCIPAL', presentationSessionId: 'private-session',
+      privateAlias: 'private-alias', extra: 'private-extra',
+    });
+    await flushMessages(audience, [principal, pending, presenter, otherAudience]);
+    const status = principal.messages.find(message => message.type === 'LIVE_AUDIO_PARTICIPANT_STATUS' && message.participantId === participantId)!;
+    expect(status).toBeDefined();
+    expect(Object.keys(status).sort()).toEqual(['type', 'participantId', 'role', 'speakerState', 'canSubscribe', 'canPublishAudio', 'isMuted', 'isActiveAudience', 'isMicrophoneActive', 'isKicked', 'isAliasVisibleToActiveParticipants', 'canViewActiveParticipants', 'isAliasHiddenByControl', 'microphonePermissionState', 'microphoneTrackState', 'liveAudioConnectionState', 'updatedAt'].sort());
+    expect(status).toMatchObject({ role: 'audience', speakerState: 'REQUESTED', canPublishAudio: false, microphonePermissionState: 'denied', microphoneTrackState: 'mutedByUser', liveAudioConnectionState: 'reconnecting' });
+    expect(presenter.messages.find(message => message.type === status.type && message.participantId === participantId)).toEqual(status);
+
+    principal.send({ type: 'LIVE_AUDIO_SNAPSHOT_REQUEST' });
+    await flushMessages(principal, [pending, presenter, audience, otherAudience]);
+    const snapshot = principal.messages.find(message => message.type === 'LIVE_AUDIO_SNAPSHOT' && (message.snapshot as { participants: Array<{ participantId: string }> }).participants.some(participant => participant.participantId === participantId))!;
+    const operational = (snapshot.snapshot as { participants: Array<Record<string, unknown>> }).participants.find(participant => participant.participantId === participantId)!;
+    expect(Object.keys(operational).sort()).toEqual(['participantId', 'role', 'operationalRole', 'microphonePermissionState', 'microphoneTrackState', 'liveAudioConnectionState', 'speakerState', 'canSubscribe', 'canPublishAudio', 'isMuted', 'isActiveAudience', 'isMicrophoneActive', 'isKicked', 'isAliasVisibleToActiveParticipants', 'canViewActiveParticipants', 'isAliasHiddenByControl', 'connected', 'connectedAt', 'updatedAt'].sort());
+    expect(operational).toMatchObject({ participantId, role: 'audience', operationalRole: 'cola', connected: true, microphonePermissionState: 'denied', microphoneTrackState: 'mutedByUser', updatedAt: status.updatedAt });
+    expect(operational.connectedAt).toEqual(expect.any(Number));
+    for (const client of [pending, audience, otherAudience]) expect(client.messages.filter(message => message.type === 'LIVE_AUDIO_PARTICIPANT_STATUS' || message.type === 'LIVE_AUDIO_SNAPSHOT')).toEqual([]);
+    expect(presenter.messages.filter(message => message.type === 'LIVE_AUDIO_SNAPSHOT')).toEqual([]);
+  });
+
   it('rate-limits private control signals to five messages per minute per participant', async () => {
     const control = await connectWs('control');
     const audience = await connectWs('audience');
