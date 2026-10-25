@@ -346,13 +346,15 @@ export function AudienceApp() {
       )}
       
       {/* Hidden audio element for audience audio sync */}
-      <audio ref={audioRef} preload="none" style={{ display: 'none' }} />
-      <audio ref={audioTimelineRef} preload="none" style={{ display: 'none' }} />
+
+
 
       <div className="fixed bottom-2 end-2 z-50 opacity-50 hover:opacity-100 transition-opacity">
         <DataProtectionLink className="text-[10px] text-white/70 hover:text-white flex items-center gap-1" />
       </div>
     </>)}
+      <audio ref={audioRef} preload="none" style={{ display: 'none' }} />
+      <audio ref={audioTimelineRef} preload="none" style={{ display: 'none' }} />
     </AudienceParticipationProvider>
   );
 }

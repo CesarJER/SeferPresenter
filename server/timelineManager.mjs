@@ -112,7 +112,17 @@ const applyAction = (action) => {
       next.updatedBy = 'control'
       break
     case 'SET_SYNC_MODE':
-      next.syncMode = validSyncModes.has(action.mode) ? action.mode : 'none'
+      next.syncMode = validSyncModes.has(action.mode)
+        ? action.mode
+        : (validSyncModes.has(action.syncMode) ? action.syncMode : 'none')
+      if (typeof action.syncMapId === 'string' && action.syncMapId) {
+        next.syncMapId = action.syncMapId
+      } else if (action.syncMapId === null) {
+        next.syncMapId = null
+      }
+      if (typeof action.presentationId === 'string' && action.presentationId) {
+        next.presentationId = action.presentationId
+      }
       next.updatedBy = 'control'
       break
     case 'END':

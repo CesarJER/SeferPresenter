@@ -331,7 +331,18 @@ const persistJson = (filePath, value) => {
   return result
 }
 
+let presentationsRawHash = null
+const getPresentationsRawHash = () => {
+  if (!fs.existsSync(seferDataPaths.presentations)) return 'missing'
+  const content = fs.readFileSync(seferDataPaths.presentations, 'utf-8').replace(/^\uFEFF/, '')
+  return createHash('sha256').update(content).digest('hex')
+}
+
 const readPresentationsCache = () => {
+  const currentHash = getPresentationsRawHash()
+  if (currentHash === presentationsRawHash && Array.isArray(presentationsCache) && Array.isArray(publicPresentationsCache)) {
+    return presentationsCache
+  }
   try {
     const validation = validatePresentationsPayload(readJsonFile(seferDataPaths.presentations, []))
     if (!validation.ok) throw new Error(formatValidationError(validation))
@@ -343,6 +354,7 @@ const readPresentationsCache = () => {
   publicPresentationsCache = buildPublicPresentations(presentationsCache, getPublicCatalogs(), {
     publicDataDir: seferDataPaths.public,
   })
+  presentationsRawHash = currentHash
   return presentationsCache
 }
 
@@ -659,15 +671,15 @@ const broadcastTimelineState = () => {
 
 const syncTimelineToSlideSelection = (payload, now = Date.now()) => {
   const tl = getTimeline()
-  if (tl.syncMode !== 'bilateral' || !tl.syncMapId) return
+  if (tl.syncMode !== 'bilateral' || (!tl.syncMapId && !tl.audioSrc)) return
 
-  const syncMap = audioSyncMapsCache.find((map) => map.id === tl.syncMapId)
+  const syncMap = (tl.syncMapId && audioSyncMapsCache.find((map) => map.id === tl.syncMapId)) || (tl.audioSrc && audioSyncMapsCache.find((map) => map.audioSrc === tl.audioSrc))
   if (!syncMap || !Array.isArray(syncMap.cues) || syncMap.cues.length === 0) return
 
   const presentation = payload.presentation || currentState.presentation
   if (!presentation || presentation.id !== syncMap.presentationId) return
 
-  const targetVerse = payload.targetVerse || currentState.scriptureState?.verse
+  const targetVerse = payload.targetVerse || (currentState.appMode === 'scripture' ? currentState.scriptureState?.verse : undefined)
   const match = findCueForSlideSelection(syncMap, payload.slideIndex, targetVerse)
   if (!match) return
 
@@ -675,7 +687,7 @@ const syncTimelineToSlideSelection = (payload, now = Date.now()) => {
   if (Math.abs(currentPositionSec - match.cue.timeSec) <= 1.0) return
 
   applyAction({ type: 'SEEK', positionSec: match.cue.timeSec })
-  lastSyncMapId = tl.syncMapId
+  lastSyncMapId = syncMap.id
   lastActiveCueIndex = match.index
   broadcastTimelineState()
 }
@@ -721,8 +733,12 @@ const reduceRemoteCommandMessage = (message, sourceMeta, beforeSessionReset) => 
     now,
   })
 
-  if (message.payload.command === 'SELECT_PRESENTATION_AND_SLIDE') {
-    syncTimelineToSlideSelection(message.payload, now)
+  if (message.clientId !== 'server' && (message.payload.command === 'SELECT_PRESENTATION_AND_SLIDE' || message.payload.command === 'SELECT_STEP')) {
+    syncTimelineToSlideSelection({
+      presentation: message.payload.presentation || committedState.presentation,
+      slideIndex: Number.isInteger(message.payload.slideIndex) ? message.payload.slideIndex : committedState.slideIndex,
+      targetVerse: message.payload.targetVerse || (committedState.appMode === 'scripture' ? committedState.scriptureState?.verse : undefined),
+    }, now)
   }
 
   return {
@@ -1114,6 +1130,21 @@ const handleApi = async (req, res, url) => {
       if (!requireCatalogRevision(req, res, readAudioSyncMapsCache())) return true
       persistJson(seferDataPaths.audioSync, validation.value)
       audioSyncMapsCache = validation.value
+      const activeTimeline = getTimeline()
+      if (activeTimeline.audioSrc) {
+        const matchedMap =
+          audioSyncMapsCache.find((m) => m.presentationId === (activeTimeline.presentationId || currentState.presentation?.id) && m.audioSrc === activeTimeline.audioSrc) ||
+          audioSyncMapsCache.find((m) => m.audioSrc === activeTimeline.audioSrc)
+        if ((matchedMap?.id ?? null) !== activeTimeline.syncMapId) {
+          applyAction({
+            type: 'SET_SYNC_MODE',
+            mode: activeTimeline.syncMode,
+            syncMapId: matchedMap?.id ?? null,
+            presentationId: matchedMap?.presentationId ?? activeTimeline.presentationId,
+          })
+          broadcastTimelineState()
+        }
+      }
       res.setHeader('ETag', catalogEtag(audioSyncMapsCache))
       writeSseSet(clients, JSON.stringify({ type: 'AUDIO_SYNC_MAPS_UPDATE', maps: audioSyncMapsCache, protocolVersion: 1, messageId: randomUUID(), timestamp: Date.now() }))
       sendJson(res, 200, { success: true })
@@ -1150,6 +1181,7 @@ const handleApi = async (req, res, url) => {
       publicPresentationsCache = buildPublicPresentations(presentationsCache, getPublicCatalogs(), {
         publicDataDir: seferDataPaths.public,
       })
+      presentationsRawHash = getPresentationsRawHash()
       res.setHeader('ETag', catalogEtag(presentationsCache))
       sendJson(res, 200, { success: true })
     } catch (err) {
@@ -1420,9 +1452,9 @@ let lastSyncMapId = null
 
 const evaluateServerCues = () => {
   const tl = getTimeline()
-  if (tl.status !== 'playing' || tl.syncMode === 'none' || !tl.syncMapId) return
+  if (tl.status !== 'playing' || tl.syncMode === 'none' || (!tl.syncMapId && !tl.audioSrc)) return
 
-  const syncMap = audioSyncMapsCache.find(m => m.id === tl.syncMapId)
+  const syncMap = (tl.syncMapId && audioSyncMapsCache.find(m => m.id === tl.syncMapId)) || (tl.audioSrc && audioSyncMapsCache.find(m => m.audioSrc === tl.audioSrc))
   if (!syncMap || !syncMap.cues || syncMap.cues.length === 0) return
   const presentation = getPresentationForSyncMap(syncMap)
   if (!presentation) return
@@ -1431,8 +1463,8 @@ const evaluateServerCues = () => {
   const currentPos = estimateTimelinePositionSec(tl, now)
   const activeCueIdx = findActiveCueIndex(syncMap.cues, currentPos)
 
-  if (tl.syncMapId !== lastSyncMapId) {
-    lastSyncMapId = tl.syncMapId
+  if (syncMap.id !== lastSyncMapId) {
+    lastSyncMapId = syncMap.id
     lastActiveCueIndex = -1
   }
 

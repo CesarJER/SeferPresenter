@@ -36,7 +36,7 @@ export type AudioTimelineAction =
   | { type: 'SET_VOLUME'; volume: number }
   | { type: 'SET_DURATION'; durationSec: number | null }
   | { type: 'SET_LOOP'; loop: boolean }
-  | { type: 'SET_SYNC_MODE'; mode: AudioSyncMode }
+  | { type: 'SET_SYNC_MODE'; mode: AudioSyncMode; syncMode?: AudioSyncMode; syncMapId?: string | null; presentationId?: string | null }
   | { type: 'END'; positionSec?: number }
   | { type: 'STOP' };
 

@@ -157,11 +157,15 @@ export const AudioPanel: React.FC<AudioPanelProps> = ({
     ? dragPosition
     : (optimisticPosition !== null ? optimisticPosition : authoritativePosition);
   const matchedSyncMap = audioState.audioSrc
-    ? audioSyncMaps.find(m => m.audioSrc === audioState.audioSrc)
+    ? (audioSyncMaps.find(m => m.presentationId === currentPresentation?.id && m.audioSrc === audioState.audioSrc)
+      ?? audioSyncMaps.find(m => m.audioSrc === audioState.audioSrc))
     : undefined;
 
   const handleSelectAudioTrack = (src: string) => {
-    const newMatchedMap = src ? audioSyncMaps.find(m => m.audioSrc === src) : undefined;
+    const newMatchedMap = src
+      ? (audioSyncMaps.find(m => m.presentationId === currentPresentation?.id && m.audioSrc === src)
+        ?? audioSyncMaps.find(m => m.audioSrc === src))
+      : undefined;
 
     if (dispatchAction) {
       const presentationId = newMatchedMap?.presentationId || currentPresentation?.id || '';
@@ -258,6 +262,8 @@ export const AudioPanel: React.FC<AudioPanelProps> = ({
                   dispatchAction({
                     type: 'SET_SYNC_MODE',
                     mode: matchedSyncMap.defaultSyncMode || 'unilateral',
+                    syncMapId: matchedSyncMap.id,
+                    presentationId: matchedSyncMap.presentationId,
                   });
                   if (matchedSyncMap.defaultVolume !== undefined) {
                     dispatchAction({
@@ -481,7 +487,7 @@ export const AudioPanel: React.FC<AudioPanelProps> = ({
               type="button"
               onClick={() => {
                 if (dispatchAction) {
-                  dispatchAction({ type: 'SET_SYNC_MODE', mode: 'unilateral' });
+                  dispatchAction({ type: 'SET_SYNC_MODE', mode: 'unilateral', syncMapId: matchedSyncMap?.id ?? null, presentationId: matchedSyncMap?.presentationId ?? currentPresentation?.id ?? null });
                 } else {
                   onAudioStateChange({
                     ...audioState,
@@ -507,7 +513,7 @@ export const AudioPanel: React.FC<AudioPanelProps> = ({
               type="button"
               onClick={() => {
                 if (dispatchAction) {
-                  dispatchAction({ type: 'SET_SYNC_MODE', mode: 'bilateral' });
+                  dispatchAction({ type: 'SET_SYNC_MODE', mode: 'bilateral', syncMapId: matchedSyncMap?.id ?? null, presentationId: matchedSyncMap?.presentationId ?? currentPresentation?.id ?? null });
                 } else {
                   onAudioStateChange({
                     ...audioState,

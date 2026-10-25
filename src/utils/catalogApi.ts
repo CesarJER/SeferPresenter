@@ -13,6 +13,9 @@ export interface CatalogSaveOptions<T> {
   signal?: AbortSignal;
 }
 const revisions = new WeakMap<object, { etag: string; snapshot: unknown[] }>();
+export function hasCatalogRevision(value: object): boolean {
+  return revisions.has(value);
+}
 export async function loadCatalog<T>(path: string, normalize?: (value: T) => T, signal?: AbortSignal): Promise<T[]> {
   const response = await fetch(path, { cache: 'no-store', headers: { Accept: 'application/json' }, signal });
   if (!response.ok) throw new Error(`${path}: HTTP ${response.status}`);

@@ -1,7 +1,7 @@
 import { UiLocaleProvider } from './i18n/UiLocaleProvider';
 import { translate } from './i18n/runtime';
 import { useUiTranslation } from './i18n/useUiTranslation';
-import { loadCatalog, audioSyncCatalogOptions } from './utils/catalogApi';
+import { loadCatalog, audioSyncCatalogOptions, hasCatalogRevision } from './utils/catalogApi';
 import { useCatalogSave } from './hooks/useCatalogSave';
 import { StrictMode, useCallback, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -95,7 +95,8 @@ export const AudioEditorApp = () => {
   const handleAudioSyncMapsChange = useCallback(async (maps: AudioSyncMap[], baseMaps = audioSyncMaps) => {
     const validation = validateAudioSyncMaps(maps);
     if (!validation.ok || !validation.value) throw new Error(translate("audioEditor:main_audio_editor.invalidAudioMaps", "Mapas de audio inválidos"));
-    const saved = await saveAudioCatalog(maps, baseMaps);
+    const effectiveBase = !hasCatalogRevision(baseMaps) && hasCatalogRevision(audioSyncMaps) ? audioSyncMaps : baseMaps;
+    const saved = await saveAudioCatalog(maps, effectiveBase);
     setAudioSyncMaps(saved);
     return saved;
   }, [audioSyncMaps, saveAudioCatalog]);

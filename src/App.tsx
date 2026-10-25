@@ -469,6 +469,7 @@ function App() {
   const audioTimelineControls = useAudioTimeline(audioTimeline, serverNow, wsSend, false);
   const dispatchAudioTimelineAction = audioTimelineControls.dispatchAction;
   const audioTimelineApplicatorOptions = useMemo(() => ({
+    onPlaybackBlocked: setAutoplayBlocked,
     onDurationChange: (durationSec: number | null) => {
       dispatchAudioTimelineAction({ type: 'SET_DURATION', durationSec });
     },
@@ -907,7 +908,10 @@ function App() {
       {autoplayBlocked && (
         <div 
           onClick={() => {
-            const audio = audioRef.current;
+            const timelineAudio = audioTimelineRef.current;
+            const audio = (audioTimeline?.status === 'playing' && audioTimeline.audioSrc && timelineAudio)
+              ? timelineAudio
+              : (audioRef.current?.src ? audioRef.current : timelineAudio || audioRef.current);
             if (audio) {
               audio.play()
                 .then(() => setAutoplayBlocked(false))
