@@ -452,7 +452,24 @@ const handleModeration = async ({ req, res, url, readBody, sendJson, controlApi,
   }
 
   const participantId = body.participantId
+  const publishPermission = url.pathname === '/api/livekit/grant-speak'
+    ? true
+    : ['/api/livekit/revoke-speak', '/api/livekit/kick-participant', '/api/livekit/rescue-participant'].includes(url.pathname)
+      ? false
+      : null
+
   if (!isValidParticipantId(participantId)) {
+    if (publishPermission === false && typeof participantId === 'string' && uuidV4Pattern.test(participantId)) {
+      if (url.pathname === '/api/livekit/kick-participant') {
+        roomState.kicked.add(participantId)
+      } else if (url.pathname === '/api/livekit/rescue-participant') {
+        roomState.kicked.delete(participantId)
+      }
+      roomState.speakers.delete(participantId)
+      roomState.muted.delete(participantId)
+      sendJson(res, 200, { success: true })
+      return true
+    }
     sendJson(res, 409, { code: 'participant_not_ready', error: 'Participant needs to reconnect to Live Audio' })
     return true
   }
@@ -462,11 +479,6 @@ const handleModeration = async ({ req, res, url, readBody, sendJson, controlApi,
     sendJson(res, 409, { code: 'publish_permission_required', error: 'Participant does not have microphone permission' })
     return true
   }
-  const publishPermission = url.pathname === '/api/livekit/grant-speak'
-    ? true
-    : ['/api/livekit/revoke-speak', '/api/livekit/kick-participant', '/api/livekit/rescue-participant'].includes(url.pathname)
-      ? false
-      : null
 
   if (publishPermission !== null || url.pathname === '/api/livekit/mute-participant') {
     const action = url.pathname.replace('/api/livekit/', '')
@@ -484,11 +496,14 @@ const handleModeration = async ({ req, res, url, readBody, sendJson, controlApi,
       console.warn(`[LIVEKIT] livekit:moderation:permission-failed action=${action} status=${details.status} code=${details.code}`)
       if (isParticipantAbsent(error)) {
         markParticipantAbsent(participant)
-        sendJson(res, 409, { code: 'participant_not_ready', error: 'Participant needs to reconnect to Live Audio' })
+        if (publishPermission !== false) {
+          sendJson(res, 409, { code: 'participant_not_ready', error: 'Participant needs to reconnect to Live Audio' })
+          return true
+        }
       } else {
         sendJson(res, 502, { code: 'livekit_unavailable', error: 'LiveKit rejected the participant permission update' })
+        return true
       }
-      return true
     }
   }
 

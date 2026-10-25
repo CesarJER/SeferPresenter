@@ -1043,6 +1043,12 @@ export default function ControlParticipationOwner({
     if (!controlSessionId || !isCurrentControl()) return;
     const epoch = getEpoch();
     setModerationError(null);
+    const isLogicalRevocation =
+      endpoint === 'revoke-speak' || endpoint === 'kick-participant' || endpoint === 'rescue-participant';
+    if (isLogicalRevocation && !media) {
+      if (isCurrentControl() && getEpoch() === epoch) sendModerationMessage(endpoint, pid);
+      return;
+    }
     try {
       const response = await fetch(`/api/livekit/${endpoint}`, {
         method: 'POST',
@@ -1054,15 +1060,17 @@ export default function ControlParticipationOwner({
         }),
       });
       if (!response.ok) {
-        const body = await response.json().catch(() => null) as { error?: unknown } | null;
-        throw new Error(typeof body?.error === 'string' ? body.error : `HTTP ${response.status}`);
+        const body = await response.json().catch(() => null) as { code?: unknown; error?: unknown } | null;
+        if (!(isLogicalRevocation && (response.status === 503 || body?.code === 'participant_not_ready'))) {
+          throw new Error(typeof body?.error === 'string' ? body.error : `HTTP ${response.status}`);
+        }
       }
       if (isCurrentControl() && getEpoch() === epoch) sendModerationMessage(endpoint, pid);
     } catch (err) {
       console.error(`Error in moderation action ${endpoint}`, err);
       setModerationError(err instanceof Error ? err.message : translate("liveAudio:LiveAudioControlContainer.couldNotApplyTheModerationAction", "No se pudo aplicar la acción de moderación"));
     }
-  }, [controlSessionId, sendModerationMessage, isCurrentControl, getEpoch]);
+  }, [media, controlSessionId, sendModerationMessage, isCurrentControl, getEpoch]);
 
   const handleMuteAll = useCallback(() => {
     const openSpeakers = participants.filter(p => p.speakerState === 'GRANTED' && p.isMicrophoneActive && !p.isMuted);

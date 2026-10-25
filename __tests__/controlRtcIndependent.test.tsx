@@ -133,3 +133,20 @@ it('shows a rejected oversized encrypted payload as a failure and keeps its draf
   expect(within(panel).getByRole('combobox', { name: 'Destinatario' })).toHaveProperty('value', participantId);
   expect(send.mock.calls.length).toBe(before);
 });
+
+it('dispatches logical moderation actions without RTC and preserves controlSessionId as issuer', async () => {
+  vi.spyOn(window, 'confirm').mockReturnValue(true);
+  await start('buildFalse');
+  fireEvent.click(screen.getByTitle('Ver panel de usuarios'));
+  fireEvent.click(await screen.findByRole('button', { name: 'Restringir a Synthetic Audience' }));
+  await waitFor(() => {
+    expect(send).toHaveBeenCalledWith(
+      'LIVE_AUDIO_KICK_PARTICIPANT',
+      expect.objectContaining({
+        type: 'LIVE_AUDIO_KICK_PARTICIPANT',
+        participantId,
+        issuedByParticipantId: 'control-a',
+      }),
+    );
+  });
+});

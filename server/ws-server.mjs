@@ -1372,6 +1372,14 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
           break
 
         case 'AUDIO_TIMELINE_ACTION': {
+          if (meta?.role === 'presenter' && (msg.action?.type === 'SET_DURATION' || msg.action?.type === 'END')) {
+            const timeline = applyAction(msg.action)
+            broadcast({
+              type: 'AUDIO_TIMELINE_STATE',
+              timeline,
+            })
+            break
+          }
           if (meta?.role !== 'control') break
           const controlMeta = liveAudioControls.get(meta.controlSessionId)
           if (!isControlAuthorized(controlMeta)) {
@@ -1707,7 +1715,7 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
             const registered = snapshotProviders.getLiveKitState?.()?.participants?.find(
               (participant) => participant.participantId === msg.participantId,
             )
-            if (registered?.canPublish !== expectedCanPublish) {
+            if (Boolean(registered?.canPublish) !== expectedCanPublish) {
               sendError(ws, 'LIVEKIT_PERMISSION_NOT_CONFIRMED', 'LiveKit permission update is not confirmed')
               break
             }

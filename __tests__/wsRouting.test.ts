@@ -713,6 +713,50 @@ describe('Live Audio WebSocket routing', () => {
     expect(observer.messages.some((message) => message.type === 'LIVE_AUDIO_GRANT_SPEAK')).toBe(false);
   });
 
+  it('allows logical kick, rescue and revoke moderation without LiveKit registration while preserving Control session issuer', async () => {
+    const control = await connectWs('control');
+    const welcome = await waitFor(control, (message) => message.type === 'WELCOME');
+    const audience = await connectWs('audience');
+    const participantId = randomUUID();
+
+    audience.send({
+      ...makeParticipantStatus(participantId),
+      isActiveAudience: true,
+      speakerState: 'REQUESTED',
+      liveAudioConnectionState: 'unavailable',
+    });
+    await waitFor(
+      control,
+      (message) => message.type === 'LIVE_AUDIO_PARTICIPANT_STATUS' && message.participantId === participantId,
+    );
+
+    expect(liveKitPermissions.has(participantId)).toBe(false);
+
+    control.send({
+      type: 'LIVE_AUDIO_KICK_PARTICIPANT',
+      participantId,
+      issuedByParticipantId: String(welcome.controlSessionId),
+      createdAt: Date.now(),
+    });
+    const kicked = await waitFor(
+      audience,
+      (message) => message.type === 'LIVE_AUDIO_KICK_PARTICIPANT' && message.participantId === participantId,
+    );
+    expect(kicked.issuedByParticipantId).toBe(welcome.controlSessionId);
+
+    control.send({
+      type: 'LIVE_AUDIO_RESCUE_PARTICIPANT',
+      participantId,
+      issuedByParticipantId: String(welcome.controlSessionId),
+      createdAt: Date.now(),
+    });
+    const rescued = await waitFor(
+      audience,
+      (message) => message.type === 'LIVE_AUDIO_RESCUE_PARTICIPANT' && message.participantId === participantId,
+    );
+    expect(rescued.issuedByParticipantId).toBe(welcome.controlSessionId);
+  });
+
   it('keeps kicked participants passive until control grants them again', async () => {
     const control = await connectWs('control');
     const audience = await connectWs('audience');

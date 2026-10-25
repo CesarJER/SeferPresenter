@@ -145,6 +145,7 @@ describe('moderation message format', () => {
   });
   it('permits optional issuer and finite timestamp without treating them as authority', () => {
     expect(validateModerationMessage(Object.freeze({ ...moderation(), issuedByParticipantId: otherId, createdAt: -0.5, extra: 'allowed' }))).toBe(true);
+    expect(validateModerationMessage(Object.freeze({ ...moderation(), issuedByParticipantId: `control-${otherId}`, createdAt: 1 }))).toBe(true);
   });
   it.each(nonRecords)('rejects non-record %s', value => expect(validateModerationMessage(value)).toBe(false));
   it.each([{ type: 'OTHER' }, { type: undefined }, { issuedByParticipantId: '' }, { issuedByParticipantId: null }, { issuedByParticipantId: 1 }, { createdAt: null }, { createdAt: '1' }, { createdAt: NaN }, { createdAt: Infinity }])('rejects moderation patch %j', patch => {

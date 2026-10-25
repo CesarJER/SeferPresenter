@@ -17,6 +17,8 @@ const liveAudioModerationTypes = new Set([
 
 const isValidParticipantId = (value) => typeof value === 'string' && uuidV4Pattern.test(value)
 
+const isValidControlIssuerId = (value) => typeof value === 'string' && value.trim() !== ''
+
 const isValidBase64 = (value) =>
   typeof value === 'string' && value.length > 0 && base64Pattern.test(value)
 
@@ -84,7 +86,7 @@ const validateModerationMessage = (msg) => {
     if (msg.type !== 'LIVE_AUDIO_MUTE_ALL' || !Array.isArray(msg.excludeParticipantIds)) return false
     if (!msg.excludeParticipantIds.every(isValidParticipantId)) return false
   }
-  if (msg.issuedByParticipantId !== undefined && !isValidParticipantId(msg.issuedByParticipantId)) return false
+  if (msg.issuedByParticipantId !== undefined && !isValidControlIssuerId(msg.issuedByParticipantId)) return false
   if (msg.createdAt !== undefined && (typeof msg.createdAt !== 'number' || !Number.isFinite(msg.createdAt))) return false
   return true
 }

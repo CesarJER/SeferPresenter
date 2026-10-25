@@ -123,9 +123,9 @@ const validateOptionalCreatedAt = (value: Record<string, unknown>, path: string,
   if (value.createdAt !== undefined && !isFiniteNumber(value.createdAt)) errors.push(`${path}.createdAt debe ser numero.`);
 };
 
-const validateOptionalParticipantId = (value: unknown, path: string, errors: string[]) => {
-  if (value !== undefined && !isValidEphemeralParticipantId(value)) {
-    errors.push(`${path} debe ser UUID v4 efimero.`);
+const validateOptionalControlIssuerId = (value: unknown, path: string, errors: string[]) => {
+  if (value !== undefined && (typeof value !== 'string' || value.trim() === '')) {
+    errors.push(`${path} debe ser texto no vacio.`);
   }
 };
 
@@ -712,7 +712,18 @@ const validateAudioTimelineAction = (value: unknown, path: string): ValidationRe
       if (typeof value.loop !== 'boolean') errors.push(`${path}.loop debe ser booleano.`);
       break;
     case 'SET_SYNC_MODE':
-      if (typeof value.mode !== 'string' || !audioSyncModes.has(value.mode as AudioSyncMode)) errors.push(`${path}.mode no es valido.`);
+      {
+        const resolvedMode = typeof value.mode === 'string' ? value.mode : value.syncMode;
+        if (typeof resolvedMode !== 'string' || !audioSyncModes.has(resolvedMode as AudioSyncMode)) {
+          errors.push(`${path}.mode no es valido.`);
+        }
+        if (value.syncMapId !== undefined && value.syncMapId !== null && typeof value.syncMapId !== 'string') {
+          errors.push(`${path}.syncMapId debe ser texto o null.`);
+        }
+        if (value.presentationId !== undefined && value.presentationId !== null && typeof value.presentationId !== 'string') {
+          errors.push(`${path}.presentationId debe ser texto o null.`);
+        }
+      }
       break;
     case 'END':
       if (value.positionSec !== undefined && !isFiniteNumber(value.positionSec)) errors.push(`${path}.positionSec debe ser numero.`);
@@ -797,11 +808,11 @@ const validateLiveAudioBroadcastMessage = (value: Record<string, unknown>): Vali
     case 'LIVE_AUDIO_KICK_PARTICIPANT':
     case 'LIVE_AUDIO_RESCUE_PARTICIPANT':
       validateParticipantId(value.participantId, 'participantId', errors);
-      validateOptionalParticipantId(value.issuedByParticipantId, 'issuedByParticipantId', errors);
+      validateOptionalControlIssuerId(value.issuedByParticipantId, 'issuedByParticipantId', errors);
       validateOptionalCreatedAt(value, value.type, errors);
       break;
     case 'LIVE_AUDIO_MUTE_ALL':
-      validateOptionalParticipantId(value.issuedByParticipantId, 'issuedByParticipantId', errors);
+      validateOptionalControlIssuerId(value.issuedByParticipantId, 'issuedByParticipantId', errors);
       if (value.excludeParticipantIds !== undefined) {
         if (!Array.isArray(value.excludeParticipantIds)) {
           errors.push('excludeParticipantIds debe ser un array.');
