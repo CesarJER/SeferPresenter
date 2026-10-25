@@ -33,12 +33,24 @@ export const parseVerses = (source: string): VerseData[] => {
         .replace(/\(([^)]+)\)\s*\[[^\]]+\]/g, '$1<sup class="text-amber-600 ml-0.5">#</sup>'); // Handle legacy (X) [Y] with marker
 
       const verseNikudClean = removeNiqqudPreserveHtml(cleanText);
+      let verseNikudSanitizedCache: string | undefined;
+      let verseNikudCleanSanitizedCache: string | undefined;
       return {
         ...row,
         verseNikud,
         verseNikudClean,
-        verseNikudSanitized: sanitizeHtml(verseNikud),
-        verseNikudCleanSanitized: sanitizeHtml(verseNikudClean),
+        get verseNikudSanitized() {
+          if (verseNikudSanitizedCache === undefined) {
+            verseNikudSanitizedCache = sanitizeHtml(verseNikud);
+          }
+          return verseNikudSanitizedCache;
+        },
+        get verseNikudCleanSanitized() {
+          if (verseNikudCleanSanitizedCache === undefined) {
+            verseNikudCleanSanitizedCache = sanitizeHtml(verseNikudClean);
+          }
+          return verseNikudCleanSanitizedCache;
+        },
       };
     });
 };

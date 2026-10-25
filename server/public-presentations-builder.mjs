@@ -1,6 +1,9 @@
 import fs from 'fs'
 import path from 'path'
+
 const metadataCache = new Map()
+const bookVersesCache = new Map()
+
 const getMetadata = (publicDataDir) => {
   if (!publicDataDir) return {}
   if (metadataCache.has(publicDataDir)) return metadataCache.get(publicDataDir)
@@ -26,26 +29,57 @@ const resolveSafeFile = (publicDataDir, bookAbbrev) => {
   return null
 }
 
+const getBookChapters = (publicDataDir, safeFile) => {
+  const filePath = path.join(publicDataDir, 'books', `${safeFile}.tsv`)
+  const now = Date.now()
+  const cached = bookVersesCache.get(filePath)
+  if (cached && now - cached.checkedAt < 2000) {
+    return cached.chapters
+  }
+  const stat = fs.statSync(filePath)
+  if (cached && cached.mtimeMs === stat.mtimeMs && cached.size === stat.size) {
+    cached.checkedAt = now
+    return cached.chapters
+  }
+
+  const tsvContent = fs.readFileSync(filePath, 'utf-8').replace(/^\uFEFF/, '')
+  const lines = tsvContent.split('\n')
+  const chapters = new Map()
+
+  for (let i = 1; i < lines.length; i++) {
+    const line = lines[i].trim()
+    if (!line) continue
+    const parts = line.split('\t')
+    if (parts.length < 8) continue
+    const chapterKey = parts[3]
+    const verseNum = parseInt(parts[4], 10)
+    if (Number.isNaN(verseNum)) continue
+    let list = chapters.get(chapterKey)
+    if (!list) {
+      list = []
+      chapters.set(chapterKey, list)
+    }
+    list.push({ verse: verseNum, texts: [parts[5], parts[6], parts[7]] })
+  }
+
+  bookVersesCache.set(filePath, { mtimeMs: stat.mtimeMs, size: stat.size, checkedAt: now, chapters })
+  return chapters
+}
+
 const loadVersesForRange = (publicDataDir, bookAbbrev, chapter, verseStart, verseEnd) => {
   const safeFile = resolveSafeFile(publicDataDir, bookAbbrev)
   if (!safeFile) return null
   try {
-    const tsvContent = fs.readFileSync(path.join(publicDataDir, 'books', `${safeFile}.tsv`), 'utf-8').replace(/^\uFEFF/, '')
-    const lines = tsvContent.split('\n')
+    const chapters = getBookChapters(publicDataDir, safeFile)
+    const chapterVerses = chapters.get(String(chapter))
+    if (!chapterVerses) return null
     const start = parseInt(verseStart, 10)
     const end = verseEnd ? parseInt(verseEnd, 10) : start
     const verses = []
-    
-    for (let i = 1; i < lines.length; i++) {
-      const line = lines[i].trim()
-      if (!line) continue
-      const parts = line.split('\t')
-      if (parts.length < 8) continue
-      if (parts[3] === String(chapter)) {
-        const v = parseInt(parts[4], 10)
-        if (v >= start && v <= end) {
-          verses.push([parts[5], parts[6], parts[7]])
-        }
+
+    for (const item of chapterVerses) {
+      if (item.verse >= start && item.verse <= end) {
+        verses.push(item.texts)
       }
     }
     return verses.length > 0 ? verses : null
@@ -104,7 +138,7 @@ export const buildPublicPresentations = (presentations, catalogs, { publicDataDi
           quizData,
           ...cleanSlide
         } = slide
-        
+
         // Inject scripture verses if applicable
         if ((cleanSlide.type === 'tanaj' || cleanSlide.type === 'sefer') && cleanSlide.scriptureBook && cleanSlide.scriptureChapter && cleanSlide.scriptureVerseStart) {
           const verses = loadVersesForRange(
@@ -118,7 +152,7 @@ export const buildPublicPresentations = (presentations, catalogs, { publicDataDi
             cleanSlide.scriptureVerses = verses
           }
         }
-        
+
         return cleanSlide
       })
 

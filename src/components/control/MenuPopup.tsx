@@ -372,13 +372,8 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
   useEffect(() => {
     const videoPaths = new Set<string>();
     slides.forEach(slide => {
-      if (slide.type === 'media' && slide.mediaSrc) {
+      if (slide.type === 'media' && slide.mediaSrc && /\.(mp4|webm|ogg|mov)$/i.test(slide.mediaSrc)) {
         videoPaths.add(slide.mediaSrc);
-      }
-    });
-    backgrounds.forEach(bg => {
-      if (bg.match(/\.(mp4|webm)$/i)) {
-        videoPaths.add(bg);
       }
     });
 
