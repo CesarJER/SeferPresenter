@@ -9,6 +9,8 @@ import {
   validateParticipantStatus,
   validateActiveParticipantProfile,
   validateModerationMessage,
+  validateLargePresentationMessage,
+  WS_ORDINARY_PAYLOAD_BYTES,
   microphonePermissionStates,
   microphoneTrackStates,
   liveAudioConnectionStates,
@@ -50,7 +52,7 @@ let externalBroadcastState = {
 }
 const PRIVATE_CONTROL_SIGNAL_RATE_LIMIT = 5
 const PRIVATE_CONTROL_SIGNAL_RATE_WINDOW_MS = 60_000
-const WS_MAX_PAYLOAD_BYTES = 64 * 1024
+const WS_MAX_PAYLOAD_BYTES = 512 * 1024
 const WS_MAX_BUFFERED_BYTES = 512 * 1024
 const audienceAllowedTypes = new Set([
   'SERVER_TIME_PING',
@@ -1335,16 +1337,31 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
     }))
 
     ws.on('message', (raw) => {
+      const meta = wsClients.get(ws)
+      if (!meta) return
+      const large = raw.length > WS_ORDINARY_PAYLOAD_BYTES
+      const rejectLarge = () => {
+        meta.cleanup()
+        ws.close(1009)
+      }
+      if (large && (meta.role !== 'presenter' &&
+          (meta.role !== 'control' || !isControlAuthorized(liveAudioControls.get(meta.controlSessionId))))) {
+        rejectLarge()
+        return
+      }
       let msg
       try {
         msg = JSON.parse(raw.toString())
+        if (large && !validateLargePresentationMessage(msg, meta.role, raw.length)) {
+          rejectLarge()
+          return
+        }
       } catch {
+        if (large) rejectLarge()
         return
       }
       if (!msg || typeof msg !== 'object' || Array.isArray(msg)) return
 
-      const meta = wsClients.get(ws)
-      if (!meta) return
       if (meta.role === 'unknown' && msg.type !== 'SERVER_TIME_PING') {
         return
       }

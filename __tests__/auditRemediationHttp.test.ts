@@ -239,3 +239,114 @@ it('does not seek to an earlier same-slide cue when the timeline generates a sel
   expect(timeline.status).toBe('playing');
   expect(timeline.basePositionSec).toBe(35);
 }, 10000);
+
+it('publishes large selections over SSE and accepts them again after Control reconnects', async () => {
+  const { base, connect } = await start();
+  const control = await connect();
+  const abort = new AbortController();
+  const timeout = setTimeout(() => abort.abort(), 8000);
+  const stream = await fetch(`${base}/api/state-events`, { headers, signal: abort.signal });
+  expect(stream.status).toBe(200);
+  const reader = stream.body!.getReader();
+  const decoder = new TextDecoder();
+  let pending = '';
+  const nextPresentation = async (id: string) => {
+    while (true) {
+      const result = await reader.read();
+      if (result.done) throw new Error('SSE closed before selection');
+      pending += decoder.decode(result.value, { stream: true });
+      const events = pending.split('\n\n');
+      pending = events.pop()!;
+      for (const event of events) {
+        const data = event.split('\n').find(line => line.startsWith('data: '));
+        if (!data) continue;
+        const message = JSON.parse(data.slice(6));
+        if (message.presentation?.id === id) return message;
+      }
+    }
+  };
+  const presentation = (id: string, count: number) => ({ id, title: 'Synthetic', mode: 'trilingual', background: '',
+    slides: Array.from({ length: count }, (_, i) => ({ id: `s${i}`, label: `Synthetic ${i}`,
+      lines: ['א'.repeat(300), 'a'.repeat(650), 'b'.repeat(650)] })) });
+  const select = (ws: WebSocket, item: ReturnType<typeof presentation>) => ws.send(JSON.stringify({
+    type: 'REMOTE_COMMAND', clientId: 'synthetic', payload: { command: 'SELECT_PRESENTATION_AND_SLIDE', presentation: item, slideIndex: 0 },
+  }));
+  try {
+    select(control.ws, presentation('small', 1));
+    expect((await nextPresentation('small')).presentation.slides).toHaveLength(1);
+    const large = presentation('large', 109);
+    expect(Buffer.byteLength(JSON.stringify(large))).toBeGreaterThan(200_000);
+    select(control.ws, large);
+    const first = await nextPresentation('large');
+    expect(first.presentation.slides).toHaveLength(109);
+    expect(first.stateRevision).toBeGreaterThan(0);
+
+    const closed = new Promise<number>(resolve => control.ws.once('close', resolve));
+    control.ws.send(JSON.stringify({ type: 'SERVER_TIME_PING', padding: 'x'.repeat(65537) }));
+    expect(await closed).toBe(1009);
+    const reconnected = await connect();
+    expect(reconnected.welcome.controlState).toBe('PRINCIPAL');
+    select(reconnected.ws, { ...large, id: 'large-after-reconnect' });
+    const second = await nextPresentation('large-after-reconnect');
+    expect(second.presentation.slides).toHaveLength(109);
+    expect(second.stateRevision).toBeGreaterThan(first.stateRevision);
+    expect(reconnected.ws.readyState).toBe(WebSocket.OPEN);
+
+    const presenter = await connect('presenter');
+    presenter.ws.send(JSON.stringify({ type: 'SYNC_STATE', clientId: 'synthetic-presenter', origin: 'presenter',
+      presentation: { ...large, id: 'presenter-large' }, slideIndex: 0, backgroundLock: false,
+      lockedBackgroundValue: null, userSelectedBackground: null, videoState: null, appMode: 'slides', scriptureState: null,
+      audioState: { isPlaying: false, currentTime: 0, duration: 0, volume: 0.7, audioSrc: null, activeSyncMapId: null,
+        syncMode: 'none', lastUpdatedBy: 'controller', timestamp: 0 } }));
+    const third = await nextPresentation('presenter-large');
+    expect(third.presentation.slides).toHaveLength(109);
+    expect(third.stateRevision).toBeGreaterThan(second.stateRevision);
+    expect(presenter.ws.readyState).toBe(WebSocket.OPEN);
+  } finally {
+    clearTimeout(timeout);
+    abort.abort();
+    await reader.cancel().catch(() => {});
+  }
+}, 10000);
+
+it('rejects an unauthenticated Control before it can send a large state', async () => {
+  const { base } = await start();
+  const ws = new WebSocket(`${base.replace('http', 'ws')}/ws?role=control`);
+  sockets.push(ws);
+  const closed = new Promise<number>(resolve => ws.once('close', resolve));
+  await expect(closed).resolves.toBe(4001);
+}, 10000);
+
+it('rejects a deeply nested oversized presentation without terminating the server', async () => {
+  const { base, connect } = await start();
+  const principal = await connect();
+  const healthy = await connect('audience');
+  const nested = '['.repeat(12_000) + '0' + ']'.repeat(12_000);
+  const raw = '{"type":"REMOTE_COMMAND","clientId":"synthetic","payload":{"command":"SELECT_PRESENTATION_AND_SLIDE","slideIndex":0,"presentation":{"id":"p","title":"Synthetic","slides":[],"extra":' + nested + ',"padding":"' + 'x'.repeat(50_000) + '"}}}';
+  expect(Buffer.byteLength(raw)).toBeGreaterThan(65536);
+  const closed = new Promise<number>(resolve => principal.ws.once('close', resolve));
+  principal.ws.send(raw);
+  await expect(closed).resolves.toBe(1009);
+  healthy.ws.send(JSON.stringify({ type: 'SERVER_TIME_PING', clientSentAtMs: 'healthy' }));
+  await vi.waitFor(() => expect(healthy.messages.some(message => message.type === 'SERVER_TIME_PONG' && message.clientSentAtMs === 'healthy')).toBe(true));
+  expect((await fetch(`${base}/api/health`)).status).toBe(200);
+}, 10000);
+
+it('rejects oversized state that would overflow projection cloning', async () => {
+  const { base, connect } = await start();
+  const presenter = await connect('presenter');
+  const healthy = await connect('audience');
+  const nested = '['.repeat(3000) + '0' + ']'.repeat(3000);
+  const message = { type: 'SYNC_STATE', clientId: 'synthetic', origin: 'presenter', slideIndex: 0,
+    presentation: { id: 'p', title: 'Synthetic', slides: [], extra: 'nested-placeholder', padding: 'x'.repeat(70_000) },
+    backgroundLock: false, lockedBackgroundValue: null, userSelectedBackground: null, videoState: null,
+    appMode: 'slides', scriptureState: null, audioState: { isPlaying: false, currentTime: 0, duration: 0,
+      volume: 0.7, audioSrc: null, activeSyncMapId: null, syncMode: 'none', lastUpdatedBy: 'controller', timestamp: 0 } };
+  const raw = JSON.stringify(message).replace('"nested-placeholder"', nested);
+  const closed = new Promise<number>(resolve => presenter.ws.once('close', resolve));
+  presenter.ws.send(raw);
+  await expect(closed).resolves.toBe(1009);
+  healthy.ws.send(JSON.stringify({ type: 'SERVER_TIME_PING', clientSentAtMs: 'healthy' }));
+  await vi.waitFor(() => expect(healthy.messages.some(event => event.type === 'SERVER_TIME_PONG' && event.clientSentAtMs === 'healthy')).toBe(true));
+  expect((await fetch(`${base}/api/health`)).status).toBe(200);
+}, 10000);

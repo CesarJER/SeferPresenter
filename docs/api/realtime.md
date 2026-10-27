@@ -19,7 +19,14 @@ y, para Control, controlSessionId/controlState. Control/Presenter reciben ademá
 operatorCredential: el cliente la conserva en memoria y la borra al cerrar socket.
 Estos campos runtime exceden la forma mínima de WELCOME en sync.ts.
 
-WS limita mensajes entrantes a 64 KiB. Los helpers internos `sendJson` y
+WS admite hasta 512 KiB por mensaje entrante. El límite habitual es 64 KiB;
+solo `REMOTE_COMMAND` de selección de presentación por Control autorizado y
+`SYNC_STATE` de Control autorizado o Presenter pueden superarlo, con una
+presentación válida. Los datos ajenos a la presentación no pueden exceder
+64 KiB y los mensajes grandes tienen una profundidad máxima de 128 objetos
+o arrays desde la raíz. Los excesos y mensajes grandes no elegibles se cierran
+con código 1009. El receptor puede ensamblar hasta 512 KiB antes de comprobar
+el tipo del mensaje. Los helpers internos `sendJson` y
 `broadcast` cierran con 1013 al observar una cola superior a 512 KiB;
 `broadcastWs` y los envíos directos no aplican uniformemente ese límite. JSON
 malformado, tipos no permitidos y determinados payloads inválidos se descartan;
