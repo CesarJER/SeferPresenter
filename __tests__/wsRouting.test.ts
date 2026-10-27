@@ -1340,22 +1340,22 @@ describe('Live Audio WebSocket routing', () => {
       expect(getLiveAudioParticipantState(access.participantId)?.connected).toBe(true);
     });
 
-    it('keeps exactly 512 KiB and broadcastWs policy while isolating one overflowing recipient', async () => {
+    it('keeps the 512 KiB budget across exported and internal broadcasts while isolating one overflowing recipient', async () => {
       const control = await trackedConnection('control');
       const slow = await trackedConnection('audience');
       const healthy = await trackedConnection('audience');
-      const buffer = vi.spyOn(slow.serverSocket, 'bufferedAmount', 'get').mockReturnValue(512 * 1024);
+      const buffer = vi.spyOn(slow.serverSocket, 'bufferedAmount', 'get').mockReturnValue(512 * 1024 - 1024);
       control.client.send({ type: 'LIVE_AUDIO_REQUEST_ALIASES' });
       await waitFor(slow.client, message => message.type === 'LIVE_AUDIO_REQUEST_ALIASES');
       expect(slow.serverSocket.readyState).toBe(WebSocket.OPEN);
-      buffer.mockReturnValue(512 * 1024 + 1);
-      broadcastWs({ type: 'R1_POLICY_MARKER' }, meta => meta.role === 'audience');
-      await waitFor(slow.client, message => message.type === 'R1_POLICY_MARKER');
-      expect(control.client.messages.some(message => message.type === 'R1_POLICY_MARKER')).toBe(false);
+      buffer.mockReturnValue(512 * 1024);
       const closed = new Promise(resolve => slow.client.ws.once('close', (code, reason) => resolve([code, reason.toString()])));
+      broadcastWs({ type: 'R1_POLICY_MARKER' }, meta => meta.role === 'audience');
+      await expect(closed).resolves.toEqual([1013, 'Slow consumer']);
+      await waitFor(healthy.client, message => message.type === 'R1_POLICY_MARKER');
+      expect(control.client.messages.some(message => message.type === 'R1_POLICY_MARKER')).toBe(false);
       healthy.client.messages.length = 0;
       control.client.send({ type: 'LIVE_AUDIO_REQUEST_ALIASES' });
-      await expect(closed).resolves.toEqual([1013, 'Slow consumer']);
       await waitFor(healthy.client, message => message.type === 'LIVE_AUDIO_REQUEST_ALIASES');
       expect(healthy.serverSocket.readyState).toBe(WebSocket.OPEN);
       await vi.waitFor(() => expect(slow.serverSocket.readyState).toBe(WebSocket.CLOSED));

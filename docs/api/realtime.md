@@ -26,10 +26,24 @@ presentación válida. Los datos ajenos a la presentación no pueden exceder
 64 KiB y los mensajes grandes tienen una profundidad máxima de 128 objetos
 o arrays desde la raíz. Los excesos y mensajes grandes no elegibles se cierran
 con código 1009. El receptor puede ensamblar hasta 512 KiB antes de comprobar
-el tipo del mensaje. Los helpers internos `sendJson` y
-`broadcast` cierran con 1013 al observar una cola superior a 512 KiB;
-`broadcastWs` y los envíos directos no aplican uniformemente ese límite. JSON
-malformado, tipos no permitidos y determinados payloads inválidos se descartan;
+el tipo del mensaje.
+
+La salida usa un presupuesto independiente de 512 KiB por conexión. Todos los
+envíos JSON, incluidos `broadcastWs`, snapshots, WELCOME, reloj y errores de
+acceso, comprueban OPEN y suman `bufferedAmount`, los bytes UTF-8 serializados y
+la cabecera de la nueva trama sin máscara antes de enviarla. Un broadcast se
+serializa una sola vez. El exceso cierra solo al destinatario afectado con
+1013; un fallo de serialización cierra con 1011 y un fallo de escritura termina
+la conexión. Todos reutilizan la limpieza idempotente existente. Los pings del
+heartbeat y las respuestas pong también comprueban el presupuesto antes de
+escribirse; la respuesta pong conserva el payload del ping. Las tramas de cierre
+siguen a cargo de `ws`.
+
+No hay prioridades ni cola de aplicación: si no cabe una actualización de estado,
+señal privada o mensaje de moderación, se cierra la conexión en vez de omitirlo
+silenciosamente. La reconexión autenticada permite recuperar el estado vigente;
+no garantiza replay de señales privadas ni recepción de mensajes anteriores.
+JSON malformado, tipos no permitidos y determinados payloads inválidos se descartan;
 otras denegaciones emiten `{ type: 'ERROR', code, message }`.
 No hay un ACK genérico ni retransmisión persistente para todos los mensajes.
 

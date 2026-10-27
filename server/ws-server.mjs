@@ -367,17 +367,74 @@ const broadcastMediaMasterStatus = () => {
   }, (meta) => meta.role === 'control')
 }
 
-const broadcastWs = (message, filter) => {
+const retireWsClient = (client, code, reason) => {
+  wsClients.get(client)?.cleanup()
+  if (client.readyState === WebSocket.CLOSED) return
+  try {
+    if (code) client.close(code, reason)
+    else client.terminate()
+  } catch {
+    client.terminate()
+  }
+}
+
+const canSendWsFrame = (client, bytes) => {
+  if (client?.readyState !== WebSocket.OPEN) return false
+  if (client.bufferedAmount + bytes > WS_MAX_BUFFERED_BYTES) {
+    retireWsClient(client, 1013, 'Slow consumer')
+    return false
+  }
+  return true
+}
+
+const serializeWsMessage = (message) => {
   const data = JSON.stringify(message)
+  const bytes = Buffer.byteLength(data)
+  // Server text frames are unmasked and uncompressed; bufferedAmount includes framing.
+  return { data, bytes: bytes + (bytes < 126 ? 2 : bytes < 65536 ? 4 : 10) }
+}
+
+const sendWsFrame = (client, frame) => {
+  if (!canSendWsFrame(client, frame.bytes)) return false
+  try {
+    client.send(frame.data, (error) => {
+      if (error) retireWsClient(client)
+    })
+    return true
+  } catch {
+    retireWsClient(client)
+    return false
+  }
+}
+
+const sendJson = (client, message) => {
+  if (client?.readyState !== WebSocket.OPEN) return false
+  let frame
+  try {
+    frame = serializeWsMessage(message)
+  } catch {
+    retireWsClient(client, 1011, 'Serialization failure')
+    return false
+  }
+  return sendWsFrame(client, frame)
+}
+
+const broadcastWs = (message, filter) => {
+  let frame
+  try {
+    frame = serializeWsMessage(message)
+  } catch {
+    for (const [client, meta] of wsClients) {
+      if (client.readyState === WebSocket.OPEN && (!filter || filter(meta))) {
+        retireWsClient(client, 1011, 'Serialization failure')
+      }
+    }
+    return
+  }
   for (const [client, meta] of wsClients) {
     if (client.readyState !== WebSocket.OPEN) continue
     if (filter && !filter(meta)) continue
-    try {
-      client.send(data)
-    } catch {
-      meta.cleanup()
-      client.terminate()
-    }
+    sendWsFrame(client, frame)
   }
 }
 
@@ -429,6 +486,7 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
   const wss = new WebSocketServer({
     noServer: true,
     maxPayload: WS_MAX_PAYLOAD_BYTES,
+    autoPong: false,
   })
 
   httpServer.on('upgrade', (request, socket, head) => {
@@ -440,41 +498,7 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
     }
   })
 
-  const broadcast = (message, filter) => {
-    const data = typeof message === 'string' ? message : JSON.stringify(message)
-    for (const [client, meta] of wsClients) {
-      if (client.readyState !== WebSocket.OPEN) continue
-      if (filter && !filter(meta)) continue
-      if (client.bufferedAmount > WS_MAX_BUFFERED_BYTES) {
-        meta.cleanup()
-        client.close(1013, 'Slow consumer')
-        continue
-      }
-      try {
-        client.send(data)
-      } catch {
-        meta.cleanup()
-        client.terminate()
-      }
-    }
-  }
-
-  const sendJson = (client, message) => {
-    if (client.readyState !== WebSocket.OPEN) return false
-    if (client.bufferedAmount > WS_MAX_BUFFERED_BYTES) {
-      wsClients.get(client)?.cleanup()
-      client.close(1013, 'Slow consumer')
-      return false
-    }
-    try {
-      client.send(JSON.stringify(message))
-      return true
-    } catch {
-      wsClients.get(client)?.cleanup()
-      client.terminate()
-      return false
-    }
-  }
+  const broadcast = broadcastWs
 
   const makeConnectionCountsMessage = () => ({
     type: 'LIVE_AUDIO_CONNECTION_COUNTS',
@@ -1245,31 +1269,45 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
   wss.rotatePresentationSession = rotatePresentationSession
 
   wss.on('connection', (ws, req) => {
+    let cleanupConnection
     ws.isAlive = true
     ws.on('pong', () => {
       ws.isAlive = true
+    })
+    ws.on('error', () => {
+      cleanupConnection?.()
+      if (ws.readyState === WebSocket.OPEN) ws.terminate()
+    })
+    // ws would otherwise write its automatic pong before emitting the ping event.
+    ws.on('ping', (data) => {
+      if (!canSendWsFrame(ws, data.length + 2)) return
+      try {
+        ws.pong(data, false, (error) => {
+          if (error) retireWsClient(ws)
+        })
+      } catch {
+        retireWsClient(ws)
+      }
     })
 
     const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`)
     const role = makeRole(url.searchParams.get('role') || 'unknown')
 
     if (!hasAllowedRequestOrigin(req)) {
-      ws.send(JSON.stringify({
+      if (sendJson(ws, {
         type: 'ERROR',
         code: 'ORIGIN_FORBIDDEN',
         message: 'Request origin is not allowed',
-      }))
-      ws.close(1008, 'Origin forbidden')
+      })) ws.close(1008, 'Origin forbidden')
       return
     }
 
     if (role !== 'audience' && isAuthRequired() && !hasValidBasicAuth(req)) {
-      ws.send(JSON.stringify({
+      if (sendJson(ws, {
         type: 'ERROR',
         code: 'UNAUTHORIZED',
         message: 'Authentication required'
-      }))
-      ws.close(4001, 'Unauthorized')
+      })) ws.close(4001, 'Unauthorized')
       return
     }
 
@@ -1297,14 +1335,11 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
       broadcastConnectionCounts()
       broadcastMediaMasterStatus()
     }
+    cleanupConnection = meta.cleanup
     wsClients.set(ws, meta)
     ws.on('close', meta.cleanup)
-    ws.on('error', () => {
-      meta.cleanup()
-      if (ws.readyState === WebSocket.OPEN) ws.terminate()
-    })
 
-    ws.send(JSON.stringify({
+    if (!sendJson(ws, {
       type: 'WELCOME',
       clientId,
       serverTimeMs: Date.now(),
@@ -1314,7 +1349,7 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
       operatorCredential: meta.operatorCredential,
       presentationSessionId,
       accessMode,
-    }))
+    })) return
     broadcastConnectionCounts()
     broadcastMediaMasterStatus()
 
@@ -1327,14 +1362,14 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
       sendJson(ws, liveAudioControlPublicKeyMessage)
     }
 
-    ws.send(JSON.stringify({
+    sendJson(ws, {
       type: 'AUDIO_TIMELINE_STATE',
       timeline: getTimeline(),
-    }))
-    ws.send(JSON.stringify({
+    })
+    sendJson(ws, {
       type: 'LIVE_AUDIO_EXTERNAL_BROADCAST_STATE',
       ...externalBroadcastState,
-    }))
+    })
 
     ws.on('message', (raw) => {
       const meta = wsClients.get(ws)
@@ -1381,11 +1416,11 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
 
       switch (msg.type) {
         case 'SERVER_TIME_PING':
-          ws.send(JSON.stringify({
+          sendJson(ws, {
             type: 'SERVER_TIME_PONG',
             clientSentAtMs: msg.clientSentAtMs,
             serverTimeMs: Date.now(),
-          }))
+          })
           break
 
         case 'AUDIO_TIMELINE_ACTION': {
@@ -1774,8 +1809,11 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
 
       client.isAlive = false
       if (client.readyState === WebSocket.OPEN) {
+        if (!canSendWsFrame(client, 2)) continue
         try {
-          client.ping()
+          client.ping(undefined, false, (error) => {
+            if (error) retireWsClient(client)
+          })
         } catch {
           meta.cleanup()
           client.terminate()
