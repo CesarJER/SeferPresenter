@@ -40,7 +40,7 @@ import {
   findCueForSlideSelection,
 } from './audio-timeline-sync.mjs'
 import { getPublicCatalogs } from './public-catalog-config.mjs'
-import { buildPublicPresentations } from './public-presentations-builder.mjs'
+import { buildPublicPresentations, getPublicPresentationsSourcesRevision } from './public-presentations-builder.mjs'
 import {
   isQuizAggregateGroupPublishable,
   QUIZ_MIN_AGGREGATE_GROUP_SIZE,
@@ -332,6 +332,7 @@ const persistJson = (filePath, value) => {
 }
 
 let presentationsRawHash = null
+let publicPresentationsSourcesRevision = null
 const getPresentationsRawHash = () => {
   if (!fs.existsSync(seferDataPaths.presentations)) return 'missing'
   const content = fs.readFileSync(seferDataPaths.presentations, 'utf-8').replace(/^\uFEFF/, '')
@@ -340,21 +341,25 @@ const getPresentationsRawHash = () => {
 
 const readPresentationsCache = () => {
   const currentHash = getPresentationsRawHash()
-  if (currentHash === presentationsRawHash && Array.isArray(presentationsCache) && Array.isArray(publicPresentationsCache)) {
-    return presentationsCache
+  if (currentHash !== presentationsRawHash) {
+    try {
+      const validation = validatePresentationsPayload(readJsonFile(seferDataPaths.presentations, []))
+      if (!validation.ok) throw new Error(formatValidationError(validation))
+      presentationsCache = normalizePresentations(validation.value)
+    } catch (error) {
+      console.error(`[PRESENTATIONS] Stored data rejected: ${error.message}`)
+      presentationsCache = []
+    }
+    presentationsRawHash = currentHash
+    publicPresentationsSourcesRevision = null
   }
-  try {
-    const validation = validatePresentationsPayload(readJsonFile(seferDataPaths.presentations, []))
-    if (!validation.ok) throw new Error(formatValidationError(validation))
-    presentationsCache = normalizePresentations(validation.value)
-  } catch (error) {
-    console.error(`[PRESENTATIONS] Stored data rejected: ${error.message}`)
-    presentationsCache = []
+  const catalogs = getPublicCatalogs()
+  const options = { publicDataDir: seferDataPaths.public }
+  const revision = getPublicPresentationsSourcesRevision(presentationsCache, catalogs, options)
+  if (revision !== publicPresentationsSourcesRevision) {
+    publicPresentationsCache = buildPublicPresentations(presentationsCache, catalogs, options)
+    publicPresentationsSourcesRevision = revision
   }
-  publicPresentationsCache = buildPublicPresentations(presentationsCache, getPublicCatalogs(), {
-    publicDataDir: seferDataPaths.public,
-  })
-  presentationsRawHash = currentHash
   return presentationsCache
 }
 
@@ -733,7 +738,8 @@ const reduceRemoteCommandMessage = (message, sourceMeta, beforeSessionReset) => 
     now,
   })
 
-  if (message.clientId !== 'server' && (message.payload.command === 'SELECT_PRESENTATION_AND_SLIDE' || message.payload.command === 'SELECT_STEP')) {
+  // Only the local timeline evaluator supplies a null source; payload fields are untrusted.
+  if (sourceMeta !== null && (message.payload.command === 'SELECT_PRESENTATION_AND_SLIDE' || message.payload.command === 'SELECT_STEP')) {
     syncTimelineToSlideSelection({
       presentation: message.payload.presentation || committedState.presentation,
       slideIndex: Number.isInteger(message.payload.slideIndex) ? message.payload.slideIndex : committedState.slideIndex,
@@ -1177,11 +1183,8 @@ const handleApi = async (req, res, url) => {
       if (!requireCatalogRevision(req, res, readPresentationsCache())) return true
       const presentations = normalizePresentations(validation.value)
       persistJson(seferDataPaths.presentations, presentations)
-      presentationsCache = presentations
-      publicPresentationsCache = buildPublicPresentations(presentationsCache, getPublicCatalogs(), {
-        publicDataDir: seferDataPaths.public,
-      })
-      presentationsRawHash = getPresentationsRawHash()
+      presentationsRawHash = null
+      readPresentationsCache()
       res.setHeader('ETag', catalogEtag(presentationsCache))
       sendJson(res, 200, { success: true })
     } catch (err) {
@@ -1209,6 +1212,7 @@ const handleApi = async (req, res, url) => {
       return true
     }
 
+    readPresentationsCache()
     const catalogPresentations = publicPresentationsCache.filter(p => p.tags.some(t => catalog.tags.includes(t)))
 
     if (presentationId) {

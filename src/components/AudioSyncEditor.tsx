@@ -104,9 +104,6 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
 
   // Load available sync map if it exists for this presentation + audio
   useEffect(() => {
-    if (!hasCatalogRevision(editBaseMapsRef.current) && hasCatalogRevision(audioSyncMaps)) {
-      editBaseMapsRef.current = audioSyncMaps;
-    }
     if (dirtyRef.current) return;
     editBaseMapsRef.current = audioSyncMaps;
     if (!selectedPresentationId || !selectedAudioFile) {
@@ -407,9 +404,14 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
     cues.sort((a, b) => a.timeSec - b.timeSec);
 
     // Existing sync map or create new one
-    const baseMaps = !hasCatalogRevision(editBaseMapsRef.current) && hasCatalogRevision(audioSyncMaps)
-      ? audioSyncMaps
-      : editBaseMapsRef.current;
+    let baseMaps = editBaseMapsRef.current;
+    if (!hasCatalogRevision(baseMaps) && hasCatalogRevision(audioSyncMaps)) {
+      if (audioSyncMaps.some(map => map.presentationId === selectedPresentationId && map.audioSrc === selectedAudioFile)) {
+        throw new Error(`${translate('common:catalogMerge.unresolved', 'Resuelve todos los conflictos antes de guardar.')} ${translate('common:catalogMerge.cancelled', 'Guardado cancelado. Tu borrador se conserva.')}`);
+      }
+      // A draft without a loaded baseline may only create a previously absent pair.
+      baseMaps = audioSyncMaps;
+    }
     const existingIndex = baseMaps.findIndex(
       (m) => m.presentationId === selectedPresentationId && m.audioSrc === selectedAudioFile
     );

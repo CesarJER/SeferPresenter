@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AudioSyncEditor } from '../src/components/AudioSyncEditor';
 import { loadCatalog, saveCatalog, audioSyncCatalogOptions } from '../src/utils/catalogApi';
 import type { AudioSyncMap } from '../src/types/audio';
@@ -154,4 +154,89 @@ it('does not abort save with "Presentation check superseded" when window focus f
 
   await waitFor(() => expect(alert).toHaveBeenCalledWith('Sincronización guardada correctamente.'));
   expect(save).toHaveBeenCalledTimes(1);
+});
+
+describe('audited initial catalog hydration', () => {
+  const setup = async (late = false) => {
+    vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => {});
+    const alert = vi.fn(); vi.stubGlobal('alert', alert);
+    const presentations: Presentation[] = [{ id: 'p', title: 'Synthetic', mode: 'standard', background: '', slides: [
+      { id: 's0', label: 'First', lines: ['One'] }, { id: 's1', label: 'Second', lines: ['Two'] },
+    ] }];
+    let remote: AudioSyncMap[] = [{ id: 'm', name: 'Existing', presentationId: 'p', audioSrc: '/test.mp3',
+      defaultVolume: 0.9, defaultSyncMode: 'bilateral', cues: [{ slideIndex: 0, timeSec: 5 }, { slideIndex: 1, timeSec: 30 }] }];
+    let revision = '"r1"';
+    const requests: { base: string; maps: AudioSyncMap[]; status: number }[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (url: string, options?: RequestInit) => {
+      if (url === '/api/presentations') return new Response(JSON.stringify(presentations), { headers: { ETag: '"p"' } });
+      if (options?.method === 'POST') {
+        const base = (options.headers as Record<string, string>)['If-Match'];
+        const maps = JSON.parse(options.body as string) as AudioSyncMap[];
+        const status = base === revision ? 200 : 412;
+        requests.push({ base, maps, status });
+        if (status === 200) { remote = structuredClone(maps); revision = '"saved"'; }
+        return new Response('{}', { status, headers: { ETag: revision } });
+      }
+      return new Response(JSON.stringify(remote), { headers: { ETag: revision } });
+    }));
+    const maps = late ? [] : await loadCatalog<AudioSyncMap>('/api/audio-sync');
+    const props = { isOpen: true, onClose: vi.fn(), presentations, activePresentationId: 'p', activeAudioSrc: '/test.mp3',
+      availableAudioFiles: ['/test.mp3'], audioSyncMaps: maps,
+      onAudioSyncMapsChange: (next: AudioSyncMap[], base: AudioSyncMap[]) => saveCatalog('/api/audio-sync', next, base, audioSyncCatalogOptions) };
+    const view = render(<AudioSyncEditor {...props} />);
+    await waitFor(() => expect(screen.getAllByRole('textbox')).toHaveLength(2));
+    return {
+      alert, requests,
+      remote: () => remote,
+      changeServer: (next: AudioSyncMap[]) => { remote = structuredClone(next); revision = '"r2"'; },
+      hydrate: async () => { view.rerender(<AudioSyncEditor {...props} audioSyncMaps={await loadCatalog<AudioSyncMap>('/api/audio-sync')} />); },
+      edit: () => fireEvent.change(screen.getAllByRole('textbox')[0], { target: { value: '12.5' } }),
+      save: async () => {
+        fireEvent.click(screen.getByRole('button', { name: 'GUARDAR CONFIGURACIÓN' }));
+        await waitFor(() => expect(alert).toHaveBeenCalled());
+      },
+    };
+  };
+
+  it('blocks a late existing map collision without losing cues, settings or the draft', async () => {
+    const fixture = await setup(true);
+    fixture.edit(); await fixture.hydrate(); await fixture.save();
+    expect(fixture.requests).toEqual([]);
+    expect(fixture.alert).toHaveBeenCalledWith(expect.stringMatching(/conflictos/));
+    expect(fixture.remote()[0]).toMatchObject({ defaultVolume: 0.9, defaultSyncMode: 'bilateral',
+      cues: [{ slideIndex: 0, timeSec: 5 }, { slideIndex: 1, timeSec: 30 }] });
+    expect((screen.getAllByRole('textbox')[0] as HTMLInputElement).value).toBe('12.5');
+  });
+
+  it('retains untouched cues, mode and volume when editing a loaded revision', async () => {
+    const fixture = await setup();
+    fixture.edit(); await fixture.save();
+    expect(fixture.remote()[0]).toMatchObject({ defaultVolume: 0.9, defaultSyncMode: 'bilateral',
+      cues: [{ slideIndex: 0, timeSec: 12.5 }, { slideIndex: 1, timeSec: 30 }] });
+    expect(fixture.requests[0]).toMatchObject({ base: '"r1"', status: 200 });
+  });
+
+  it('retains the original ETag and blocks simultaneous edits to the same cue', async () => {
+    const fixture = await setup();
+    fixture.edit();
+    fixture.changeServer([{ ...fixture.remote()[0], defaultVolume: 0.4, cues: [{ slideIndex: 0, timeSec: 8 }, { slideIndex: 1, timeSec: 30 }] }]);
+    await fixture.hydrate(); await fixture.save();
+    expect(fixture.requests).toHaveLength(1);
+    expect(fixture.requests[0]).toMatchObject({ base: '"r1"', status: 412 });
+    expect(fixture.remote()[0].cues[0].timeSec).toBe(8);
+    expect(fixture.remote()[0].defaultVolume).toBe(0.4);
+    expect((screen.getAllByRole('textbox')[0] as HTMLInputElement).value).toBe('12.5');
+    expect(fixture.alert).not.toHaveBeenCalledWith('Sincronización guardada correctamente.');
+  });
+
+  it('merges an unambiguous concurrent map addition through the existing 412 flow', async () => {
+    const fixture = await setup(); fixture.edit();
+    fixture.changeServer([...fixture.remote(), { ...fixture.remote()[0], id: 'other', presentationId: 'other' }]);
+    await fixture.hydrate(); await fixture.save();
+    expect(fixture.requests.map(request => request.status)).toEqual([412, 200]);
+    expect(fixture.requests.map(request => request.base)).toEqual(['"r1"', '"r2"']);
+    expect(fixture.remote()).toHaveLength(2);
+    expect(fixture.remote()[0].cues).toEqual([{ slideIndex: 0, timeSec: 12.5 }, { slideIndex: 1, timeSec: 30 }]);
+    expect(fixture.remote()[0].defaultSyncMode).toBe('bilateral');
+  });
 });

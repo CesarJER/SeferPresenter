@@ -21,20 +21,23 @@ afterEach(async () => {
   }
   child = undefined; dataDir = undefined;
 });
-async function start(authRequired = true) {
+async function start(authRequired = true, prepare?: (directory: string) => void) {
   dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sefer-remediation-'));
+  prepare?.(dataDir);
   const reserve = createServer(); await new Promise<void>(resolve => reserve.listen(0, '127.0.0.1', resolve));
   const address = reserve.address(); if (!address || typeof address === 'string') throw new Error('Address required');
   const port = address.port; await new Promise<void>(resolve => reserve.close(() => resolve()));
   child = spawn(process.execPath, ['server/local-server.mjs'], { windowsHide: true, stdio: 'ignore', env: {
     ...process.env, SEFER_DATA_DIR: dataDir, SEFER_PORT: String(port), SEFER_REQUIRE_AUTH: String(authRequired),
     SEFER_CONTROL_PASSWORD: 'synthetic-password', SEFER_LIVE_AUDIO_ENABLED: 'false', SEFER_VOICE_SCRIPTURE_ENABLED: 'false',
+    SEFER_PUBLIC_CATALOGS_JSON: JSON.stringify([{ id: 'audit', path: '/audit', title: 'Synthetic', tags: ['audit'] }]),
   } });
   const base = `http://127.0.0.1:${port}`;
   await vi.waitFor(async () => expect((await fetch(`${base}/api/health`)).ok).toBe(true), { timeout: 5000 });
-  const connect = (role = 'control', controlSessionId?: string) => new Promise<{ ws: WebSocket; welcome: Record<string, string> }>((resolve, reject) => {
+  const connect = (role = 'control', controlSessionId?: string) => new Promise<{ ws: WebSocket; welcome: Record<string, string>; messages: Record<string, unknown>[] }>((resolve, reject) => {
     const ws = new WebSocket(`${base.replace('http', 'ws')}/ws?role=${role}${controlSessionId ? `&controlSessionId=${encodeURIComponent(controlSessionId)}` : ''}`, { headers }); sockets.push(ws);
-    ws.on('message', raw => { const message = JSON.parse(raw.toString()); if (message.type === 'WELCOME') resolve({ ws, welcome: message }); });
+    const messages: Record<string, unknown>[] = [];
+    ws.on('message', raw => { const message = JSON.parse(raw.toString()); messages.push(message); if (message.type === 'WELCOME') resolve({ ws, welcome: message, messages }); });
     ws.on('error', reject);
   });
   const post = (route: string, body: unknown, credential?: string, etag?: string) => fetch(`${base}${route}`, { method: 'POST',
@@ -154,4 +157,85 @@ it.each(['', '-gzip', '-zstd'])('accepts current catalog revisions through Caddy
     expect((await post(route, [item])).status).toBe(428);
     expect(await (await fetch(`${base}${route}`, { headers })).json()).toEqual(edited);
   }
+}, 10000);
+
+it('refreshes a warm public projection after corpus, metadata and external presentation changes', async () => {
+  const presentation = { id: 'p', title: 'Synthetic', mode: 'standard', background: '', tags: ['audit'],
+    slides: [{ id: 's', label: 'Scripture', lines: ['Synthetic'], type: 'tanaj', scriptureBook: 'Gn', scriptureChapter: '1', scriptureVerseStart: '1' }] };
+  const content = 'book\tabbrev\theb\tchapter\tverse\tnikud\ttranslit\ttranslation\nGenesis\tGn\tBereshit\t1\t1\tHEB\tTRANS\tOLD\n';
+  const { base } = await start(true, directory => {
+    fs.mkdirSync(path.join(directory, 'public/books'), { recursive: true });
+    fs.writeFileSync(path.join(directory, 'public/metadata.json'), JSON.stringify({ Genesis: { bookAbbrevEs: 'Gn', safeFile: 'genesis' } }));
+    fs.writeFileSync(path.join(directory, 'public/books/genesis.tsv'), content);
+    fs.writeFileSync(path.join(directory, 'presentations.json'), JSON.stringify([presentation]));
+  });
+  const publicState = async () => (await (await fetch(`${base}/api/public-catalogs/audit/presentations`)).json())[0];
+  expect((await publicState()).slides[0].scriptureVerses[0][2]).toBe('OLD');
+  const file = path.join(dataDir!, 'public/books/genesis.tsv');
+  const stat = fs.statSync(file);
+  fs.writeFileSync(file, content.replace('OLD', 'NEW'));
+  fs.utimesSync(file, stat.atime, stat.mtime);
+  expect((await publicState()).slides[0].scriptureVerses[0][2]).toBe('NEW');
+  fs.writeFileSync(path.join(dataDir!, 'public/books/override.tsv'), content.replace('OLD', 'OVERRIDE'));
+  fs.writeFileSync(path.join(dataDir!, 'public/metadata.json'), JSON.stringify({ Genesis: { bookAbbrevEs: 'Gn', safeFile: 'override' } }));
+  expect((await publicState()).slides[0].scriptureVerses[0][2]).toBe('OVERRIDE');
+  fs.writeFileSync(path.join(dataDir!, 'presentations.json'), JSON.stringify([{ ...presentation, title: 'External edit' }]));
+  expect((await publicState()).title).toBe('External edit');
+  expect(await publicState()).toEqual(await publicState());
+}, 10000);
+
+const startBilateral = () => start(true, directory => {
+  fs.writeFileSync(path.join(directory, 'presentations.json'), JSON.stringify([{
+    id: 'p', title: 'Synthetic', mode: 'standard', background: '',
+    slides: [{ id: 's0', label: 'First', lines: ['One'] }, { id: 's1', label: 'Second', lines: ['Two'] }],
+  }]));
+  fs.writeFileSync(path.join(directory, 'audio_sync.json'), JSON.stringify([{
+    id: 'm', name: 'Synthetic', presentationId: 'p', audioSrc: '/synthetic.mp3', defaultVolume: 0.7, defaultSyncMode: 'bilateral',
+    cues: [{ slideIndex: 0, timeSec: 0 }, { slideIndex: 1, timeSec: 10 }, { slideIndex: 1, timeSec: 30 }],
+  }]));
+});
+
+it.each(['HTTP', 'WS'])('keeps clientId=server external for bilateral commands over %s', async entry => {
+  const { base, connect, post } = await startBilateral();
+  const principal = await connect();
+  const pending = await connect();
+  const send = (message: Record<string, unknown>) => principal.ws.send(JSON.stringify(message));
+  send({ type: 'AUDIO_TIMELINE_ACTION', action: { type: 'SET_TRACK', presentationId: 'p', audioSrc: '/synthetic.mp3', syncMapId: 'm', syncMode: 'bilateral' } });
+  send({ type: 'AUDIO_TIMELINE_ACTION', action: { type: 'SEEK', positionSec: 5 } });
+  send({ type: 'SERVER_TIME_PING', clientSentAtMs: 'ready' });
+  await vi.waitFor(() => expect(principal.messages.some(message => message.clientSentAtMs === 'ready')).toBe(true));
+  const command = { type: 'REMOTE_COMMAND', clientId: 'server', origin: 'server', sourceMeta: null, internal: true,
+    payload: { command: 'SELECT_PRESENTATION_AND_SLIDE', presentation: (await (await fetch(`${base}/api/presentations`, { headers })).json())[0], slideIndex: 1 } };
+  if (entry === 'HTTP') {
+    expect((await post('/api/command', command, pending.welcome.operatorCredential)).status).toBe(403);
+    expect((await post('/api/command', command, principal.welcome.operatorCredential)).status).toBe(200);
+  } else {
+    pending.ws.send(JSON.stringify(command));
+    await vi.waitFor(() => expect(pending.messages.some(message => message.code === 'CONTROL_PENDING_FORBIDDEN')).toBe(true));
+    send(command); send({ type: 'SERVER_TIME_PING', clientSentAtMs: 'after-command' });
+    await vi.waitFor(() => expect(principal.messages.some(message => message.clientSentAtMs === 'after-command')).toBe(true));
+  }
+  const observer = await connect('audience');
+  const timeline = await vi.waitFor(() => {
+    const message = observer.messages.find(message => message.type === 'AUDIO_TIMELINE_STATE');
+    expect(message).toBeDefined(); return message!.timeline as { basePositionSec: number };
+  });
+  expect(timeline.basePositionSec).toBe(10);
+}, 10000);
+
+it('does not seek to an earlier same-slide cue when the timeline generates a selection internally', async () => {
+  const { base, connect } = await startBilateral();
+  const principal = await connect();
+  for (const action of [
+    { type: 'SET_TRACK', presentationId: 'p', audioSrc: '/synthetic.mp3', syncMapId: 'm', syncMode: 'bilateral' },
+    { type: 'PLAY', positionSec: 35 },
+  ]) principal.ws.send(JSON.stringify({ type: 'AUDIO_TIMELINE_ACTION', action }));
+  await vi.waitFor(async () => expect((await (await fetch(`${base}/api/state`, { headers })).json()).slideIndex).toBe(1));
+  const observer = await connect('audience');
+  const timeline = await vi.waitFor(() => {
+    const message = observer.messages.find(message => message.type === 'AUDIO_TIMELINE_STATE');
+    expect(message).toBeDefined(); return message!.timeline as { basePositionSec: number; status: string };
+  });
+  expect(timeline.status).toBe('playing');
+  expect(timeline.basePositionSec).toBe(35);
 }, 10000);

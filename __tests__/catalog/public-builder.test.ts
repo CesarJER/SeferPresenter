@@ -104,4 +104,34 @@ describe('Public Presentations Builder', () => {
     const result = buildPublicPresentations(presentations, mockCatalogs, { publicDataDir })
     expect(result[0].slides[0].scriptureVerses).toEqual([['HEB', 'TRANS', 'TEXT']])
   })
+
+  it.each([false, true])('refreshes translation content in a warm book cache (preserved stat=%s)', preserveStat => {
+    const publicDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sefer-scripture-test-'))
+    temporaryDirectories.push(publicDataDir)
+    fs.mkdirSync(path.join(publicDataDir, 'books'))
+    fs.writeFileSync(path.join(publicDataDir, 'metadata.json'), JSON.stringify({ Genesis: { bookAbbrevEs: 'Gn', safeFile: 'genesis' } }))
+    const file = path.join(publicDataDir, 'books', 'genesis.tsv')
+    const content = 'book\tabbrev\theb\tchapter\tverse\tnikud\ttranslit\ttranslation\nGenesis\tGn\tBereshit\t1\t1\tHEB\tTRANS\tOLD\n'
+    fs.writeFileSync(file, content)
+    const timestamp = new Date('2026-01-01T00:00:00Z')
+    fs.utimesSync(file, timestamp, timestamp)
+    const presentations = [{ id: 'p', tags: ['tema1'], slides: [{ id: 's', type: 'tanaj', scriptureBook: 'Gn', scriptureChapter: '1', scriptureVerseStart: '1' }] }]
+    expect(buildPublicPresentations(presentations, mockCatalogs, { publicDataDir })[0].slides[0].scriptureVerses[0][2]).toBe('OLD')
+    fs.writeFileSync(file, content.replace('OLD', 'NEW'))
+    if (preserveStat) fs.utimesSync(file, timestamp, timestamp)
+    expect(buildPublicPresentations(presentations, mockCatalogs, { publicDataDir })[0].slides[0].scriptureVerses[0][2]).toBe('NEW')
+  })
+
+  it('refreshes metadata mapping and recovers a missing private corpus override', () => {
+    const publicDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sefer-scripture-test-'))
+    temporaryDirectories.push(publicDataDir)
+    fs.mkdirSync(path.join(publicDataDir, 'books'))
+    const metadata = path.join(publicDataDir, 'metadata.json')
+    fs.writeFileSync(metadata, JSON.stringify({ Genesis: { bookAbbrevEs: 'Gn', safeFile: 'missing' } }))
+    const presentations = [{ id: 'p', tags: ['tema1'], slides: [{ id: 's', type: 'sefer', scriptureBook: 'Gn', scriptureChapter: '1', scriptureVerseStart: '1' }] }]
+    expect(buildPublicPresentations(presentations, mockCatalogs, { publicDataDir })[0].slides[0].scriptureVerses).toBeUndefined()
+    fs.writeFileSync(path.join(publicDataDir, 'books', 'override.tsv'), 'book\tabbrev\theb\tchapter\tverse\tnikud\ttranslit\ttranslation\nGenesis\tGn\tBereshit\t1\t1\tHEB\tTRANS\tPRIVATE OVERRIDE\n')
+    fs.writeFileSync(metadata, JSON.stringify({ Genesis: { bookAbbrevEs: 'Gn', safeFile: 'override' } }))
+    expect(buildPublicPresentations(presentations, mockCatalogs, { publicDataDir })[0].slides[0].scriptureVerses[0][2]).toBe('PRIVATE OVERRIDE')
+  })
 })

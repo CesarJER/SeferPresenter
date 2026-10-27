@@ -205,11 +205,15 @@ describe('AudioPanel', () => {
       const first = buildPublicPresentations(presentations, catalogs, { publicDataDir: tempDir });
       expect(first[0].slides[0].scriptureVerses?.length).toBe(2);
 
-      // Subsequent rebuilds within the stat TTL should not re-read the .tsv file from disk
+      // Check source contents once per dependency, while reusing the parsed chapter rows.
       const readFileSyncSpy = vi.spyOn(fs, 'readFileSync');
-      const second = buildPublicPresentations(presentations, catalogs, { publicDataDir: tempDir });
+      const second = buildPublicPresentations([{ ...presentations[0], slides: Array(20).fill(presentations[0].slides[0]) }], catalogs, { publicDataDir: tempDir });
+      expect(second[0].slides).toHaveLength(20);
       expect(second[0].slides[0].scriptureVerses?.length).toBe(2);
-      expect(readFileSyncSpy).not.toHaveBeenCalled();
+      expect(second[0].slides[0].scriptureVerses?.[0]).toBe(first[0].slides[0].scriptureVerses?.[0]);
+      expect(readFileSyncSpy.mock.calls.map(([file]) => file)).toEqual([
+        path.join(tempDir, 'metadata.json'), path.join(tempDir, 'books', '01_genesis.tsv'),
+      ]);
     } finally {
       fs.rmSync(tempDir, { recursive: true, force: true });
     }
