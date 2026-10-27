@@ -362,6 +362,23 @@ describe('LiveKit token endpoint security', () => {
     expect(await response).toMatchObject({ body: { available: false, reason: 'livekit-unreachable' } });
   });
 
+  it('cancels the readiness deadline and settles the request on API close', async () => {
+    api.close();
+    vi.useFakeTimers();
+    api = createLiveKitApi({}, { roomServiceClient: { listRooms: () => new Promise(() => {}) } });
+    const response = call('/api/livekit/status', {});
+    await vi.advanceTimersByTimeAsync(0);
+    expect(vi.getTimerCount()).toBe(2);
+    try {
+      api.close();
+      api.close();
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(await response).toMatchObject({ body: { available: false } });
+    }
+  });
+
   it('mutes microphone tracks in LiveKit while retaining the grant for explicit user reopening', async () => {
     api.close();
     const mutePublishedTrack = vi.fn().mockResolvedValue({});

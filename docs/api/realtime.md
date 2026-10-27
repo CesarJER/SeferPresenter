@@ -39,6 +39,16 @@ heartbeat y las respuestas pong también comprueban el presupuesto antes de
 escribirse; la respuesta pong conserva el payload del ping. Las tramas de cierre
 siguen a cargo de `ws`.
 
+Cada servidor WS posee un heartbeat de 25 segundos, retirado junto con su
+listener de upgrade al cerrar. Los códigos pendientes pierden su temporizador
+al autorizar, rechazar, desconectar, promocionar o rotar sesión. La limpieza de
+participantes conserva la gracia de rejoin; sus callbacks comprueban la identidad
+del registro y sus temporizadores se cancelan al reconectar, eliminar, rotar o
+cerrar. El heartbeat retira tickets SSE caducados sin modificar su validez de
+30 segundos ni su consumo de un uso. Una transición de emisión que espera a
+LiveKit vuelve a comprobar la conexión y autorización del Control antes de aplicar
+el resultado; desconexión, rotación y cierre invalidan la operación pendiente.
+
 No hay prioridades ni cola de aplicación: si no cabe una actualización de estado,
 señal privada o mensaje de moderación, se cierra la conexión en vez de omitirlo
 silenciosamente. La reconexión autenticada permite recuperar el estado vigente;

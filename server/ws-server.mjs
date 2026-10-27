@@ -488,15 +488,17 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
     maxPayload: WS_MAX_PAYLOAD_BYTES,
     autoPong: false,
   })
+  let closed = false
 
-  httpServer.on('upgrade', (request, socket, head) => {
+  const handleUpgrade = (request, socket, head) => {
     const url = new URL(request.url || '/', `http://${request.headers.host || 'localhost'}`)
     if (url.pathname === '/ws') {
       wss.handleUpgrade(request, socket, head, (ws) => {
         wss.emit('connection', ws, request)
       })
     }
-  })
+  }
+  httpServer.on('upgrade', handleUpgrade)
 
   const broadcast = broadcastWs
 
@@ -729,6 +731,8 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
     resetPrivateControlSession()
 
     if (pending[0]) {
+      clearTimeout(pending[0].expiryTimer)
+      pending[0].expiryTimer = undefined
       pending[0].controlState = 'PRINCIPAL'
       pending[0].verificationCode = undefined
       pending[0].codeExpiresAt = undefined
@@ -751,9 +755,9 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
     }
   }
 
-  const expirePendingControl = (controlSessionId) => {
-    const control = liveAudioControls.get(controlSessionId)
-    if (!control || control.controlState !== 'PENDING') return
+  const expirePendingControl = (control) => {
+    if (liveAudioControls.get(control.controlSessionId) !== control || control.controlState !== 'PENDING') return
+    control.expiryTimer = undefined
     control.verificationCode = undefined
     control.codeExpiresAt = Date.now()
     sendAuthorizationState(control)
@@ -778,7 +782,7 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
     if (control.controlState === 'PENDING') {
       control.verificationCode = generateVerificationCode()
       control.codeExpiresAt = connectedAt + getControlCodeTtlMs()
-      control.expiryTimer = setTimeout(() => expirePendingControl(controlSessionId), getControlCodeTtlMs())
+      control.expiryTimer = setTimeout(() => expirePendingControl(control), getControlCodeTtlMs())
       control.expiryTimer.unref?.()
     }
 
@@ -966,7 +970,9 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
     participant.disconnectedAt = Date.now()
     participant.cleanupDueAt = participant.disconnectedAt + getRejoinGraceMs()
     clearTimeout(participant.cleanupTimer)
-    participant.cleanupTimer = setTimeout(() => cleanupExpiredParticipant(participantId), getRejoinGraceMs())
+    participant.cleanupTimer = setTimeout(() => {
+      if (liveAudioParticipants.get(participantId) === participant) cleanupExpiredParticipant(participantId)
+    }, getRejoinGraceMs())
     participant.cleanupTimer.unref?.()
 
     broadcast({
@@ -980,6 +986,8 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
     const current = liveAudioParticipants.get(participantId)
     if (!current || current.ws !== null) return
     if (current.cleanupDueAt && current.cleanupDueAt > Date.now()) return
+    clearTimeout(current.cleanupTimer)
+    current.cleanupTimer = undefined
 
     const releasedStatus = {
       ...makeReducedParticipantStatus(current),
@@ -1155,7 +1163,8 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
 
   let externalBroadcastUpdatePending = false
   let externalBroadcastRequestVersion = 0
-  const setExternalBroadcastState = async (nextState) => {
+  const setExternalBroadcastState = async (nextState, sourceMeta) => {
+    if (closed) return false
     if (!['off', 'live', 'recording'].includes(nextState)) return false
     if (externalBroadcastUpdatePending && nextState !== 'off') return false
     const requestVersion = ++externalBroadcastRequestVersion
@@ -1170,6 +1179,10 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
         externalBroadcastUpdatePending = false
       }
       if (requestVersion !== externalBroadcastRequestVersion) return false
+      if (closed || (sourceMeta && (
+        wsClients.get(sourceMeta.ws) !== sourceMeta || sourceMeta.ws.readyState !== WebSocket.OPEN ||
+        !isControlAuthorized(liveAudioControls.get(sourceMeta.controlSessionId))
+      ))) return false
     }
 
     const previousState = externalBroadcastState.state
@@ -1243,11 +1256,16 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
     return msg.participantId === targetMeta.participantId
   }
 
+  const clearSessionTimers = () => {
+    for (const control of liveAudioControls.values()) clearTimeout(control.expiryTimer)
+    for (const participant of liveAudioParticipants.values()) clearTimeout(participant.cleanupTimer)
+  }
+
   const rotatePresentationSession = ({ hardRefresh = false } = {}) => {
     // Persist the new boundary before clearing state or notifying any client.
     const nextSessionId = snapshotProviders.presentationSessionStore?.rotate() || randomUUID()
     presentationSessionId = nextSessionId
-    for (const control of liveAudioControls.values()) clearTimeout(control.expiryTimer)
+    clearSessionTimers()
     liveAudioControls.clear()
     liveAudioParticipants.clear()
     audienceAccessRecords.clear()
@@ -1647,7 +1665,7 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
             break
           }
           if (!['off', 'live', 'recording'].includes(msg.state)) break
-          void setExternalBroadcastState(msg.state).then((accepted) => {
+          void setExternalBroadcastState(msg.state, meta).then((accepted) => {
             if (!accepted) sendError(ws, 'LIVEKIT_PERMISSION_NOT_CONFIRMED', 'LiveKit could not revoke all microphones; retry explicitly')
           })
           break
@@ -1800,6 +1818,7 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
   })
 
   const heartbeat = setInterval(() => {
+    if (closed) return
     for (const [client, meta] of wsClients) {
       if (client.isAlive === false) {
         meta.cleanup()
@@ -1823,10 +1842,25 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
       }
     }
     sweepExpiredParticipants()
+    const now = Date.now()
+    for (const [ticket, issued] of audienceSseTickets) {
+      if (issued.expiresAt <= now) audienceSseTickets.delete(ticket)
+    }
   }, 25_000)
   heartbeat.unref?.()
 
-  wss.on('close', () => clearInterval(heartbeat))
+  wss.on('close', () => {
+    closed = true
+    externalBroadcastRequestVersion += 1
+    clearInterval(heartbeat)
+    httpServer.off('upgrade', handleUpgrade)
+    clearSessionTimers()
+    liveAudioControls.clear()
+    liveAudioParticipants.clear()
+    audienceAccessRecords.clear()
+    audienceSseTickets.clear()
+    liveAudioControlPublicKeyMessage = null
+  })
 
   return wss
 }

@@ -75,9 +75,10 @@ const rejectUpgrade = (socket, status, message) => {
 
 export const createVoiceScriptureService = (httpServer) => {
   const downstreamServer = new WebSocketServer({ noServer: true, maxPayload: MAX_VOICE_FRAME_BYTES })
-  const pendingTokens = new Set()
+  const pendingTokens = new Map()
+  let closed = false
   let activeSession = null
-  let connecting = false
+  let connecting = null
 
   const handleUpgrade = (request, socket, head) => {
     const url = new URL(request.url || '/', `http://${request.headers.host || 'localhost'}`)
@@ -93,7 +94,10 @@ export const createVoiceScriptureService = (httpServer) => {
       .map((value) => value.trim())
     const token = protocols.find((value) => pendingTokens.has(value))
     const isValidToken = Boolean(token && pendingTokens.has(token))
-    if (isValidToken) pendingTokens.delete(token)
+    if (isValidToken) {
+      clearTimeout(pendingTokens.get(token))
+      pendingTokens.delete(token)
+    }
     const sameOrigin = hasAllowedRequestOrigin(request)
     const basicAuthValid = hasValidBasicAuth(request)
 
@@ -115,23 +119,41 @@ export const createVoiceScriptureService = (httpServer) => {
       return
     }
 
-    connecting = true
     const upstream = new WebSocket(config.sttUrl, {
       headers: { Authorization: `Bearer ${config.apiKey}` },
       maxPayload: MAX_VOICE_FRAME_BYTES,
       handshakeTimeout: 5_000,
     })
+    connecting = { upstream, socket }
+
+    const cancelPending = () => {
+      if (connecting?.upstream !== upstream) return
+      connecting = null
+      upstream.terminate()
+      socket.destroy()
+    }
+    socket.once('close', cancelPending)
+    socket.once('end', cancelPending)
+    socket.once('error', cancelPending)
 
     const failBeforeUpgrade = () => {
-      connecting = false
+      if (connecting?.upstream !== upstream) return
+      connecting = null
       debugLog(config, 'upstream.error-before-open')
       rejectUpgrade(socket, '503 Service Unavailable', 'STT unavailable')
     }
     upstream.once('error', failBeforeUpgrade)
     upstream.once('open', () => {
+      if (closed || socket.destroyed || connecting?.upstream !== upstream) {
+        upstream.terminate()
+        return
+      }
+      socket.off('close', cancelPending)
+      socket.off('end', cancelPending)
+      socket.off('error', cancelPending)
       upstream.off('error', failBeforeUpgrade)
       downstreamServer.handleUpgrade(request, socket, head, (client) => {
-        connecting = false
+        connecting = null
         activeSession = { client, upstream, frames: 0, bytes: 0 }
         debugLog(config, 'session.open')
 
@@ -188,21 +210,29 @@ export const createVoiceScriptureService = (httpServer) => {
     getStatus: (options) => getVoiceScriptureStatus(options),
     issueToken: async ({ fetchImpl = fetch } = {}) => {
       const status = await getVoiceScriptureStatus({ fetchImpl })
+      if (closed) return { ...status, available: false }
       if (!status.available) return status
       const token = crypto.randomUUID()
-      pendingTokens.add(token)
-      setTimeout(() => pendingTokens.delete(token), TOKEN_TTL_MS)
+      const expiryTimer = setTimeout(() => pendingTokens.delete(token), TOKEN_TTL_MS)
+      expiryTimer.unref?.()
+      pendingTokens.set(token, expiryTimer)
       const config = getVoiceScriptureConfig()
       debugLog(config, 'capability.issued', { expiresInMs: TOKEN_TTL_MS })
       return { ...status, token, expiresInMs: TOKEN_TTL_MS }
     },
     close: () => {
+      if (closed) return
+      closed = true
+      for (const timer of pendingTokens.values()) clearTimeout(timer)
+      pendingTokens.clear()
       httpServer.off('upgrade', handleUpgrade)
+      connecting?.upstream.terminate()
+      connecting?.socket.destroy()
       activeSession?.client.close()
       activeSession?.upstream.close()
       downstreamServer.close()
       activeSession = null
-      connecting = false
+      connecting = null
     },
   }
 }

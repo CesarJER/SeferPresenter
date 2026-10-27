@@ -1541,6 +1541,8 @@ const shutdown = () => {
   shuttingDown = true
   clearInterval(sseHeartbeat)
   clearInterval(serverCueInterval)
+  liveKitApi?.close()
+  voiceScriptureService.close()
   for (const clientSet of [clients, audienceClients, quizClients]) {
     for (const response of clientSet) response.end()
     clientSet.clear()

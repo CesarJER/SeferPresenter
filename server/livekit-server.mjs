@@ -564,6 +564,8 @@ export const createLiveKitApi = (controlApi, options = {}) => {
   let cachedStatus = { enabled: getConfig().enabled, available: false }
   let statusExpiresAt = 0
   let pendingStatus = null
+  let cancelStatus = null
+  let closed = false
   let revokingAll = false
   const pendingModerations = new Set()
 
@@ -576,6 +578,7 @@ export const createLiveKitApi = (controlApi, options = {}) => {
 
   const getOperationalStatus = async () => {
     const configStatus = statusPayload()
+    if (closed) return { ...configStatus, available: false }
     if (!configStatus.enabled) return configStatus
     if (Date.now() < statusExpiresAt) return cachedStatus
     if (pendingStatus) return pendingStatus
@@ -584,7 +587,13 @@ export const createLiveKitApi = (controlApi, options = {}) => {
       try {
         await Promise.race([
           Promise.resolve().then(() => getRoomServiceClient().listRooms()),
-          new Promise((_, reject) => { timeout = setTimeout(() => reject(new Error('LiveKit readiness timeout')), options.statusTimeoutMs ?? 2000) }),
+          new Promise((_, reject) => {
+            timeout = setTimeout(() => reject(new Error('LiveKit readiness timeout')), options.statusTimeoutMs ?? 2000)
+            cancelStatus = () => {
+              clearTimeout(timeout)
+              reject(new Error('LiveKit API closed'))
+            }
+          }),
         ])
         cachedStatus = { enabled: true, available: true }
       } catch (error) {
@@ -593,6 +602,7 @@ export const createLiveKitApi = (controlApi, options = {}) => {
         cachedStatus = { enabled: true, available: false, reason: 'livekit-unreachable' }
       } finally {
         clearTimeout(timeout)
+        cancelStatus = null
         statusExpiresAt = Date.now() + 5000
         pendingStatus = null
       }
@@ -602,7 +612,11 @@ export const createLiveKitApi = (controlApi, options = {}) => {
   }
 
   return {
-    close: () => clearInterval(cleanupTimer),
+    close: () => {
+      closed = true
+      clearInterval(cleanupTimer)
+      cancelStatus?.()
+    },
     revokeAllSpeakers: async () => {
       if (revokingAll) return false
       revokingAll = true
