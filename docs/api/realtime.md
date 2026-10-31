@@ -55,6 +55,11 @@ silenciosamente. La reconexión autenticada permite recuperar el estado vigente;
 no garantiza replay de señales privadas ni recepción de mensajes anteriores.
 JSON malformado, tipos no permitidos y determinados payloads inválidos se descartan;
 otras denegaciones emiten `{ type: 'ERROR', code, message }`.
+La telemetría se valida antes de modificar estado o distribuirla, con las mismas
+comprobaciones de datos que [HTTP](http.md#estado-comandos-y-telemetría).
+Los payloads inválidos se descartan; una excepción síncrona del consumidor de
+estado/telemetría se contiene por mensaje y emite `ERROR` con `INVALID_MESSAGE`,
+sin terminar el proceso. Este error también respeta el presupuesto de salida.
 No hay un ACK genérico ni retransmisión persistente para todos los mensajes.
 
 Los constructores cliente añaden protocolVersion=1, timestamp y messageId.

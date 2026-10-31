@@ -3,14 +3,18 @@ import os from 'node:os';
 import path from 'node:path';
 import { createServer } from 'node:net';
 import { spawn, type ChildProcess } from 'node:child_process';
+import { request, type ClientRequest } from 'node:http';
 import { WebSocket } from 'ws';
 import { afterEach, expect, it, vi } from 'vitest';
 
 let child: ChildProcess | undefined;
 let dataDir: string | undefined;
 const sockets: WebSocket[] = [];
+const pendingRequests: ClientRequest[] = [];
 const headers = { Authorization: `Basic ${Buffer.from('control:synthetic-password').toString('base64')}` };
+type Operator = { ws: WebSocket; welcome: Record<string, string>; messages: Record<string, unknown>[] };
 afterEach(async () => {
+  pendingRequests.forEach(req => req.destroy()); pendingRequests.length = 0;
   sockets.forEach(ws => ws.terminate()); sockets.length = 0;
   if (child && child.exitCode === null) {
     const exited = new Promise<void>(resolve => child!.once('exit', () => resolve())); child.kill(); await exited;
@@ -30,11 +34,12 @@ async function start(authRequired = true, prepare?: (directory: string) => void)
   child = spawn(process.execPath, ['server/local-server.mjs'], { windowsHide: true, stdio: 'ignore', env: {
     ...process.env, SEFER_DATA_DIR: dataDir, SEFER_PORT: String(port), SEFER_REQUIRE_AUTH: String(authRequired),
     SEFER_CONTROL_PASSWORD: 'synthetic-password', SEFER_LIVE_AUDIO_ENABLED: 'false', SEFER_VOICE_SCRIPTURE_ENABLED: 'false',
+    SEFER_PRIVACY_MANIFEST_DIR: path.join(dataDir, 'manifests'), SEFER_BACKUP_DIR: path.join(dataDir, 'backups'),
     SEFER_PUBLIC_CATALOGS_JSON: JSON.stringify([{ id: 'audit', path: '/audit', title: 'Synthetic', tags: ['audit'] }]),
   } });
   const base = `http://127.0.0.1:${port}`;
   await vi.waitFor(async () => expect((await fetch(`${base}/api/health`)).ok).toBe(true), { timeout: 5000 });
-  const connect = (role = 'control', controlSessionId?: string) => new Promise<{ ws: WebSocket; welcome: Record<string, string>; messages: Record<string, unknown>[] }>((resolve, reject) => {
+  const connect = (role = 'control', controlSessionId?: string) => new Promise<Operator>((resolve, reject) => {
     const ws = new WebSocket(`${base.replace('http', 'ws')}/ws?role=${role}${controlSessionId ? `&controlSessionId=${encodeURIComponent(controlSessionId)}` : ''}`, { headers }); sockets.push(ws);
     const messages: Record<string, unknown>[] = [];
     ws.on('message', raw => { const message = JSON.parse(raw.toString()); messages.push(message); if (message.type === 'WELCOME') resolve({ ws, welcome: message, messages }); });
@@ -44,6 +49,261 @@ async function start(authRequired = true, prepare?: (directory: string) => void)
     headers: { ...headers, 'Content-Type': 'application/json', ...(credential ? { 'X-Sefer-Operator-Credential': credential } : {}), ...(etag ? { 'If-Match': etag } : {}) }, body: JSON.stringify(body) });
   return { base, connect, post };
 }
+
+// 100 Continue synchronizes with the real server entering its delayed-body handler.
+async function delayedOperatorPost(base: string, route: string, credential: string, body: unknown) {
+  const serialized = JSON.stringify(body);
+  let req!: ClientRequest;
+  const response = new Promise<{ status: number; body: Record<string, unknown> }>((resolve, reject) => {
+    req = request(base + route, { method: 'POST', headers: {
+      ...headers, 'X-Sefer-Operator-Credential': credential, 'Content-Type': 'application/json',
+      'Content-Length': Buffer.byteLength(serialized), Expect: '100-continue',
+    } }, res => {
+      let text = '';
+      res.on('data', chunk => { text += chunk; });
+      res.on('end', () => resolve({ status: res.statusCode!, body: JSON.parse(text) }));
+    });
+    req.on('error', reject);
+  });
+  pendingRequests.push(req);
+  const continued = new Promise<void>(resolve => req.once('continue', resolve));
+  req.flushHeaders();
+  await continued;
+  req.write(serialized.slice(0, 10));
+  return { response, finish: () => { req.end(serialized.slice(10)); return response; } };
+}
+
+const operatorBodies = [
+  { route: '/api/state', body: { clientId: 'r4-retired', slideIndex: -1 } },
+  { route: '/api/command', body: { type: 'REMOTE_COMMAND', clientId: 'r4-retired',
+    payload: { command: 'SELECT_BG_OVERRIDE', bg: 'retired-background' } } },
+  { route: '/api/audio-telemetry', body: { type: 'AUDIO_TELEMETRY', audioState: {
+    isPlaying: false, currentTime: 5, duration: 20, volume: 0.5, audioSrc: '/audio/synthetic.mp3',
+    activeSyncMapId: null, syncMode: 'none', lastUpdatedBy: 'controller', timestamp: 1,
+  } } },
+  { route: '/api/video-telemetry', body: { type: 'VIDEO_TELEMETRY', videoState: {
+    isPlaying: false, currentTime: 5, duration: 20, volume: 0.5, speed: 1, lastUpdatedBy: 'controller', timestamp: 1,
+  } } },
+  { route: '/api/display-telemetry', body: { type: 'DISPLAY_TELEMETRY', backgroundLock: true,
+    lockedBackgroundValue: 'retired-background', userSelectedBackground: null } },
+];
+const operatorCases = operatorBodies.flatMap(test =>
+  (test.route === '/api/command' ? ['control'] : ['control', 'presenter']).map(role => ({ ...test, role })));
+
+async function wsBarrier(operator: Operator) {
+  const marker = Math.random().toString();
+  operator.ws.send(JSON.stringify({ type: 'SERVER_TIME_PING', clientSentAtMs: marker }));
+  await vi.waitFor(() => {
+    expect(child!.exitCode).toBeNull();
+    expect(operator.messages.some(message => message.type === 'SERVER_TIME_PONG' && message.clientSentAtMs === marker)).toBe(true);
+  });
+}
+
+async function playingCueFixture(syncMode: string) {
+  const presentation = { id: 'r4-cue-presentation', title: 'Synthetic cues', mode: 'trilingual', background: '',
+    slides: [{ id: 's0', label: 'First', lines: ['Synthetic first'] }, { id: 's1', label: 'Second', lines: ['Synthetic second'] }] };
+  const app = await start(true, directory => {
+    fs.writeFileSync(path.join(directory, 'presentations.json'), JSON.stringify([presentation]));
+    fs.writeFileSync(path.join(directory, 'audio_sync.json'), JSON.stringify([{ id: 'r4-cue-map', name: 'Synthetic',
+      audioSrc: '/audio/synthetic.mp3', presentationId: presentation.id, defaultSyncMode: syncMode, defaultVolume: 0.7,
+      cues: [{ timeSec: 0, slideIndex: 0 }, { timeSec: 1.2, slideIndex: 1 }] }]));
+  });
+  const principal = await app.connect();
+  const select = (operator: Operator, slideIndex: number) => app.post('/api/command', {
+    type: 'REMOTE_COMMAND', clientId: 'r4-human', payload: { command: 'SELECT_PRESENTATION_AND_SLIDE', presentation, slideIndex },
+  }, operator.welcome.operatorCredential);
+  const play = async (operator: Operator) => {
+    operator.ws.send(JSON.stringify({ type: 'AUDIO_TIMELINE_ACTION', action: { type: 'SET_TRACK',
+      presentationId: presentation.id, audioSrc: '/audio/synthetic.mp3', syncMapId: 'r4-cue-map', syncMode } }));
+    operator.ws.send(JSON.stringify({ type: 'AUDIO_TIMELINE_ACTION', action: { type: 'PLAY', positionSec: 0 } }));
+    await wsBarrier(operator);
+  };
+  const state = async () => (await fetch(app.base + '/api/state', { headers })).json();
+  const timeline = async () => {
+    const observer = await app.connect('presenter');
+    return vi.waitFor(() => {
+      const message = observer.messages.find(message => message.type === 'AUDIO_TIMELINE_STATE');
+      expect(message).toBeDefined();
+      return message!.timeline as Record<string, unknown>;
+    });
+  };
+  await select(principal, 1);
+  await play(principal);
+  await vi.waitFor(async () => expect(await state()).toMatchObject({ clientId: 'server', slideIndex: 0 }));
+  return { ...app, principal, select, play, state, timeline };
+}
+
+it.each(['HTTP', 'WS'].flatMap(entry => ['unilateral', 'bilateral'].flatMap(syncMode =>
+  [false, true].map(hardRefresh => ({ entry, syncMode, hardRefresh })))))(
+  'retires cues across $entry session rotation ($syncMode, hardRefresh=$hardRefresh) and permits new playback',
+  async ({ entry, syncMode, hardRefresh }) => {
+    const app = await playingCueFixture(syncMode);
+    const oldTimeline = await app.timeline();
+    const payload = { command: 'RESET_STATE', clearSession: true, hardRefresh };
+    const closed = new Promise<void>(resolve => app.principal.ws.once('close', () => resolve()));
+    if (entry === 'HTTP') {
+      const response = await app.post('/api/command', { type: 'REMOTE_COMMAND', clientId: 'r4', payload },
+        app.principal.welcome.operatorCredential);
+      expect(response.status).toBe(200);
+      expect((await response.json()).state.presentation).toBeNull();
+    } else app.principal.ws.send(JSON.stringify({ type: 'REMOTE_COMMAND', clientId: 'r4', payload }));
+    await closed;
+    // Let the real 100 ms evaluator cross the old map's last cue without a Control.
+    await new Promise(resolve => setTimeout(resolve, 1400));
+    expect((await app.state()).presentation).toBeNull();
+    const fresh = await app.connect('control', app.principal.welcome.controlSessionId);
+    expect(fresh.welcome.presentationSessionId).not.toBe(app.principal.welcome.presentationSessionId);
+    const timeline = await app.timeline();
+    expect(timeline).toMatchObject({ status: 'idle', audioSrc: null, syncMapId: null, presentationId: null, syncMode: 'none' });
+    expect(timeline.timelineId).not.toBe(oldTimeline.timelineId);
+    expect((await app.select(fresh, 1)).status).toBe(200);
+    await app.play(fresh);
+    // Reusing the same map's first cue also proves its previous cursor was retired.
+    await vi.waitFor(async () => expect(await app.state()).toMatchObject({ clientId: 'server', slideIndex: 0 }));
+  }, 10000);
+
+it.each(['HTTP', 'WS'].flatMap(entry => ['unilateral', 'bilateral'].map(syncMode => ({ entry, syncMode })) ))(
+  'preserves timeline and session on failed $entry rotation ($syncMode)', async ({ entry, syncMode }) => {
+    const app = await playingCueFixture(syncMode);
+    app.principal.ws.send(JSON.stringify({ type: 'AUDIO_TIMELINE_ACTION', action: { type: 'PAUSE' } }));
+    await wsBarrier(app.principal);
+    const beforeTimeline = await app.timeline(), beforeState = await app.state();
+    const markerPath = path.join(dataDir!, 'presentation-session.json');
+    const marker = fs.readFileSync(markerPath, 'utf8');
+    fs.mkdirSync(markerPath + '.bak');
+    const payload = { command: 'RESET_STATE', clearSession: true };
+    if (entry === 'HTTP') {
+      const response = await app.post('/api/command', { type: 'REMOTE_COMMAND', clientId: 'r4', payload },
+        app.principal.welcome.operatorCredential);
+      expect(response.status).toBe(503);
+    } else {
+      app.principal.ws.send(JSON.stringify({ type: 'REMOTE_COMMAND', clientId: 'r4', payload }));
+      await wsBarrier(app.principal);
+      expect(app.principal.messages.some(message => message.type === 'ERROR' && message.code === 'SESSION_PERSISTENCE_FAILED')).toBe(true);
+    }
+    expect(fs.readFileSync(markerPath, 'utf8')).toBe(marker);
+    expect(await app.state()).toEqual(beforeState);
+    expect(await app.timeline()).toEqual(beforeTimeline);
+  });
+
+it.each(['unilateral', 'bilateral'])('preserves the existing non-session soft reset timeline (%s)', async syncMode => {
+  const app = await playingCueFixture(syncMode);
+  app.principal.ws.send(JSON.stringify({ type: 'AUDIO_TIMELINE_ACTION', action: { type: 'PAUSE' } }));
+  await wsBarrier(app.principal);
+  const before = await app.timeline();
+  const markerPath = path.join(dataDir!, 'presentation-session.json'), marker = fs.readFileSync(markerPath, 'utf8');
+  const response = await app.post('/api/command', { type: 'REMOTE_COMMAND', clientId: 'r4', payload: { command: 'RESET_STATE' } },
+    app.principal.welcome.operatorCredential);
+  expect(response.status).toBe(200);
+  expect(fs.readFileSync(markerPath, 'utf8')).toBe(marker);
+  expect(await app.timeline()).toEqual(before);
+  expect(app.principal.ws.readyState).toBe(WebSocket.OPEN);
+});
+
+it.each(['control', 'presenter'])('rejects malformed real-backend %s telemetry before mutation on HTTP and WS', async role => {
+  const { base, connect, post } = await start();
+  const operator = await connect(role);
+  const healthy = await connect('audience');
+  const initial = await (await fetch(base + '/api/state', { headers })).json();
+  const validAudio = operatorBodies[2].body;
+  const malformed: Record<string, unknown>[] = [
+    { type: 'AUDIO_TELEMETRY' },
+    ...[null, [], 'bad', 1, false, {}].map(audioState => ({ type: 'AUDIO_TELEMETRY', audioState })),
+    ...Object.entries({ isPlaying: 'yes', currentTime: '5', duration: null, volume: 2,
+      audioSrc: 4, activeSyncMapId: [], syncMode: 'bad', lastUpdatedBy: 'bad', timestamp: null })
+      .map(([field, value]) => ({ ...validAudio, audioState: { ...validAudio.audioState, [field]: value } })),
+    { ...validAudio, payload: null },
+    { type: 'VIDEO_TELEMETRY' }, { type: 'VIDEO_TELEMETRY', videoState: {} },
+    { type: 'VIDEO_TELEMETRY', videoState: [] },
+    { type: 'DISPLAY_TELEMETRY', backgroundLock: true, lockedBackgroundValue: 1, userSelectedBackground: null },
+    { type: 'DISPLAY_TELEMETRY', backgroundLock: null, lockedBackgroundValue: null, userSelectedBackground: null },
+  ];
+  for (const message of malformed) {
+    operator.ws.send(JSON.stringify(message));
+    await wsBarrier(operator);
+    await wsBarrier(healthy);
+    expect(await (await fetch(base + '/api/state', { headers })).json()).toEqual(initial);
+    const route = message.type === 'AUDIO_TELEMETRY' ? '/api/audio-telemetry'
+      : message.type === 'VIDEO_TELEMETRY' ? '/api/video-telemetry' : '/api/display-telemetry';
+    expect((await post(route, message, operator.welcome.operatorCredential)).status).toBe(400);
+    expect(await (await fetch(base + '/api/state', { headers })).json()).toEqual(initial);
+  }
+  expect((await fetch(base + '/api/health')).status).toBe(200);
+}, 10000);
+
+it.each(['control', 'presenter'])('preserves valid %s telemetry on HTTP and WS, including null video', async role => {
+  const { base, connect, post } = await start();
+  const operator = await connect(role);
+  for (const { route, body } of [...operatorBodies.slice(2),
+    { route: '/api/video-telemetry', body: { type: 'VIDEO_TELEMETRY', videoState: null } }]) {
+    const before = await (await fetch(base + '/api/state', { headers })).json();
+    operator.ws.send(JSON.stringify(body));
+    await wsBarrier(operator);
+    const after = await (await fetch(base + '/api/state', { headers })).json();
+    expect(after.stateRevision).toBe(before.stateRevision + 1);
+    expect((await post(route, body, operator.welcome.operatorCredential)).status).toBe(200);
+    expect((await (await fetch(base + '/api/state', { headers })).json()).stateRevision).toBe(after.stateRevision + 1);
+  }
+});
+
+it('contains a real callback exception without terminating the backend or changing projection', async () => {
+  const { base, connect } = await start();
+  const operator = await connect('presenter');
+  const healthy = await connect('control');
+  const initial = await (await fetch(base + '/api/state', { headers })).json();
+  const nested = '['.repeat(3000) + '0' + ']'.repeat(3000);
+  operator.ws.send('{"type":"SYNC_STATE","clientId":"synthetic","presentation":{"extra":' + nested + '}}');
+  await wsBarrier(operator);
+  await wsBarrier(healthy);
+  expect(operator.messages.some(message => message.type === 'ERROR' && message.code === 'INVALID_MESSAGE')).toBe(true);
+  expect(await (await fetch(base + '/api/state', { headers })).json()).toEqual(initial);
+});
+
+it.each(operatorCases.flatMap(test => ['disconnect', 'rotation'].map(ending => ({ ...test, ending }))))(
+  'rejects delayed $role $route after $ending, even with a reused Control ID', async ({ route, body, role, ending }) => {
+    const { base, connect, post } = await start();
+    const principal = await connect('control', 'r4-original-control');
+    const operator = role === 'control' ? principal : await connect('presenter');
+    const delayed = await delayedOperatorPost(base, route, operator.welcome.operatorCredential, body);
+    const closed = new Promise<void>(resolve => operator.ws.once('close', () => resolve()));
+    if (ending === 'disconnect') operator.ws.close();
+    else principal.ws.send(JSON.stringify({ type: 'REMOTE_COMMAND', clientId: 'r4-reset',
+      payload: { command: 'RESET_STATE', clearSession: true } }));
+    await closed;
+    const replacement = await connect(role, operator.welcome.controlSessionId);
+    if (role === 'control') {
+      expect(replacement.welcome.controlSessionId).toBe(operator.welcome.controlSessionId);
+      expect(replacement.welcome.controlState).toBe('PRINCIPAL');
+    }
+    expect((await post(route, body, operator.welcome.operatorCredential)).status).toBe(403);
+    const before = await (await fetch(base + '/api/state', { headers })).json();
+    expect(await delayed.finish()).toMatchObject({ status: 403, body: { code: 'OPERATOR_FORBIDDEN' } });
+    expect(await (await fetch(base + '/api/state', { headers })).json()).toEqual(before);
+    expect((await fetch(base + '/api/health')).status).toBe(200);
+  }, 10000);
+
+it.each(operatorCases)('accepts a delayed $role $route while its original authority is unchanged', async ({ route, body, role }) => {
+  const { base, connect } = await start();
+  const operator = await connect(role);
+  const delayed = await delayedOperatorPost(base, route, operator.welcome.operatorCredential, body);
+  expect((await delayed.finish()).status).toBe(200);
+});
+
+it.each([true, false])('rechecks delayed HTTP authority with auth=%s and preserves early rejection', async authRequired => {
+  const { base, connect } = await start(authRequired);
+  const principal = await connect();
+  const pending = await connect();
+  const denied = await delayedOperatorPost(base, '/api/state', pending.welcome.operatorCredential,
+    { clientId: 'pending', slideIndex: -1 });
+  // No complete body is sent: the entry guard must reject immediately.
+  expect((await denied.response).status).toBe(403);
+  const delayed = await delayedOperatorPost(base, '/api/state', principal.welcome.operatorCredential,
+    { clientId: 'retired', slideIndex: -1 });
+  const closed = new Promise<void>(resolve => principal.ws.once('close', () => resolve()));
+  principal.ws.close(); await closed;
+  expect((await delayed.finish()).status).toBe(403);
+});
+
 it.each([true, false])('clears controlled quiz aggregates only for active Controls (auth=%s)', async (authRequired) => {
   const { connect, post } = await start(authRequired);
   const principal = await connect();

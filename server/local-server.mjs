@@ -33,7 +33,8 @@ import {
   reduceProjectionCommand,
 } from './projection-state-reducer.mjs'
 import { broadcastWs } from './ws-server.mjs'
-import { getTimeline, applyAction } from './timelineManager.mjs'
+import { isAudioState, isVideoState, hasSafeNesting } from './ws-message-validation.mjs'
+import { getTimeline, applyAction, reset as resetTimeline } from './timelineManager.mjs'
 import {
   estimateTimelinePositionSec,
   findActiveCueIndex,
@@ -267,7 +268,7 @@ const isObjectRecord = (value) => value !== null && typeof value === 'object' &&
 
 const hasStringOrObjectPayload = (value) => typeof value === 'string' || isObjectRecord(value)
 
-const validateTelemetry = (telemetry, expectedType, hasTelemetryPayload) => {
+const validateTelemetry = (telemetry, expectedType) => {
   if (!isObjectRecord(telemetry)) {
     return `${expectedType} payload must be an object`
   }
@@ -277,7 +278,11 @@ const validateTelemetry = (telemetry, expectedType, hasTelemetryPayload) => {
   if ('payload' in telemetry && !hasStringOrObjectPayload(telemetry.payload)) {
     return `${expectedType} payload must be a string or object when provided`
   }
-  if (!hasTelemetryPayload(telemetry)) {
+  const valid = expectedType === 'AUDIO_TELEMETRY' ? isAudioState(telemetry.audioState)
+    : expectedType === 'VIDEO_TELEMETRY' ? isVideoState(telemetry.videoState)
+      : expectedType === 'DISPLAY_TELEMETRY' && typeof telemetry.backgroundLock === 'boolean' &&
+        isNullableString(telemetry.lockedBackgroundValue) && isNullableString(telemetry.userSelectedBackground)
+  if (!valid || !hasSafeNesting(telemetry)) {
     return `${expectedType} payload has invalid telemetry data`
   }
   return null
@@ -980,7 +985,7 @@ const handleApi = async (req, res, url) => {
 
   if (url.pathname === '/api/state' && req.method === 'POST') {
     try {
-      const body = await readBody(req)
+      const body = req.operatorBody
       const parsed = JSON.parse(body)
       if (
         parsed === null ||
@@ -1006,7 +1011,7 @@ const handleApi = async (req, res, url) => {
 
   if (url.pathname === '/api/command' && req.method === 'POST') {
     try {
-      const body = await readBody(req)
+      const body = req.operatorBody
       const parsed = JSON.parse(body)
       const result = reduceRemoteCommandMessage(parsed, req.operatorMeta)
       if (!result.ok) {
@@ -1026,13 +1031,9 @@ const handleApi = async (req, res, url) => {
 
   if (url.pathname === '/api/audio-telemetry' && req.method === 'POST') {
     try {
-      const body = await readBody(req)
+      const body = req.operatorBody
       const telemetry = JSON.parse(body)
-      const error = validateTelemetry(
-        telemetry,
-        'AUDIO_TELEMETRY',
-        (value) => isObjectRecord(value.audioState)
-      )
+      const error = validateTelemetry(telemetry, 'AUDIO_TELEMETRY')
       if (error) {
         sendJson(res, 400, { error })
         return true
@@ -1049,13 +1050,9 @@ const handleApi = async (req, res, url) => {
 
   if (url.pathname === '/api/video-telemetry' && req.method === 'POST') {
     try {
-      const body = await readBody(req)
+      const body = req.operatorBody
       const telemetry = JSON.parse(body)
-      const error = validateTelemetry(
-        telemetry,
-        'VIDEO_TELEMETRY',
-        (value) => value.videoState === null || isObjectRecord(value.videoState)
-      )
+      const error = validateTelemetry(telemetry, 'VIDEO_TELEMETRY')
       if (error) {
         sendJson(res, 400, { error })
         return true
@@ -1072,16 +1069,9 @@ const handleApi = async (req, res, url) => {
 
   if (url.pathname === '/api/display-telemetry' && req.method === 'POST') {
     try {
-      const body = await readBody(req)
+      const body = req.operatorBody
       const telemetry = JSON.parse(body)
-      const error = validateTelemetry(
-        telemetry,
-        'DISPLAY_TELEMETRY',
-        (value) =>
-          typeof value.backgroundLock === 'boolean' &&
-          isNullableString(value.lockedBackgroundValue) &&
-          isNullableString(value.userSelectedBackground)
-      )
+      const error = validateTelemetry(telemetry, 'DISPLAY_TELEMETRY')
       if (error) {
         sendJson(res, 400, { error })
         return true
@@ -1381,9 +1371,23 @@ const server = http.createServer(async (req, res) => {
   if (requireAuth(req, res, url)) return
   const operatorPaths = ['/api/command', '/api/state', '/api/audio-telemetry', '/api/video-telemetry', '/api/display-telemetry'];
   if (req.method === 'POST' && operatorPaths.includes(url.pathname)) {
-    req.operatorMeta = authorizeOperatorCredential(req, { controlOnly: url.pathname === '/api/command' });
+    const controlOnly = url.pathname === '/api/command';
+    const sessionId = presentationSessionStore.getSessionId();
+    req.operatorMeta = authorizeOperatorCredential(req, { controlOnly });
     if (!req.operatorMeta) {
       sendJson(res, 403, { code: 'OPERATOR_FORBIDDEN', error: 'An authorized operator connection is required' });
+      return;
+    }
+    try {
+      req.operatorBody = await readBody(req);
+    } catch (error) {
+      sendJson(res, 400, { error: error.message || 'Invalid request body' });
+      return;
+    }
+    // An ID reused by a replacement Control cannot authorize this connection's pending request.
+    if (presentationSessionStore.getSessionId() !== sessionId ||
+        authorizeOperatorCredential(req, { controlOnly }) !== req.operatorMeta) {
+      sendJson(res, 403, { code: 'OPERATOR_FORBIDDEN', error: 'The original operator connection is no longer authorized' });
       return;
     }
   }
@@ -1402,6 +1406,8 @@ const server = http.createServer(async (req, res) => {
 const voiceScriptureService = createVoiceScriptureService(server)
 
 const handleWsMessageFromClient = (msg, meta, beforeSessionReset) => {
+  if (['AUDIO_TELEMETRY', 'VIDEO_TELEMETRY', 'DISPLAY_TELEMETRY'].includes(msg.type) &&
+      validateTelemetry(msg, msg.type)) return false
   if (msg.type === 'SYNC_STATE') {
     if (meta?.role === 'control' && !canReduceRemoteCommand(meta)) return false
     commitState(normalizeProjectionState(msg), {
@@ -1520,7 +1526,13 @@ server.listen(port, () => {
   const staticLabel = staticDir ? `, serving ${path.relative(rootDir, staticDir)}` : ''
   wsServer = createWsServer(server, handleWsMessageFromClient, {
     presentationSessionStore,
-    onPresentationSessionRotated: (previousSessionId) => { void liveKitApi.onPresentationSessionRotated(previousSessionId) },
+    onPresentationSessionRotated: (previousSessionId) => {
+      resetTimeline()
+      lastActiveCueIndex = -1
+      lastSyncMapId = null
+      void liveKitApi.onPresentationSessionRotated(previousSessionId)
+      broadcastTimelineState()
+    },
     getLiveKitState: () => liveKitApi?.getState?.() || {
       enabled: false,
       available: false,

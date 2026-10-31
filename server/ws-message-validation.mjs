@@ -186,4 +186,7 @@ export {
   microphonePermissionStates,
   microphoneTrackStates,
   liveAudioConnectionStates,
+  isAudioState,
+  isVideoState,
+  hasSafeNesting,
 }

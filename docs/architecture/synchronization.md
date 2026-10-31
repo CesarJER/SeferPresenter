@@ -127,6 +127,11 @@ pendientes. Véase [contrato privado](../api/realtime.md#señales-privadas-envel
   o borraron datos no aportan recuperación; no existe backup servidor individual.
 - RESET_STATE con clearSession, logout, rotación y expiración limpian los estados correspondientes.
   La persistencia del límite de sesión debe completar antes de aceptar el reset.
+  Una rotación confirmada reinicia también la timeline y sus cursores de cues,
+  y publica la timeline inactiva; el evaluador no puede restaurar la presentación
+  de la sesión retirada. Si falla persistir, conserva la timeline anterior.
+  RESET_STATE sin clearSession mantiene su comportamiento previo, sin rotar ni
+  reiniciar esa timeline.
 - La gracia de rejoin de Live Audio conserva estado técnico temporal, no permite
   restaurar automáticamente permisos de hablar tras una nueva admisión. La
   [feature](../features/live-audio.md) detalla captura y reconexión.

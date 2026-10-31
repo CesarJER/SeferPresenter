@@ -1735,7 +1735,11 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
             break
           }
           if (onFallbackMessage) {
-            onFallbackMessage(msg, meta)
+            try {
+              onFallbackMessage(msg, meta)
+            } catch {
+              sendError(ws, 'INVALID_MESSAGE', 'Invalid projection or telemetry message')
+            }
           }
           break
 

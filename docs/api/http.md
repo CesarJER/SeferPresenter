@@ -20,6 +20,12 @@ y vinculado a un WS abierto autorizado; `/api/command` exige Control, estado y
 telemetría también admiten Presenter. Sin autoridad: `403 OPERATOR_FORBIDDEN`.
 No persistir ni publicar esa credencial.
 
+En estado, comandos y telemetría, el guard se comprueba antes de leer el body y
+de nuevo al terminar: deben seguir vigentes la misma conexión autorizada y la
+misma sesión de presentación. Una petición pendiente pierde autoridad al retirar
+esa conexión o rotar sesión, aunque otro Control reutilice su controlSessionId;
+se rechaza con `403 OPERATOR_FORBIDDEN` antes de aplicar cambios.
+
 Audience controlada utiliza `Authorization: Bearer <credencial-audience>`.
 EventSource utiliza un ticket de un uso en `?ticket=<ticket>`, distinto de la
 credencial. Tokens y otras rutas LiveKit aplican sus propios guards incluso si
@@ -51,15 +57,17 @@ español. Véanse [configuración y prioridad de preferencias](../development/i1
 | POST `/api/display-telemetry` | Operador activo; type correspondiente, clientId/origin, `backgroundLock: boolean`, dos campos string o null | Actualiza `lockedBackgroundValue`/`userSelectedBackground` y distribuye |
 
 En telemetría HTTP, `clientId` y `origin` son campos emitidos por los clientes,
-pero el handler no los exige. Comprueba `type`, datos mínimos de la familia y
+pero el handler no los exige. Comprueba `type`, los datos de la familia y
 que `payload`, si existe, sea string u objeto. La autoridad proviene del guard
 de conexión, no del `origin` declarado.
 
 La sintaxis cliente está en [sync.ts](../../src/types/sync.ts),
 [audio.ts](../../src/types/audio.ts) y [presentation.ts](../../src/types/presentation.ts).
 El handler HTTP de estado comprueba mínimos y normaliza: **no aplica íntegramente
-el validador TypeScript del cliente**. Telemetría HTTP comprueba envelope y formas
-básicas, no una validación exhaustiva de cada campo anidado. El reducer valida
+el validador TypeScript del cliente**. Telemetría HTTP y WS comparten la validación
+de audio/video (video admite null) y de los campos de display antes de mutar o
+distribuir. Rechazan tipos inválidos, datos requeridos ausentes y profundidad
+superior a 128; los campos adicionales no tienen un esquema exhaustivo. El reducer valida
 comandos mediante [projection-state-reducer](../../server/projection-state-reducer.mjs).
 
 ## Catálogos, medios y caché
