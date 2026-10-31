@@ -30,7 +30,7 @@ const LanguagePicker = ({ role, supported }: { role: UiRole; supported: readonly
       setFailed(true);
     } finally { setBusy(false); }
   };
-  return <div className="ui-language-picker fixed top-2 start-2 z-100 max-w-[45vw] rounded-md border border-slate-500 bg-slate-950/95 p-1 text-xs text-white shadow-md">
+  return <div className="ui-language-picker hidden fixed top-2 start-2 z-100 max-w-[45vw] rounded-md border border-slate-500 bg-slate-950/95 p-1 text-xs text-white shadow-md">
     <label className="flex items-center gap-1">
       <span aria-hidden="true">🌐</span>
       <span className="sr-only">{t('language', { defaultValue: 'Idioma de la interfaz' })}</span>

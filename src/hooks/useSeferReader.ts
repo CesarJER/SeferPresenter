@@ -163,7 +163,7 @@ export function useSeferReader(enabled = true): UseSeferReaderResult {
       verseStart,
       verseEnd
     );
-  }, [bookData, buildState, chapterVerses, hasActiveRange, rangeChapterVerses.length, selectedChapter, selectedVerse]);
+  }, [bookData, buildState, chapterVerses, hasActiveRange, rangeChapterVerses, selectedChapter, selectedVerse]);
 
   const currentVerse = getCurrentVerseState();
 

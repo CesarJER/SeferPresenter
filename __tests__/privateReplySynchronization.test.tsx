@@ -791,9 +791,9 @@ it('preserves a newer draft typed while an Audience send is pending', async () =
   await act(async () => { release(); });
 
   // Verification: Draft B must be preserved, and recipient must not be reset to 'control'
-  await waitFor(() => expect(input).toHaveProperty('value', 'Draft B'));
+  await waitFor(() => expect(sendBtn).toHaveProperty('disabled', false));
+  expect(input).toHaveProperty('value', 'Draft B');
   expect(selector).toHaveProperty('value', audienceId);
-  expect(sendBtn).toHaveProperty('disabled', false);
 
   // Operator can now send Draft B without interference
   fireEvent.click(sendBtn);

@@ -143,6 +143,12 @@ En shells compatibles pueden usarse `npm`/`npx` sin `.cmd`. El tsconfig raíz
 solo contiene referencias; un `tsc --noEmit` sin proyecto no comprueba los hijos.
 La configuración no habilita strict ni type-check del backend `.mjs`.
 
+El override de `minimatch@^10.2.2` fija 11.0.1 por
+[GHSA-g3hv-75wg-m249](https://github.com/advisories/GHSA-g3hv-75wg-m249).
+Los consumidores de lint aún declaran la versión 10; se comprueban la cobertura
+de archivos de ESLint y los tests de arquitectura con la sustitución. Retirar el
+override cuando esos consumidores admitan una versión corregida.
+
 Los [límites arquitectónicos](../adr/0005-minimal-dependency-boundaries.md) se
 ejecutan con los comandos existentes: `npm run lint` comprueba imports de `src/`
 y `server/`, y `npm test` incluye `architectureBoundaries.test.ts`. CI ejecuta
