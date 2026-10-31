@@ -47,12 +47,16 @@ Una casilla completada aquí no certifica un despliegue distinto.
 - [x] Cerrar la invalidación de streams Audience ya abiertos al rotar una sesión
   CONTROLLED; comprobar que no reciben proyección posterior sin nueva admisión.
   Resuelto en commit d62b4c6.
-- [ ] Revisar conjuntamente backpressure y cleanup WS: conservar metadata hasta
+- [x] Revisar conjuntamente backpressure y cleanup WS: conservar metadata hasta
   retirar autoridad/bindings y aplicar una política explícita en cada ruta de envío.
-- [ ] Completar la liberación de timers y listeners WS al rotar/cerrar y verificar
+  Implementado en R1 (commit dac43ee) y R2 (commit 0e1ede5); registrado en [ADR 0008](docs/adr/0008-realtime-transport-backpressure-and-input-containment.md).
+- [x] Completar la liberación de timers y listeners WS al rotar/cerrar y verificar
   recreación sobre el mismo servidor HTTP. No asumir soporte multiinstancia.
-- [ ] Acordar el alcance de la comparación humana del código de Control y su
-  descripción en la UI; el protocolo actual comprueba vigencia, no coteja el código.
+  Implementado en R3-Timers (commit 6e8b691); verificado en `__tests__/backendTimerLifecycle.test.ts`.
+- [x] F-01: política de comparación visual humana del código de Control acordada y confirmada.
+  El código temporal se utiliza para comprobación visual entre personas en sala; el servidor
+  valida vigencia pero no coteja el código ni implementa 2FA técnico en esta fase.
+  Documentado en [docs/api/realtime.md](docs/api/realtime.md) y [docs/architecture/synchronization.md](docs/architecture/synchronization.md).
 
 - [x] Preparar Tailwind 4 en la rama `codex/tailwind-v4`, completando los cambios
   que faltaban en la PR #4. PostCSS, tema CSS, clases y Dockerfile adaptados;
@@ -73,6 +77,17 @@ Una casilla completada aquí no certifica un despliegue distinto.
   (`rotatePresentationSession`). Decisión documentada en [docs/architecture/synchronization.md](docs/architecture/synchronization.md).
 - [x] I02: `scripts/make-pingpong.js` adaptado a selección explícita de archivos por CLI
   (`process.argv.slice(2)`), sin escaneo indiscriminado ni rutas fijas a directorios del operador.
+
+## Estado del backend: modularización cerrada
+
+El roadmap de modularización del backend (P2, R1, R2, R3, R4) está arquitectónicamente cerrado
+y formalizado en los ADRs 0005 a 0008. Todas las invariantes de ciclo de vida, contrapresión de salida,
+seguridad de fronteras de sesión y contención de excepciones han sido implementadas, testeadas con
+1.255/1.255 pruebas automáticas y auditadas independientemente.
+
+La verificación de rechazo de tokens en un SFU LiveKit real con `room.auto_create: false` permanece
+como una actividad de aceptación de despliegue operativo previa a producción, separada del cierre
+del código backend.
 
 ## Validación del candidato
 

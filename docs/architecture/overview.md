@@ -5,7 +5,8 @@ audiencia y edición. El backend aplica los comandos de proyección soportados;
 Presenter y Audience renderizan su estado. Live Audio y Voice Scripture son opcionales.
 
 Esta referencia describe responsabilidades actuales. Para sintaxis y autorización
-consulte [API](../api/README.md); para transporte y recuperación, [sincronización](synchronization.md).
+consulte [API](../api/README.md); para transporte y recuperación, [sincronización](synchronization.md);
+para el registro de decisiones estructurales, [ADRs](../adr/README.md).
 
 ## Unidades runtime y navegación
 

@@ -1,8 +1,7 @@
 # 0005 — Límites mínimos de dependencias
 
-Estado: Proposed. Los controles están implementados; el registro queda propuesto
-para revisión y aceptación formal.
-Fecha: 2026-10-21.
+Estado: Accepted. Controles implementados, verificados en CI y consolidados tras las fases de modularización backend P2 a R4.
+Fecha de propuesta: 2026-10-21. Aceptación formal: 2026-10-31.
 
 ## Contexto
 
@@ -17,7 +16,7 @@ estáticas de imports por sí solas no cubren `import()` y expresiones de tipo
 interfaces locales del navegador. Una prohibición general de todos los hooks o
 de todos los tipos de ese archivo produciría falsos positivos.
 
-## Decisión propuesta
+## Decisión
 
 - Añadir una sola regla local de ESLint, con tres comprobaciones y sin opciones
   de configuración: dependencias de contratos, propiedad del controlador Scripture

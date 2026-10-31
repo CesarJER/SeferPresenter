@@ -15,10 +15,13 @@ local BroadcastChannel complementa pestañas. Live Audio se entrega a sus
 suscriptores WS, fuera del estado de proyección y de BroadcastChannel/SSE.
 
 Las mutaciones HTTP de proyección y telemetría necesitan una credencial vinculada
-a WS abierto autorizado,
+a WS abierto autorizado (véase [ADR 0003](../adr/0003-active-connection-authority.md)),
 además de Basic cuando está activado. Al caer el WS, el fallback no conserva
-autoridad y recibe 403 hasta reconectar. No atribuir autoridad a un clientId
-copiado, una conexión pendiente, presencia LiveKit o formato UUID.
+autoridad y recibe 403 hasta reconectar. El guard se comprueba antes de leer el body y se revalida
+por igualdad estricta de referencia tras la lectura asíncrona, rechazando credenciales obsoletas
+o conexiones sustitutas (véase [ADR 0008](../adr/0008-realtime-transport-backpressure-and-input-containment.md)).
+Los envíos WebSocket convergen en una política unificada de contrapresión de salida con un límite de 512 KiB.
+No atribuir autoridad a un clientId copiado, una conexión pendiente, presencia LiveKit o formato UUID.
 
 Los snapshots llevan stateEpoch/stateRevision. El gate de
 [useSyncState](../../src/hooks/useSyncState.ts) rechaza snapshots antiguos y
@@ -108,6 +111,10 @@ pendientes. Véase [contrato privado](../api/realtime.md#señales-privadas-envel
   Sin autorizados se rota la clave/frontera privada y puede promocionarse el
   pendiente más antiguo. Los clientes renegocian claves y reenvían estado privado
   vigente; no recuperan historial cifrado.
+  La autorización de Controls secundarios utiliza un código temporal mostrado en pantalla para
+  cotejo visual humano entre operadores. De acuerdo con la política de seguridad aceptada (F-01),
+  el servidor no realiza cotejo automatizado ni actúa como segundo factor técnico (2FA); verifica
+  únicamente la vigencia temporal y el estado pendiente antes de la aprobación explícita del principal.
 - La identidad de sesión de presentación (`presentationSessionId`) utiliza un
   marcador privado en disco (`presentation-session.json`) con una validez de 24 horas
   al arrancar o reiniciar el proceso (`createPresentationSessionStore`). Si el servidor
@@ -116,10 +123,11 @@ pendientes. Véase [contrato privado](../api/realtime.md#señales-privadas-envel
   Durante la ejecución continua en caliente, la sesión en memoria RAM no rota de forma automática
   por reloj para evitar cortes o desconexiones imprevistas en presentaciones activas; la rotación
   en caliente se realiza bajo control explícito del operador (`rotatePresentationSession`).
+  El ciclo de vida y la invalidación en cascada están formalizados en [ADR 0006](../adr/0006-presentation-session-lifecycle.md).
 - RTC utiliza una sala derivada de esa misma identidad; no mantiene otra sesión
-  canónica. Tras persistir una rotación se invalidan los registros/refresh RTC y se
-  retira la sala anterior mediante RPC acotado. La limpieza remota no bloquea ni
-  revierte la frontera local. Véanse [Live Audio](../features/live-audio.md#aislamiento-entre-sesiones)
+  canónica ([ADR 0007](../adr/0007-session-scoped-rtc-and-media-decoupling.md)).
+  Tras persistir una rotación se invalidan los registros/refresh RTC y se retira la sala anterior mediante
+  RPC acotado. La limpieza remota no bloquea ni revierte la frontera local. Véanse [Live Audio](../features/live-audio.md#aislamiento-entre-sesiones)
   y [configuración](../operations/deployment.md#ejecución-local-y-compose).
 - Después del reinicio, Control vuelve a seleccionar la presentación. Los
   dispositivos Audience que regresan con contribuciones locales pueden reconstruir
