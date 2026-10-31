@@ -116,6 +116,11 @@ pendientes. Véase [contrato privado](../api/realtime.md#señales-privadas-envel
   Durante la ejecución continua en caliente, la sesión en memoria RAM no rota de forma automática
   por reloj para evitar cortes o desconexiones imprevistas en presentaciones activas; la rotación
   en caliente se realiza bajo control explícito del operador (`rotatePresentationSession`).
+- RTC utiliza una sala derivada de esa misma identidad; no mantiene otra sesión
+  canónica. Tras persistir una rotación se invalidan los registros/refresh RTC y se
+  retira la sala anterior mediante RPC acotado. La limpieza remota no bloquea ni
+  revierte la frontera local. Véanse [Live Audio](../features/live-audio.md#aislamiento-entre-sesiones)
+  y [configuración](../operations/deployment.md#ejecución-local-y-compose).
 - Después del reinicio, Control vuelve a seleccionar la presentación. Los
   dispositivos Audience que regresan con contribuciones locales pueden reconstruir
   agregados sin duplicar IDs. Los que no vuelven, expiraron por su TTL local independiente

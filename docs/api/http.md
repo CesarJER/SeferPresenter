@@ -221,6 +221,19 @@ operador en header, además de Basic válido. Presenter necesita Basic para toke
 Control necesita además WS autorizado coincidente. En token, role omitido o no
 reconocido se interpreta como Audience: no inferir permiso privilegiado del input.
 
+La sala deriva exclusivamente del identificador canónico de sesión de presentación.
+`roomSession` se acepta por compatibilidad pero se ignora. Antes de emitir o renovar
+un JWT, el backend crea explícitamente la sala vigente y vuelve a comprobar sesión,
+registro y autorización tras las operaciones asíncronas. Los JWT de participantes
+no conceden `roomCreate`. Un fallo de creación devuelve 502 `livekit_unavailable`;
+un trabajo de una sesión retirada devuelve 403 `participant_inactive`.
+
+La rotación invalida registros y credenciales de refresh anteriores antes de
+programar el borrado de su sala. El borrado usa el nombre antiguo capturado,
+timeout RPC de dos segundos y como máximo dos intentos; su fallo no revierte la
+sesión nueva. `not_found` cuenta como sala ausente. Los fallos quedan en logs con
+nombre técnico, intento y status/code saneados, sin JWT ni credenciales.
+
 Los guards de admisión comprueban Audience antes de emitir/renovar token.
 Refresh rechaza participante inactivo (403 participant_inactive), sesión caducada
 (401 session_expired), credencial inválida/reutilizada (403 refresh_credential_invalid),

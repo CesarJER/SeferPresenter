@@ -8,7 +8,7 @@ import * as crypto from '../src/utils/cryptoUtils';
 import { useControlAuthorization } from '../src/hooks/useControlAuthorization';
 
 const media = vi.hoisted(() => ({ availability: 'enabled', state: 'connected', fail: false,
-  publish: vi.fn(async () => {}), unpublish: vi.fn(async () => {}), start: vi.fn(async () => {}), mount: vi.fn() }));
+  publish: vi.fn(async () => {}), unpublish: vi.fn(async () => {}), start: vi.fn(async () => {}), mount: vi.fn(), retire: vi.fn() }));
 const observed = vi.hoisted(() => ({ signals: null as PrivateControlSignalsState | null }));
 vi.mock('../src/hooks/usePrivateControlSignals', async original => {
   const module = await original<typeof import('../src/hooks/usePrivateControlSignals')>();
@@ -17,12 +17,16 @@ vi.mock('../src/hooks/usePrivateControlSignals', async original => {
   } };
 });
 vi.mock('../src/features/liveAudio/hooks/useLiveAudioAvailability', () => ({ useLiveAudioAvailability: () => ({ availability: media.availability }) }));
-vi.mock('../src/features/liveAudio/hooks/useLiveAudio', () => ({ useLiveAudio: () => {
+vi.mock('../src/features/liveAudio/hooks/useLiveAudio', async () => {
+  const { useEffect } = await import('react');
+  return { useLiveAudio: () => {
+  useEffect(() => () => { media.retire(); }, []);
   media.mount(); if (media.fail) throw new Error('Synthetic RTC render failure');
   return { state: media.state, connectionQuality: 'good', participantId: '22222222-2222-4222-8222-222222222222',
     isMicrophoneActive: false, microphoneTrackState: 'off', remoteTracks: [], controlParticipants: [],
     publishMicrophone: media.publish, republishMicrophone: media.publish, unpublishMicrophone: media.unpublish, startRemoteAudio: media.start };
-} }));
+} };
+});
 vi.mock('../src/components/shared/PwaRestartButton', () => ({ PwaRestartButton: () => null }));
 const subscribers = new Set<(type: string, payload: Record<string, unknown>) => void>();
 const subscribe = (handler: (type: string, payload: Record<string, unknown>) => void) => {
@@ -81,6 +85,14 @@ async function start(scenario: string) {
   await waitFor(() => expect(within(panel).getByRole('button', { name: 'Enviar' })).toHaveProperty('disabled', false));
   return { view, Owner, props, panel, shared, keyId, publicKey };
 }
+
+it('retires the RTC adapter on a presentation-session change even if the Control id is reused', async () => {
+  const { view, Owner, props } = await start('enabled');
+  const before = media.retire.mock.calls.length;
+  view.rerender(<StrictMode><Owner {...props} presentationSessionId="session-b" /></StrictMode>);
+  await waitFor(() => expect(media.retire.mock.calls.length).toBeGreaterThan(before));
+  expect(media.publish).not.toHaveBeenCalled();
+});
 
 it.each(['enabled', 'disabled', 'misconfigured', 'unsupported', 'disconnect', 'loadFailure', 'renderFailure', 'buildFalse'])('keeps the actual owner, inbox, queue, admission and E2EE active with RTC=%s', async scenario => {
   const { panel, shared, keyId } = await start(scenario);

@@ -32,6 +32,29 @@ de alias/aviso/admisión. Conceder palabra habilita publicación, pero no abre l
 captura automáticamente: cada navegador confirma su micrófono. Presenter y
 Control mantienen sus permisos específicos; un Control pendiente no modera.
 
+## Aislamiento entre sesiones
+
+Cada sesión de presentación utiliza una sala LiveKit derivada de su UUID canónico
+persistido. Un reinicio con el marcador vigente conserva esa identidad. Una
+rotación retira los registros RTC y sus credenciales anteriores y programa el
+borrado de la sala antigua; no cambia el propietario de la sesión ni la timeline.
+Si el marcador expiró al arrancar, se puede retirar la identidad anterior válida
+sin borrar la nueva. No hay barrido por prefijo ni cola de limpieza persistente.
+
+Los adaptadores cliente liberan la conexión anterior, pistas y timers al cambiar
+su sesión. Audience también detecta un WELCOME con una identidad distinta si no
+recibió el evento de rotación. La reconexión no restaura publicación de micrófono:
+siguen siendo necesarios el permiso vigente, la acción local y el consentimiento
+aplicable. La participación social y E2EE conservan sus propietarios independientes.
+
+Con la configuración [LiveKit](../../config/livekit.yaml), las salas solo se crean
+por el backend. Tras borrar una sala, un JWT de participante no puede recrearla
+por autocreación ni entrar en otra sala. Esto no revoca criptográficamente JWT
+self-hosted. Si el borrado falla, la sala antigua puede seguir accesible; una
+creación con resultado remoto incierto requiere revisar el aviso de limpieza.
+La sesión nueva sigue aislada. El TTL inicial tampoco garantiza que una conexión
+antigua haya terminado: LiveKit puede renovar sus tokens mientras permanece activa.
+
 Cada Control puede activar o desactivar localmente la escucha de audio de programa.
 Esta preferencia no cambia fuente Voice, permiso de captura, transmisión ni
 media-master. Presencia WS y conexión LiveKit se muestran por separado.

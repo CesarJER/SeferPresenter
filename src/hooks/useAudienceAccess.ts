@@ -166,12 +166,15 @@ export function useAudienceAccess() {
   }, [bootstrap, snapshot.accessState]);
 
   const handleWsMessage = useCallback((type: string, payload: Record<string, unknown>) => {
+    const sessionChanged = type === 'WELCOME' && typeof payload.presentationSessionId === 'string'
+      && Boolean(currentRef.current.snapshot.presentationSessionId)
+      && payload.presentationSessionId !== currentRef.current.snapshot.presentationSessionId;
     if (type === 'WELCOME') {
       connectionRevisionRef.current += 1;
       currentRef.current.bound = false;
-      return;
+      if (!sessionChanged) return;
     }
-    if (type === 'PRESENTATION_SESSION_ROTATED' || (type === 'AUDIENCE_ACCESS_STATE' && payload.accessState === 'CREDENTIAL_OBSOLETE')) {
+    if (sessionChanged || type === 'PRESENTATION_SESSION_ROTATED' || (type === 'AUDIENCE_ACCESS_STATE' && payload.accessState === 'CREDENTIAL_OBSOLETE')) {
       generationRef.current += 1;
       bootstrappingRef.current = false;
       currentRef.current = { ...currentRef.current, credential: null, bound: false,

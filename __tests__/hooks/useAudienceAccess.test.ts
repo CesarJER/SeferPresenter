@@ -64,6 +64,20 @@ describe('useAudienceAccess credential identity', () => {
     expect(hook.result.current.credential).toBe('credential-b');
   });
 
+  it('invalidates the previous generation on a changed WELCOME even when the rotation event was missed', async () => {
+    let count = 0;
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({
+      presentationSessionId: ++count === 1 ? 'session-a' : 'session-b',
+      credential: count === 1 ? 'credential-a' : 'credential-b', participantId: 'participant-' + count,
+      accessMode: 'PUBLIC', accessState: 'ADMITTED',
+    }) } as Response)));
+    const hook = renderHook(() => useAudienceAccess());
+    await waitFor(() => expect(hook.result.current.credential).toBe('credential-a'));
+    act(() => hook.result.current.handleWsMessage('WELCOME', { presentationSessionId: 'session-b' }));
+    await waitFor(() => expect(hook.result.current.credential).toBe('credential-b'));
+    expect(hook.result.current.presentationSessionId).toBe('session-b');
+  });
+
   it('distinguishes bootstrap from bind and rejects mismatched sessions or participant IDs', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({
       presentationSessionId: 'session-a', credential: 'credential-a', participantId: 'participant-a',

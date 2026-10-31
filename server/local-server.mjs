@@ -1501,6 +1501,7 @@ server.on('close', () => {
 })
 
 liveKitApi = createLiveKitApi({
+  getPresentationSessionId: () => presentationSessionStore.getSessionId(),
   getLiveAudioControlSnapshot,
   getLiveAudioParticipantState,
   isLiveAudioControlAuthorized,
@@ -1508,6 +1509,8 @@ liveKitApi = createLiveKitApi({
   authorizeOperatorCredential,
   getSessionAccessMode,
 })
+const retiredSessionId = presentationSessionStore.getRetiredSessionId()
+if (retiredSessionId) void liveKitApi.onPresentationSessionRotated(retiredSessionId)
 
 let wsServer
 
@@ -1517,6 +1520,7 @@ server.listen(port, () => {
   const staticLabel = staticDir ? `, serving ${path.relative(rootDir, staticDir)}` : ''
   wsServer = createWsServer(server, handleWsMessageFromClient, {
     presentationSessionStore,
+    onPresentationSessionRotated: (previousSessionId) => { void liveKitApi.onPresentationSessionRotated(previousSessionId) },
     getLiveKitState: () => liveKitApi?.getState?.() || {
       enabled: false,
       available: false,

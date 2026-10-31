@@ -1263,8 +1263,10 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
 
   const rotatePresentationSession = ({ hardRefresh = false } = {}) => {
     // Persist the new boundary before clearing state or notifying any client.
+    const previousSessionId = presentationSessionId
     const nextSessionId = snapshotProviders.presentationSessionStore?.rotate() || randomUUID()
     presentationSessionId = nextSessionId
+    snapshotProviders.onPresentationSessionRotated?.(previousSessionId)
     clearSessionTimers()
     liveAudioControls.clear()
     liveAudioParticipants.clear()

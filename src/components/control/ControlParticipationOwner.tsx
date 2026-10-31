@@ -1269,7 +1269,7 @@ export default function ControlParticipationOwner({
     <>
       {inboxPortal}
       {RtcAdapter && <OptionalRtcBoundary><Suspense fallback={null}>
-        <RtcAdapter model={rtcModel} onMediaChange={setMedia} />
+        <RtcAdapter key={presentationSessionId} model={rtcModel} onMediaChange={setMedia} />
       </Suspense></OptionalRtcBoundary>}
 
       <LiveAudioControlPanel

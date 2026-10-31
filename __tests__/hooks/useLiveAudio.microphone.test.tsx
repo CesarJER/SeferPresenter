@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
+import { act, cleanup, render, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const liveKit = vi.hoisted(() => {
@@ -115,6 +115,28 @@ describe('useLiveAudio microphone publication', () => {
     await waitFor(() => expect(hook.result.current.state).toBe('connected'));
     return hook;
   };
+
+  it('releases the previous microphone and refresh identity when the RTC owner is remounted for a new session', async () => {
+    let current!: ReturnType<typeof useLiveAudio>;
+    function SessionRtc() { current = useLiveAudio({ role: 'audience' }); return null; }
+    const view = render(<SessionRtc key="session-a" />);
+    await waitFor(() => expect(current.state).toBe('connected'));
+    const previousRoom = liveKit.rooms[0];
+    await act(async () => { await current.publishMicrophone(); });
+    const previousTrack = liveKit.createLocalAudioTrack.mock.results[0].value;
+    const track = await previousTrack;
+    expect(current.isMicrophoneActive).toBe(true);
+    (globalThis.fetch as ReturnType<typeof vi.fn>).mockClear();
+    view.rerender(<SessionRtc key="session-b" />);
+    await waitFor(() => expect(liveKit.rooms).toHaveLength(2));
+    await waitFor(() => expect(current.state).toBe('connected'));
+    expect(previousRoom.disconnect).toHaveBeenCalledWith(true);
+    expect(track.stop).toHaveBeenCalled();
+    expect(current.isMicrophoneActive).toBe(false);
+    expect(liveKit.createLocalAudioTrack).toHaveBeenCalledTimes(1);
+    const paths = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls.map(([url]) => url);
+    expect(paths).toEqual(['/api/livekit/token']);
+  });
 
   it('changes from publishing to published only after LiveKit confirms publication', async () => {
     const publication = deferred<unknown>();
