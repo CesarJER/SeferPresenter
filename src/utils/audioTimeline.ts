@@ -27,7 +27,7 @@ export type AudioTimelineAction =
   | { type: 'SET_RATE'; rate: number }
   | { type: 'SET_DURATION'; durationSec: number | null }
   | { type: 'SET_LOOP'; loop: boolean }
-  | { type: 'SET_SYNC_MODE'; syncMode: AudioSyncMode }
+  | { type: 'SET_SYNC_MODE'; syncMode?: AudioSyncMode; mode?: AudioSyncMode; syncMapId?: string | null; presentationId?: string | null }
   | { type: 'END'; positionSec?: number }
   | { type: 'SET_TRACK'; presentationId: string | null; audioSrc: string | null; syncMapId: string | null }
   | { type: 'STOP' };
@@ -228,7 +228,7 @@ export function applyTimelineAction(
       return {
         ...timeline,
         version: timeline.version + 1,
-        syncMode: action.syncMode,
+        syncMode: action.syncMode ?? action.mode ?? 'none',
         updatedBy
       };
 

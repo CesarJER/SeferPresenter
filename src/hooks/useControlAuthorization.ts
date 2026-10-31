@@ -17,6 +17,7 @@ export interface UseControlAuthorizationOptions {
 }
 
 export interface ControlAuthorizationState {
+  presentationSessionId?: string | null;
   controlSessionId: string | null;
   controlState: LiveAudioControlState | null;
   principalControlSessionId: string | null;
@@ -56,6 +57,7 @@ const normalizePendingControls = (value: unknown): PendingControlAuthorization[]
 export function useControlAuthorization(options: UseControlAuthorizationOptions): ControlAuthorizationState {
   const { wsStatus, sendMessage, subscribeToWsMessage } = options;
   const [controlSessionId, setControlSessionId] = useState<string | null>(null);
+  const [presentationSessionId, setPresentationSessionId] = useState<string | null>(null);
   const [controlState, setControlState] = useState<LiveAudioControlState | null>(null);
   const [principalControlSessionId, setPrincipalControlSessionId] = useState<string | null>(null);
   const [verificationCode, setVerificationCode] = useState<string | null>(null);
@@ -90,7 +92,12 @@ export function useControlAuthorization(options: UseControlAuthorizationOptions)
 
   useEffect(() => {
     const unsubscribe = subscribeToWsMessage((type, payload) => {
+      if (type === 'PRESENTATION_SESSION_ROTATED' && typeof payload.presentationSessionId === 'string') {
+        setPresentationSessionId(payload.presentationSessionId);
+        return;
+      }
       if (type === 'WELCOME') {
+        if (typeof payload.presentationSessionId === 'string') setPresentationSessionId(payload.presentationSessionId);
         if (typeof payload.controlSessionId === 'string') setControlSessionId(payload.controlSessionId);
         if (isControlState(payload.controlState)) setControlState(payload.controlState);
         return;
@@ -136,6 +143,7 @@ export function useControlAuthorization(options: UseControlAuthorizationOptions)
   }, [canAuthorize, controlSessionId]);
 
   return {
+    presentationSessionId,
     controlSessionId,
     controlState,
     principalControlSessionId,

@@ -1,7 +1,7 @@
 import { useUiTranslation } from '../../i18n/useUiTranslation';
 import { translate } from '../../i18n/runtime';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { SeferReaderState } from '../../hooks/useSeferReader';
+import type { SeferReaderState } from '../../types/scripture';
 import type { ScriptureNavState } from '../../types/presentation';
 import { getMetadata, type AppMetadata } from '../../utils/metadataCache';
 import { parseVoiceScriptureUtterance, type VoiceScriptureCandidate } from './voiceScriptureParser';

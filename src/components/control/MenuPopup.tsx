@@ -1,9 +1,9 @@
 import { translate } from '../../i18n/runtime';
 import { sameValue } from '../../utils/catalogMerge';
 import { useUiTranslation } from '../../i18n/useUiTranslation';
-import React, { useCallback, useEffect, useState, useRef, Suspense, lazy } from 'react';
+import React, { useCallback, useEffect, useState, useRef } from 'react';
 import type { Presentation, QuizData, Slide, VideoState, AppMode, ScriptureNavState } from '../../types/presentation';
-import type { SeferReaderState } from '../../hooks/useSeferReader';
+import type { SeferReaderState } from '../../types/scripture';
 import { transliterateText } from '../../utils/transliterate';
 import { parseMediaSlideString, serializeMediaToText } from '../../utils/mediaUtils';
 import {
@@ -17,6 +17,7 @@ import {
 import { ArrowUp, Pencil, Maximize2, Minimize2, Music, ArrowUpDown } from 'lucide-react';
 import SeferControlPanel from './SeferControlPanel';
 import SeferControlPanelMini from './SeferControlPanelMini';
+import { useSeferControlLogic } from '../../hooks/useSeferControlLogic';
 import { MediaControls } from './MediaControls';
 import SlideVisualizer from '../shared/SlideVisualizer';
 import { BackgroundSelector } from './BackgroundSelector';
@@ -30,9 +31,7 @@ import type { PendingControlAuthorization, LiveAudioControlState } from '../../t
 import type { WebSocketConnectionStatus } from '../../hooks/useWebSocket';
 import type { RemoteCommandPayload } from '../../types/sync';
 
-const LiveAudioControlContainer = import.meta.env.VITE_SEFER_LIVE_AUDIO_BUILD !== 'false'
-  ? lazy(() => import('../../features/liveAudio/components/control/LiveAudioControlContainer'))
-  : null;
+import ControlParticipationOwner from './ControlParticipationOwner';
 import { useControllerAnswers } from '../../hooks/useQuizAnswers';
 import { QuizControllerView } from '../quiz/QuizControllerView';
 import { applyNeutralBrandingFallback } from '../../utils/branding';
@@ -99,7 +98,7 @@ interface MenuPopupProps {
   onQuizPlayApplause?: () => void;
   onQuizPlayMal?: () => void;
   onQuizAdjustTimer?: (seconds: number) => void;
-  controlAuthorization?: { role: string; verificationCode?: string; pendingControls?: PendingControlAuthorization[]; controlState?: LiveAudioControlState | null; };
+  controlAuthorization?: { role: string; verificationCode?: string; pendingControls?: PendingControlAuthorization[]; controlState?: LiveAudioControlState | null; presentationSessionId?: string | null; };
   onApproveControlRequest?: (sessionId: string) => void;
   onRejectControlRequest?: (sessionId: string) => void;
   wsSend?: (type: string, payload?: unknown) => boolean;
@@ -226,6 +225,16 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
     }
   };
   const isActiveScriptureSlide = !!activeSlide && (activeSlide.type === 'sefer' || activeSlide.type === 'tanaj' || !!activeSlide.scriptureBook);
+  const scriptureController = useSeferControlLogic({
+    keyboardMode: appMode === 'seferManual' ? 'manual' : isActiveScriptureSlide && scriptureState ? 'projected' : null,
+    onProject: onProjectScripture,
+    onDeactivate: () => onToggleAppMode('slides'),
+    onAddSlide: onAddScriptureSlide,
+    onBoundaryReached,
+    restoredState: scriptureState,
+    onUpdateFontSizes: onUpdateScriptureFontSizes,
+  });
+  const resolvedScriptureState = scriptureController.currentVerse;
 
   const [id, setId] = useState('');
   const [title, setTitle] = useState('');
@@ -236,8 +245,6 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isMusicPanelOpen, setIsMusicPanelOpen] = useState(false);
   const [voiceSuggestionsTarget, setVoiceSuggestionsTarget] = useState<HTMLDivElement | null>(null);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [resolvedScriptureState, setResolvedScriptureState] = useState<any>(null);
 
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const resetDialogRef = useRef<HTMLDivElement>(null);
@@ -365,13 +372,8 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
   useEffect(() => {
     const videoPaths = new Set<string>();
     slides.forEach(slide => {
-      if (slide.type === 'media' && slide.mediaSrc) {
+      if (slide.type === 'media' && slide.mediaSrc && /\.(mp4|webm|ogg|mov)$/i.test(slide.mediaSrc)) {
         videoPaths.add(slide.mediaSrc);
-      }
-    });
-    backgrounds.forEach(bg => {
-      if (bg.match(/\.(mp4|webm)$/i)) {
-        videoPaths.add(bg);
       }
     });
 
@@ -1679,20 +1681,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
         <div className="shrink-0 border-b border-gray-700 bg-gray-950/70 flex flex-col md:flex-row">
           {appMode === 'seferManual' && (
             <div className="min-w-0 flex-1">
-              <SeferControlPanel
-                onProject={(state, cmd) => {
-                  if (onProjectScripture) {
-                    onProjectScripture(state, cmd);
-                  }
-                }}
-                onDeactivate={() => {
-                  if (onToggleAppMode) onToggleAppMode('slides');
-                }}
-                onAddSlide={onAddScriptureSlide}
-                restoredState={scriptureState}
-                onUpdateFontSizes={onUpdateScriptureFontSizes}
-                onVerseResolved={(state) => setResolvedScriptureState(state)}
-              />
+              <SeferControlPanel controller={scriptureController} />
             </div>
           )}
           <div ref={setVoiceSuggestionsTarget} className="empty:hidden md:w-64 md:shrink-0" />
@@ -1833,17 +1822,7 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
                     {/* ── Sefer Control Panel Mini ───────────────────────────────── */}
                     {appMode !== 'seferManual' && isActiveScriptureSlide && scriptureState && (
                       <div id="section-sefer-control-mini" className="rounded-md border border-gray-800 bg-gray-950/50">
-                        <SeferControlPanelMini
-                          onProject={(state, cmd) => {
-                            if (onProjectScripture) {
-                              onProjectScripture(state, cmd);
-                            }
-                          }}
-                          onBoundaryReached={onBoundaryReached}
-                          restoredState={scriptureState}
-                          onUpdateFontSizes={onUpdateScriptureFontSizes}
-                          onVerseResolved={(state) => setResolvedScriptureState(state)}
-                        />
+                        <SeferControlPanelMini controller={scriptureController} />
                       </div>
                     )}
 
@@ -1909,7 +1888,11 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
           <SlideVisualizer
             slide={activeSlide}
             appMode={appMode}
-            scriptureState={resolvedScriptureState || scriptureState}
+            scriptureState={resolvedScriptureState ? {
+              ...scriptureState,
+              ...resolvedScriptureState,
+              verseStart: resolvedScriptureState.verseStart ?? resolvedScriptureState.verse,
+            } : scriptureState}
             quizSubslide={activeSlide?.type === 'quiz' ? quizSubslides[quizCurrentSubslideIndex] : undefined}
             videoState={videoState}
             isMediaMaster={isMediaMaster}
@@ -2092,34 +2075,31 @@ const MenuPopup: React.FC<MenuPopupProps> = ({
         </div>
       )}
 
-      {/* Live Audio Control Container */}
-      {LiveAudioControlContainer && (
-        <Suspense fallback={null}>
-          <LiveAudioControlContainer
-            scriptureState={scriptureState}
-            voiceSuggestionsTarget={voiceSuggestionsTarget}
-            onProjectScripture={(state, command) => {
-              onToggleAppMode('seferManual');
-              onProjectScripture?.(state, command);
-            }}
-            isControlAuthorized={controlAuthorization?.role === 'principal' || controlAuthorization?.role === 'delegated'}
-            programAudioEnabled={programAudioEnabled}
-            onProgramAudioEnabledChange={onProgramAudioEnabledChange}
-            authorizationRequests={controlAuthorization?.pendingControls || []}
-            onApproveRequest={onApproveControlRequest}
-            onRejectRequest={onRejectControlRequest}
-            wsSend={wsSend}
-            subscribeToWsMessage={subscribeToWsMessage}
-            wsStatus={wsStatus}
-            controlSessionId={controlSessionId}
-            controlState={controlAuthorization?.controlState}
-            verificationCode={controlAuthorization?.verificationCode}
-          />
-        </Suspense>
-      )}
+      {/* Stable participation; RTC is an optional sibling inside the owner. */}
+      <ControlParticipationOwner
+        key={controlSessionId}
+        presentationSessionId={controlAuthorization?.presentationSessionId}
+        scriptureState={scriptureState}
+        voiceSuggestionsTarget={voiceSuggestionsTarget}
+        onProjectScripture={(state, command) => {
+          onToggleAppMode('seferManual');
+          onProjectScripture?.(state, command);
+        }}
+        isControlAuthorized={controlAuthorization?.role === 'principal' || controlAuthorization?.role === 'delegated'}
+        programAudioEnabled={programAudioEnabled}
+        onProgramAudioEnabledChange={onProgramAudioEnabledChange}
+        authorizationRequests={controlAuthorization?.pendingControls || []}
+        onApproveRequest={onApproveControlRequest}
+        onRejectRequest={onRejectControlRequest}
+        wsSend={wsSend}
+        subscribeToWsMessage={subscribeToWsMessage}
+        wsStatus={wsStatus}
+        controlSessionId={controlSessionId}
+        controlState={controlAuthorization?.controlState}
+        verificationCode={controlAuthorization?.verificationCode}
+      />
     </div>
   );
 };
 
 export default MenuPopup;
-

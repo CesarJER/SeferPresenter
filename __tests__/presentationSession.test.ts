@@ -57,6 +57,17 @@ beforeEach(() => {
   resetWsServerStateForTests();
 });
 
+it('exposes only a valid expired session for bounded startup room cleanup', () => {
+  const now = 2 * PRESENTATION_SESSION_TTL_MS;
+  const original = createPresentationSessionStore({ filePath, now: () => 0 });
+  const restarted = createPresentationSessionStore({ filePath, now: () => now });
+  expect(restarted.getSessionId()).not.toBe(original.getSessionId());
+  expect(restarted.getRetiredSessionId()).toBe(original.getSessionId());
+  const warmRestart = createPresentationSessionStore({ filePath, now: () => now });
+  expect(warmRestart.getSessionId()).toBe(restarted.getSessionId());
+  expect(warmRestart.getRetiredSessionId()).toBeUndefined();
+});
+
 afterEach(async () => {
   clients.forEach((client) => client.terminate());
   clients = [];

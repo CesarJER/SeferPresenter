@@ -20,6 +20,12 @@ y vinculado a un WS abierto autorizado; `/api/command` exige Control, estado y
 telemetría también admiten Presenter. Sin autoridad: `403 OPERATOR_FORBIDDEN`.
 No persistir ni publicar esa credencial.
 
+En estado, comandos y telemetría, el guard se comprueba antes de leer el body y
+de nuevo al terminar: deben seguir vigentes la misma conexión autorizada y la
+misma sesión de presentación. Una petición pendiente pierde autoridad al retirar
+esa conexión o rotar sesión, aunque otro Control reutilice su controlSessionId;
+se rechaza con `403 OPERATOR_FORBIDDEN` antes de aplicar cambios.
+
 Audience controlada utiliza `Authorization: Bearer <credencial-audience>`.
 EventSource utiliza un ticket de un uso en `?ticket=<ticket>`, distinto de la
 credencial. Tokens y otras rutas LiveKit aplican sus propios guards incluso si
@@ -51,15 +57,17 @@ español. Véanse [configuración y prioridad de preferencias](../development/i1
 | POST `/api/display-telemetry` | Operador activo; type correspondiente, clientId/origin, `backgroundLock: boolean`, dos campos string o null | Actualiza `lockedBackgroundValue`/`userSelectedBackground` y distribuye |
 
 En telemetría HTTP, `clientId` y `origin` son campos emitidos por los clientes,
-pero el handler no los exige. Comprueba `type`, datos mínimos de la familia y
+pero el handler no los exige. Comprueba `type`, los datos de la familia y
 que `payload`, si existe, sea string u objeto. La autoridad proviene del guard
 de conexión, no del `origin` declarado.
 
 La sintaxis cliente está en [sync.ts](../../src/types/sync.ts),
 [audio.ts](../../src/types/audio.ts) y [presentation.ts](../../src/types/presentation.ts).
 El handler HTTP de estado comprueba mínimos y normaliza: **no aplica íntegramente
-el validador TypeScript del cliente**. Telemetría HTTP comprueba envelope y formas
-básicas, no una validación exhaustiva de cada campo anidado. El reducer valida
+el validador TypeScript del cliente**. Telemetría HTTP y WS comparten la validación
+de audio/video (video admite null) y de los campos de display antes de mutar o
+distribuir. Rechazan tipos inválidos, datos requeridos ausentes y profundidad
+superior a 128; los campos adicionales no tienen un esquema exhaustivo. El reducer valida
 comandos mediante [projection-state-reducer](../../server/projection-state-reducer.mjs).
 
 ## Catálogos, medios y caché
@@ -127,6 +135,18 @@ El bootstrap incluye `presentationSessionId`, `participantId`, `accessMode`,
 la devuelve otra vez. El backend guarda su digest y registro en RAM. Los tickets
 caducan a los 30 segundos y se consumen también cuando el propósito no coincide:
 solicitar uno nuevo para otra conexión. Rotar sesión o política invalida tickets.
+
+La admisión SSE se comprueba al abrir la conexión. Tras persistir correctamente
+una rotación de sesión, el servidor invalida las credenciales y tickets anteriores
+y termina las suscripciones Audience STATE y QUIZ antes de publicar el estado
+de la nueva sesión. Las suscripciones administrativas se conservan. En modo
+CONTROLLED, Audience debe obtener nueva admisión y tickets; en PUBLIC se mantiene
+la política de acceso público. Si falla la persistencia antes de completar la
+rotación, la sesión y los streams anteriores siguen vigentes.
+
+El cierre impide escribir datos de la sesión nueva al stream retirado; pueden
+terminar de llegar bytes de la sesión anterior ya enviados. Esta garantía no
+supone revocación de permisos RTC ni solución de otros riesgos de lifecycle.
 
 El cliente conserva la credencial de acceso en `sefer-audience-access` ligada
 a la sesión. Este registro tiene un lifecycle distinto de las respuestas con
@@ -208,6 +228,19 @@ Bodies de moderación incluyen `role: 'control'`, `controlSessionId` y credencia
 operador en header, además de Basic válido. Presenter necesita Basic para token;
 Control necesita además WS autorizado coincidente. En token, role omitido o no
 reconocido se interpreta como Audience: no inferir permiso privilegiado del input.
+
+La sala deriva exclusivamente del identificador canónico de sesión de presentación.
+`roomSession` se acepta por compatibilidad pero se ignora. Antes de emitir o renovar
+un JWT, el backend crea explícitamente la sala vigente y vuelve a comprobar sesión,
+registro y autorización tras las operaciones asíncronas. Los JWT de participantes
+no conceden `roomCreate`. Un fallo de creación devuelve 502 `livekit_unavailable`;
+un trabajo de una sesión retirada devuelve 403 `participant_inactive`.
+
+La rotación invalida registros y credenciales de refresh anteriores antes de
+programar el borrado de su sala. El borrado usa el nombre antiguo capturado,
+timeout RPC de dos segundos y como máximo dos intentos; su fallo no revierte la
+sesión nueva. `not_found` cuenta como sala ausente. Los fallos quedan en logs con
+nombre técnico, intento y status/code saneados, sin JWT ni credenciales.
 
 Los guards de admisión comprueban Audience antes de emitir/renovar token.
 Refresh rechaza participante inactivo (403 participant_inactive), sesión caducada

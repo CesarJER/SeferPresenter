@@ -154,7 +154,9 @@ services:
         fi
         is_ipv4 "$$NODE_IP" || { echo "LIVEKIT_NODE_IP is not a valid IPv4 address" >&2; exit 1; }
         export NODE_IP
-        exec /livekit-server
+        exec /livekit-server --config /etc/sefer-livekit.yaml
+    volumes:
+      - ./config/livekit.yaml:/etc/sefer-livekit.yaml:ro
     environment:
       - LIVEKIT_API_KEY=${LIVEKIT_API_KEY:-}
       - LIVEKIT_API_SECRET=${LIVEKIT_API_SECRET:-}

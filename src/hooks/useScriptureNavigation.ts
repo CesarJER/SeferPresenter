@@ -1,6 +1,6 @@
 import { useCallback, useRef, useEffect } from 'react';
 import type { AppMode, Presentation, ScriptureNavState, SeferOnlineRefPayload, Slide, VideoState, PresentationStep } from '../types/presentation';
-import type { SeferReaderState } from './useSeferReader';
+import type { SeferReaderState } from '../types/scripture';
 import { getScriptureChapterVerses } from '../utils/scriptureLookup';
 import type { AudioState } from '../types/audio';
 

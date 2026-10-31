@@ -2,6 +2,23 @@ import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypt
 import { WebSocket, WebSocketServer } from 'ws'
 import { applyAction, getTimeline } from './timelineManager.mjs'
 import { hasAllowedRequestOrigin, isAuthRequired, hasValidBasicAuth } from './authUtils.mjs'
+import {
+  isValidParticipantId,
+  isValidBase64,
+  validatePrivateControlSignal,
+  validateParticipantStatus,
+  validateActiveParticipantProfile,
+  validateModerationMessage,
+  validateLargePresentationMessage,
+  WS_ORDINARY_PAYLOAD_BYTES,
+  microphonePermissionStates,
+  microphoneTrackStates,
+  liveAudioConnectionStates,
+} from './ws-message-validation.mjs'
+import {
+  makeOperationalParticipantSnapshot,
+  makeReducedParticipantStatus,
+} from './ws-participant-snapshots.mjs'
 
 const wsClients = new Map()
 export const authorizeOperatorCredential = (req, { controlOnly = false } = {}) => {
@@ -33,25 +50,10 @@ let externalBroadcastState = {
   revision: 0,
   updatedAt: Date.now(),
 }
-const PRIVATE_CONTROL_SIGNAL_MAX_CIPHERTEXT_BYTES = 4096
 const PRIVATE_CONTROL_SIGNAL_RATE_LIMIT = 5
 const PRIVATE_CONTROL_SIGNAL_RATE_WINDOW_MS = 60_000
-const WS_MAX_PAYLOAD_BYTES = 64 * 1024
+const WS_MAX_PAYLOAD_BYTES = 512 * 1024
 const WS_MAX_BUFFERED_BYTES = 512 * 1024
-const uuidV4Pattern = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
-const base64Pattern = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/
-const speakerStates = new Set(['LISTENER', 'REQUESTED', 'GRANTED', 'MUTED', 'REVOKED'])
-const microphonePermissionStates = new Set(['unknown', 'prompt', 'denied', 'granted', 'unavailable'])
-const liveAudioConnectionStates = new Set(['connected', 'connecting', 'reconnecting', 'reconnected', 'reconnectFailed', 'disconnected', 'permissionDenied', 'unavailable'])
-const microphoneTrackStates = new Set(['notRequested', 'off', 'publishing', 'published', 'mutedByUser', 'mutedByControl', 'error'])
-const liveAudioModerationTypes = new Set([
-  'LIVE_AUDIO_GRANT_SPEAK',
-  'LIVE_AUDIO_REVOKE_SPEAK',
-  'LIVE_AUDIO_MUTE_PARTICIPANT',
-  'LIVE_AUDIO_MUTE_ALL',
-  'LIVE_AUDIO_KICK_PARTICIPANT',
-  'LIVE_AUDIO_RESCUE_PARTICIPANT',
-])
 const audienceAllowedTypes = new Set([
   'SERVER_TIME_PING',
   'AUDIENCE_ACCESS_BIND',
@@ -198,16 +200,6 @@ const generateVerificationCode = () => {
   return `${number.slice(0, 3)}-${number.slice(3)}`
 }
 
-const isValidParticipantId = (value) => typeof value === 'string' && uuidV4Pattern.test(value)
-
-const isValidBase64 = (value) =>
-  typeof value === 'string' && value.length > 0 && base64Pattern.test(value)
-
-const getBase64ByteLength = (value) => {
-  const padding = value.endsWith('==') ? 2 : value.endsWith('=') ? 1 : 0
-  return Math.floor((value.length * 3) / 4) - padding
-}
-
 const isControlAuthorized = (control) =>
   control?.controlState === 'PRINCIPAL' || control?.controlState === 'AUTHORIZED'
 
@@ -302,51 +294,6 @@ const getConnectionCountsSnapshot = () => {
   }
 }
 
-const inferOperationalRole = (participant) => {
-  if (participant.role === 'control') return 'control'
-  if (participant.role === 'presenter') return 'presenter'
-  if (participant.isKicked || participant.speakerState === 'REVOKED' || participant.isActiveAudience === false) return 'pasivo'
-  if (participant.speakerState === 'REQUESTED') return 'cola'
-  if (participant.speakerState === 'GRANTED' || participant.isMicrophoneActive) return 'orador'
-  return 'activo'
-}
-
-const inferMicrophoneTrackState = (participant) => {
-  if (participant.microphoneTrackState) return participant.microphoneTrackState
-  if (participant.isKicked || participant.speakerState === 'REVOKED') return 'off'
-  if (participant.isMicrophoneActive) return 'published'
-  if (participant.speakerState === 'GRANTED' && participant.isMuted) return 'mutedByControl'
-  if (participant.canPublishAudio) return 'off'
-  return 'notRequested'
-}
-
-const makeOperationalParticipantSnapshot = (participant) => {
-  const participantId = participant.participantId
-  return {
-    participantId,
-    role: participant.role,
-    operationalRole: inferOperationalRole(participant),
-    microphonePermissionState: participant.microphonePermissionState || 'unknown',
-    microphoneTrackState: participant.microphoneTrackState || inferMicrophoneTrackState(participant),
-    liveAudioConnectionState: participant.liveAudioConnectionState,
-    speakerState: participant.speakerState,
-    canSubscribe: participant.canSubscribe,
-    canPublishAudio: participant.canPublishAudio,
-    isMuted: participant.isMuted,
-    isActiveAudience: participant.isActiveAudience,
-    isMicrophoneActive: participant.isMicrophoneActive,
-    isKicked: participant.isKicked,
-    isAliasVisibleToActiveParticipants: participant.isAliasVisibleToActiveParticipants ?? false,
-    canViewActiveParticipants: participant.canViewActiveParticipants ?? false,
-    isAliasHiddenByControl: participant.isAliasHiddenByControl ?? false,
-    activeListPublicKey: participant.activeListPublicKey,
-    connected: Boolean(participant.ws && participant.ws.readyState === WebSocket.OPEN),
-    connectedAt: participant.connectedAt,
-    disconnectedAt: participant.disconnectedAt,
-    updatedAt: participant.updatedAt,
-  }
-}
-
 const makeOperationalSnapshot = ({ liveKitState, quizAggregate } = {}) => {
   const participants = Array.from(liveAudioParticipants.values()).map((participant) =>
     makeOperationalParticipantSnapshot(participant))
@@ -420,16 +367,74 @@ const broadcastMediaMasterStatus = () => {
   }, (meta) => meta.role === 'control')
 }
 
-const broadcastWs = (message, filter) => {
+const retireWsClient = (client, code, reason) => {
+  wsClients.get(client)?.cleanup()
+  if (client.readyState === WebSocket.CLOSED) return
+  try {
+    if (code) client.close(code, reason)
+    else client.terminate()
+  } catch {
+    client.terminate()
+  }
+}
+
+const canSendWsFrame = (client, bytes) => {
+  if (client?.readyState !== WebSocket.OPEN) return false
+  if (client.bufferedAmount + bytes > WS_MAX_BUFFERED_BYTES) {
+    retireWsClient(client, 1013, 'Slow consumer')
+    return false
+  }
+  return true
+}
+
+const serializeWsMessage = (message) => {
   const data = JSON.stringify(message)
+  const bytes = Buffer.byteLength(data)
+  // Server text frames are unmasked and uncompressed; bufferedAmount includes framing.
+  return { data, bytes: bytes + (bytes < 126 ? 2 : bytes < 65536 ? 4 : 10) }
+}
+
+const sendWsFrame = (client, frame) => {
+  if (!canSendWsFrame(client, frame.bytes)) return false
+  try {
+    client.send(frame.data, (error) => {
+      if (error) retireWsClient(client)
+    })
+    return true
+  } catch {
+    retireWsClient(client)
+    return false
+  }
+}
+
+const sendJson = (client, message) => {
+  if (client?.readyState !== WebSocket.OPEN) return false
+  let frame
+  try {
+    frame = serializeWsMessage(message)
+  } catch {
+    retireWsClient(client, 1011, 'Serialization failure')
+    return false
+  }
+  return sendWsFrame(client, frame)
+}
+
+const broadcastWs = (message, filter) => {
+  let frame
+  try {
+    frame = serializeWsMessage(message)
+  } catch {
+    for (const [client, meta] of wsClients) {
+      if (client.readyState === WebSocket.OPEN && (!filter || filter(meta))) {
+        retireWsClient(client, 1011, 'Serialization failure')
+      }
+    }
+    return
+  }
   for (const [client, meta] of wsClients) {
     if (client.readyState !== WebSocket.OPEN) continue
     if (filter && !filter(meta)) continue
-    try {
-      client.send(data)
-    } catch {
-      wsClients.delete(client)
-    }
+    sendWsFrame(client, frame)
   }
 }
 
@@ -481,72 +486,26 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
   const wss = new WebSocketServer({
     noServer: true,
     maxPayload: WS_MAX_PAYLOAD_BYTES,
+    autoPong: false,
   })
+  let closed = false
 
-  httpServer.on('upgrade', (request, socket, head) => {
+  const handleUpgrade = (request, socket, head) => {
     const url = new URL(request.url || '/', `http://${request.headers.host || 'localhost'}`)
     if (url.pathname === '/ws') {
       wss.handleUpgrade(request, socket, head, (ws) => {
         wss.emit('connection', ws, request)
       })
     }
+  }
+  httpServer.on('upgrade', handleUpgrade)
+
+  const broadcast = broadcastWs
+
+  const makeConnectionCountsMessage = () => ({
+    type: 'LIVE_AUDIO_CONNECTION_COUNTS',
+    ...getConnectionCountsSnapshot(),
   })
-
-  const broadcast = (message, filter) => {
-    const data = typeof message === 'string' ? message : JSON.stringify(message)
-    for (const [client, meta] of wsClients) {
-      if (client.readyState !== WebSocket.OPEN) continue
-      if (filter && !filter(meta)) continue
-      if (client.bufferedAmount > WS_MAX_BUFFERED_BYTES) {
-        wsClients.delete(client)
-        client.close(1013, 'Slow consumer')
-        continue
-      }
-      try {
-        client.send(data)
-      } catch {
-        wsClients.delete(client)
-      }
-    }
-  }
-
-  const sendJson = (client, message) => {
-    if (client.readyState !== WebSocket.OPEN) return false
-    if (client.bufferedAmount > WS_MAX_BUFFERED_BYTES) {
-      wsClients.delete(client)
-      client.close(1013, 'Slow consumer')
-      return false
-    }
-    try {
-      client.send(JSON.stringify(message))
-      return true
-    } catch {
-      wsClients.delete(client)
-      return false
-    }
-  }
-
-  const makeConnectionCountsMessage = () => {
-    const counts = {
-      audienceConnections: 0,
-      controlConnections: 0,
-      presenterConnections: 0,
-    }
-
-    for (const [client, meta] of wsClients) {
-      if (client.readyState !== WebSocket.OPEN) continue
-      if (meta.role === 'audience') counts.audienceConnections += 1
-      if (meta.role === 'control') counts.controlConnections += 1
-      if (meta.role === 'presenter') counts.presenterConnections += 1
-    }
-
-    return {
-      type: 'LIVE_AUDIO_CONNECTION_COUNTS',
-      totalConnections: counts.audienceConnections + counts.controlConnections + counts.presenterConnections,
-      ...counts,
-      updatedAt: Date.now(),
-    }
-  }
 
   const broadcastConnectionCounts = () => {
     const message = makeConnectionCountsMessage()
@@ -772,6 +731,8 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
     resetPrivateControlSession()
 
     if (pending[0]) {
+      clearTimeout(pending[0].expiryTimer)
+      pending[0].expiryTimer = undefined
       pending[0].controlState = 'PRINCIPAL'
       pending[0].verificationCode = undefined
       pending[0].codeExpiresAt = undefined
@@ -784,6 +745,7 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
   const removeControl = (controlSessionId) => {
     const control = liveAudioControls.get(controlSessionId)
     if (!control) return
+    clearTimeout(control.expiryTimer)
     const wasPrincipal = control.controlState === 'PRINCIPAL'
     liveAudioControls.delete(controlSessionId)
     if (wasPrincipal) {
@@ -793,9 +755,9 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
     }
   }
 
-  const expirePendingControl = (controlSessionId) => {
-    const control = liveAudioControls.get(controlSessionId)
-    if (!control || control.controlState !== 'PENDING') return
+  const expirePendingControl = (control) => {
+    if (liveAudioControls.get(control.controlSessionId) !== control || control.controlState !== 'PENDING') return
+    control.expiryTimer = undefined
     control.verificationCode = undefined
     control.codeExpiresAt = Date.now()
     sendAuthorizationState(control)
@@ -820,7 +782,7 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
     if (control.controlState === 'PENDING') {
       control.verificationCode = generateVerificationCode()
       control.codeExpiresAt = connectedAt + getControlCodeTtlMs()
-      control.expiryTimer = setTimeout(() => expirePendingControl(controlSessionId), getControlCodeTtlMs())
+      control.expiryTimer = setTimeout(() => expirePendingControl(control), getControlCodeTtlMs())
       control.expiryTimer.unref?.()
     }
 
@@ -828,13 +790,11 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
     return control
   }
 
-  const isAuthorizedToDecide = (control) => canAuthorizeControls(control)
-
   const handleAuthorizationDecision = (meta, msg) => {
     const issuer = liveAudioControls.get(meta?.controlSessionId)
     const target = liveAudioControls.get(msg.targetControlSessionId)
 
-    if (!isAuthorizedToDecide(issuer)) {
+    if (!canAuthorizeControls(issuer)) {
       sendError(meta.ws, 'CONTROL_AUTH_FORBIDDEN', 'Control is not allowed to authorize other controls')
       return
     }
@@ -917,57 +877,6 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
       meta.role === 'audience' &&
       (meta.participantId === msg.toParticipantId || meta.audienceAccessId === msg.toParticipantId)
     ))
-  }
-
-  const validatePrivateControlSignal = (msg, senderRole = 'audience') => {
-    if (!msg || typeof msg !== 'object' || Array.isArray(msg)) return false
-    if (msg.type !== 'PRIVATE_CONTROL_SIGNAL') return false
-    if (senderRole === 'control') {
-      if (typeof msg.fromParticipantId !== 'string' || msg.fromParticipantId.trim() === '') return false
-    } else if (!isValidParticipantId(msg.fromParticipantId)) {
-      return false
-    }
-    if (msg.toControlSessionId !== undefined && typeof msg.toControlSessionId !== 'string') return false
-    if (msg.toParticipantId !== undefined && !isValidParticipantId(msg.toParticipantId)) return false
-    if (senderRole === 'audience' && msg.toParticipantId !== undefined) return false
-    if (senderRole === 'control' && msg.toParticipantId !== undefined && !isValidParticipantId(msg.toParticipantId)) return false
-    if (typeof msg.keyId !== 'string' || msg.keyId.trim() === '') return false
-    if (!isValidBase64(msg.ephemeralPublicKey)) return false
-    if (!isValidBase64(msg.ciphertext)) return false
-    if (getBase64ByteLength(msg.ciphertext) > PRIVATE_CONTROL_SIGNAL_MAX_CIPHERTEXT_BYTES) return false
-    if (!isValidBase64(msg.nonce) || getBase64ByteLength(msg.nonce) !== 12) return false
-    if (msg.createdAt !== undefined && (typeof msg.createdAt !== 'number' || !Number.isFinite(msg.createdAt))) return false
-    return true
-  }
-
-  const validateParticipantStatus = (msg, expectedRole) => {
-    if (!msg || typeof msg !== 'object' || Array.isArray(msg)) return false
-    if (msg.type !== 'LIVE_AUDIO_PARTICIPANT_STATUS') return false
-    if (!isValidParticipantId(msg.participantId)) return false
-    if (msg.role !== expectedRole) return false
-    if (typeof msg.speakerState !== 'string' || !speakerStates.has(msg.speakerState)) return false
-    if (typeof msg.canSubscribe !== 'boolean') return false
-    if (typeof msg.canPublishAudio !== 'boolean') return false
-    if (msg.isMuted !== undefined && typeof msg.isMuted !== 'boolean') return false
-    if (msg.isActiveAudience !== undefined && typeof msg.isActiveAudience !== 'boolean') return false
-    if (msg.isMicrophoneActive !== undefined && typeof msg.isMicrophoneActive !== 'boolean') return false
-    if (msg.isKicked !== undefined && typeof msg.isKicked !== 'boolean') return false
-    if (msg.microphonePermissionState !== undefined && !microphonePermissionStates.has(msg.microphonePermissionState)) return false
-    if (msg.microphoneTrackState !== undefined && !microphoneTrackStates.has(msg.microphoneTrackState)) return false
-    if (msg.liveAudioConnectionState !== undefined && !liveAudioConnectionStates.has(msg.liveAudioConnectionState)) return false
-    if (msg.updatedAt !== undefined && (typeof msg.updatedAt !== 'number' || !Number.isFinite(msg.updatedAt))) return false
-    return msg.alias === undefined
-  }
-
-  const validateActiveParticipantProfile = (msg) => {
-    if (!msg || typeof msg !== 'object' || Array.isArray(msg)) return false
-    if (msg.type !== 'LIVE_AUDIO_ACTIVE_PARTICIPANT_PROFILE') return false
-    if (!isValidParticipantId(msg.participantId)) return false
-    if (msg.alias !== undefined) return false
-    if (!isValidBase64(msg.activeListPublicKey)) return false
-    if (typeof msg.isAliasVisibleToActiveParticipants !== 'boolean') return false
-    if (msg.createdAt !== undefined && (typeof msg.createdAt !== 'number' || !Number.isFinite(msg.createdAt))) return false
-    return true
   }
 
   const bindParticipantToConnection = (meta, participantId, status = {}) => {
@@ -1061,7 +970,9 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
     participant.disconnectedAt = Date.now()
     participant.cleanupDueAt = participant.disconnectedAt + getRejoinGraceMs()
     clearTimeout(participant.cleanupTimer)
-    participant.cleanupTimer = setTimeout(() => cleanupExpiredParticipant(participantId), getRejoinGraceMs())
+    participant.cleanupTimer = setTimeout(() => {
+      if (liveAudioParticipants.get(participantId) === participant) cleanupExpiredParticipant(participantId)
+    }, getRejoinGraceMs())
     participant.cleanupTimer.unref?.()
 
     broadcast({
@@ -1075,6 +986,8 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
     const current = liveAudioParticipants.get(participantId)
     if (!current || current.ws !== null) return
     if (current.cleanupDueAt && current.cleanupDueAt > Date.now()) return
+    clearTimeout(current.cleanupTimer)
+    current.cleanupTimer = undefined
 
     const releasedStatus = {
       ...makeReducedParticipantStatus(current),
@@ -1152,27 +1065,6 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
     return false
   }
 
-  const makeReducedParticipantStatus = (msg) => ({
-    type: 'LIVE_AUDIO_PARTICIPANT_STATUS',
-    participantId: msg.participantId,
-    role: msg.role,
-    speakerState: msg.speakerState,
-    canSubscribe: msg.canSubscribe,
-    canPublishAudio: msg.canPublishAudio,
-    isMuted: msg.isMuted,
-    isActiveAudience: msg.isActiveAudience,
-    isMicrophoneActive: msg.isMicrophoneActive,
-    isKicked: msg.isKicked,
-    isAliasVisibleToActiveParticipants: msg.isAliasVisibleToActiveParticipants ?? false,
-    canViewActiveParticipants: msg.canViewActiveParticipants ?? false,
-    isAliasHiddenByControl: msg.isAliasHiddenByControl ?? false,
-    activeListPublicKey: msg.activeListPublicKey,
-    microphonePermissionState: msg.microphonePermissionState,
-    microphoneTrackState: msg.microphoneTrackState,
-    liveAudioConnectionState: msg.liveAudioConnectionState,
-    updatedAt: msg.updatedAt || Date.now(),
-  })
-
   const routeParticipantStatus = (msg) => {
     const reduced = makeReducedParticipantStatus(msg)
     broadcast(reduced, (targetMeta) => {
@@ -1180,19 +1072,6 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
       if (targetMeta.role !== 'control') return false
       return isControlAuthorized(liveAudioControls.get(targetMeta.controlSessionId))
     })
-  }
-
-  const validateModerationMessage = (msg) => {
-    if (!msg || typeof msg !== 'object' || Array.isArray(msg)) return false
-    if (!liveAudioModerationTypes.has(msg.type)) return false
-    if (msg.type !== 'LIVE_AUDIO_MUTE_ALL' && !isValidParticipantId(msg.participantId)) return false
-    if (msg.excludeParticipantIds !== undefined) {
-      if (msg.type !== 'LIVE_AUDIO_MUTE_ALL' || !Array.isArray(msg.excludeParticipantIds)) return false
-      if (!msg.excludeParticipantIds.every(isValidParticipantId)) return false
-    }
-    if (msg.issuedByParticipantId !== undefined && !isValidParticipantId(msg.issuedByParticipantId)) return false
-    if (msg.createdAt !== undefined && (typeof msg.createdAt !== 'number' || !Number.isFinite(msg.createdAt))) return false
-    return true
   }
 
   const applyModerationState = (msg) => {
@@ -1284,7 +1163,8 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
 
   let externalBroadcastUpdatePending = false
   let externalBroadcastRequestVersion = 0
-  const setExternalBroadcastState = async (nextState) => {
+  const setExternalBroadcastState = async (nextState, sourceMeta) => {
+    if (closed) return false
     if (!['off', 'live', 'recording'].includes(nextState)) return false
     if (externalBroadcastUpdatePending && nextState !== 'off') return false
     const requestVersion = ++externalBroadcastRequestVersion
@@ -1299,6 +1179,10 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
         externalBroadcastUpdatePending = false
       }
       if (requestVersion !== externalBroadcastRequestVersion) return false
+      if (closed || (sourceMeta && (
+        wsClients.get(sourceMeta.ws) !== sourceMeta || sourceMeta.ws.readyState !== WebSocket.OPEN ||
+        !isControlAuthorized(liveAudioControls.get(sourceMeta.controlSessionId))
+      ))) return false
     }
 
     const previousState = externalBroadcastState.state
@@ -1372,15 +1256,23 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
     return msg.participantId === targetMeta.participantId
   }
 
+  const clearSessionTimers = () => {
+    for (const control of liveAudioControls.values()) clearTimeout(control.expiryTimer)
+    for (const participant of liveAudioParticipants.values()) clearTimeout(participant.cleanupTimer)
+  }
+
   const rotatePresentationSession = ({ hardRefresh = false } = {}) => {
     // Persist the new boundary before clearing state or notifying any client.
+    const previousSessionId = presentationSessionId
     const nextSessionId = snapshotProviders.presentationSessionStore?.rotate() || randomUUID()
     presentationSessionId = nextSessionId
-    for (const control of liveAudioControls.values()) clearTimeout(control.expiryTimer)
+    snapshotProviders.onPresentationSessionRotated?.(previousSessionId)
+    clearSessionTimers()
     liveAudioControls.clear()
     liveAudioParticipants.clear()
     audienceAccessRecords.clear()
     audienceSseTickets.clear()
+    snapshotProviders.invalidateAudienceStreams?.()
     accessMode = getDefaultAccessMode()
     setExternalBroadcastState('off')
     broadcastConnectionCounts()
@@ -1397,31 +1289,45 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
   wss.rotatePresentationSession = rotatePresentationSession
 
   wss.on('connection', (ws, req) => {
+    let cleanupConnection
     ws.isAlive = true
     ws.on('pong', () => {
       ws.isAlive = true
+    })
+    ws.on('error', () => {
+      cleanupConnection?.()
+      if (ws.readyState === WebSocket.OPEN) ws.terminate()
+    })
+    // ws would otherwise write its automatic pong before emitting the ping event.
+    ws.on('ping', (data) => {
+      if (!canSendWsFrame(ws, data.length + 2)) return
+      try {
+        ws.pong(data, false, (error) => {
+          if (error) retireWsClient(ws)
+        })
+      } catch {
+        retireWsClient(ws)
+      }
     })
 
     const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`)
     const role = makeRole(url.searchParams.get('role') || 'unknown')
 
     if (!hasAllowedRequestOrigin(req)) {
-      ws.send(JSON.stringify({
+      if (sendJson(ws, {
         type: 'ERROR',
         code: 'ORIGIN_FORBIDDEN',
         message: 'Request origin is not allowed',
-      }))
-      ws.close(1008, 'Origin forbidden')
+      })) ws.close(1008, 'Origin forbidden')
       return
     }
 
     if (role !== 'audience' && isAuthRequired() && !hasValidBasicAuth(req)) {
-      ws.send(JSON.stringify({
+      if (sendJson(ws, {
         type: 'ERROR',
         code: 'UNAUTHORIZED',
         message: 'Authentication required'
-      }))
-      ws.close(4001, 'Unauthorized')
+      })) ws.close(4001, 'Unauthorized')
       return
     }
 
@@ -1436,9 +1342,24 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
       controlSessionId: control?.controlSessionId,
       operatorCredential: role === 'control' || role === 'presenter' ? randomBytes(32).toString('hex') : undefined,
     }
+    let cleanedUp = false
+    meta.cleanup = () => {
+      // Retain socket identity even when rotation/rejection already retired metadata.
+      if (cleanedUp) return
+      cleanedUp = true
+      wsClients.delete(ws)
+      if (meta.role === 'control' && liveAudioControls.get(meta.controlSessionId)?.ws === ws) {
+        removeControl(meta.controlSessionId)
+      }
+      releaseParticipantConnection(meta)
+      broadcastConnectionCounts()
+      broadcastMediaMasterStatus()
+    }
+    cleanupConnection = meta.cleanup
     wsClients.set(ws, meta)
+    ws.on('close', meta.cleanup)
 
-    ws.send(JSON.stringify({
+    if (!sendJson(ws, {
       type: 'WELCOME',
       clientId,
       serverTimeMs: Date.now(),
@@ -1448,7 +1369,7 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
       operatorCredential: meta.operatorCredential,
       presentationSessionId,
       accessMode,
-    }))
+    })) return
     broadcastConnectionCounts()
     broadcastMediaMasterStatus()
 
@@ -1461,26 +1382,41 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
       sendJson(ws, liveAudioControlPublicKeyMessage)
     }
 
-    ws.send(JSON.stringify({
+    sendJson(ws, {
       type: 'AUDIO_TIMELINE_STATE',
       timeline: getTimeline(),
-    }))
-    ws.send(JSON.stringify({
+    })
+    sendJson(ws, {
       type: 'LIVE_AUDIO_EXTERNAL_BROADCAST_STATE',
       ...externalBroadcastState,
-    }))
+    })
 
     ws.on('message', (raw) => {
+      const meta = wsClients.get(ws)
+      if (!meta) return
+      const large = raw.length > WS_ORDINARY_PAYLOAD_BYTES
+      const rejectLarge = () => {
+        meta.cleanup()
+        ws.close(1009)
+      }
+      if (large && (meta.role !== 'presenter' &&
+          (meta.role !== 'control' || !isControlAuthorized(liveAudioControls.get(meta.controlSessionId))))) {
+        rejectLarge()
+        return
+      }
       let msg
       try {
         msg = JSON.parse(raw.toString())
+        if (large && !validateLargePresentationMessage(msg, meta.role, raw.length)) {
+          rejectLarge()
+          return
+        }
       } catch {
+        if (large) rejectLarge()
         return
       }
       if (!msg || typeof msg !== 'object' || Array.isArray(msg)) return
 
-      const meta = wsClients.get(ws)
-      if (!meta) return
       if (meta.role === 'unknown' && msg.type !== 'SERVER_TIME_PING') {
         return
       }
@@ -1500,14 +1436,22 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
 
       switch (msg.type) {
         case 'SERVER_TIME_PING':
-          ws.send(JSON.stringify({
+          sendJson(ws, {
             type: 'SERVER_TIME_PONG',
             clientSentAtMs: msg.clientSentAtMs,
             serverTimeMs: Date.now(),
-          }))
+          })
           break
 
         case 'AUDIO_TIMELINE_ACTION': {
+          if (meta?.role === 'presenter' && (msg.action?.type === 'SET_DURATION' || msg.action?.type === 'END')) {
+            const timeline = applyAction(msg.action)
+            broadcast({
+              type: 'AUDIO_TIMELINE_STATE',
+              timeline,
+            })
+            break
+          }
           if (meta?.role !== 'control') break
           const controlMeta = liveAudioControls.get(meta.controlSessionId)
           if (!isControlAuthorized(controlMeta)) {
@@ -1723,7 +1667,7 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
             break
           }
           if (!['off', 'live', 'recording'].includes(msg.state)) break
-          void setExternalBroadcastState(msg.state).then((accepted) => {
+          void setExternalBroadcastState(msg.state, meta).then((accepted) => {
             if (!accepted) sendError(ws, 'LIVEKIT_PERMISSION_NOT_CONFIRMED', 'LiveKit could not revoke all microphones; retry explicitly')
           })
           break
@@ -1791,7 +1735,11 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
             break
           }
           if (onFallbackMessage) {
-            onFallbackMessage(msg, meta)
+            try {
+              onFallbackMessage(msg, meta)
+            } catch {
+              sendError(ws, 'INVALID_MESSAGE', 'Invalid projection or telemetry message')
+            }
           }
           break
 
@@ -1843,7 +1791,7 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
             const registered = snapshotProviders.getLiveKitState?.()?.participants?.find(
               (participant) => participant.participantId === msg.participantId,
             )
-            if (registered?.canPublish !== expectedCanPublish) {
+            if (Boolean(registered?.canPublish) !== expectedCanPublish) {
               sendError(ws, 'LIVEKIT_PERMISSION_NOT_CONFIRMED', 'LiveKit permission update is not confirmed')
               break
             }
@@ -1873,59 +1821,52 @@ const createWsServer = (httpServer, onFallbackMessage, snapshotProviders = {}) =
           break
       }
     })
-
-    ws.on('close', () => {
-      const meta = wsClients.get(ws)
-      wsClients.delete(ws)
-      if (meta?.role === 'control' && meta.controlSessionId) {
-        removeControl(meta.controlSessionId)
-      }
-      releaseParticipantConnection(meta)
-      broadcastConnectionCounts()
-      broadcastMediaMasterStatus()
-    })
-    ws.on('error', () => {
-      const meta = wsClients.get(ws)
-      wsClients.delete(ws)
-      if (meta?.role === 'control' && meta.controlSessionId) {
-        removeControl(meta.controlSessionId)
-      }
-      releaseParticipantConnection(meta)
-      broadcastConnectionCounts()
-      broadcastMediaMasterStatus()
-    })
   })
 
   const heartbeat = setInterval(() => {
+    if (closed) return
     for (const [client, meta] of wsClients) {
       if (client.isAlive === false) {
-        wsClients.delete(client)
-        if (meta?.role === 'control' && meta.controlSessionId) {
-          removeControl(meta.controlSessionId)
-        }
-        releaseParticipantConnection(meta)
-        broadcastConnectionCounts()
-        broadcastMediaMasterStatus()
+        meta.cleanup()
         client.terminate()
         continue
       }
 
       client.isAlive = false
       if (client.readyState === WebSocket.OPEN) {
+        if (!canSendWsFrame(client, 2)) continue
         try {
-          client.ping()
+          client.ping(undefined, false, (error) => {
+            if (error) retireWsClient(client)
+          })
         } catch {
-          wsClients.delete(client)
+          meta.cleanup()
+          client.terminate()
         }
       } else {
-        wsClients.delete(client)
+        meta.cleanup()
       }
     }
     sweepExpiredParticipants()
+    const now = Date.now()
+    for (const [ticket, issued] of audienceSseTickets) {
+      if (issued.expiresAt <= now) audienceSseTickets.delete(ticket)
+    }
   }, 25_000)
   heartbeat.unref?.()
 
-  wss.on('close', () => clearInterval(heartbeat))
+  wss.on('close', () => {
+    closed = true
+    externalBroadcastRequestVersion += 1
+    clearInterval(heartbeat)
+    httpServer.off('upgrade', handleUpgrade)
+    clearSessionTimers()
+    liveAudioControls.clear()
+    liveAudioParticipants.clear()
+    audienceAccessRecords.clear()
+    audienceSseTickets.clear()
+    liveAudioControlPublicKeyMessage = null
+  })
 
   return wss
 }

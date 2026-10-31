@@ -5,7 +5,8 @@ audiencia y edición. El backend aplica los comandos de proyección soportados;
 Presenter y Audience renderizan su estado. Live Audio y Voice Scripture son opcionales.
 
 Esta referencia describe responsabilidades actuales. Para sintaxis y autorización
-consulte [API](../api/README.md); para transporte y recuperación, [sincronización](synchronization.md).
+consulte [API](../api/README.md); para transporte y recuperación, [sincronización](synchronization.md);
+para el registro de decisiones estructurales, [ADRs](../adr/README.md).
 
 ## Unidades runtime y navegación
 
@@ -33,12 +34,104 @@ Los hooks en `src/hooks/` coordinan ciclos de vida. Las utilidades en `src/utils
 contienen parsing, normalización, validación y cálculos compartidos. Los contratos
 están en `src/types/`; sus tipos no sustituyen la validación runtime.
 
+En Scripture, `MenuPopup` mantiene una instancia de `useSeferControlLogic` por
+contexto de navegación. Los paneles completo y compacto reciben ese controlador
+por props; conservan solo estado visual, como abrir el ajuste de fuentes. Mover
+u ocultar un panel no reinicia selección, rango ni carga del corpus. El host
+elige la política del único atajo de teclado; cada vista conserva su política
+de navegación manual o proyectada. El estado canónico sigue en el backend.
+Los datos portables de Scripture están en `src/types/scripture.ts`, sin React.
+
 Los widgets compartidos de texto, preview y documento legal permanecen en
 `src/components/shared/`. Los widgets dependientes de Live Audio están en
 `src/features/liveAudio/components/`. El canal crypto compartido
 [usePrivateControlSignals](../../src/hooks/usePrivateControlSignals.ts) y
 [cryptoUtils](../../src/utils/cryptoUtils.ts) utiliza Web Crypto y el transporte
 existente; no necesita importar el SDK LiveKit al núcleo.
+
+En Audience, [AudienceParticipationProvider](../../src/components/audience/AudienceParticipationProvider.tsx)
+mantiene una instancia de [useAudienceParticipationOwner](../../src/hooks/useAudienceParticipation.ts)
+por identidad de acceso y presentación. La puerta y el contenedor admitido
+consumen sus claves E2EE, respuestas, alias enviado y estado de participación;
+cambiar entre ambas vistas u ocultarlas no crea otra sesión criptográfica.
+La identidad procede de `useAudienceAccess`, y el envío exige la confirmación
+`AUDIENCE_ACCESS_STATE` del bind WS actual, además del bootstrap HTTP.
+Cambiar la credencial o la identidad desmonta ese propietario; una reconexión
+de la misma identidad conserva estado privado, pero exige un nuevo bind antes
+de enviar. Las generaciones invalidan resultados asíncronos antiguos.
+Ese propietario también coordina activación/salida, petición/cancelación, perfil
+y mensajes sociales. [AudienceParticipationSurface](../../src/components/audience/AudienceParticipationSurface.tsx)
+compone la vista admitida con un adaptador RTC hermano y opcional, bajo su propio
+Suspense/límite de error. [AudienceParticipationPanel](../../src/components/audience/AudienceParticipationPanel.tsx)
+reutiliza los widgets en los slots Scripture/slides/quiz, con fallback cuando no
+hay slot y entrada para reabrir el panel. TV conserva solo escucha pasiva.
+El contenedor Live Audio conserva `useLiveAudio`, pistas, reproducción, consentimiento
+y publicación; comunica únicamente estado/acciones de medios por una interfaz local.
+El flag `VITE_SEFER_LIVE_AUDIO_BUILD=false`, la ausencia de RTC o un fallo del módulo
+opcional no retiran el propietario ni los widgets sociales de Audience. Los envíos
+siguen exigiendo admisión, bind WS vigente y cifrado.
+
+En Control, [ControlParticipationOwner](../../src/components/control/ControlParticipationOwner.tsx)
+permanece bajo MenuPopup, fuera del flag y del límite de error RTC. Consume la
+autorización canónica de `useControlAuthorization` y posee una sola instancia del
+canal privado. Conserva bandeja, admisión, cola, visibilidad, claves y conversaciones;
+el adaptador LiveAudioControlContainer posee SDK, pistas, dispositivos y Voice.
+Comunica metadatos y acciones de medios, sin exportar pistas al propietario social.
+La bandeja tiene fallback cuando no existe su slot. Ocultar sus widgets no reinicia
+las claves; errores/desconexión RTC no desmontan la conversación.
+
+[useControlConversations](../../src/hooks/useControlConversations.ts) mantiene en
+memoria solo las operaciones nuevas hacia Audience, por presentación y UUID canónico
+del destinatario. Los cuerpos entrantes y sus respuestas contextuales tienen un único
+propietario en el modelo de Notificaciones; no se duplican en un historial interno.
+Un Control autorizado puede iniciar un mensaje sin uno previo cuando Audience está conectada,
+activo y admitido, con perfil técnico recibido en vivo y perfil E2EE que confirman
+la misma clave. Los snapshots no acreditan por sí solos esa elegibilidad. Ambos
+envíos cifrados comparten un UUID de operación; sus resultados son independientes.
+Correlación, límites y compatibilidad: [señales privadas](../api/realtime.md#señales-privadas-envelope-y-payload-descifrado).
+
+## Coordinación WebSocket del backend
+
+[ws-server](../../server/ws-server.mjs) conserva los registros de conexiones,
+Controls, participantes, admisión y tickets, además de la identidad de sesión.
+Autoriza, enlaza identidades, enruta, modera y coordina snapshots, reconexión y
+rotación. Dos módulos auxiliares separan lógica sin apropiarse de esos registros:
+
+| Módulo | Responsabilidad | Límite |
+| --- | --- | --- |
+| [ws-message-validation](../../server/ws-message-validation.mjs) | Comprueba formatos de señales privadas, estados/perfiles y moderación | Validar forma no concede autorización ni admisión |
+| [ws-participant-snapshots](../../server/ws-participant-snapshots.mjs) | Proyecta vistas técnicas de un participante recibido como argumento | Selecciona campos; no enruta ni decide destinatarios |
+
+La vista operacional incluye conexión y rol derivado; el status reducido tiene
+su propio envelope y selección de campos. No son representaciones intercambiables
+ni copias completas del registro interno. La autorización y los filtros permanecen
+en el coordinador que las publica.
+
+Una sola función del coordinador cuenta sockets abiertos por rol para el snapshot
+operacional y el mensaje de recuentos. Este último llega a Control y Presenter,
+incluidos Controls pendientes; recibirlo no concede acceso al snapshot operacional.
+Los contratos de transporte se detallan en [realtime](../api/realtime.md).
+
+## Límites comprobados en desarrollo
+
+ESLint restringe los imports de `src/` y `server/` mediante
+[la regla de arquitectura](../../scripts/eslint-architecture.mjs). Los módulos de
+`src/types/` solo pueden depender de otros contratos de esa carpeta y no cargar
+módulos mediante `import()` o `require()`. Los widgets Scripture no importan como
+valores su lector o controlador; pueden importar tipos del controlador compartido.
+Solo `useLiveAudio.ts` puede importar `livekit-client`, y solo
+`server/livekit-server.mjs` puede importar `livekit-server-sdk`.
+
+[Los tests de arquitectura](../../__tests__/architectureBoundaries.test.ts)
+comprueban esos límites y compilan los contratos sin DOM, con cuatro excepciones
+exactas para dos interfaces locales del navegador en `types/liveAudio.ts`.
+No son campos del protocolo ni una exclusión de todo el archivo.
+[ADR 0005](../adr/0005-minimal-dependency-boundaries.md) detalla alcance y límites.
+
+La unicidad de recursos, limpieza de efectos, autoridad servidor, accesibilidad,
+i18n y comportamiento responsive siguen requiriendo revisión y pruebas de
+comportamiento. Estas reglas no convierten todo `utils/` en lógica portable ni
+prohíben hooks visuales, componentes React o reutilización de vistas entre roles.
 
 ## Ownership de datos y estado
 

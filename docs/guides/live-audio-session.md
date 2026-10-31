@@ -49,6 +49,31 @@ transcripciones ni nicks reales. Para una release, completar también
 
 ## Fallos y parada
 
+En Audience, un fallo de audio conserva las acciones sociales si admisión, WS y
+cifrado siguen disponibles. Utilizar el mensaje privado como respaldo; el botón
+de mano reabre un panel oculto. Sin RTC no aparece un micrófono concedido ni se
+solicita permiso de captura. La bandeja, admisión, lista y cola de Control también
+permanecen disponibles con RTC desactivado o excluido del build.
+
+En Notificaciones, usar el selector «Destinatario» del compositor inferior:
+«Control» envía un aviso azul al equipo; elegir Audience prepara un mensaje nuevo
+naranja, con el operador y el destinatario visibles. El selector parte de Control,
+se vuelve verde oscuro al elegir Audience y vuelve a Control tras aceptar ese envío,
+si no se ha editado el borrador ni cambiado el destinatario mientras tanto.
+No hace falta que Audience escriba primero. Si el envío seguro no está disponible,
+comprobar admisión, conexión, perfil y clave actuales; no conceder micrófono para
+habilitar el chat.
+
+Los mensajes entrantes de Audience son grises. «Responder» o «Agradecer» adjunta una
+respuesta verde a esa tarjeta; «Responder de nuevo» permite otra respuesta contextual.
+Audience puede usar «Responder» desde el mensaje recibido. No hay un panel separado
+de historial. Un Control que entra tarde no recupera mensajes anteriores.
+
+Solo aparecen avisos de fallo: distinguir envío a Audience de sincronización del
+equipo. Un fallo conserva el borrador; una finalización antigua no borra uno nuevo.
+La aceptación local del transporte no confirma recepción ni aplicación remota y no
+genera un banner de éxito. Los borradores son efímeros y se pierden al recargar la página.
+
 Ante participant_not_ready, reconectar y comprobar presencia SFU real. Ante
 livekit_unavailable o permiso no confirmado, no asumir que se concedió palabra.
 Los retries automáticos de red son limitados; denegación, kick o fallo de captura

@@ -32,10 +32,10 @@ vi.mock('../src/features/voiceScripture/VoiceScriptureControl', () => ({ default
   useEffect(() => { mocks.mounts++; onAvailabilityChange(true); }, [onAvailabilityChange]);
   return <div data-testid="runtime" data-selected={selectedId} data-transcribes={String(canTranscribe)} />;
 } }));
-let Container: typeof import('../src/features/liveAudio/components/control/LiveAudioControlContainer').default;
+let Container: typeof import('../src/components/control/ControlParticipationOwner').default;
 beforeAll(async () => {
   vi.stubEnv('VITE_SEFER_VOICE_SCRIPTURE_BUILD', 'true');
-  Container = (await import('../src/features/liveAudio/components/control/LiveAudioControlContainer')).default;
+  Container = (await import('../src/components/control/ControlParticipationOwner')).default;
 });
 beforeEach(() => {
   mocks.mounts = 0; mocks.send.mockReset(); mocks.send.mockResolvedValue(true);
@@ -47,10 +47,10 @@ beforeEach(() => {
 afterEach(() => { cleanup(); document.getElementById('live-audio-inbox-portal-target')?.remove(); localStorage.clear(); });
 const setup = async () => {
   const host = document.createElement('div'); host.id = 'live-audio-inbox-portal-target'; document.body.append(host);
-  const view = render(<Container isControlAuthorized controlState="PRINCIPAL" controlSessionId="session"
+  const view = render(<Container wsStatus="open" isControlAuthorized controlState="PRINCIPAL" controlSessionId="session"
     subscribeToWsMessage={(handler) => { mocks.ws = handler; return () => undefined; }} />);
   await screen.findByTestId('runtime');
-  await act(async () => mocks.signal?.({ fromParticipantId: mocks.remoteId, value: { type: 'CONTROL_PROFILE', alias: 'Operador remoto', volume: 100 } }));
+  await act(async () => mocks.signal?.({ isControlSignal: true, fromParticipantId: mocks.remoteId, value: { type: 'CONTROL_PROFILE', alias: 'Operador remoto', volume: 100 } }));
   return view;
 };
 
@@ -123,7 +123,7 @@ it('applies encrypted shared selection without echo and rejects malformed payloa
   await setup();
   mocks.send.mockClear();
   await act(async () => mocks.signal?.({
-    fromParticipantId: mocks.remoteId,
+    isControlSignal: true, fromParticipantId: mocks.remoteId,
     value: { type: 'VOICE_SOURCE_SELECTION', participantId: mocks.remoteId, version: 1, updatedAt: 10 },
   }));
   expect(screen.getByTestId('runtime').getAttribute('data-selected')).toBe(mocks.remoteId);
@@ -131,7 +131,7 @@ it('applies encrypted shared selection without echo and rejects malformed payloa
   expect(mocks.send).not.toHaveBeenCalled();
 
   await act(async () => mocks.signal?.({
-    fromParticipantId: mocks.remoteId,
+    isControlSignal: true, fromParticipantId: mocks.remoteId,
     value: { type: 'VOICE_SOURCE_SELECTION', participantId: 'not-a-participant', version: 1, updatedAt: 11 },
   }));
   expect(screen.getByTestId('runtime').getAttribute('data-selected')).toBe(mocks.remoteId);
@@ -142,14 +142,14 @@ it('keeps participant selection when its temporary track disappears', async () =
   fireEvent.click(screen.getByRole('button', { name: 'Comandos de voz: Operador remoto' }));
   mocks.remoteTracks = [];
   mocks.controlParticipants = [];
-  view.rerender(<Container isControlAuthorized controlState="PRINCIPAL" controlSessionId="session"
+  view.rerender(<Container wsStatus="open" isControlAuthorized controlState="PRINCIPAL" controlSessionId="session"
     subscribeToWsMessage={(handler) => { mocks.ws = handler; return () => undefined; }} />);
   expect(screen.getByTestId('runtime').getAttribute('data-selected')).toBe(mocks.remoteId);
   expect(screen.getByText(/Operador remoto · Micrófono no disponible/)).toBeTruthy();
   const replacementTrack = { readyState: 'live' } as MediaStreamTrack;
   mocks.controlParticipants = [{ participantId: mocks.remoteId, isMicrophoneActive: true }];
   mocks.remoteTracks = [{ id: 'replacement-track', participantId: mocks.remoteId, track: replacementTrack }];
-  view.rerender(<Container isControlAuthorized controlState="PRINCIPAL" controlSessionId="session"
+  view.rerender(<Container wsStatus="open" isControlAuthorized controlState="PRINCIPAL" controlSessionId="session"
     subscribeToWsMessage={(handler) => { mocks.ws = handler; return () => undefined; }} />);
   expect(screen.getByTestId('runtime').getAttribute('data-selected')).toBe(mocks.remoteId);
   expect(screen.getByText(/Operador remoto · Disponible/)).toBeTruthy();
@@ -157,7 +157,7 @@ it('keeps participant selection when its temporary track disappears', async () =
 
 it('marks secondary controls as passive Voice Scripture observers', async () => {
   const host = document.createElement('div'); host.id = 'live-audio-inbox-portal-target'; document.body.append(host);
-  render(<Container isControlAuthorized controlState="AUTHORIZED" controlSessionId="secondary"
+  render(<Container wsStatus="open" isControlAuthorized controlState="AUTHORIZED" controlSessionId="secondary"
     subscribeToWsMessage={(handler) => { mocks.ws = handler; return () => undefined; }} />);
   expect((await screen.findByTestId('runtime')).getAttribute('data-transcribes')).toBe('false');
 });
@@ -171,7 +171,7 @@ it('replays the current encrypted selection when a Control joins late', async ()
     { participantId: mocks.remoteId, isMicrophoneActive: true },
     { participantId: mocks.lateId, isMicrophoneActive: false },
   ];
-  view.rerender(<Container isControlAuthorized controlState="PRINCIPAL" controlSessionId="session"
+  view.rerender(<Container wsStatus="open" isControlAuthorized controlState="PRINCIPAL" controlSessionId="session"
     subscribeToWsMessage={(handler) => { mocks.ws = handler; return () => undefined; }} />);
   expect(mocks.send).toHaveBeenCalledWith(expect.objectContaining({
     type: 'VOICE_SOURCE_SELECTION', participantId: mocks.localId, version: 1,

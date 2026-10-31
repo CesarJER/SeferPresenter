@@ -71,7 +71,7 @@ interface SlideRowProps {
 const isTitleSlide = (slide: Slide) =>
   slide.id === 'slide-title' || slide.label === 'Título';
 
-export const SlideRow: React.FC<SlideRowProps> = ({
+const SlideRowComponent: React.FC<SlideRowProps> = ({
   slide,
   idx,
   slides,
@@ -653,3 +653,5 @@ export const SlideRow: React.FC<SlideRowProps> = ({
                               </tr>
   );
 };
+
+export const SlideRow = React.memo(SlideRowComponent);

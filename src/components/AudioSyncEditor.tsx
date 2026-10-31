@@ -8,6 +8,7 @@ import { findScriptureRange } from '../utils/scriptureLookup';
 import { sanitizeSlideHtml } from '../utils/hebrewText';
 import { validateAudioSyncMaps } from '../utils/validation';
 import { sameValue } from '../utils/catalogMerge';
+import { hasCatalogRevision } from '../utils/catalogApi';
 import { remapSyncTimes, useSyncPresentationReview } from '../hooks/useSyncPresentationReview';
 import { SyncPresentationReview } from './SyncPresentationReview';
 
@@ -66,6 +67,7 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
 
   const dirtyRef = useRef(false);
   const initializedRef = useRef(false);
+  const userSelectedPresentationRef = useRef(false);
   const editBaseMapsRef = useRef(audioSyncMaps);
   const [isSaving, setIsSaving] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -75,14 +77,16 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
 
   // Initialize selected presentation and audio
   useEffect(() => {
-    if (!isOpen) { dirtyRef.current = false; initializedRef.current = false; return; }
+    if (!isOpen) { dirtyRef.current = false; initializedRef.current = false; userSelectedPresentationRef.current = false; return; }
     if (dirtyRef.current || initializedRef.current) return;
     if (isOpen) {
-      const initialAudio = activeAudioSrc || '';
-      setSelectedAudioFile(initialAudio);
+      const initialAudio = selectedAudioFile || activeAudioSrc || '';
+      if (initialAudio !== selectedAudioFile) setSelectedAudioFile(initialAudio);
 
-      let initialPresId = '';
-      if (initialAudio) {
+
+      let initialPresId = selectedPresentationId || '';
+      if (!initialPresId && initialAudio) {
+
         const existingMap = audioSyncMaps.find((m) => m.audioSrc === initialAudio);
         if (existingMap) {
           initialPresId = existingMap.presentationId;
@@ -96,7 +100,7 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
       if (initialPresId && presentations.some(p => p.id === initialPresId)) initializedRef.current = true;
       setSelectedPresentationId(initialPresId);
     }
-  }, [isOpen, activePresentationId, activeAudioSrc, presentations, audioSyncMaps, selectedPresentationId]);
+  }, [isOpen, activePresentationId, activeAudioSrc, presentations, audioSyncMaps, selectedPresentationId, selectedAudioFile]);
 
   // Load available sync map if it exists for this presentation + audio
   useEffect(() => {
@@ -351,6 +355,14 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
   // Save changes
   const handleSave = async () => {
     if (isSaving) return;
+    if (!selectedPresentationId) {
+      alert(translate("audioEditor:AudioSyncEditor.pleaseSelectAPresentation", "Por favor seleccione una presentación."));
+      return;
+    }
+    if (!selectedAudioFile) {
+      alert(translate("audioEditor:AudioSyncEditor.pleaseSelectAnAudioFile", "Por favor seleccione un archivo de audio."));
+      return;
+    }
     setIsSaving(true);
     try {
       const latest = await sourceReview.refresh();
@@ -392,7 +404,14 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
     cues.sort((a, b) => a.timeSec - b.timeSec);
 
     // Existing sync map or create new one
-    const baseMaps = editBaseMapsRef.current;
+    let baseMaps = editBaseMapsRef.current;
+    if (!hasCatalogRevision(baseMaps) && hasCatalogRevision(audioSyncMaps)) {
+      if (audioSyncMaps.some(map => map.presentationId === selectedPresentationId && map.audioSrc === selectedAudioFile)) {
+        throw new Error(`${translate('common:catalogMerge.unresolved', 'Resuelve todos los conflictos antes de guardar.')} ${translate('common:catalogMerge.cancelled', 'Guardado cancelado. Tu borrador se conserva.')}`);
+      }
+      // A draft without a loaded baseline may only create a previously absent pair.
+      baseMaps = audioSyncMaps;
+    }
     const existingIndex = baseMaps.findIndex(
       (m) => m.presentationId === selectedPresentationId && m.audioSrc === selectedAudioFile
     );
@@ -553,7 +572,7 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
                       dirtyRef.current = false;
                       const audioFile = e.target.value;
                       setSelectedAudioFile(audioFile);
-                      if (audioFile) {
+                      if (audioFile && !userSelectedPresentationRef.current) {
                         const existingMap = audioSyncMaps.find((m) => m.audioSrc === audioFile);
                         if (existingMap) {
                           setSelectedPresentationId(existingMap.presentationId);
@@ -585,6 +604,7 @@ export const AudioSyncEditor: React.FC<AudioSyncEditorProps> = ({
                     onChange={(e) => {
                       if (dirtyRef.current && !window.confirm(translate("audioEditor:AudioSyncEditor.discardTheDraftToChangePresentations", "¿Descartar el borrador para cambiar de presentación?"))) return;
                       dirtyRef.current = false;
+                      userSelectedPresentationRef.current = Boolean(e.target.value);
                       setSelectedPresentationId(e.target.value);
                     }}
                     className="w-full text-xs bg-gray-900 border border-gray-800 rounded-sm px-2.5 py-1.5 focus:border-yellow-500 outline-hidden text-white cursor-pointer shadow-xs"

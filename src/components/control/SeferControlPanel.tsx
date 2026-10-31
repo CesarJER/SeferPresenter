@@ -2,35 +2,18 @@ import { translate } from '../../i18n/runtime';
 import { useUiTranslation } from '../../i18n/useUiTranslation';
 import React from 'react';
 import { ChevronLeft, ChevronRight, Play, Sliders } from 'lucide-react';
-import type { ScriptureNavState } from '../../types/presentation';
-import type { SeferReaderState } from '../../hooks/useSeferReader';
-import { useSeferControlLogic } from '../../hooks/useSeferControlLogic';
+import type { SeferControlController } from '../../hooks/useSeferControlLogic';
 import { sanitizeSlideHtml } from '../../utils/hebrewText';
 
 interface SeferControlPanelProps {
-  /** Called whenever a verse should be projected (activate ▶️ or arrow nav while active) */
-  onProject: (state: SeferReaderState, command?: 'navigate' | 'next' | 'previous') => void;
-  /** Called when projection is stopped */
-  onDeactivate?: () => void;
-  /** Called when ➕ is pressed — project + add as slide */
-  onAddSlide: (state: SeferReaderState, kind?: 'sefer' | 'tanaj') => void;
-  /** Restore a previously projected state (when returning to scripture mode) */
-  restoredState?: ScriptureNavState | null;
-  /** Callback to update font sizes */
-  onUpdateFontSizes?: (sizes: { hebrewFontSize: number; combinedTextBaseSize: number }) => void;
-  /** Emits the fully resolved verse data for preview */
-  onVerseResolved?: (state: SeferReaderState | null) => void;
+  controller: SeferControlController;
 }
 
 const SeferControlPanel: React.FC<SeferControlPanelProps> = ({
-  onProject,
-  onDeactivate,
-  onAddSlide,
-  restoredState,
-  onUpdateFontSizes,
-  onVerseResolved,
+  controller,
 }) => {
   useUiTranslation('control');
+  const [showFontSettings, setShowFontSettings] = React.useState(false);
   const {
     metadata,
     currentVerse,
@@ -45,8 +28,6 @@ const SeferControlPanel: React.FC<SeferControlPanelProps> = ({
     setSelectedBook,
     setSelectedChapter,
     setSelectedVerse,
-    showFontSettings,
-    setShowFontSettings,
     hebrewFontSize,
     combinedTextBaseSize,
     updateHebrewFontSize,
@@ -60,23 +41,7 @@ const SeferControlPanel: React.FC<SeferControlPanelProps> = ({
     handlePrev,
     handleAddSlide,
     handleVerseSelect,
-  } = useSeferControlLogic({
-    variant: 'full',
-    onProject,
-    onDeactivate,
-    onAddSlide,
-    restoredState,
-    onUpdateFontSizes,
-  });
-
-  // ----------------------------------------------------------------
-  // Emitting resolved verse for preview
-  // ----------------------------------------------------------------
-  React.useEffect(() => {
-    if (onVerseResolved) {
-      onVerseResolved(currentVerse);
-    }
-  }, [currentVerse, onVerseResolved]);
+  } = controller;
 
   // ----------------------------------------------------------------
   // Loading / unavailable states
@@ -167,7 +132,7 @@ const SeferControlPanel: React.FC<SeferControlPanelProps> = ({
             {/* Prev */}
             <button
               id="sefer-prev-btn"
-              onClick={handlePrev}
+              onClick={() => handlePrev('manual')}
               disabled={!currentVerse || currentVerse.verseIdx === 0}
               className="control-nav-btn flex-1"
             >
@@ -242,7 +207,7 @@ const SeferControlPanel: React.FC<SeferControlPanelProps> = ({
             {/* Next */}
             <button
               id="sefer-next-btn"
-              onClick={handleNext}
+              onClick={() => handleNext('manual')}
               disabled={!currentVerse || currentVerse.verseIdx >= currentVerse.totalVerses - 1}
               className="control-nav-btn flex-1"
             >

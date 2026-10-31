@@ -6,6 +6,7 @@ import { i18nOptions, loadCatalog, readPreference, savePreference, storageKey, t
 import { useUiTranslation } from '../src/i18n/useUiTranslation';
 import AutoResizeText from '../src/components/shared/AutoResizeText';
 import * as runtime from '../src/i18n/runtime';
+import { PrivateControlInbox } from '../src/features/liveAudio/components/control/PrivateControlInbox';
 
 beforeEach(()=>{
   vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
@@ -22,6 +23,26 @@ const Sample=()=>{useUiTranslation('common');return <>
   <AutoResizeText text="Escucha Israel" dir="ltr" />
   <AutoResizeText text="שְׁמַע יִשְׂרָאֵל" dir="rtl" lang="he" />
 </>;};
+
+it('labels the composer in Hebrew and preserves automatic direction for private text and aliases', async () => {
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ i18n: { defaultLocale: 'he', supportedLocales: ['es','en','fr','he'] } }) }));
+  render(<UiLocaleProvider role="control"><PrivateControlInbox
+    isOpen={true}
+    isControlAuthorized={true}
+    conversationRecipients={[{ participantId: 'audience', alias: 'משתתף', eligible: true }]}
+    messages={[{ id: 'message', fromAlias: 'משתתף', content: 'שלום', timestamp: 1, isControlToAudience: true, toAlias: 'משתתף' }]}
+    authorizationRequests={[]}
+    onApproveRequest={vi.fn()}
+    onRejectRequest={vi.fn()}
+    onDismissMessage={vi.fn()}
+    onSendConversation={vi.fn().mockResolvedValue({ audienceQueued: false, controlsQueued: false })} /></UiLocaleProvider>);
+  await waitFor(() => expect(document.documentElement.dir).toBe('rtl'));
+  const recipient = await screen.findByRole('combobox', { name: 'נמען' });
+  fireEvent.change(recipient, { target: { value: 'audience' } });
+  expect(screen.getByText('שלום').getAttribute('dir')).toBe('auto');
+  expect(screen.getByRole('textbox', { name: 'הודעה' }).getAttribute('dir')).toBe('auto');
+  expect(screen.getByRole('button', { name: 'שליחה' })).toBeTruthy();
+});
 
 it('loads the server default, preserves biblical direction and changes only this role’s preference',async()=>{
   vi.stubGlobal('fetch',vi.fn().mockResolvedValue({ok:true,json:async()=>({i18n:{defaultLocale:'he',supportedLocales:['es','en','fr','he']}})}));

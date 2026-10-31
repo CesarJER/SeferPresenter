@@ -13,10 +13,47 @@ de música/vídeo sincronizados. Con la feature desactivada, el uso de presentac
 debe seguir disponible. Hay flags distintos de bundle y backend; cargar la UI
 no demuestra que LiveKit esté disponible ni que audio llegue al receptor.
 
+La participación social de Audience utiliza admisión autenticada, el WS existente
+y WebCrypto/E2EE: puede activar/salir, pedir/cancelar palabra, enviar mensajes a
+Control, recibir respuestas y consultar la lista permitida sin LiveKit. La entrada
+está disponible en Scripture, slides y quiz; al ocultar el panel queda un botón para
+reabrirlo. Las pantallas sin slot usan un único fallback. TV conserva escucha pasiva
+sin controles de participación ni captura.
+
+`VITE_SEFER_LIVE_AUDIO_BUILD=false` excluye el runtime RTC de Audience y Control,
+conservando sus propietarios y widgets sociales. Un fallo de carga/render del adaptador también
+queda aislado. Los controles de medios requieren el adaptador disponible; publicar
+micrófono requiere además conexión, permiso de Control y acción local. Si falta WS
+o cifrado, la participación indica indisponibilidad y no usa texto plano.
+No hay recuperación de historial ni un turno presencial nuevo.
+
 Audience puede escuchar pasivamente o participar activamente tras el recorrido
 de alias/aviso/admisión. Conceder palabra habilita publicación, pero no abre la
 captura automáticamente: cada navegador confirma su micrófono. Presenter y
 Control mantienen sus permisos específicos; un Control pendiente no modera.
+
+## Aislamiento entre sesiones
+
+Cada sesión de presentación utiliza una sala LiveKit derivada de su UUID canónico
+persistido. Un reinicio con el marcador vigente conserva esa identidad. Una
+rotación retira los registros RTC y sus credenciales anteriores y programa el
+borrado de la sala antigua; no cambia el propietario de la sesión ni la timeline.
+Si el marcador expiró al arrancar, se puede retirar la identidad anterior válida
+sin borrar la nueva. No hay barrido por prefijo ni cola de limpieza persistente.
+
+Los adaptadores cliente liberan la conexión anterior, pistas y timers al cambiar
+su sesión. Audience también detecta un WELCOME con una identidad distinta si no
+recibió el evento de rotación. La reconexión no restaura publicación de micrófono:
+siguen siendo necesarios el permiso vigente, la acción local y el consentimiento
+aplicable. La participación social y E2EE conservan sus propietarios independientes.
+
+Con la configuración [LiveKit](../../config/livekit.yaml), las salas solo se crean
+por el backend. Tras borrar una sala, un JWT de participante no puede recrearla
+por autocreación ni entrar en otra sala. Esto no revoca criptográficamente JWT
+self-hosted. Si el borrado falla, la sala antigua puede seguir accesible; una
+creación con resultado remoto incierto requiere revisar el aviso de limpieza.
+La sesión nueva sigue aislada. El TTL inicial tampoco garantiza que una conexión
+antigua haya terminado: LiveKit puede renovar sus tokens mientras permanece activa.
 
 Cada Control puede activar o desactivar localmente la escucha de audio de programa.
 Esta preferencia no cambia fuente Voice, permiso de captura, transmisión ni
@@ -57,6 +94,41 @@ legible y la envía cifrada a destinatarios con permiso; el servidor gestiona
 preferencias/permisos técnicos. Incógnito y permiso de ver lista son acciones
 distintas. La rotación de clave exige volver a comunicar estado; no hay historia
 privada recuperada del backend.
+
+## Conversaciones compartidas sin RTC
+
+Desde la bandeja privada, un Control PRINCIPAL o AUTHORIZED puede seleccionar una
+Audience conectada, activa y admitida que haya publicado una clave válida y su perfil
+cifrado actual. No necesita un mensaje previo. Cuando faltan esas confirmaciones,
+la opción indica que el envío no está disponible; no se envía en claro ni se concede
+un permiso de micrófono para habilitar el chat.
+
+Notificaciones utiliza un compositor compacto con destinatario Control por defecto.
+Los avisos entre Controls son azules; los mensajes entrantes de Audience, grises;
+las respuestas contextuales se adjuntan en verde; los mensajes nuevos hacia Audience
+son naranjas. Se muestra el operador y, en los salientes, el destinatario. Elegir
+Audience vuelve el selector verde oscuro. Tras aceptar el envío a Audience, vuelve
+a Control si el operador no ha cambiado el borrador o destinatario durante el envío.
+No hay un panel separado de historial.
+
+Cada mensaje hacia Audience se cifra y se sincroniza por separado con el equipo
+autorizado. Las respuestas referencian una operación concreta, conservando la
+distinción entre escribir un mensaje nuevo y responder a una tarjeta gris. Solo se
+muestran fallos, diferenciando Audience y sincronización del equipo; los booleanos
+internos positivos indican aceptación local, sin confirmar recepción remota. Un fallo
+de envío conserva el borrador y una finalización antigua no borra ediciones nuevas.
+No hay reintento automático. Los alias permanecen en las rutas cifradas y autorizadas.
+
+Mensajes y borradores permanecen en memoria; un fallo RTC no los desmonta. La rotación
+de presentación/clave o revocación limpia los mensajes privados de Control e invalida
+trabajos pendientes. La desconexión invalida envíos y vacía las operaciones iniciadas;
+con la misma sesión/clave se conservan los descartes, sin reconstruir historial.
+Descartar oculta una operación localmente: otro sobre cifrado con el mismo ID no la
+reabre. Los IDs de descarte se limpian al cambiar sesión/clave o perder autorización.
+Los borradores no se borran por una finalización de otra sesión/clave y no se persisten
+al recargar. No hay backfill para Controls nuevos o reconectados. MESSAGE_REPLY_SYNC
+mantiene su correlación exacta y rechazo de duplicados. Audience y todos los Controls
+deben ejecutar este candidato para disponer de la experiencia completa.
 
 ## Emisión externa y avisos
 

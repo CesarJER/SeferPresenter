@@ -13,11 +13,12 @@ import { useAudioTimelineApplicator } from './hooks/useAudioTimelineApplicator';
 import { generateQuizSubslides, calcMaxBaseCentipunts } from './utils/quizUtils';
 import { makeClientId } from './utils/normalizePresentation';
 import { DataProtectionLink } from './components/shared/DataProtectionLink';
-import { useLiveAudioAvailability } from './features/liveAudio/hooks/useLiveAudioAvailability';
+import { AudienceParticipationSurface } from './components/audience/AudienceParticipationSurface';
 import { useAudienceAudioPlayback } from './hooks/useAudienceAudioPlayback';
 import { useAudienceSession } from './hooks/useAudienceSession';
 import { useAudienceAccess } from './hooks/useAudienceAccess';
 import { AudienceAccessGate } from './components/audience/AudienceAccessGate';
+import { AudienceParticipationProvider } from './components/audience/AudienceParticipationProvider';
 import { useQuizAudio } from './hooks/useQuizAudio';
 import { registerScopedServiceWorker } from './utils/pwaUpdate';
 import { isMediaPlaybackBlockedError, resumeManagedMediaAudio } from './utils/mediaVolume';
@@ -30,11 +31,7 @@ import { DEFAULT_AUDIO_STATE } from './types/audio';
 
 import './index.css';
 
-const LiveAudioContainer = import.meta.env.VITE_SEFER_LIVE_AUDIO_BUILD !== 'false'
-  ? React.lazy(() => import('./features/liveAudio/components/audience/LiveAudioAudienceContainer'))
-  : null;
-
-function AudienceApp() {
+export function AudienceApp() {
   useUiTranslation('audience');
   const isTvMode = new URLSearchParams(window.location.search).get('tv') === '1';
   const audienceAccess = useAudienceAccess();
@@ -165,6 +162,7 @@ function AudienceApp() {
     audienceSseTicket: audienceAccess.stateSseTicket,
     onAudienceSseReconnect: audienceAccess.refreshTickets,
     onWsMessage: audienceAccess.handleWsMessage,
+    onAudienceWsConnectionChange: audienceAccess.handleWsConnectionChange,
   });
 
   const { serverNow } = useServerClock(wsSend, wsStatus, subscribeToWsMessage);
@@ -173,7 +171,6 @@ function AudienceApp() {
   }), [handlePlaybackBlocked]);
   useAudioTimelineApplicator(audioTimelineRef, audioTimeline, serverNow, autoduckState, audioTimelineApplicatorOptions);
 
-  const liveAudioAvailability = useLiveAudioAvailability();
   const audienceSession = useAudienceSession({ subscribeToWsMessage });
 
   const { getActiveBackground } = useBackgroundResolver({
@@ -308,44 +305,35 @@ function AudienceApp() {
     !audienceAccess.quizSseTicket ||
     (audienceAccess.accessMode === 'CONTROLLED' && !audienceSession.nick);
 
-  if (isGateRequired) {
-    const effectiveAccessState =
+  const effectiveAccessState =
       audienceAccess.accessMode === 'CONTROLLED' && !audienceSession.nick && audienceAccess.accessState === 'ADMITTED'
         ? 'REQUEST_REQUIRED'
         : audienceAccess.accessState;
 
-    return (
+  return (
+    <AudienceParticipationProvider
+      key={JSON.stringify([audienceAccess.presentationSessionId, audienceAccess.participantId, audienceAccess.credential, audienceAccess.sessionGeneration])}
+      access={audienceAccess}
+      audienceSession={audienceSession}
+      wsStatus={wsStatus}
+      wsSend={wsSend}
+      subscribeToWsMessage={subscribeToWsMessage}
+    >
+    {isGateRequired ? (
       <AudienceAccessGate
         accessState={effectiveAccessState}
-        participantId={audienceAccess.participantId}
         retryAt={audienceAccess.retryAt}
-        wsStatus={wsStatus}
-        wsSend={wsSend}
-        subscribeToWsMessage={subscribeToWsMessage}
         autoAlias={isTvMode ? 'TV' : undefined}
         onAliasAccepted={(alias, visible) => {
           audienceSession.login(alias);
           audienceSession.setAliasVisible(visible);
         }}
       />
-    );
-  }
-
-  return (
+    ) : (
     <>
-      {LiveAudioContainer ? (
-        <React.Suspense fallback={audienceScreenElement}>
-          <LiveAudioContainer
-            availability={liveAudioAvailability.availability}
-            wsSend={wsSend}
-            subscribeToWsMessage={subscribeToWsMessage}
-            clientId={clientIdRef.current}
-            audienceSession={audienceSession}
-          >
-            {audienceScreenElement}
-          </LiveAudioContainer>
-        </React.Suspense>
-      ) : audienceScreenElement}
+      <AudienceParticipationSurface subscribeToWsMessage={subscribeToWsMessage}>
+        {audienceScreenElement}
+      </AudienceParticipationSurface>
       {shouldShowMediaUnlock && (
         <button
           type="button"
@@ -358,13 +346,16 @@ function AudienceApp() {
       )}
       
       {/* Hidden audio element for audience audio sync */}
-      <audio ref={audioRef} preload="none" style={{ display: 'none' }} />
-      <audio ref={audioTimelineRef} preload="none" style={{ display: 'none' }} />
+
+
 
       <div className="fixed bottom-2 end-2 z-50 opacity-50 hover:opacity-100 transition-opacity">
         <DataProtectionLink className="text-[10px] text-white/70 hover:text-white flex items-center gap-1" />
       </div>
-    </>
+    </>)}
+      <audio ref={audioRef} preload="none" style={{ display: 'none' }} />
+      <audio ref={audioTimelineRef} preload="none" style={{ display: 'none' }} />
+    </AudienceParticipationProvider>
   );
 }
 

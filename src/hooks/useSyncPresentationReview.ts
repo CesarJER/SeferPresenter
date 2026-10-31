@@ -13,6 +13,7 @@ export function useSyncPresentationReview(id: string, isOpen: boolean, presentat
   const [snapshot, setSnapshot] = useState<{ id: string; reviewed: Presentation | null; latest: Presentation | null } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const generation = useRef({ value: 0 });
+  const inFlight = useRef(0);
   const reviewed = snapshot?.id === id ? snapshot.reviewed : initial;
   const latest = snapshot?.id === id ? snapshot.latest : initial;
   useEffect(() => { if (!isOpen) { setSnapshot(null); setError(null); } }, [isOpen]);
@@ -22,6 +23,7 @@ export function useSyncPresentationReview(id: string, isOpen: boolean, presentat
   }, [id, initial]);
   const refresh = useCallback(async () => {
     const request = ++generation.current.value;
+    inFlight.current += 1;
     try {
       const items = await loadCatalog<Presentation>('/api/presentations', normalizePresentation);
       if (!validatePresentationList(items).ok) throw new Error('Invalid presentations payload');
@@ -33,13 +35,18 @@ export function useSyncPresentationReview(id: string, isOpen: boolean, presentat
     } catch (err) {
       if (request === generation.current.value) setError(err instanceof Error ? err.message : String(err));
       throw err;
+    } finally {
+      inFlight.current = Math.max(0, inFlight.current - 1);
     }
   }, [id, initial]);
   useEffect(() => {
     if (!isOpen || !id) return;
     const pendingChecks = generation.current;
-    const check = () => { void refresh().catch(() => {}); };
-    check();
+    const check = () => {
+      if (inFlight.current > 0) return;
+      void refresh().catch(() => {});
+    };
+    void refresh().catch(() => {});
     const timer = window.setInterval(check, 15000);
     window.addEventListener('focus', check);
     return () => { ++pendingChecks.value; window.clearInterval(timer); window.removeEventListener('focus', check); };

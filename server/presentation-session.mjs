@@ -23,7 +23,7 @@ const readMarker = (filePath, now) => {
   }
   if (!marker || typeof marker !== 'object' || Array.isArray(marker) ||
       Object.keys(marker).length !== 2 || !uuidV4Pattern.test(marker.sessionId) ||
-      !Number.isFinite(marker.expiresAt) || marker.expiresAt <= now ||
+      !Number.isFinite(marker.expiresAt) ||
       marker.expiresAt > now + PRESENTATION_SESSION_TTL_MS) return null
   return { sessionId: marker.sessionId, expiresAt: marker.expiresAt }
 }
@@ -31,7 +31,10 @@ const readMarker = (filePath, now) => {
 // This marker preserves the session boundary, never audience or quiz data.
 export const createPresentationSessionStore = ({ filePath, now = Date.now, write = writeJsonSafely, initialSessionId }) => {
   if (!filePath) throw new Error('Presentation session marker path is required')
-  let marker = readMarker(filePath, now())
+  const startedAt = now()
+  const stored = readMarker(filePath, startedAt)
+  const retiredSessionId = stored && stored.expiresAt <= startedAt ? stored.sessionId : undefined
+  let marker = retiredSessionId ? null : stored
   const rotate = () => {
     const next = { sessionId: randomUUID(), expiresAt: now() + PRESENTATION_SESSION_TTL_MS }
     write(filePath, next)
@@ -47,5 +50,5 @@ export const createPresentationSessionStore = ({ filePath, now = Date.now, write
     marker = seeded
   }
   if (!marker) rotate()
-  return Object.freeze({ getSessionId: () => marker.sessionId, rotate })
+  return Object.freeze({ getSessionId: () => marker.sessionId, getRetiredSessionId: () => retiredSessionId, rotate })
 }

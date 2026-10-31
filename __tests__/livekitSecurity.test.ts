@@ -1,11 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createLiveKitApi, resetLiveKitStateForTests } from '../server/livekit-server.mjs';
+import { createLiveKitApi as createRealLiveKitApi, resetLiveKitStateForTests } from '../server/livekit-server.mjs';
 import { isProtectedRequestPath } from '../server/authUtils.mjs';
 
 interface ApiResponse {
   status: number;
   body: Record<string, unknown>;
 }
+
+const presentationSessionId = '11111111-1111-4111-8111-111111111111';
+const roomName = `sefer-live-audio-${presentationSessionId}`;
+const createLiveKitApi = (...[controlApi, options = {}]: Parameters<typeof createRealLiveKitApi>) => createRealLiveKitApi({
+  getPresentationSessionId: () => presentationSessionId, ...controlApi,
+}, { ...options, roomServiceClient: { createRoom: vi.fn().mockResolvedValue({}), ...options.roomServiceClient } });
 
 const basicAuth = (password = 'test-password') =>
   `Basic ${Buffer.from(`control:${password}`).toString('base64')}`;
@@ -29,6 +35,7 @@ describe('LiveKit token endpoint security', () => {
     process.env.LIVEKIT_API_SECRET = 'test-api-secret-with-enough-entropy';
     process.env.SEFER_CONTROL_PASSWORD = 'test-password';
     process.env.SEFER_LIVE_AUDIO_TOKEN_TTL_MINUTES = '1';
+    vi.stubEnv('LIVEKIT_ROOM_NAME', 'sefer-live-audio');
     api = createLiveKitApi({ authorizeOperatorCredential: () => ({ controlSessionId: 'authorized-control' }),
       isLiveAudioControlAuthorized: (controlSessionId: string) => authorizedControls.has(controlSessionId),
       getLiveAudioParticipantState: () => null,
@@ -45,6 +52,7 @@ describe('LiveKit token endpoint security', () => {
     delete process.env.LIVEKIT_API_SECRET;
     delete process.env.SEFER_CONTROL_PASSWORD;
     delete process.env.SEFER_LIVE_AUDIO_TOKEN_TTL_MINUTES;
+    vi.unstubAllEnvs();
   });
 
   const call = async (
@@ -218,7 +226,7 @@ describe('LiveKit token endpoint security', () => {
 
     expect(granted.status).toBe(200);
     expect(updateParticipant).toHaveBeenCalledWith(
-      'sefer-live-audio',
+      roomName,
       audience.participantIdentity,
       expect.objectContaining({ permission: expect.objectContaining({ canPublish: true }) }),
     );
@@ -267,7 +275,7 @@ describe('LiveKit token endpoint security', () => {
 
     expect(revoked.status).toBe(200);
     expect(updateParticipant).toHaveBeenLastCalledWith(
-      'sefer-live-audio',
+      roomName,
       audience.participantIdentity,
       expect.objectContaining({ permission: expect.objectContaining({ canPublish: false }) }),
     );
@@ -362,6 +370,23 @@ describe('LiveKit token endpoint security', () => {
     expect(await response).toMatchObject({ body: { available: false, reason: 'livekit-unreachable' } });
   });
 
+  it('cancels the readiness deadline and settles the request on API close', async () => {
+    api.close();
+    vi.useFakeTimers();
+    api = createLiveKitApi({}, { roomServiceClient: { listRooms: () => new Promise(() => {}) } });
+    const response = call('/api/livekit/status', {});
+    await vi.advanceTimersByTimeAsync(0);
+    expect(vi.getTimerCount()).toBe(2);
+    try {
+      api.close();
+      api.close();
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(await response).toMatchObject({ body: { available: false } });
+    }
+  });
+
   it('mutes microphone tracks in LiveKit while retaining the grant for explicit user reopening', async () => {
     api.close();
     const mutePublishedTrack = vi.fn().mockResolvedValue({});
@@ -374,7 +399,7 @@ describe('LiveKit token endpoint security', () => {
     const body = { role: 'control', controlSessionId: 'authorized-control', participantId: audience.participantId };
     await call('/api/livekit/grant-speak', body);
     expect((await call('/api/livekit/mute-participant', body)).status).toBe(200);
-    expect(mutePublishedTrack).toHaveBeenCalledExactlyOnceWith('sefer-live-audio', audience.participantIdentity, 'microphone-track', true);
+    expect(mutePublishedTrack).toHaveBeenCalledExactlyOnceWith(roomName, audience.participantIdentity, 'microphone-track', true);
     expect(api.getState().participants.find((p) => p.participantId === audience.participantId)?.canPublish).toBe(true);
   });
 
@@ -385,7 +410,7 @@ describe('LiveKit token endpoint security', () => {
     const audience = await issueAudience();
     await call('/api/livekit/grant-speak', { role: 'control', controlSessionId: 'authorized-control', participantId: audience.participantId });
     expect(await api.revokeAllSpeakers()).toBe(true);
-    expect(updateParticipant).toHaveBeenLastCalledWith('sefer-live-audio', audience.participantIdentity,
+    expect(updateParticipant).toHaveBeenLastCalledWith(roomName, audience.participantIdentity,
       expect.objectContaining({ permission: expect.objectContaining({ canPublish: false }) }));
     expect(api.getState().participants.find((p) => p.participantId === audience.participantId)?.canPublish).toBe(false);
   });
@@ -419,7 +444,7 @@ describe('LiveKit token endpoint security', () => {
     finishGrant();
     expect((await grant).status).toBe(200);
     expect(await revoke).toBe(true);
-    expect(updateParticipant).toHaveBeenLastCalledWith('sefer-live-audio', audience.participantIdentity,
+    expect(updateParticipant).toHaveBeenLastCalledWith(roomName, audience.participantIdentity,
       expect.objectContaining({ permission: expect.objectContaining({ canPublish: false }) }));
     expect(api.getState().participants.find((p) => p.participantId === audience.participantId)?.canPublish).toBe(false);
   });
@@ -441,6 +466,6 @@ describe('LiveKit token endpoint security', () => {
       role: 'control', controlSessionId: 'authorized-control', excludeParticipantIds: [first.participantId],
     });
     expect(muted.status).toBe(200);
-    expect(mutePublishedTrack).toHaveBeenCalledExactlyOnceWith('sefer-live-audio', second.participantIdentity, 'microphone-track', true);
+    expect(mutePublishedTrack).toHaveBeenCalledExactlyOnceWith(roomName, second.participantIdentity, 'microphone-track', true);
   });
 });

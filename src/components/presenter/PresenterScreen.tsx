@@ -193,6 +193,7 @@ const PresenterScreen: React.FC<PresenterScreenProps> = ({
     slide,
     slide?.id,
     mediaSrc,
+    serverNow,
   ]);
 
   // 2B. Live parameter updates: Apply volume, speed, loop without resetting time
@@ -319,7 +320,7 @@ const PresenterScreen: React.FC<PresenterScreenProps> = ({
         videoElement.removeEventListener('durationchange', handleDurationChange);
       }
     };
-  }, [slide, mediaSrc, slide?.id, slide?.mediaSrc, slide?.mediaStart, slide?.mediaEnd, videoElement, videoState?.volume]);
+  }, [slide, mediaSrc, slide?.id, slide?.mediaSrc, slide?.mediaStart, slide?.mediaEnd, videoElement, videoState?.volume, enableDriftCorrection, serverNow]);
 
   const isVideoBg = /\.(mp4|webm)$/i.test(background);
   const isFallback1x = slide?.lines.length === 3 && slide.lines[1] === '-' && slide.lines[2] === '-';

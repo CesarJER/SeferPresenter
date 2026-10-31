@@ -1,4 +1,4 @@
-import type { SeferReaderState, VerseData } from '../../hooks/useSeferReader';
+import type { SeferReaderState, VerseData } from '../../types/scripture';
 import type { ScriptureNavState } from '../../types/presentation';
 import { loadBookData, type AppMetadata } from '../../utils/metadataCache';
 import { parseVerses } from '../../utils/scriptureParser';

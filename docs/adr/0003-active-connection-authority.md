@@ -36,4 +36,5 @@ de la instalación.
 [matriz HTTP](../../__tests__/auditRemediationHttp.test.ts).
 El commit describe validación aislada y SDK mock; no prueba SFU real.
 Complementa [0001](0001-server-projection-authority.md).
+Evolución en R4: [0008](0008-realtime-transport-backpressure-and-input-containment.md) refuerza esta decisión revalidando la autoridad por igualdad estricta de referencia tras la lectura asíncrona del body HTTP.
 Contrato actual: [HTTP](../api/http.md#autenticación-y-límites-comunes).

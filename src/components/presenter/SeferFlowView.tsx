@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import type { VerseData } from '../../hooks/useSeferReader';
+import type { VerseData } from '../../types/scripture';
 import { sanitizeSlideHtml } from '../../utils/hebrewText';
 
 interface SeferFlowViewProps {

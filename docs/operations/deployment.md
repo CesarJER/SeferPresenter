@@ -122,6 +122,32 @@ proveedores HTTPS permitidos, valida una respuesta IPv4 y falla si no obtiene
 una válida.
 Antes de construirlo, activa tambien `SEFER_LIVE_AUDIO_ENABLED=true` y
 `VITE_SEFER_LIVE_AUDIO_BUILD=true` en el entorno.
+
+El servicio monta [config/livekit.yaml](../../config/livekit.yaml) en solo lectura
+y arranca LiveKit con `room.auto_create: false`. El backend debe poder invocar
+`CreateRoom` y `DeleteRoom` con sus credenciales servidor; los JWT de participantes
+solo permiten entrar en su sala. Al emitir/renovar tokens se asegura la sala
+vigente, incluida la recuperación de una sala cerrada por inactividad.
+
+En la primera transición desde salas compartidas, actualizar primero el backend
+que crea salas explícitamente y aplicar después la configuración del SFU en una
+ventana autorizada. Una vez activos ambos, rotar la sesión desde Control para
+establecer un UUID nuevo; no borrar el marcador para simular esa operación.
+La sala legacy compartida y otras salas creadas antes del cambio requieren revisión
+del operador: no se borran automáticamente por prefijo. Preparar estos archivos
+no aplica la configuración a un LiveKit que ya está ejecutándose.
+
+Revisar avisos `livekit:room:delete-failed`, `delete-cancelled` y
+`create-outcome-uncertain`. Un timeout puede dejar incierto el efecto remoto;
+no equivale a confirmación de borrado ni revocación permanente de un JWT.
+
+En Audience, `VITE_SEFER_LIVE_AUDIO_BUILD=false` conserva participación y mensajería
+E2EE y excluye solo el adaptador RTC/SDK de su grafo. No necesita token LiveKit para
+las acciones sociales. El mismo flag todavía excluye el contenedor actual de
+Control; para recibir/responder necesita un Control autorizado con su canal privado
+activo. La independencia del propietario Control sigue pendiente. Véase
+[comportamiento y límites](../features/live-audio.md).
+
 `npm run dev` sigue siendo util
 para desarrollo local del frontend/backend, pero no sustituye el entorno
 contenedorizado cuando quieres validar la ruta completa de voz en vivo.

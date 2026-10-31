@@ -4,7 +4,10 @@ La explicación de autoridad/recuperación está en
 [sincronización](../architecture/synchronization.md). Esta página concentra la
 sintaxis y los límites. Fuentes: [sync](../../src/types/sync.ts),
 [audio](../../src/types/audio.ts), [Live Audio](../../src/types/liveAudio.ts),
-[WS servidor](../../server/ws-server.mjs), [validación cliente](../../src/utils/validation.ts),
+[WS servidor](../../server/ws-server.mjs),
+[validación backend de mensajes](../../server/ws-message-validation.mjs),
+[vistas técnicas de participantes](../../server/ws-participant-snapshots.mjs),
+[validación cliente](../../src/utils/validation.ts),
 [useSyncState](../../src/hooks/useSyncState.ts) y consumidores de cada feature.
 
 ## Transportes y envelopes
@@ -16,9 +19,47 @@ y, para Control, controlSessionId/controlState. Control/Presenter reciben ademá
 operatorCredential: el cliente la conserva en memoria y la borra al cerrar socket.
 Estos campos runtime exceden la forma mínima de WELCOME en sync.ts.
 
-WS limita mensajes a 64 KiB y cierra clientes cuya cola supera 512 KiB. JSON
-malformado, tipos no permitidos y determinados payloads inválidos se descartan;
+WS admite hasta 512 KiB por mensaje entrante. El límite habitual es 64 KiB;
+solo `REMOTE_COMMAND` de selección de presentación por Control autorizado y
+`SYNC_STATE` de Control autorizado o Presenter pueden superarlo, con una
+presentación válida. Los datos ajenos a la presentación no pueden exceder
+64 KiB y los mensajes grandes tienen una profundidad máxima de 128 objetos
+o arrays desde la raíz. Los excesos y mensajes grandes no elegibles se cierran
+con código 1009. El receptor puede ensamblar hasta 512 KiB antes de comprobar
+el tipo del mensaje.
+
+La salida usa un presupuesto independiente de 512 KiB por conexión. Todos los
+envíos JSON, incluidos `broadcastWs`, snapshots, WELCOME, reloj y errores de
+acceso, comprueban OPEN y suman `bufferedAmount`, los bytes UTF-8 serializados y
+la cabecera de la nueva trama sin máscara antes de enviarla. Un broadcast se
+serializa una sola vez. El exceso cierra solo al destinatario afectado con
+1013; un fallo de serialización cierra con 1011 y un fallo de escritura termina
+la conexión. Todos reutilizan la limpieza idempotente existente. Los pings del
+heartbeat y las respuestas pong también comprueban el presupuesto antes de
+escribirse; la respuesta pong conserva el payload del ping. Las tramas de cierre
+siguen a cargo de `ws`.
+
+Cada servidor WS posee un heartbeat de 25 segundos, retirado junto con su
+listener de upgrade al cerrar. Los códigos pendientes pierden su temporizador
+al autorizar, rechazar, desconectar, promocionar o rotar sesión. La limpieza de
+participantes conserva la gracia de rejoin; sus callbacks comprueban la identidad
+del registro y sus temporizadores se cancelan al reconectar, eliminar, rotar o
+cerrar. El heartbeat retira tickets SSE caducados sin modificar su validez de
+30 segundos ni su consumo de un uso. Una transición de emisión que espera a
+LiveKit vuelve a comprobar la conexión y autorización del Control antes de aplicar
+el resultado; desconexión, rotación y cierre invalidan la operación pendiente.
+
+No hay prioridades ni cola de aplicación: si no cabe una actualización de estado,
+señal privada o mensaje de moderación, se cierra la conexión en vez de omitirlo
+silenciosamente. La reconexión autenticada permite recuperar el estado vigente;
+no garantiza replay de señales privadas ni recepción de mensajes anteriores.
+JSON malformado, tipos no permitidos y determinados payloads inválidos se descartan;
 otras denegaciones emiten `{ type: 'ERROR', code, message }`.
+La telemetría se valida antes de modificar estado o distribuirla, con las mismas
+comprobaciones de datos que [HTTP](http.md#estado-comandos-y-telemetría).
+Los payloads inválidos se descartan; una excepción síncrona del consumidor de
+estado/telemetría se contiene por mensaje y emite `ERROR` con `INVALID_MESSAGE`,
+sin terminar el proceso. Este error también respeta el presupuesto de salida.
 No hay un ACK genérico ni retransmisión persistente para todos los mensajes.
 
 Los constructores cliente añaden protocolVersion=1, timestamp y messageId.
@@ -102,8 +143,8 @@ anónimos al gate. BLOCK de admisión no equivale a KICK de publicación LiveKit
 ## Live Audio: autorización, perfiles y snapshots
 
 Tipos exactos en la tabla de sintaxis al final. Productores y consumidores:
-[Control](../../src/features/liveAudio/components/control/LiveAudioControlContainer.tsx),
-[Audience](../../src/features/liveAudio/components/audience/LiveAudioAudienceContainer.tsx),
+[Control](../../src/components/control/ControlParticipationOwner.tsx),
+[Audience](../../src/hooks/useAudienceParticipation.ts),
 [useControlAuthorization](../../src/hooks/useControlAuthorization.ts) y
 WS servidor; moderación utiliza además la [API HTTP](http.md#live-audio-tokens-y-moderación).
 
@@ -112,6 +153,16 @@ y autorización de Controls; perfil/permisos/lista visible; external broadcast;
 solicitud/snapshot/patch operacional; y PRIVATE_CONTROL_SIGNAL.
 PENDING no recibe snapshots ni señales privadas y no puede moderar. La autorización
 y sucesión pertenecen al servidor, no al perfil comunicado por el cliente.
+
+El código temporal mostrado identifica una solicitud para comparación humana.
+La decisión envía `targetControlSessionId` y `APPROVE`/`REJECT`, sin devolver el
+código para cotejo. El servidor exige emisor elegible, target pendiente y código
+no caducado; no acredita que una persona haya comparado los códigos.
+
+`LIVE_AUDIO_CONNECTION_COUNTS` cuenta sockets abiertos Audience/Control/Presenter,
+incluidos Controls pendientes. Se publica a Control y Presenter, sin Audience;
+su `updatedAt` se genera en cada construcción. El snapshot operacional reutiliza
+esos recuentos, pero conserva su autorización y sus destinatarios propios.
 
 LIVE_AUDIO_ACTIVE_PARTICIPANT_PROFILE permite participantId, sharing preference,
 activeListPublicKey y createdAt opcional. **alias es inválido**. El servidor
@@ -134,28 +185,92 @@ toParticipantId?, keyId, ephemeralPublicKey, ciphertext, nonce, createdAt? }`.
 
 Audience solo envía desde su UUID vinculado a WS; el backend valida base64,
 ciphertext ≤4096 bytes, nonce de 12 bytes y límite de cinco mensajes/minuto.
-Controls autorizados pueden dirigirse a Audience o a otros Controls según ruta.
+Controls autorizados pueden dirigirse a Audience o emitir a Controls autorizados
+sin destinatario; este broadcast incluye al emisor. La validación cliente admite
+ese envelope existente también cuando el emisor usa su controlSessionId.
 El servidor no descifra el payload. Consumers crypto derivan ECDH P-256/AES-GCM
 256 y mantienen rechazo de nonce repetido en memoria; una rotación de clave
-pierde historial y exige renegociación.
+exige renegociación y descarta operaciones pendientes de la generación anterior.
 
 Dentro del ciphertext existen contratos propios, no nuevos tipos WS:
 ACTIVE_PROFILE/ACTIVE_STATE/REQUEST_WORD/ACCESS_REQUEST, AUDIO_FALLBACK y mensajes privados hacia Control;
 VISIBLE_ACTIVE_PARTICIPANTS y CHAT_RESPONSE hacia Audience;
 CONTROL_PROFILE, CONTROL_MICROPHONE_CONFIG, CONTROL_ANNOUNCEMENT y
-MESSAGE_REPLY_SYNC entre Controls. Sus campos y guards están en los contenedores
+MESSAGE_REPLY_SYNC y CONTROL_CONVERSATION_MESSAGE entre Controls. Sus campos y guards están en los propietarios
 anteriores y [usePrivateControlSignals](../../src/hooks/usePrivateControlSignals.ts).
 
 Especialmente:
 - VOICE_SOURCE_SELECTION: `{ type, participantId: string|null, version: 1, updatedAt: number }`;
-  allowlist de campos y emisores Control actuales; sincroniza selección, no PCM.
+  allowlist de campos y pertenencia cifrada al grupo Control actual; sincroniza selección, no PCM.
 - VOICE_SCRIPTURE_SYNC: `{ type, options, detail, phase }`; sugerencias/estado
   transitorios; el principal produce y los secundarios consumen.
-- CONTROL_PROFILE: alias, volume, musicMode; no perfil público.
+- CONTROL_PROFILE: alias, volume, musicMode y mediaParticipantId opcional; este último
+  asocia el ID RTC con el emisor controlSessionId, sin convertirlo en identidad social.
 - CONTROL_MICROPHONE_CONFIG: targetParticipantId y volume/musicMode opcionales;
   el destinatario actual aplica su configuración.
-- MESSAGE_REPLY_SYNC: messageId, targetParticipantId, responseText, repliedBy,
-  repliedAt; estado de respuesta privado.
+- MESSAGE_REPLY_SYNC: replyId, messageId, targetParticipantId, responseText,
+  repliedBy, repliedAt y audienceQueued; todos dentro del ciphertext. El receptor
+  exige una señal cifrada con la clave compartida de Controls. El messageId de un
+  mensaje legacy recibido es JSON.stringify([keyId, fromParticipantId, nonce]) del
+  envelope original, igual para todos los Controls; no depende del reloj local.
+  Se exige coincidencia exacta de mensaje, participante y keyId. replyId identifica
+  la operación para aplicar una sola vez tanto el eco como un reenvío recifrado;
+  no sustituye el rechazo criptográfico de nonce repetido. Correlaciones ausentes,
+  desconocidas o de otra clave se ignoran, sin buscar por participante.
+
+La respuesta CHAT_RESPONSE a Audience y su sincronización a Controls informan
+resultados de envío separados. Un booleano positivo solo acredita aceptación por
+el WebSocket local, sin ACK de recepción ni de aplicación. Un fallo de Audience
+conserva el borrador; la sincronización no se emite como mensaje WS en claro.
+Las respuestas desde la fila de admisión usan access-<participantId> y no se
+adjuntan a mensajes de ese participante ni crean un historial de admisión.
+Mensajes y respuestas no se reconstruyen de snapshots ni se persisten. Los
+Controls deben ejecutar el mismo candidato: los IDs locales anteriores y payloads
+sin replyId no proporcionan correlación segura para esta sincronización.
+
+Las conversaciones nuevas usan `conversationId = JSON.stringify([presentationSessionId,
+participantId])` y `operationId = crypto.randomUUID()` (UUID v4). PRIVATE_MESSAGE y
+CHAT_RESPONSE conservan sus campos anteriores y añaden operationId, conversationId,
+presentationSessionId y replyTo opcional; PRIVATE_MESSAGE añade createdAt. replyTo
+referencia una operación exacta, nunca «el último mensaje del participante».
+
+CONTROL_CONVERSATION_MESSAGE contiene version=1, operationId, conversationId,
+presentationSessionId, participantId, text, operator, createdAt, replyTo opcional y
+audienceQueued. Solo se aplica desde el grupo E2EE autorizado, en sesión/clave vigente.
+Texto no vacío ≤1000 caracteres, operator ≤80 y fecha entero seguro; el productor de
+Control limita además bytes antes de cifrar. IDs repetidos conservan identidad/contenido
+inmutables; solo actualizan resultados locales. El compositor de Control produce
+operaciones nuevas sin replyTo. Los eventos de equipo con replyTo no crean otra
+tarjeta: las respuestas contextuales se aplican por MESSAGE_REPLY_SYNC, con la
+coincidencia exacta descrita arriba.
+
+Control conserva el cuerpo de PRIVATE_MESSAGE y sus respuestas verdes solo en el
+modelo de Notificaciones. useControlConversations conserva solo las operaciones
+nuevas hacia Audience y sus resultados; no duplica los cuerpos entrantes ni mantiene
+una línea de historial oculta. El replyTo validado de Audience se conserva en el
+mensaje entrante, incluso si su operación original todavía no llegó a ese Control;
+no se muestra un historial resuelto. No se cambia el ID ni se asocia al último mensaje.
+Los IDs descartados se conservan sin el cuerpo entrante hasta cambiar sesión/clave
+o perder autorización. Reencriptar una operación descartada no la vuelve a mostrar;
+esto es distinto del rechazo criptográfico de un nonce repetido.
+
+El Control emite CHAT_RESPONSE con la clave del destinatario y un evento separado
+con la clave compartida del equipo, usando el mismo operationId. Cada escritura
+puede fallar por separado. audienceQueued/controlsQueued son resultados internos:
+no se renderizan banners de éxito, solo fallos contextuales. audienceQueued no demuestra entrega; recibir el evento
+del equipo tampoco demuestra que Audience lo recibió. No hay ACK, reintento automático,
+persistencia, replay histórico ni backfill. Nick del operador es atribución del
+grupo de confianza, no firma criptográfica individual.
+
+La iniciación exige estado técnico conectado/activo/no kicked, un perfil técnico
+LIVE_AUDIO_ACTIVE_PARTICIPANT_PROFILE recibido en vivo (su handler servidor exige
+admisión) y un perfil E2EE actual que confirme la misma clave. requestAliases permite
+obtener ambos sin mensaje previo. Un snapshot antiguo o un ACTIVE_PROFILE cifrado
+aislado no acreditan admisión. Rechazo, desconexión, revocación y cambio de clave/sesión
+invalidan esas confirmaciones. El backend conserva sus envelopes y rutas existentes;
+no interpreta estos campos descifrados. Clientes antiguos muestran CHAT_RESPONSE y
+pueden escribir PRIVATE_MESSAGE sin metadatos, pero no comparten los nuevos eventos
+ni ofrecen su correlación. MESSAGE_REPLY_SYNC sigue rechazando referencias desconocidas.
 
 Otros payloads emitidos por los clientes actuales:
 

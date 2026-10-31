@@ -7,6 +7,8 @@ import { ActiveParticipantsPanel } from './ActiveParticipantsPanel';
 
 interface AudienceLiveAudioPanelProps {
   state: LiveAudioConnectionState;
+  mediaAvailable?: boolean;
+  socialReady?: boolean;
   isActive: boolean;
   isMicrophoneActive: boolean;
   microphoneTrackState: MicrophoneTrackState;
@@ -39,6 +41,8 @@ interface AudienceLiveAudioPanelProps {
 
 export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
   state,
+  mediaAvailable = true,
+  socialReady = true,
   isActive,
   isMicrophoneActive,
   microphoneTrackState,
@@ -75,7 +79,6 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
   });
   const [isVolumeOpen, setIsVolumeOpen] = useState(false);
   const [isParticipantsOpen, setIsParticipantsOpen] = useState(false);
-  const hasAudioStartedRef = useRef(hasAudioStarted);
   const panelRootRef = useRef<HTMLDivElement>(null);
   const isFirstMountRef = useRef(true);
 
@@ -96,25 +99,6 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
       return next;
     });
   };
-
-  useEffect(() => {
-    hasAudioStartedRef.current = hasAudioStarted;
-  }, [hasAudioStarted]);
-
-  // First interaction anywhere starts audio
-  useEffect(() => {
-    const handleFirstInteraction = () => {
-      if (!hasAudioStartedRef.current) {
-        onStartAudio();
-      }
-    };
-    window.addEventListener('click', handleFirstInteraction, true);
-    window.addEventListener('touchstart', handleFirstInteraction, true);
-    return () => {
-      window.removeEventListener('click', handleFirstInteraction, true);
-      window.removeEventListener('touchstart', handleFirstInteraction, true);
-    };
-  }, [onStartAudio]);
 
   // Randomly reappear passive button to act as a reminder if the user has hidden it (slide-persistent)
   useEffect(() => {
@@ -198,10 +182,6 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
     return () => window.removeEventListener('click', handleGlobalClick);
   }, []);
 
-  if (state !== 'connected' && state !== 'reconnecting' && state !== 'reconnected' && state !== 'reconnectFailed') {
-    return null;
-  }
-
   const handlePanelClick = (e: React.MouseEvent) => {
     e.stopPropagation();
   };
@@ -210,35 +190,15 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
     ? "flex items-center justify-center w-full pointer-events-none z-60"
     : "flex items-end justify-center w-full h-full pointer-events-none z-60";
 
-  if (!isVisible) return null;
+  if (!isVisible) return <div className={wrapperClass}>
+    <button type="button" onClick={() => setIsVisible(true)}
+      className="pointer-events-auto rounded-full bg-gray-900/95 px-4 py-2 text-white shadow-lg focus-visible:outline-2 focus-visible:outline-blue-400"
+      aria-label={translate('liveAudio:AudienceLiveAudioPanel.showParticipation', 'Mostrar controles de participación')}>
+      <Hand className="h-5 w-5" />
+    </button>
+  </div>;
 
-  /* Pill buttons toggle panel visibility - TODO: Replantear en el futuro
-  if (!isVisible) {
-    return (
-      <div ref={panelRootRef} className={wrapperClass} onClick={handlePanelClick}>
-        <button
-          onClick={() => setIsVisible(true)}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gray-900/85 hover:bg-gray-800 border border-white/10 shadow-lg pointer-events-auto backdrop-blur-md transition-all duration-200 text-xs font-semibold cursor-pointer select-none"
-          title="Mostrar controles de participación"
-        >
-          {isActive ? (
-            <>
-              <Mic className="w-3.5 h-3.5 text-blue-400 animate-pulse" />
-              <span className="text-blue-300">Audio Activo</span>
-            </>
-          ) : (
-            <>
-              <Hand className="w-3.5 h-3.5 text-yellow-500" />
-              <span className="text-yellow-400">Participa</span>
-            </>
-          )}
-        </button>
-      </div>
-    );
-  }
-  */
-
-  const panelClass = "h-[7vh] min-h-14 max-h-20 flex items-center gap-1.5 sm:gap-2 pointer-events-auto";
+  const panelClass = "h-[7vh] min-h-14 max-h-20 flex items-center gap-1.5 sm:gap-2 pointer-events-auto [&_button]:focus-visible:outline-2 [&_button]:focus-visible:outline-blue-400";
   const diagnostics = microphoneDiagnostics ? (
     <div className="hidden absolute bottom-full left-1/2 mb-2 w-[min(92vw,22rem)] -translate-x-1/2 rounded-md border border-white/10 bg-gray-950/95 px-3 py-2 text-[10px] leading-4 text-gray-300 shadow-xl">
       <div className="grid grid-cols-[auto_1fr] gap-x-2">
@@ -263,7 +223,7 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
       </div>
     </div>
   ) : null;
-  const reconnectStatus = state === 'reconnecting'
+  const reconnectStatus = !mediaAvailable ? null : state === 'reconnecting'
     ? (
       <div className="flex items-center gap-2 h-full bg-orange-600/90 text-white px-3 rounded-full shadow-lg backdrop-blur-xs">
         <Loader2 className="w-4 h-4 animate-spin" />
@@ -308,7 +268,7 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
         <div className={panelClass}>
           {externalBroadcastNotice}
           {reconnectStatus}
-          {!hasAudioStarted && (
+          {mediaAvailable && !hasAudioStarted && (
             <button
               onClick={onStartAudio}
               className="flex items-center gap-2 h-full bg-blue-600/90 hover:bg-blue-500/90 text-white px-4 rounded-full shadow-lg backdrop-blur-xs transition-all"
@@ -319,7 +279,7 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
           )}
           <button
             onClick={onJoinActive}
-            disabled={isParticipationBlocked}
+            disabled={isParticipationBlocked || !socialReady}
             className={`flex items-center gap-2 h-full border px-4 rounded-full backdrop-blur-md transition-all ${isParticipationBlocked
               ? 'bg-gray-700 border-gray-600 text-gray-400 cursor-not-allowed'
               : 'bg-yellow-500 hover:bg-yellow-400 border-yellow-300 text-black shadow-[0_0_15px_rgba(234,179,8,0.6)] animate-pulse'
@@ -360,7 +320,7 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
             )}
             <button
               onClick={onToggleMicrophone}
-              disabled={microphoneTrackState === 'publishing'}
+              disabled={!socialReady || microphoneTrackState === 'publishing'}
               className={`flex items-center justify-center p-3 rounded-xl transition-colors ${microphoneTrackState === 'publishing'
                 ? 'bg-orange-600 text-white shadow-[0_0_15px_rgba(234,88,12,0.5)]'
                 : microphoneTrackState === 'error'
@@ -383,6 +343,7 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
         ) : (
           <button
             onClick={isPendingWord ? onCancelRequest : onRequestWord}
+            disabled={!socialReady || isParticipationBlocked}
             className={`flex items-center justify-center p-3 rounded-xl transition-colors ${isPendingWord
               ? 'bg-yellow-600/80 hover:bg-yellow-500/80 text-white'
               : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
@@ -395,6 +356,7 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
 
         <button
           onClick={onOpenMessage}
+          disabled={!socialReady || isParticipationBlocked}
           className="flex items-center justify-center p-3 rounded-xl bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors"
           title={translate("liveAudio:AudienceLiveAudioPanel.privateMessageToControl", "Mensaje Privado a Control")}
         >
@@ -403,17 +365,20 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
 
         <button
           onClick={() => setIsParticipantsOpen((current) => !current)}
+          aria-expanded={isParticipantsOpen}
           className="flex items-center justify-center p-3 rounded-xl bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors"
           title={translate("liveAudio:AudienceLiveAudioPanel.participants", "Participantes")}
         >
           <Users className="w-6 h-6" />
         </button>
 
-        <div
-          className="relative flex items-center justify-center p-3 rounded-xl bg-gray-700 text-gray-300 hover:bg-gray-600 transition-colors cursor-pointer"
-          onClick={() => setIsVolumeOpen((current) => !current)}
-        >
-          {volume === 0 ? <VolumeX className="w-6 h-6" /> : <Volume2 className="w-6 h-6" />}
+        {mediaAvailable && <div className="relative">
+          <button type="button" onClick={() => setIsVolumeOpen((current) => !current)}
+            aria-expanded={isVolumeOpen}
+            aria-label={translate("liveAudio:AudienceLiveAudioPanel.liveAudioVolume", "Volumen del audio en vivo")}
+            className="flex items-center justify-center p-3 rounded-xl bg-gray-700 text-gray-300 hover:bg-gray-600 transition-colors">
+            {volume === 0 ? <VolumeX className="w-6 h-6" /> : <Volume2 className="w-6 h-6" />}
+          </button>
 
           {isVolumeOpen && (
             <div
@@ -458,7 +423,7 @@ export const AudienceLiveAudioPanel: React.FC<AudienceLiveAudioPanelProps> = ({
               )}
             </div>
           )}
-        </div>
+        </div>}
 
         <div className="w-px h-8 bg-white/20 mx-1"></div>
 

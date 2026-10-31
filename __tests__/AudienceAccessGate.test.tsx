@@ -4,9 +4,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AudienceAccessGate } from '../src/components/audience/AudienceAccessGate';
 
 const sendPrivateSignal = vi.fn(async () => true);
+const state = vi.hoisted(() => ({ participantId: 'participant-tv', ready: true }));
+const wsSend = vi.fn(() => true);
 
-vi.mock('../src/hooks/usePrivateControlSignals', () => ({
-  usePrivateControlSignals: () => ({ ready: true, sendPrivateSignal }),
+vi.mock('../src/hooks/useAudienceParticipation', () => ({
+  useAudienceParticipation: () => ({
+    participantId: state.participantId, privateSignals: { ready: state.ready, sendPrivateSignal },
+    submittedAlias: null, setSubmittedAlias: vi.fn(), receivedControlMessages: [],
+    dismissControlMessage: vi.fn(), externalBroadcastState: 'off', sendSessionMessage: wsSend,
+  }),
 }));
 
 vi.mock('../src/features/liveAudio/components/audience/AudienceInterventionModal', () => ({
@@ -16,19 +22,13 @@ vi.mock('../src/features/liveAudio/components/audience/AudienceInterventionModal
 vi.mock('../src/components/shared/BrandingWelcome', () => ({ BrandingWelcome: () => null }));
 
 describe('AudienceAccessGate TV mode', () => {
-  const wsSend = vi.fn(() => true);
   const onAliasAccepted = vi.fn();
-  const subscribeToWsMessage = vi.fn(() => () => {});
   const baseProps = {
-    participantId: 'participant-tv',
     retryAt: undefined,
-    wsStatus: 'open' as const,
-    wsSend,
-    subscribeToWsMessage,
     onAliasAccepted,
   };
 
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => { vi.clearAllMocks(); state.participantId = 'participant-tv'; state.ready = true; });
   afterEach(cleanup);
 
   it('uses the normal manual form without autoAlias', () => {
@@ -49,8 +49,10 @@ describe('AudienceAccessGate TV mode', () => {
 
     rerender(<AudienceAccessGate {...baseProps} accessState="REQUEST_REQUIRED" autoAlias="TV" />);
     rerender(<AudienceAccessGate {...baseProps} accessState="WAITING" autoAlias="TV" />);
-    rerender(<AudienceAccessGate {...baseProps} accessState="WAITING" autoAlias="TV" wsStatus="closed" />);
-    rerender(<AudienceAccessGate {...baseProps} accessState="WAITING" autoAlias="TV" wsStatus="open" />);
+    state.ready = false;
+    rerender(<AudienceAccessGate {...baseProps} accessState="WAITING" autoAlias="TV" />);
+    state.ready = true;
+    rerender(<AudienceAccessGate {...baseProps} accessState="WAITING" autoAlias="TV" />);
     expect(wsSend).toHaveBeenCalledTimes(1);
   });
 
@@ -63,7 +65,8 @@ describe('AudienceAccessGate TV mode', () => {
   it('may request once for a new participant identity', async () => {
     const { rerender } = render(<AudienceAccessGate {...baseProps} accessState="REQUEST_REQUIRED" autoAlias="TV" />);
     await waitFor(() => expect(wsSend).toHaveBeenCalledTimes(1));
-    rerender(<AudienceAccessGate {...baseProps} participantId="participant-new-session" accessState="REQUEST_REQUIRED" autoAlias="TV" />);
+    state.participantId = 'participant-new-session';
+    rerender(<AudienceAccessGate {...baseProps} accessState="REQUEST_REQUIRED" autoAlias="TV" />);
     await waitFor(() => expect(wsSend).toHaveBeenCalledTimes(2));
   });
 });
